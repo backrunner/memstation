@@ -1,0 +1,47 @@
+name: nightly
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    env:
+      LOCOMO_DATASET_URL: ${{ secrets.LOCOMO_DATASET_URL }}
+      LOCOMO_DATASET_PATH: ${{ vars.LOCOMO_DATASET_PATH }}
+      MEMSTATION_PERF_P95_MS: "50"
+      MEMSTATION_RECOVERY_MAX_DRAIN: "20s"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.26.1
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.11.1
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile=false
+      - name: Run repo-native nightly eval bundle
+        run: ./scripts/perf-smoke.sh "$RUNNER_TEMP/memstation-nightly-repo-native"
+      - name: Run LOCOMO nightly benchmark
+        run: ./scripts/eval-memory-nightly.sh "$RUNNER_TEMP/memstation-nightly"
+      - name: Run worker recovery nightly drill
+        run: ./scripts/worker-backlog-nightly.sh "$RUNNER_TEMP/memstation-nightly-recovery"
+      - name: Run backup/restore nightly drill
+        run: ./scripts/backup-restore-drill.sh --out-dir "$RUNNER_TEMP/memstation-backup-drill"
+      - name: Upload nightly artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: memstation-nightly-eval-artifacts
+          path: |
+            ${{ runner.temp }}/memstation-nightly-repo-native
+            ${{ runner.temp }}/memstation-nightly
+            ${{ runner.temp }}/memstation-nightly-recovery
+            ${{ runner.temp }}/memstation-backup-drill

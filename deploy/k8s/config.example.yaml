@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: memstation-config
+data:
+  MEMSTATION_PORT: "8080"
+  MEMSTATION_DEFAULT_PROVIDER: "openai"
+  DATABASE_URL: "postgres://memstation:memstation_dev@postgres:5432/memstation?sslmode=disable"
+  REDIS_URL: "redis://redis:6379/0"
+  VECTOR_STORE_BACKEND: "pgvector"
+  OPENAI_BASE_URL: "https://api.openai.com/v1"
+  ANTHROPIC_BASE_URL: "https://api.anthropic.com/v1"
+  GEMINI_BASE_URL: "https://generativelanguage.googleapis.com/v1beta"
+  CHAT_MODEL: ""
+  SUMMARY_MODEL: ""
+  ANALYSIS_MODEL: ""
+  EMBEDDING_MODEL: ""
+  MEMSTATION_PROVIDER_TIMEOUT_SECONDS: "60"
+  CONVERSATION_TIMEOUT_MINUTES: "15"
+  MAX_CONTEXT_TOKENS: "8192"
+  MAX_INJECTION_TOKENS: "2048"
+  MESSAGE_THRESHOLD: "32"
+  TOKEN_THRESHOLD: "64000"
+  MEMSTATION_RATE_LIMIT_RPS: "20"
+  MEMSTATION_RATE_LIMIT_BURST: "40"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: memstation-secrets
+type: Opaque
+stringData:
+  MEMSTATION_ADMIN_TOKEN: "replace-with-a-strong-admin-token"
+  MEMSTATION_MASTER_KEY: "replace-with-a-strong-master-key"
+  MEMSTATION_DEV_API_KEY: "ms-local-dev"
+  OPENAI_API_KEY: ""
+  ANTHROPIC_API_KEY: ""
+  GEMINI_API_KEY: ""

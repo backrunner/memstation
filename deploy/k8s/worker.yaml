@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memstation-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memstation-worker
+  template:
+    metadata:
+      labels:
+        app: memstation-worker
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: worker
+          image: memstation/server:0.1.0
+          args: ["worker"]
+          envFrom:
+            - configMapRef:
+                name: memstation-config
+            - secretRef:
+                name: memstation-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

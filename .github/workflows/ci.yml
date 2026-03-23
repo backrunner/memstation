@@ -1,0 +1,90 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable
+      MEMSTATION_SERVER_COVERAGE_THRESHOLD: "55"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.26.1
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.11.1
+          cache: pnpm
+      - uses: ariga/setup-atlas@v0
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile=false
+      - name: Go test
+        run: cd apps/server && go test ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          working-directory: apps/server
+          args: ./...
+      - name: Go generate check
+        run: cd apps/server && go generate ./... && git diff --exit-code
+      - name: Atlas migration lint and dry-run
+        run: ./scripts/atlas-check.sh
+      - name: Contract tests
+        run: ./scripts/contract-test.sh
+      - name: Benchmark smoke
+        run: ./scripts/eval-memory.sh "$RUNNER_TEMP/memstation-eval"
+      - name: Performance smoke
+        run: ./scripts/perf-smoke.sh "$RUNNER_TEMP/memstation-perf"
+      - name: Worker recovery smoke
+        run: ./scripts/worker-backlog-smoke.sh "$RUNNER_TEMP/memstation-recovery"
+      - name: Backup/restore drill dry-run
+        run: ./scripts/backup-restore-drill.sh --dry-run --out-dir "$RUNNER_TEMP/memstation-backup-drill"
+      - name: pnpm lint
+        run: pnpm lint
+      - name: pnpm test
+        run: pnpm test
+      - name: Coverage thresholds
+        run: ./scripts/coverage-check.sh
+      - name: Install Playwright browser
+        run: cd apps/manager && pnpm exec playwright install --with-deps chromium
+      - name: Manager Playwright E2E
+        run: pnpm test:e2e:manager
+      - name: Upload benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: memstation-eval-artifacts
+          path: |
+            ${{ runner.temp }}/memstation-eval
+            ${{ runner.temp }}/memstation-perf
+            ${{ runner.temp }}/memstation-recovery
+            ${{ runner.temp }}/memstation-backup-drill
+      - name: Upload manager Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: manager-playwright-artifacts
+          path: |
+            apps/manager/test-results
+            apps/manager/playwright-report

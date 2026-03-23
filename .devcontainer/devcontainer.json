@@ -1,0 +1,21 @@
+{
+  "name": "MemStation",
+  "dockerComposeFile": ["../deploy/compose/docker-compose.yml"],
+  "service": "workspace",
+  "workspaceFolder": "/workspace/memstation",
+  "shutdownAction": "stopCompose",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "go.useLanguageServer": true,
+        "typescript.tsdk": "apps/manager/node_modules/typescript/lib"
+      },
+      "extensions": [
+        "golang.go",
+        "svelte.svelte-vscode",
+        "ms-azuretools.vscode-docker",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  }
+}

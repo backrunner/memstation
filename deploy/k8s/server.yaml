@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memstation-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memstation-server
+  template:
+    metadata:
+      labels:
+        app: memstation-server
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: memstation
+          image: memstation/server:0.1.0
+          args: ["serve"]
+          envFrom:
+            - configMapRef:
+                name: memstation-config
+            - secretRef:
+                name: memstation-secrets
+          ports:
+            - containerPort: 8080
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: memstation-server
+spec:
+  selector:
+    app: memstation-server
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http

@@ -1,0 +1,45 @@
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+type Query {
+  me: User!
+  users: [User!]!
+  conversations: [Conversation!]!
+  memorySummaries: [MemorySummary!]!
+  impressions: [Impression!]!
+  facts: [Fact!]!
+  keyMemories: [KeyMemory!]!
+  auditEvents: [AuditEvent!]!
+  searchMemories(query: String!, topN: Int = 10): SearchMemoriesResult!
+  tokenUsageStats: TokenUsageStats!
+  systemOverview: SystemOverview!
+}
+
+type Mutation {
+  createAPIKey(name: String!): APIKey!
+  revokeAPIKey(id: ID!): Boolean!
+  updateUserSetting(chatModel: String, summaryModel: String, analysisModel: String, embeddingModel: String, toolWriteEnabled: Boolean, maxInjectionTokens: Int): UserSetting!
+  createKeyMemory(key: String!, value: String!, category: String): KeyMemory!
+  updateKeyMemory(id: ID!, value: String!): KeyMemory!
+  deleteKeyMemory(id: ID!): Boolean!
+  updateMemorySummary(id: ID!, summary: String!): MemorySummary!
+  updateImpression(id: ID!, description: String!): Impression!
+  updateFact(id: ID!, content: String!): Fact!
+  requeueConversationAnalysis(conversationID: ID!): Boolean!
+}
+
+type User { id: ID!, name: String! }
+type APIKey { id: ID!, prefix: String! }
+type UserSetting { chatModel: String, summaryModel: String, analysisModel: String, embeddingModel: String, toolWriteEnabled: Boolean!, maxInjectionTokens: Int! }
+type Conversation { id: ID!, finalizeStatus: String!, mode: String!, provider: String! }
+type MemorySummary { id: ID!, summary: String!, topicLabel: String }
+type Impression { id: ID!, description: String! }
+type Fact { id: ID!, content: String! }
+type KeyMemory { id: ID!, key: String!, value: String!, category: String }
+type AuditEvent { id: ID!, action: String!, targetType: String!, targetID: String! }
+type SearchMemoryItem { id: ID!, type: String!, content: String!, score: Float!, effectiveScore: Float! }
+type SearchMemoriesResult { memories: [SearchMemoryItem!]!, total: Int!, queryEmbeddingTokens: Int! }
+type TokenUsageStats { inputTokens: Int!, outputTokens: Int!, totalTokens: Int! }
+type SystemOverview { activeConversations: Int!, keyMemoryCount: Int!, recentAuditEvents: Int! }

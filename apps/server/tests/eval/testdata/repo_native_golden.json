@@ -1,0 +1,264 @@
+{
+  "name": "repo-native-golden",
+  "description": "Repo-distributed deterministic retrieval/ranking smoke dataset for MemStation.",
+  "smoke_expectations": {
+    "min_recall_at_3": 0.7,
+    "min_mrr": 0.65,
+    "min_ndcg_at_5": 0.7,
+    "max_wrong_user_leakage": 0.0,
+    "max_stale_fact_top_3_rate": 0.0,
+    "min_relation_expansion_gain": 0.0
+  },
+  "documents": [
+    {
+      "id": "summary-style-1",
+      "node_id": "node-summary-style-1",
+      "user_id": "user-alpha",
+      "type": "summary",
+      "content": "Preferred code style is explicit Go naming and small interfaces.",
+      "importance": 1.2,
+      "decay_factor": 1.0,
+      "created_at": "2026-03-10T08:00:00Z",
+      "updated_at": "2026-03-14T08:00:00Z"
+    },
+    {
+      "id": "key-style-1",
+      "node_id": "node-key-style-1",
+      "user_id": "user-alpha",
+      "type": "key_memory",
+      "content": "preferred_code_style: explicit Go naming and small interfaces",
+      "importance": 1.5,
+      "decay_factor": 1.0,
+      "metadata": {
+        "key": "preferred_code_style",
+        "value": "explicit Go naming and small interfaces"
+      },
+      "created_at": "2026-03-10T08:05:00Z",
+      "updated_at": "2026-03-14T08:05:00Z"
+    },
+    {
+      "id": "fact-city-current",
+      "node_id": "node-fact-city-current",
+      "user_id": "user-alpha",
+      "type": "fact",
+      "content": "The user currently lives in Shanghai.",
+      "importance": 1.4,
+      "decay_factor": 1.0,
+      "created_at": "2026-03-12T09:00:00Z",
+      "updated_at": "2026-03-14T09:00:00Z"
+    },
+    {
+      "id": "fact-city-stale",
+      "node_id": "node-fact-city-stale",
+      "user_id": "user-alpha",
+      "type": "fact",
+      "content": "The user previously lived in Hangzhou.",
+      "importance": 1.0,
+      "decay_factor": 0.5,
+      "created_at": "2025-02-01T09:00:00Z",
+      "updated_at": "2025-03-01T09:00:00Z"
+    },
+    {
+      "id": "summary-relocation-1",
+      "node_id": "node-summary-relocation-1",
+      "user_id": "user-alpha",
+      "type": "summary",
+      "content": "The user relocated to Shanghai after leaving Hangzhou.",
+      "importance": 1.1,
+      "decay_factor": 1.0,
+      "created_at": "2026-03-12T10:00:00Z",
+      "updated_at": "2026-03-14T10:00:00Z"
+    },
+    {
+      "id": "summary-runbook-1",
+      "node_id": "node-summary-runbook-1",
+      "user_id": "user-alpha",
+      "type": "summary",
+      "content": "Launch checklist includes smoke tests, rollback ownership, and incident contacts.",
+      "importance": 1.2,
+      "decay_factor": 1.0,
+      "created_at": "2026-03-13T11:00:00Z",
+      "updated_at": "2026-03-14T11:00:00Z"
+    },
+    {
+      "id": "fact-rollback-owner-1",
+      "node_id": "node-fact-rollback-owner-1",
+      "user_id": "user-alpha",
+      "type": "fact",
+      "content": "AC-17 is the designated release safety approver.",
+      "importance": 1.1,
+      "decay_factor": 1.0,
+      "created_at": "2026-03-13T11:10:00Z",
+      "updated_at": "2026-03-14T11:10:00Z"
+    },
+    {
+      "id": "impression-planning-1",
+      "node_id": "node-impression-planning-1",
+      "user_id": "user-alpha",
+      "type": "impression",
+      "content": "The user plans releases carefully and prefers written checklists.",
+      "importance": 1.3,
+      "decay_factor": 1.0,
+      "created_at": "2026-03-13T12:00:00Z",
+      "updated_at": "2026-03-14T12:00:00Z"
+    },
+    {
+      "id": "summary-cn-ui-1",
+      "node_id": "node-summary-cn-ui-1",
+      "user_id": "user-alpha",
+      "type": "summary",
+      "content": "\u7528\u6237\u559c\u6b22\u4e2d\u6587\u754c\u9762\uff0c\u5e76\u4e14\u5e0c\u671b\u9ed8\u8ba4\u4f7f\u7528\u6d45\u8272\u4e3b\u9898\u3002",
+      "importance": 1.2,
+      "decay_factor": 1.0,
+      "created_at": "2026-03-13T13:00:00Z",
+      "updated_at": "2026-03-14T13:00:00Z"
+    },
+    {
+      "id": "key-cn-theme-1",
+      "node_id": "node-key-cn-theme-1",
+      "user_id": "user-alpha",
+      "type": "key_memory",
+      "content": "ui_theme: \u6d45\u8272\u4e3b\u9898",
+      "importance": 1.4,
+      "decay_factor": 1.0,
+      "metadata": {
+        "key": "ui_theme",
+        "value": "\u6d45\u8272\u4e3b\u9898"
+      },
+      "created_at": "2026-03-13T13:05:00Z",
+      "updated_at": "2026-03-14T13:05:00Z"
+    },
+    {
+      "id": "summary-other-user-1",
+      "node_id": "node-summary-other-user-1",
+      "user_id": "user-bravo",
+      "type": "summary",
+      "content": "Preferred code style is terse Python one-liners and dark theme dashboards.",
+      "importance": 1.0,
+      "decay_factor": 1.0,
+      "created_at": "2026-03-14T08:00:00Z",
+      "updated_at": "2026-03-14T08:00:00Z"
+    }
+  ],
+  "relations": [
+    {
+      "user_id": "user-alpha",
+      "src_node_id": "node-summary-runbook-1",
+      "dst_node_id": "node-fact-rollback-owner-1",
+      "relation_type": "derived_from",
+      "weight": 0.95,
+      "source": "golden"
+    },
+    {
+      "user_id": "user-alpha",
+      "src_node_id": "node-summary-relocation-1",
+      "dst_node_id": "node-fact-city-current",
+      "relation_type": "supports",
+      "weight": 0.85,
+      "source": "golden"
+    }
+  ],
+  "queries": [
+    {
+      "case_id": "retrieval.code_style",
+      "user_id": "user-alpha",
+      "query": "preferred_code_style: explicit Go naming and small interfaces",
+      "top_n": 5,
+      "positives": [
+        "key-style-1",
+        "summary-style-1"
+      ],
+      "negatives": [
+        "summary-other-user-1"
+      ],
+      "graded_relevance": {
+        "key-style-1": 3,
+        "summary-style-1": 2
+      },
+      "notes": "Stable preference retrieval should favor key memory and keep other-user content out.",
+      "memory_types": [
+        "key_memory",
+        "summary"
+      ]
+    },
+    {
+      "case_id": "retrieval.current_city",
+      "user_id": "user-alpha",
+      "query": "The user currently lives in Shanghai.",
+      "top_n": 5,
+      "positives": [
+        "fact-city-current",
+        "summary-relocation-1"
+      ],
+      "stale_document_ids": [
+        "fact-city-stale"
+      ],
+      "graded_relevance": {
+        "fact-city-current": 3,
+        "summary-relocation-1": 2
+      },
+      "notes": "Current fact should outrank stale superseded history.",
+      "memory_types": [
+        "fact",
+        "summary"
+      ]
+    },
+    {
+      "case_id": "retrieval.relation_runbook",
+      "user_id": "user-alpha",
+      "query": "Launch checklist includes smoke tests, rollback ownership, and incident contacts.",
+      "top_n": 2,
+      "positives": [
+        "summary-runbook-1",
+        "fact-rollback-owner-1"
+      ],
+      "relation_positive_ids": [
+        "fact-rollback-owner-1"
+      ],
+      "graded_relevance": {
+        "summary-runbook-1": 3,
+        "fact-rollback-owner-1": 2
+      },
+      "notes": "The related rollback owner fact should appear only when relation expansion is active.",
+      "memory_types": [
+        "fact",
+        "summary"
+      ]
+    },
+    {
+      "case_id": "retrieval.release_planning",
+      "user_id": "user-alpha",
+      "query": "The user plans releases carefully and prefers written checklists.",
+      "top_n": 5,
+      "positives": [
+        "impression-planning-1"
+      ],
+      "graded_relevance": {
+        "impression-planning-1": 3
+      },
+      "notes": "Impression retrieval should stay stable across variants.",
+      "memory_types": [
+        "impression"
+      ]
+    },
+    {
+      "case_id": "retrieval.cn_theme",
+      "user_id": "user-alpha",
+      "query": "ui_theme: \u6d45\u8272\u4e3b\u9898",
+      "top_n": 5,
+      "positives": [
+        "key-cn-theme-1",
+        "summary-cn-ui-1"
+      ],
+      "graded_relevance": {
+        "key-cn-theme-1": 3,
+        "summary-cn-ui-1": 2
+      },
+      "notes": "Multilingual retrieval should keep the Chinese key memory and summary aligned.",
+      "memory_types": [
+        "key_memory",
+        "summary"
+      ]
+    }
+  ]
+}

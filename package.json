@@ -1,0 +1,27 @@
+{
+  "name": "memstation",
+  "private": true,
+  "packageManager": "pnpm@10.32.1",
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:reset": "./scripts/dev-reset-stack.sh",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:contract": "./scripts/contract-test.sh",
+    "test:eval": "./scripts/eval-memory.sh",
+    "test:eval:locomo": "./scripts/eval-memory-locomo.sh",
+    "test:eval:nightly": "./scripts/eval-memory-nightly.sh",
+    "test:e2e:manager": "pnpm --filter @memstation/manager test:e2e",
+    "test:perf": "./scripts/perf-smoke.sh",
+    "test:recovery": "./scripts/worker-backlog-smoke.sh",
+    "test:backup:dry-run": "./scripts/backup-restore-drill.sh --dry-run",
+    "test:coverage": "./scripts/coverage-check.sh",
+    "test:all": "pnpm lint && pnpm test && pnpm test:contract && pnpm test:eval && pnpm test:e2e:manager",
+    "generate": "turbo run generate",
+    "format": "turbo run format"
+  },
+  "devDependencies": {
+    "turbo": "2.8.16"
+  }
+}

@@ -1,0 +1,68 @@
+[
+  {
+    "sample_id": "sample-001",
+    "conversation": [
+      {
+        "dialogue_id": "D1",
+        "speaker": "Alex",
+        "text": "Alex moved to Shanghai and now keeps a weekly planning checklist."
+      },
+      {
+        "dialogue_id": "D1",
+        "speaker": "Sam",
+        "text": "Sam prefers coffee chats in the afternoon."
+      },
+      {
+        "dialogue_id": "D1",
+        "speaker": "Alex",
+        "text": "Alex said the rollback owner for launches is Alice Chen."
+      }
+    ],
+    "event_summary": [
+      {
+        "id": "E1",
+        "speaker": "Alex",
+        "summary": "Alex moved to Shanghai and uses a weekly planning checklist."
+      }
+    ],
+    "observation": [
+      {
+        "id": "O1",
+        "speaker": "Alex",
+        "observation": "Rollback owner is Alice Chen."
+      },
+      {
+        "id": "O2",
+        "speaker": "Sam",
+        "observation": "Sam prefers coffee chats in the afternoon."
+      }
+    ],
+    "session_summary": [
+      {
+        "id": "S1",
+        "speaker": "Alex",
+        "summary": "Alex discussed relocation, planning habits, and rollback ownership."
+      }
+    ],
+    "qa": [
+      {
+        "question": "Who is the rollback owner for launches?",
+        "answer": "Alice Chen",
+        "category": 2,
+        "evidence": ["O1", "D1:3"]
+      },
+      {
+        "question": "Where did Alex move to?",
+        "answer": "Shanghai",
+        "category": 1,
+        "evidence": ["E1", "D1:1"]
+      },
+      {
+        "question": "What kind of chats does Sam prefer?",
+        "answer": "Coffee chats in the afternoon",
+        "category": 5,
+        "evidence": ["O2", "D1:2"]
+      }
+    ]
+  }
+]

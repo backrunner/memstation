@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memstation-scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memstation-scheduler
+  template:
+    metadata:
+      labels:
+        app: memstation-scheduler
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: scheduler
+          image: memstation/server:0.1.0
+          args: ["scheduler"]
+          envFrom:
+            - configMapRef:
+                name: memstation-config
+            - secretRef:
+                name: memstation-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 250m
+              memory: 384Mi

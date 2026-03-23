@@ -1,0 +1,127 @@
+services:
+  workspace:
+    image: mcr.microsoft.com/devcontainers/base:ubuntu-24.04
+    command: sleep infinity
+    working_dir: /workspace/memstation
+    volumes:
+      - ../..:/workspace/memstation
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  memstation:
+    build:
+      context: ../..
+      dockerfile: apps/server/Dockerfile
+    environment:
+      MEMSTATION_PORT: 8080
+      DATABASE_URL: postgres://memstation:memstation_dev@postgres:5432/memstation?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      VECTOR_STORE_BACKEND: pgvector
+      CHAT_MODEL: ${CHAT_MODEL:-}
+      SUMMARY_MODEL: ${SUMMARY_MODEL:-}
+      ANALYSIS_MODEL: ${ANALYSIS_MODEL:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
+      MEMSTATION_ADMIN_TOKEN: ${MEMSTATION_ADMIN_TOKEN:-memstation-local-admin-token}
+      MEMSTATION_MASTER_KEY: ${MEMSTATION_MASTER_KEY:-memstation-local-master-key}
+      MEMSTATION_DEV_API_KEY: ${MEMSTATION_DEV_API_KEY:-ms-local-dev}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["serve"]
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: apps/server/Dockerfile
+    environment:
+      DATABASE_URL: postgres://memstation:memstation_dev@postgres:5432/memstation?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      VECTOR_STORE_BACKEND: pgvector
+      MEMSTATION_ADMIN_TOKEN: ${MEMSTATION_ADMIN_TOKEN:-memstation-local-admin-token}
+      MEMSTATION_MASTER_KEY: ${MEMSTATION_MASTER_KEY:-memstation-local-master-key}
+      MEMSTATION_DEV_API_KEY: ${MEMSTATION_DEV_API_KEY:-ms-local-dev}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["worker"]
+
+  scheduler:
+    build:
+      context: ../..
+      dockerfile: apps/server/Dockerfile
+    environment:
+      DATABASE_URL: postgres://memstation:memstation_dev@postgres:5432/memstation?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      VECTOR_STORE_BACKEND: pgvector
+      MEMSTATION_ADMIN_TOKEN: ${MEMSTATION_ADMIN_TOKEN:-memstation-local-admin-token}
+      MEMSTATION_MASTER_KEY: ${MEMSTATION_MASTER_KEY:-memstation-local-master-key}
+      MEMSTATION_DEV_API_KEY: ${MEMSTATION_DEV_API_KEY:-ms-local-dev}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["scheduler"]
+
+  manager:
+    build:
+      context: ../..
+      dockerfile: apps/manager/Dockerfile
+    environment:
+      PUBLIC_MEMSTATION_URL: http://memstation:8080
+    ports:
+      - "4173:3000"
+    depends_on:
+      memstation:
+        condition: service_started
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: memstation
+      POSTGRES_PASSWORD: memstation_dev
+      POSTGRES_DB: memstation
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U memstation -d memstation"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.135.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ../otel/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+
+volumes:
+  postgres-data:
+  redis-data:
