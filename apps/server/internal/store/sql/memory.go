@@ -129,9 +129,7 @@ func (r *InMemoryConversationRepository) ReplaceSegments(_ context.Context, user
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	next := make([]domain.ConversationSegment, 0, len(segments))
-	for _, segment := range segments {
-		next = append(next, segment)
-	}
+	next = append(next, segments...)
 	r.segments[key(userID, conversationID)] = next
 	if conversation, ok := r.conversations[key(userID, conversationID)]; ok {
 		conversation.Segments = append([]domain.ConversationSegment{}, next...)
@@ -272,7 +270,7 @@ func (r *InMemoryMemoryRepository) StoreDocument(_ context.Context, doc domain.M
 	if doc.Type == domain.MemoryTypeFact {
 		r.syncFactSupersedesLocked(doc)
 	}
-	r.syncTemporalRelationsLocked(doc.UserID, doc.NodeID, doc.ActivityAt, doc.TimeTier)
+	r.syncTemporalRelationsLocked(doc.UserID, doc.NodeID, doc.ActivityAt)
 	return nil
 }
 
@@ -617,7 +615,7 @@ func (r *InMemoryMemoryRepository) UpsertKeyMemory(_ context.Context, km domain.
 		CreatedAt: km.CreatedAt,
 		UpdatedAt: km.UpdatedAt,
 	}
-	r.syncTemporalRelationsLocked(km.UserID, nodeID, km.ActivityAt, km.TimeTier)
+	r.syncTemporalRelationsLocked(km.UserID, nodeID, km.ActivityAt)
 	return nil
 }
 
@@ -799,12 +797,12 @@ func (r *InMemoryMemoryRepository) upsertRelationLocked(relation domain.MemoryRe
 	r.relations = append(r.relations, relation)
 }
 
-func (r *InMemoryMemoryRepository) syncTemporalRelationsLocked(userID, nodeID string, activityAt time.Time, tier domain.TimeTier) {
+func (r *InMemoryMemoryRepository) syncTemporalRelationsLocked(userID, nodeID string, activityAt time.Time) {
 	if userID == "" || nodeID == "" {
 		return
 	}
 	activityAt = domain.DeriveActivityAt(activityAt, time.Time{}, time.Now().UTC())
-	tier = domain.ClassifyTimeTier(activityAt, time.Now().UTC())
+	tier := domain.ClassifyTimeTier(activityAt, time.Now().UTC())
 	filtered := r.relations[:0]
 	for _, relation := range r.relations {
 		if relation.UserID == userID && relation.SrcNodeID == nodeID && isTemporalRelationType(relation.RelationType) {

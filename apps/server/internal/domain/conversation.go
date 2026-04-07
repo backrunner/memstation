@@ -2,8 +2,10 @@ package domain
 
 import "time"
 
-type FinalizeStatus string
-type ProcessingStatus string
+type (
+	FinalizeStatus   string
+	ProcessingStatus string
+)
 
 const (
 	FinalizeStatusActive  FinalizeStatus = "active"

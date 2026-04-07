@@ -41,10 +41,13 @@ jobs:
         run: pnpm install --frozen-lockfile=false
       - name: Go test
         run: cd apps/server && go test ./...
+      - name: Go format check
+        run: bash ./scripts/go-format.sh --check
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
           working-directory: apps/server
+          version: v1.64.8
           args: ./...
       - name: Go generate check
         run: cd apps/server && go generate ./... && git diff --exit-code

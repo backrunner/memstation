@@ -1742,14 +1742,6 @@ func stringValue(metadata map[string]any, key string) string {
 	}
 }
 
-func nullableString(metadata map[string]any, key string) any {
-	value := stringValue(metadata, key)
-	if value == "" || value == "%!v(<nil>)" || value == "<nil>" {
-		return nil
-	}
-	return value
-}
-
 func floatValue(metadata map[string]any, key string, fallback float64) float64 {
 	if metadata == nil {
 		return fallback

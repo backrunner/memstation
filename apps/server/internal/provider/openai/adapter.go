@@ -562,7 +562,8 @@ func responseOutput(output []struct {
 		Type string `json:"type"`
 		Text string `json:"text"`
 	} `json:"content"`
-}) (string, []domain.ToolCall) {
+},
+) (string, []domain.ToolCall) {
 	parts := make([]string, 0)
 	toolCalls := make([]domain.ToolCall, 0)
 	for _, item := range output {
@@ -615,7 +616,8 @@ func parseChatToolCalls(items []struct {
 		Name      string `json:"name"`
 		Arguments string `json:"arguments"`
 	} `json:"function"`
-}) []domain.ToolCall {
+},
+) []domain.ToolCall {
 	if len(items) == 0 {
 		return nil
 	}

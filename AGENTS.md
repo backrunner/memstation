@@ -541,15 +541,16 @@ Benchmark 基线固定采用 **LOCOMO-first 方法论 + 混合数据集落地**�
 
 v1.0 完整 CI 至少执行下列门禁；当前仓库如未全部补齐，也必须以后续实现将其补齐，不得降级：
 
-1. `go test ./...`
-2. `golangci-lint run ./...`
-3. `go generate ./...` 后执行 `git diff --exit-code`，不允许使用 `|| true`
-4. `pnpm lint`
-5. `pnpm test`
-6. manager Playwright E2E
-7. Atlas migration lint / dry-run
-8. retrieval/ranking benchmark smoke
-9. backup/restore drill dry-run
+1. `bash ./scripts/go-format.sh --check`
+2. `go test ./...`
+3. `golangci-lint run ./...`
+4. `go generate ./...` 后执行 `git diff --exit-code`，不允许使用 `|| true`
+5. `pnpm lint`
+6. `pnpm test`
+7. manager Playwright E2E
+8. Atlas migration lint / dry-run
+9. retrieval/ranking benchmark smoke
+10. backup/restore drill dry-run
 
 ### 12.5 Nightly 基线
 
@@ -569,6 +570,19 @@ nightly 回归不是可选项，v1.0 必须预留并最终落地：
 - 所有外部调用都必须带超时、重试策略和 metrics
 - 所有跨包 DTO 必须显式定义，禁止在 handler 中直接传 Ent entity 到前端
 - 所有 provider adapter 必须有 contract tests
+- Go 代码格式必须统一通过 `goimports + gofumpt`，并以 `scripts/go-format.sh` 为唯一仓库级入口
+- Go lint 必须统一通过 `golangci-lint`，并以 `scripts/go-lint.sh` 为唯一仓库级入口
+
+### 12.7 提交规范
+
+- Git commit message 必须遵循 `type: message` 形式，`type` 使用小写英文前缀，冒号后必须保留一个空格
+- 当前项目约定的常用前缀至少包括：`fix`、`feat`、`init`、`chore`；如确有必要可扩展 `docs`、`refactor`、`test` 等语义化前缀
+- 根初始化、仓库基线落地、首次导入大规模结构时优先使用 `init: ...`
+- 新增用户可感知能力、接口、页面、链路时优先使用 `feat: ...`
+- 修复缺陷、回归、数据一致性或可靠性问题时优先使用 `fix: ...`
+- 不影响用户能力的工程清理、脚本、依赖、配置、门禁调整时优先使用 `chore: ...`
+- 禁止使用不带前缀的提交信息，例如 `update`, `misc`, `wip`, `tmp`
+- 单个 commit 应尽量聚焦单一主题；如同时包含功能、文档和质量门禁，应优先按主语义选择前缀，而不是堆叠多个类型
 
 ---
 
@@ -595,7 +609,7 @@ v1.x 后续路线：
 
 ---
 
-## 14. 当前实现状态（as of 2026-03-16）
+## 14. 当前实现状态（as of 2026-04-08）
 
 本节用于重启时快速恢复上下文；如后续实现进度发生变化，必须同步更新本节，而不能只改代码不改状态。
 
@@ -611,14 +625,18 @@ v1.x 后续路线：
 - LOCOMO benchmark 默认会从 Snap Research 官方公开地址下载 `locomo10.json`，仍允许通过环境变量覆盖数据源
 - CI 已补齐 `golangci-lint`、严格 generated diff 校验、Atlas migration lint/dry-run、benchmark smoke、manager Playwright、coverage gate
 - K8s baseline 已补齐 server / worker / scheduler deployment，以及 ConfigMap / Secret 示例清单
-- 当前自动化测试全绿，包含 Go 单元/集成/契约/e2e/eval、manager 的 Vitest / Playwright，以及 coverage / perf smoke 脚本
+- 根目录 `README.md` 已补齐，覆盖当前架构、接口、运行方式、测试入口和部署基线
+- Go 代码质量门禁已统一为 `scripts/go-format.sh` + `scripts/go-lint.sh`，并接入 `apps/server` 本地脚本与 CI 的 format check / golangci-lint
+- 记忆切片 rewrite 的 stale segment 清理链路已补强，能够按 `conversation_id + keep set` 删除残留 segment graph node、relation 与 vector，避免重试或侧表已覆盖后的脏数据残留
+- 当前已确认通过的本地门禁包括：`pnpm lint`、`pnpm --filter @memstation/server format:check`、`pnpm --filter @memstation/server lint`、`go test ./...`
 
 ### 14.2 未完成
 
-- 当前没有已确认的 v1 代码缺口；R1-R6 与 R5.5 所要求的仓库内实现均已落地
+- 当前没有已确认的 v1 功能缺口；R1-R6 与 R5.5 所要求的仓库内实现均已落地
 - 原始 LOCOMO 数据仍然不会提交进仓库；默认 benchmark 会从上游公开地址拉取，夜间和本地运行仍受外部网络与许可证约束
 - backup/restore 实际演练仍要求运行环境具备 Docker Compose 与镜像拉取能力；在无 Docker 环境下只能执行 dry-run 形态校验
 - 压测与覆盖率门禁已具备基线实现，但后续仍应随着功能扩展逐步提高阈值，而不是长期停留在当前数值
+- 当前主要剩余工作已从“补功能”转为“持续提高工程门禁和运维阈值”，而不是继续扩写新的 v1 范围
 
 ### 14.3 重启检查点
 
@@ -629,6 +647,21 @@ v1.x 后续路线：
 3. 如果新增记忆类型、排序信号或 relation 规则，先更新 `apps/server/tests/eval/testdata/` 和 smoke expectations
 4. 如果新增 manager 核心模块，同步补 Vitest、Playwright 和 coverage gate
 5. 如果后续引入集群化或多节点恢复方案，把现有单实例 drill 扩展为跨节点恢复演练，而不是另起一套脚本
+
+### 14.4 当前开发计划（as of 2026-04-08）
+
+当前开发计划不再以“补齐 v1 基础功能”为主，而是固定按以下顺序推进：
+
+1. 工程纪律优先：
+   所有 Go 改动默认先跑 `scripts/go-format.sh --check`、`scripts/go-lint.sh`、`go test ./...`，所有提交信息统一遵循 `type: message`
+2. 质量门禁持续收紧：
+   持续观察 CI / nightly 结果，逐步提高 coverage、perf smoke、recovery、backup/restore 的阈值，而不是长期保守放行
+3. 评测先行：
+   凡是修改记忆类型、排序信号、relation expansion、注入逻辑或 temporal 规则，先同步更新 benchmark、smoke expectation 与相关回归测试
+4. 运维基线深化：
+   继续用现有 Compose / K8s / multi-target manager 基线承接后续集群化和多节点恢复需求，不另起一套平行架构
+5. 文档与状态同步：
+   后续只要出现里程碑、门禁、运行方式或当前进度变化，必须同步更新 `AGENTS.md` 与根 `README.md`
 
 ---
 

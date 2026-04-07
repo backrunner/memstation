@@ -1,0 +1,19 @@
+run:
+  timeout: 5m
+  tests: true
+
+issues:
+  exclude-dirs:
+    - ent
+    - graph/generated
+    - graph/model
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
