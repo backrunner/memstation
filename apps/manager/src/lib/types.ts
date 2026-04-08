@@ -59,6 +59,7 @@ export interface GatewayHeaders {
   conversationId: string;
   requestId: string;
   memoryPersist: boolean;
+  sourceRetain?: boolean;
 }
 
 export interface GatewayDebugState {
@@ -87,6 +88,7 @@ export interface ConversationRecord {
 
 export interface ConversationSegment {
   id: string;
+  generation_id?: string;
   user_id: string;
   conversation_id: string;
   segment_index: number;
@@ -120,6 +122,7 @@ export interface ConversationListItem {
 export interface MemoryDocument {
   id: string;
   node_id: string;
+  generation_id?: string;
   user_id: string;
   conversation_id?: string;
   type: string;
@@ -195,8 +198,85 @@ export interface SearchMemoriesResult {
 
 export interface ConversationMemoryPayload {
   conversation_id: string;
+  generation_id?: string;
   documents: MemoryDocument[];
   key_memories: KeyMemoryRecord[];
+}
+
+export interface MemorySourceSnapshot {
+  snapshot_id: string;
+  user_id: string;
+  conversation_id: string;
+  snapshot_version: number;
+  source_hash: string;
+  request_format?: string;
+  provider?: string;
+  mode?: string;
+  finalize_status?: string;
+  message_count?: number;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface MemoryGeneration {
+  generation_id: string;
+  user_id: string;
+  status: string;
+  scope: string;
+  conversation_id?: string;
+  is_active: boolean;
+  structure_version: number;
+  embedding_version: number;
+  embedding_model: string;
+  activate_on_success: boolean;
+  source_count: number;
+  processed_count: number;
+  embedding_count: number;
+  failure_count: number;
+  last_error?: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+  activated_at?: string;
+}
+
+export interface MemoryGenerationSource {
+  id: string;
+  generation_id: string;
+  user_id: string;
+  snapshot_id: string;
+  conversation_id: string;
+  source_hash: string;
+  status: string;
+  last_error?: string;
+  created_at?: string;
+  updated_at?: string;
+  processed_at?: string;
+}
+
+export interface UserSourcesPayload {
+  user_id: string;
+  source_stats: {
+    snapshot_count: number;
+    latest_snapshot_at?: string;
+    latest_snapshot_user_id?: string;
+  };
+  active_generation: MemoryGeneration;
+  generations: MemoryGeneration[];
+}
+
+export interface ConversationSourcesPayload {
+  user_id: string;
+  conversation_id: string;
+  has_snapshot: boolean;
+  latest_snapshot?: MemorySourceSnapshot;
+  snapshots: MemorySourceSnapshot[];
+}
+
+export interface MemoryRebuildDetailPayload {
+  item: MemoryGeneration;
+  sources: MemoryGenerationSource[];
 }
 
 export interface MemoryPreviewPayload {
@@ -351,6 +431,11 @@ export interface UserDetailPayload {
     conversation_count: number;
     key_memory_count: number;
   };
+}
+
+export interface UpdateUserSettingsResponse {
+  settings: Record<string, unknown>;
+  memory_rebuild_required?: boolean;
 }
 
 export interface AdminConfigPayload extends Record<string, unknown> {

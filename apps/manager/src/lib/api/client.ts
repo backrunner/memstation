@@ -8,6 +8,7 @@ import type {
   ConversationListItem,
   ConversationMemoryPayload,
   ConversationRecord,
+  ConversationSourcesPayload,
   ConversationSegment,
   DashboardOverview,
   GatewayDebugState,
@@ -18,6 +19,10 @@ import type {
   KeyMemoryRecord,
   MemStationTarget,
   MemoryDocument,
+  MemoryGeneration,
+  MemoryGenerationSource,
+  MemoryRebuildDetailPayload,
+  MemorySourceSnapshot,
   MemoryPreviewPayload,
   ProviderDiagnostic,
   QueueInfo,
@@ -27,7 +32,9 @@ import type {
   TokenStatsResponse,
   ToolCall,
   UserDetailPayload,
+  UserSourcesPayload,
   UserSummary,
+  UpdateUserSettingsResponse,
   UsageRecord
 } from '$lib/types';
 
@@ -210,10 +217,18 @@ export async function fetchConversations(
 export async function fetchConversation(
   target: MemStationTarget,
   conversationId: string,
-  userId?: string
+  userId?: string,
+  generationId?: string
 ): Promise<ConversationRecord> {
-  const query = userId?.trim() ? `?user_id=${encodeURIComponent(userId.trim())}` : '';
-  const payload = await adminRequest<ConversationRecord>(target, `/api/admin/conversations/${conversationId}${query}`);
+  const query = new URLSearchParams();
+  if (userId?.trim()) {
+    query.set('user_id', userId.trim());
+  }
+  if (generationId?.trim()) {
+    query.set('generation_id', generationId.trim());
+  }
+  const suffix = query.size > 0 ? `?${query.toString()}` : '';
+  const payload = await adminRequest<ConversationRecord>(target, `/api/admin/conversations/${conversationId}${suffix}`);
   return {
     ...payload,
     messages: (payload.messages ?? []).map((message) => normalizeMessage(message as unknown as Record<string, unknown>)),
@@ -226,17 +241,48 @@ export async function fetchConversation(
 export function fetchConversationMemory(
   target: MemStationTarget,
   conversationId: string,
-  userId?: string
+  userId?: string,
+  generationId?: string
 ): Promise<ConversationMemoryPayload> {
-  const query = userId?.trim() ? `?user_id=${encodeURIComponent(userId.trim())}` : '';
+  const query = new URLSearchParams();
+  if (userId?.trim()) {
+    query.set('user_id', userId.trim());
+  }
+  if (generationId?.trim()) {
+    query.set('generation_id', generationId.trim());
+  }
+  const suffix = query.size > 0 ? `?${query.toString()}` : '';
   return adminRequest<{
     conversation_id: string;
+    generation_id?: string;
     documents?: Array<Record<string, unknown>>;
     key_memories?: Array<Record<string, unknown>>;
-  }>(target, `/api/admin/conversations/${conversationId}/memory${query}`).then((payload) => ({
+  }>(target, `/api/admin/conversations/${conversationId}/memory${suffix}`).then((payload) => ({
     conversation_id: payload.conversation_id,
+    generation_id: typeof payload.generation_id === 'string' ? payload.generation_id : undefined,
     documents: (payload.documents ?? []).map((item) => normalizeMemoryDocument(item)),
     key_memories: (payload.key_memories ?? []).map((item) => normalizeKeyMemoryRecord(item))
+  }));
+}
+
+export function fetchConversationSources(
+  target: MemStationTarget,
+  conversationId: string,
+  userId?: string
+): Promise<ConversationSourcesPayload> {
+  const suffix = userId?.trim() ? `?user_id=${encodeURIComponent(userId.trim())}` : '';
+  return adminRequest<{
+    user_id: string;
+    conversation_id: string;
+    has_snapshot: boolean;
+    latest_snapshot?: Record<string, unknown>;
+    snapshots?: Array<Record<string, unknown>>;
+  }>(target, `/api/admin/conversations/${conversationId}/sources${suffix}`).then((payload) => ({
+    user_id: payload.user_id,
+    conversation_id: payload.conversation_id,
+    has_snapshot: Boolean(payload.has_snapshot),
+    latest_snapshot: payload.latest_snapshot ? normalizeMemorySourceSnapshot(payload.latest_snapshot) : undefined,
+    snapshots: (payload.snapshots ?? []).map((item) => normalizeMemorySourceSnapshot(item))
   }));
 }
 
@@ -439,6 +485,24 @@ export function fetchUserDetail(target: MemStationTarget, userId: string): Promi
   return adminRequest(target, `/api/admin/users/${encodeURIComponent(userId)}`);
 }
 
+export function fetchUserSources(target: MemStationTarget, userId: string): Promise<UserSourcesPayload> {
+  return adminRequest<{
+    user_id: string;
+    source_stats: {
+      snapshot_count: number;
+      latest_snapshot_at?: string;
+      latest_snapshot_user_id?: string;
+    };
+    active_generation: Record<string, unknown>;
+    generations?: Array<Record<string, unknown>>;
+  }>(target, `/api/admin/users/${encodeURIComponent(userId)}/sources`).then((payload) => ({
+    user_id: payload.user_id,
+    source_stats: payload.source_stats,
+    active_generation: normalizeMemoryGeneration(payload.active_generation),
+    generations: (payload.generations ?? []).map((item) => normalizeMemoryGeneration(item))
+  }));
+}
+
 export async function createUserAPIKey(
   target: MemStationTarget,
   userId: string,
@@ -460,11 +524,70 @@ export function updateUserSettings(
   target: MemStationTarget,
   userId: string,
   payload: Record<string, unknown>
-): Promise<Record<string, unknown>> {
-  return adminRequest(target, `/api/admin/users/${encodeURIComponent(userId)}/settings`, {
+): Promise<UpdateUserSettingsResponse> {
+  return adminRequest<{
+    settings: Record<string, unknown>;
+    memory_rebuild_required?: boolean;
+  }>(target, `/api/admin/users/${encodeURIComponent(userId)}/settings`, {
     method: 'PUT',
     body: JSON.stringify(payload)
+  }).then((result) => ({
+    settings: result.settings ?? {},
+    memory_rebuild_required: Boolean(result.memory_rebuild_required)
+  }));
+}
+
+export function fetchMemoryRebuilds(target: MemStationTarget, userId: string, limit = 20): Promise<MemoryGeneration[]> {
+  const query = new URLSearchParams({
+    user_id: userId,
+    limit: String(limit)
   });
+  return adminRequest<{ items: Array<Record<string, unknown>> }>(target, `/api/admin/memory/rebuilds?${query.toString()}`).then((payload) =>
+    (payload.items ?? []).map((item) => normalizeMemoryGeneration(item))
+  );
+}
+
+export function fetchMemoryRebuildDetail(target: MemStationTarget, userId: string, generationId: string): Promise<MemoryRebuildDetailPayload> {
+  const query = new URLSearchParams({ user_id: userId });
+  return adminRequest<{ item: Record<string, unknown>; sources?: Array<Record<string, unknown>> }>(
+    target,
+    `/api/admin/memory/rebuilds/${encodeURIComponent(generationId)}?${query.toString()}`
+  ).then((payload) => ({
+    item: normalizeMemoryGeneration(payload.item),
+    sources: (payload.sources ?? []).map((item) => normalizeMemoryGenerationSource(item))
+  }));
+}
+
+export function createMemoryRebuild(
+  target: MemStationTarget,
+  payload: {
+    userId: string;
+    scope: 'user' | 'conversation';
+    conversationId?: string;
+    activateOnSuccess?: boolean;
+    embeddingModelOverride?: string;
+  }
+): Promise<MemoryRebuildDetailPayload> {
+  return adminRequest<{ item: Record<string, unknown>; sources?: Array<Record<string, unknown>> }>(target, '/api/admin/memory/rebuilds', {
+    method: 'POST',
+    body: JSON.stringify({
+      user_id: payload.userId,
+      scope: payload.scope,
+      conversation_id: payload.conversationId ?? '',
+      activate_on_success: payload.activateOnSuccess ?? true,
+      embedding_model_override: payload.embeddingModelOverride ?? ''
+    })
+  }).then((result) => ({
+    item: normalizeMemoryGeneration(result.item),
+    sources: (result.sources ?? []).map((item) => normalizeMemoryGenerationSource(item))
+  }));
+}
+
+export function activateMemoryRebuild(target: MemStationTarget, userId: string, generationId: string): Promise<MemoryGeneration> {
+  return adminRequest<Record<string, unknown>>(target, `/api/admin/memory/rebuilds/${encodeURIComponent(generationId)}/activate`, {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId })
+  }).then((payload) => normalizeMemoryGeneration(payload));
 }
 
 export async function fetchTasks(target: MemStationTarget, options?: { limit?: number; states?: string[]; queue?: string }): Promise<QueueTaskRecord[]> {
@@ -721,7 +844,8 @@ function readGatewayHeaders(headers: Headers): GatewayHeaders {
   return {
     conversationId: headers.get('X-MemStation-Conversation-ID') ?? '',
     requestId: headers.get('X-MemStation-Request-ID') ?? '',
-    memoryPersist: headers.get('X-MemStation-Memory-Persist') !== 'false'
+    memoryPersist: headers.get('X-MemStation-Memory-Persist') !== 'false',
+    sourceRetain: headers.get('X-MemStation-Source-Retain') === 'true'
   };
 }
 
@@ -997,6 +1121,7 @@ function normalizeMemoryDocument(payload: Record<string, unknown>): MemoryDocume
   return {
     id: String(payload.id ?? ''),
     node_id: stringOrUndefined(payload.node_id) ?? '',
+    generation_id: stringOrUndefined(payload.generation_id),
     user_id: stringOrUndefined(payload.user_id) ?? '',
     conversation_id: stringOrUndefined(payload.conversation_id),
     type: String(payload.type ?? ''),
@@ -1026,6 +1151,7 @@ function normalizeMemoryDocument(payload: Record<string, unknown>): MemoryDocume
 function normalizeConversationSegment(payload: Record<string, unknown>): ConversationSegment {
   return {
     id: String(payload.id ?? ''),
+    generation_id: stringOrUndefined(payload.generation_id),
     user_id: stringOrUndefined(payload.user_id) ?? '',
     conversation_id: stringOrUndefined(payload.conversation_id) ?? '',
     segment_index: Number(payload.segment_index ?? 0),
@@ -1058,6 +1184,64 @@ function normalizeSearchMemoryItem(payload: Record<string, unknown>) {
     time_tier: item.time_tier,
     metadata: item.metadata,
     related: item.related
+  };
+}
+
+function normalizeMemorySourceSnapshot(payload: Record<string, unknown>): MemorySourceSnapshot {
+  return {
+    snapshot_id: String(payload.snapshot_id ?? ''),
+    user_id: String(payload.user_id ?? ''),
+    conversation_id: String(payload.conversation_id ?? ''),
+    snapshot_version: Number(payload.snapshot_version ?? 0),
+    source_hash: String(payload.source_hash ?? ''),
+    request_format: stringOrUndefined(payload.request_format),
+    provider: stringOrUndefined(payload.provider),
+    mode: stringOrUndefined(payload.mode),
+    finalize_status: stringOrUndefined(payload.finalize_status),
+    message_count: numberOrUndefined(payload.message_count),
+    metadata: objectOrUndefined(payload.metadata),
+    created_at: stringOrUndefined(payload.created_at),
+    updated_at: stringOrUndefined(payload.updated_at)
+  };
+}
+
+function normalizeMemoryGeneration(payload: Record<string, unknown>): MemoryGeneration {
+  return {
+    generation_id: String(payload.generation_id ?? ''),
+    user_id: String(payload.user_id ?? ''),
+    status: String(payload.status ?? ''),
+    scope: String(payload.scope ?? ''),
+    conversation_id: stringOrUndefined(payload.conversation_id),
+    is_active: Boolean(payload.is_active),
+    structure_version: Number(payload.structure_version ?? 0),
+    embedding_version: Number(payload.embedding_version ?? 0),
+    embedding_model: String(payload.embedding_model ?? ''),
+    activate_on_success: Boolean(payload.activate_on_success),
+    source_count: Number(payload.source_count ?? 0),
+    processed_count: Number(payload.processed_count ?? 0),
+    embedding_count: Number(payload.embedding_count ?? 0),
+    failure_count: Number(payload.failure_count ?? 0),
+    last_error: stringOrUndefined(payload.last_error),
+    metadata: objectOrUndefined(payload.metadata),
+    created_at: stringOrUndefined(payload.created_at),
+    updated_at: stringOrUndefined(payload.updated_at),
+    activated_at: stringOrUndefined(payload.activated_at)
+  };
+}
+
+function normalizeMemoryGenerationSource(payload: Record<string, unknown>): MemoryGenerationSource {
+  return {
+    id: String(payload.id ?? ''),
+    generation_id: String(payload.generation_id ?? ''),
+    user_id: String(payload.user_id ?? ''),
+    snapshot_id: String(payload.snapshot_id ?? ''),
+    conversation_id: String(payload.conversation_id ?? ''),
+    source_hash: String(payload.source_hash ?? ''),
+    status: String(payload.status ?? ''),
+    last_error: stringOrUndefined(payload.last_error),
+    created_at: stringOrUndefined(payload.created_at),
+    updated_at: stringOrUndefined(payload.updated_at),
+    processed_at: stringOrUndefined(payload.processed_at)
   };
 }
 

@@ -5,18 +5,16 @@
   import { page } from '$app/stores';
   import { Select } from 'bits-ui';
 
-  import { fetchQueues, fetchTasks, requeueTask } from '$lib/api/client';
+  import { activateMemoryRebuild, fetchMemoryRebuilds, fetchQueues, fetchTasks, requeueTask } from '$lib/api/client';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { QueueInfo, QueueTaskRecord } from '$lib/types';
+  import type { MemoryGeneration, QueueInfo, QueueTaskRecord } from '$lib/types';
 
   const taskTypeItems = [
     { value: 'analysis.extract', label: 'analysis.extract' },
     { value: 'summary.generate', label: 'summary.generate' },
-    { value: 'embedding.generate', label: 'embedding.generate' },
     { value: 'keymemory.reconcile', label: 'keymemory.reconcile' },
-    { value: 'conversation.finalize', label: 'conversation.finalize' },
-    { value: 'embedding.rebuild', label: 'embedding.rebuild' }
+    { value: 'conversation.finalize', label: 'conversation.finalize' }
   ];
 
   let loading = true;
@@ -29,10 +27,11 @@
   let selectedStates = ['retry', 'archived', 'scheduled', 'active'];
   let selectedQueue = '';
   let selectedTask: QueueTaskRecord | null = null;
+  let rebuilds: MemoryGeneration[] = [];
   let manualConversationId = '';
   let manualUserId = 'admin';
   let manualTaskType = 'analysis.extract';
-  let embeddingVersion = 1;
+  let rebuildUserId = 'admin';
 
   onMount(async () => {
     await loadTasks();
@@ -43,7 +42,9 @@
     selectedQueue = routeQueue;
   }
 
-  $: queueFilterKey = `${$selectedTarget?.id ?? 'none'}:${selectedQueue}:${selectedStates.join(',')}:${$targetState.session.authenticated ? 'auth' : 'anon'}`;
+  $: queueFilterKey =
+    `${$selectedTarget?.id ?? 'none'}:${selectedQueue}:${selectedStates.join(',')}:` +
+    `${rebuildUserId.trim()}:${$targetState.session.authenticated ? 'auth' : 'anon'}`;
   $: if (queueFilterKey !== lastQueueFilter && !$targetState.session.checking) {
     lastQueueFilter = queueFilterKey;
     void loadTasks();
@@ -57,9 +58,10 @@
     loading = true;
     error = '';
     try {
-      [queues, tasks] = await Promise.all([
+      [queues, tasks, rebuilds] = await Promise.all([
         fetchQueues($selectedTarget),
-        fetchTasks($selectedTarget, { limit: 20, states: selectedStates, queue: selectedQueue })
+        fetchTasks($selectedTarget, { limit: 20, states: selectedStates, queue: selectedQueue }),
+        rebuildUserId.trim() ? fetchMemoryRebuilds($selectedTarget, rebuildUserId.trim(), 12) : Promise.resolve([])
       ]);
       selectedTask = tasks[0] ?? null;
     } catch (cause) {
@@ -110,13 +112,30 @@
       await requeueTask($selectedTarget, {
         task_type: manualTaskType,
         conversation_id: manualConversationId.trim(),
-        user_id: manualUserId.trim(),
-        embedding_version: embeddingVersion
+        user_id: manualUserId.trim()
       });
       success = 'Manual requeue request accepted by the selected target.';
       await loadTasks();
     } catch (cause) {
       error = cause instanceof Error ? cause.message : 'Failed to requeue task';
+    } finally {
+      actionLoading = false;
+    }
+  }
+
+  async function activateGeneration(generationId: string): Promise<void> {
+    if (!$selectedTarget || !rebuildUserId.trim()) {
+      return;
+    }
+    actionLoading = true;
+    error = '';
+    success = '';
+    try {
+      await activateMemoryRebuild($selectedTarget, rebuildUserId.trim(), generationId);
+      success = 'Generation activated. Active reads will switch on the selected target.';
+      await loadTasks();
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : 'Failed to activate memory generation';
     } finally {
       actionLoading = false;
     }
@@ -154,6 +173,12 @@
           </label>
           <button class="button-secondary" type="button" on:click={loadTasks}>Refresh tasks</button>
         </div>
+      </div>
+      <div class="inline-group" style="margin-top: 12px;">
+        <label class="field" style="min-width: 260px;">
+          <span class="field-label">Rebuild user filter</span>
+          <input class="input" bind:value={rebuildUserId} placeholder="user id for generation status" />
+        </label>
       </div>
     </section>
 
@@ -212,6 +237,48 @@
           <div class="debug-block">
             <div class="page-header">
               <div>
+                <div class="sidebar-label">Memory rebuilds</div>
+                <h2 class="page-title" style="font-size: 1.2rem;">Generation lifecycle</h2>
+              </div>
+            </div>
+            {#if rebuilds.length === 0}
+              <div class="empty-state">No rebuild generations found for the selected user filter.</div>
+            {:else}
+              <div class="toolbar">
+                {#each rebuilds as rebuild}
+                  <div class="debug-block" style="background: var(--bg-panel-muted);">
+                    <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px;">
+                      <div>
+                        <strong>{rebuild.scope}</strong>
+                        <div class="subtle-text">{rebuild.generation_id}</div>
+                      </div>
+                      <StatusBadge
+                        tone={rebuild.is_active ? 'success' : rebuild.status === 'failed' ? 'danger' : rebuild.status === 'queued' || rebuild.status === 'running' ? 'warning' : 'muted'}
+                        label={rebuild.is_active ? 'active' : rebuild.status}
+                      />
+                    </div>
+                    <div class="helper-text">{rebuild.processed_count}/{rebuild.source_count} snapshots · {rebuild.embedding_count} embeddings</div>
+                    {#if rebuild.last_error}
+                      <div class="subtle-text" style="margin-top: 8px;">{rebuild.last_error}</div>
+                    {/if}
+                    {#if rebuild.scope === 'conversation'}
+                      <div class="helper-text" style="margin-top: 10px;">Conversation-scoped rebuilds are inspection-only candidates and cannot replace the user's active generation.</div>
+                    {:else if !rebuild.is_active && (rebuild.status === 'completed' || rebuild.status === 'activated')}
+                      <div style="margin-top: 10px;">
+                        <button class="button-ghost" type="button" disabled={actionLoading} on:click={() => activateGeneration(rebuild.generation_id)}>
+                          {actionLoading ? 'Activating...' : 'Activate / rollback to this generation'}
+                        </button>
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+
+          <div class="debug-block">
+            <div class="page-header">
+              <div>
                 <div class="sidebar-label">Selected task</div>
                 <h2 class="page-title" style="font-size: 1.2rem;">Payload and retry context</h2>
               </div>
@@ -254,18 +321,12 @@
               </label>
               <label class="field">
                 <span class="field-label">Conversation ID</span>
-                <input class="input" bind:value={manualConversationId} placeholder="conv-... (not required for embedding.rebuild)" />
+                <input class="input" bind:value={manualConversationId} placeholder="conv-..." />
               </label>
               <label class="field">
                 <span class="field-label">User ID</span>
                 <input class="input" bind:value={manualUserId} />
               </label>
-              {#if manualTaskType === 'embedding.rebuild'}
-                <label class="field">
-                  <span class="field-label">Embedding version</span>
-                  <input class="input" type="number" bind:value={embeddingVersion} min="1" />
-                </label>
-              {/if}
               <button class="button-secondary" type="button" disabled={actionLoading} on:click={runManualRequeue}>Publish manual task</button>
             </div>
           </div>
