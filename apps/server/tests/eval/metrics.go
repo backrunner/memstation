@@ -19,6 +19,7 @@ type AggregateMetrics struct {
 	MRR                     float64 `json:"mrr"`
 	NDCGAt5                 float64 `json:"ndcg_at_5"`
 	NDCGAt10                float64 `json:"ndcg_at_10"`
+	NegativeLeakage         float64 `json:"negative_leakage"`
 	WrongUserLeakage        float64 `json:"wrong_user_leakage"`
 	StaleFactTop3Rate       float64 `json:"stale_fact_top_3_rate"`
 	StaleFactTopKRate       float64 `json:"stale_fact_top_k_rate"`
@@ -38,6 +39,7 @@ type CaseMetrics struct {
 	MRR                     float64  `json:"mrr"`
 	NDCGAt5                 float64  `json:"ndcg_at_5"`
 	NDCGAt10                float64  `json:"ndcg_at_10"`
+	NegativeLeak            bool     `json:"negative_leak"`
 	WrongUserLeak           bool     `json:"wrong_user_leak"`
 	StaleFactTop3Rate       float64  `json:"stale_fact_top_3_rate"`
 	StaleFactTopKRate       float64  `json:"stale_fact_top_k_rate"`
@@ -53,6 +55,7 @@ type VariantComparison struct {
 	MRRDelta               float64 `json:"mrr_delta"`
 	NDCGAt5Delta           float64 `json:"ndcg_at_5_delta"`
 	RelationPositiveGain   float64 `json:"relation_positive_gain"`
+	NegativeLeakageDelta   float64 `json:"negative_leakage_delta"`
 	WrongUserLeakageDelta  float64 `json:"wrong_user_leakage_delta"`
 	StaleFactTop3RateDelta float64 `json:"stale_fact_top_3_rate_delta"`
 }
@@ -75,6 +78,9 @@ func summarizeCases(cases []CaseReport) AggregateMetrics {
 		aggregate.StaleFactTop3Rate += item.Metrics.StaleFactTop3Rate
 		aggregate.StaleFactTopKRate += item.Metrics.StaleFactTopKRate
 		aggregate.RelationPositiveHitRate += item.Metrics.RelationPositiveHitRate
+		if item.Metrics.NegativeLeak {
+			aggregate.NegativeLeakage += 1
+		}
 		if item.Metrics.HitAt1 {
 			aggregate.HitAt1 += 1
 		}
@@ -101,6 +107,7 @@ func summarizeCases(cases []CaseReport) AggregateMetrics {
 	aggregate.MRR /= divisor
 	aggregate.NDCGAt5 /= divisor
 	aggregate.NDCGAt10 /= divisor
+	aggregate.NegativeLeakage /= divisor
 	aggregate.WrongUserLeakage /= divisor
 	aggregate.StaleFactTop3Rate /= divisor
 	aggregate.StaleFactTopKRate /= divisor
@@ -116,6 +123,7 @@ func compareVariants(baseline, candidate VariantReport) VariantComparison {
 		MRRDelta:               candidate.Aggregate.MRR - baseline.Aggregate.MRR,
 		NDCGAt5Delta:           candidate.Aggregate.NDCGAt5 - baseline.Aggregate.NDCGAt5,
 		RelationPositiveGain:   candidate.Aggregate.RelationPositiveHitRate - baseline.Aggregate.RelationPositiveHitRate,
+		NegativeLeakageDelta:   candidate.Aggregate.NegativeLeakage - baseline.Aggregate.NegativeLeakage,
 		WrongUserLeakageDelta:  candidate.Aggregate.WrongUserLeakage - baseline.Aggregate.WrongUserLeakage,
 		StaleFactTop3RateDelta: candidate.Aggregate.StaleFactTop3Rate - baseline.Aggregate.StaleFactTop3Rate,
 	}
@@ -152,6 +160,7 @@ func computeCaseMetrics(query QueryCase, results []RankedResult) CaseMetrics {
 	metrics.MRR = reciprocalRank(results, positives)
 	metrics.NDCGAt5 = ndcgAt(results, query.GradedRelevance, positives, 5)
 	metrics.NDCGAt10 = ndcgAt(results, query.GradedRelevance, positives, 10)
+	metrics.NegativeLeak = hasUnexpectedNegatives(results, negatives)
 	metrics.WrongUserLeak = wrongUserLeak(results, query.UserID)
 	metrics.StaleFactTop3Rate = staleRateAt(results, stale, 3)
 	metrics.StaleFactTopKRate = staleRateAt(results, stale, minInt(maxInt(query.TopN, 5), 10))
@@ -326,6 +335,10 @@ func unexpectedNegatives(results []RankedResult, negatives map[string]struct{}) 
 	}
 	sort.Strings(found)
 	return found
+}
+
+func hasUnexpectedNegatives(results []RankedResult, negatives map[string]struct{}) bool {
+	return len(unexpectedNegatives(results, negatives)) > 0
 }
 
 func minInt(left, right int) int {

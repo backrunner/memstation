@@ -1,0 +1,66 @@
+[
+  {
+    "question_id": "q001",
+    "question_type": "knowledge-update",
+    "question": "What city did the user move to after leaving Seattle?",
+    "answer": "Portland",
+    "question_date": "2025-02-05",
+    "haystack_session_ids": ["s1", "s2", "s3"],
+    "haystack_dates": ["2025-01-01", "2025-01-15", "2025-02-01"],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "I still live in Seattle."},
+        {"role": "assistant", "content": "Noted, Seattle is your current city."}
+      ],
+      [
+        {"role": "user", "content": "I just moved to Portland last week.", "has_answer": true},
+        {"role": "assistant", "content": "Updated, you now live in Portland."}
+      ],
+      [
+        {"role": "user", "content": "I am decorating the new apartment."},
+        {"role": "assistant", "content": "That sounds exciting."}
+      ]
+    ],
+    "answer_session_ids": ["s2"]
+  },
+  {
+    "question_id": "q002",
+    "question_type": "multi-session",
+    "question": "Which two hobbies did the user return to this year?",
+    "answer": "Cycling and watercolor painting",
+    "question_date": "2025-03-10",
+    "haystack_session_ids": ["a1", "a2", "a3"],
+    "haystack_dates": ["2025-01-03", "2025-02-11", "2025-03-01"],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "I started cycling again on weekends.", "has_answer": true},
+        {"role": "assistant", "content": "Cycling is back in your routine."}
+      ],
+      [
+        {"role": "user", "content": "I also picked watercolor painting back up.", "has_answer": true},
+        {"role": "assistant", "content": "Watercolor painting is back too."}
+      ],
+      [
+        {"role": "user", "content": "Work has been busy lately."},
+        {"role": "assistant", "content": "Let's keep the hobbies in mind as a stress outlet."}
+      ]
+    ],
+    "answer_session_ids": ["a1", "a2"]
+  },
+  {
+    "question_id": "q003_abs",
+    "question_type": "knowledge-update",
+    "question": "What did the user say about adopting a dog?",
+    "answer": "The user never mentioned adopting a dog.",
+    "question_date": "2025-03-10",
+    "haystack_session_ids": ["b1"],
+    "haystack_dates": ["2025-03-01"],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "I am thinking about repainting the kitchen."},
+        {"role": "assistant", "content": "You are considering a kitchen refresh."}
+      ]
+    ],
+    "answer_session_ids": []
+  }
+]

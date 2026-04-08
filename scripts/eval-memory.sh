@@ -9,6 +9,7 @@ go run ./tests/eval/cmd/evalrun \
   -format repo-native \
   -dataset ./tests/eval/testdata/repo_native_golden.json \
   -out "$OUT_DIR" \
+  -embedding-mode deterministic \
   -variants full,full_no_relations,semantic_only,semantic_importance \
   -top-n 5 \
   -enforce-smoke

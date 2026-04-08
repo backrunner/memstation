@@ -14,9 +14,15 @@ import (
 type DatasetFormat string
 
 const (
-	DatasetFormatRepoNative DatasetFormat = "repo-native"
-	DatasetFormatLOCOMO     DatasetFormat = "locomo"
+	DatasetFormatRepoNative  DatasetFormat = "repo-native"
+	DatasetFormatLOCOMO      DatasetFormat = "locomo"
+	DatasetFormatLongMemEval DatasetFormat = "longmemeval"
 )
+
+type DatasetLoadOptions struct {
+	LOCOMO      LOCOMOOptions      `json:"locomo,omitempty"`
+	LongMemEval LongMemEvalOptions `json:"longmemeval,omitempty"`
+}
 
 type Dataset struct {
 	Name              string            `json:"name"`
@@ -31,6 +37,7 @@ type SmokeExpectations struct {
 	MinRecallAt3             float64 `json:"min_recall_at_3,omitempty"`
 	MinMRR                   float64 `json:"min_mrr,omitempty"`
 	MinNDCGAt5               float64 `json:"min_ndcg_at_5,omitempty"`
+	MaxNegativeLeakage       float64 `json:"max_negative_leakage,omitempty"`
 	MaxWrongUserLeakage      float64 `json:"max_wrong_user_leakage,omitempty"`
 	MaxStaleFactTop3Rate     float64 `json:"max_stale_fact_top_3_rate,omitempty"`
 	MinRelationExpansionGain float64 `json:"min_relation_expansion_gain,omitempty"`
@@ -39,6 +46,7 @@ type SmokeExpectations struct {
 type DatasetDocument struct {
 	ID             string            `json:"id"`
 	NodeID         string            `json:"node_id"`
+	GenerationID   string            `json:"generation_id,omitempty"`
 	UserID         string            `json:"user_id"`
 	ConversationID string            `json:"conversation_id,omitempty"`
 	Type           domain.MemoryType `json:"type"`
@@ -65,6 +73,7 @@ type DatasetRelation struct {
 type QueryCase struct {
 	CaseID              string              `json:"case_id"`
 	UserID              string              `json:"user_id"`
+	GenerationID        string              `json:"generation_id,omitempty"`
 	Query               string              `json:"query"`
 	TopN                int                 `json:"top_n,omitempty"`
 	MemoryTypes         []domain.MemoryType `json:"memory_types,omitempty"`
@@ -78,11 +87,24 @@ type QueryCase struct {
 }
 
 func LoadDataset(path string, format DatasetFormat) (Dataset, error) {
+	return LoadDatasetWithOptions(path, format, DatasetLoadOptions{
+		LOCOMO: LOCOMOOptions{
+			SkipCategoryFive: true,
+		},
+		LongMemEval: LongMemEvalOptions{
+			Granularity: LongMemEvalGranularitySession,
+		},
+	})
+}
+
+func LoadDatasetWithOptions(path string, format DatasetFormat, options DatasetLoadOptions) (Dataset, error) {
 	switch format {
 	case DatasetFormatRepoNative:
 		return loadRepoNativeDataset(path)
 	case DatasetFormatLOCOMO:
-		return LoadLOCOMODataset(path, LOCOMOOptions{SkipCategoryFive: true})
+		return LoadLOCOMODataset(path, options.LOCOMO)
+	case DatasetFormatLongMemEval:
+		return LoadLongMemEvalDataset(path, options.LongMemEval)
 	default:
 		return Dataset{}, fmt.Errorf("unsupported dataset format %q", format)
 	}
@@ -190,6 +212,7 @@ func (doc DatasetDocument) ToDomain() domain.MemoryDocument {
 	return domain.MemoryDocument{
 		ID:             doc.ID,
 		NodeID:         doc.NodeID,
+		GenerationID:   doc.GenerationID,
 		UserID:         doc.UserID,
 		ConversationID: doc.ConversationID,
 		Type:           doc.Type,

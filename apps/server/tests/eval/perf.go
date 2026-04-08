@@ -14,10 +14,12 @@ type PerformanceOptions struct {
 	Variant    memoryservice.SearchVariant `json:"variant,omitempty"`
 	Iterations int                         `json:"iterations,omitempty"`
 	TopN       int                         `json:"top_n,omitempty"`
+	Embedding  EmbeddingOptions            `json:"embedding,omitempty"`
 }
 
 type PerformanceReport struct {
 	Dataset    string                      `json:"dataset"`
+	Embedding  EmbeddingRunInfo            `json:"embedding"`
 	Variant    memoryservice.SearchVariant `json:"variant"`
 	Iterations int                         `json:"iterations"`
 	QueryCount int                         `json:"query_count"`
@@ -40,7 +42,7 @@ func RunPerformanceSmoke(ctx context.Context, dataset Dataset, options Performan
 	if iterations <= 0 {
 		iterations = 25
 	}
-	bench, err := newHarness(ctx, dataset)
+	bench, err := newHarness(ctx, dataset, options.Embedding)
 	if err != nil {
 		return PerformanceReport{}, err
 	}
@@ -58,10 +60,11 @@ func RunPerformanceSmoke(ctx context.Context, dataset Dataset, options Performan
 			}
 			start := time.Now()
 			if _, err := bench.engine.SearchWithVariant(ctx, domain.SearchInput{
-				UserID:      query.UserID,
-				Query:       query.Query,
-				TopN:        limit,
-				MemoryTypes: query.MemoryTypes,
+				UserID:       query.UserID,
+				GenerationID: query.GenerationID,
+				Query:        query.Query,
+				TopN:         limit,
+				MemoryTypes:  query.MemoryTypes,
 			}, variant); err != nil {
 				return PerformanceReport{}, fmt.Errorf("performance case %s: %w", query.CaseID, err)
 			}
@@ -79,6 +82,7 @@ func RunPerformanceSmoke(ctx context.Context, dataset Dataset, options Performan
 	mean /= float64(len(samples))
 	return PerformanceReport{
 		Dataset:    dataset.Name,
+		Embedding:  bench.embedding,
 		Variant:    variant,
 		Iterations: iterations,
 		QueryCount: len(queries),

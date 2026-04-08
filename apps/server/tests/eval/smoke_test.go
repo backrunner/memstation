@@ -28,6 +28,9 @@ func TestRepoNativeSmokeBenchmark(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run benchmark: %v", err)
 	}
+	if report.Embedding.Mode != EmbeddingModeDeterministic {
+		t.Fatalf("expected smoke benchmark to default to deterministic embeddings, got %s", report.Embedding.Mode)
+	}
 	if err := ValidateSmokeExpectations(report); err != nil {
 		t.Fatalf("validate smoke expectations: %v", err)
 	}

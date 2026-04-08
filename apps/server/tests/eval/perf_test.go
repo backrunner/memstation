@@ -23,6 +23,9 @@ func TestPerformanceSmoke(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run performance smoke: %v", err)
 	}
+	if report.Embedding.Mode != EmbeddingModeDeterministic {
+		t.Fatalf("expected performance smoke to default to deterministic embeddings, got %s", report.Embedding.Mode)
+	}
 	if report.P95Millis <= 0 {
 		t.Fatalf("expected p95 to be positive, got %.3f", report.P95Millis)
 	}

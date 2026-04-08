@@ -13,14 +13,16 @@ import (
 )
 
 type RunOptions struct {
-	Variants []memoryservice.SearchVariant `json:"variants,omitempty"`
-	TopN     int                           `json:"top_n,omitempty"`
+	Variants  []memoryservice.SearchVariant `json:"variants,omitempty"`
+	TopN      int                           `json:"top_n,omitempty"`
+	Embedding EmbeddingOptions              `json:"embedding,omitempty"`
 }
 
 type BenchmarkReport struct {
 	Dataset      string              `json:"dataset"`
 	Description  string              `json:"description,omitempty"`
 	GeneratedAt  time.Time           `json:"generated_at"`
+	Embedding    EmbeddingRunInfo    `json:"embedding"`
 	Variants     []VariantReport     `json:"variants"`
 	Comparisons  []VariantComparison `json:"comparisons,omitempty"`
 	Failures     []FailureSample     `json:"failures,omitempty"`
@@ -35,14 +37,15 @@ type VariantReport struct {
 }
 
 type CaseReport struct {
-	CaseID  string                      `json:"case_id"`
-	UserID  string                      `json:"user_id"`
-	Query   string                      `json:"query"`
-	Variant memoryservice.SearchVariant `json:"variant"`
-	TopN    int                         `json:"top_n"`
-	Metrics CaseMetrics                 `json:"metrics"`
-	Results []RankedResult              `json:"results"`
-	Notes   string                      `json:"notes,omitempty"`
+	CaseID       string                      `json:"case_id"`
+	UserID       string                      `json:"user_id"`
+	GenerationID string                      `json:"generation_id,omitempty"`
+	Query        string                      `json:"query"`
+	Variant      memoryservice.SearchVariant `json:"variant"`
+	TopN         int                         `json:"top_n"`
+	Metrics      CaseMetrics                 `json:"metrics"`
+	Results      []RankedResult              `json:"results"`
+	Notes        string                      `json:"notes,omitempty"`
 }
 
 type RankedResult struct {
@@ -61,7 +64,8 @@ type FailureSample struct {
 }
 
 type harness struct {
-	engine *memoryservice.Engine
+	engine    *memoryservice.Engine
+	embedding EmbeddingRunInfo
 }
 
 func RunBenchmark(ctx context.Context, dataset Dataset, options RunOptions) (BenchmarkReport, error) {
@@ -77,7 +81,7 @@ func RunBenchmark(ctx context.Context, dataset Dataset, options RunOptions) (Ben
 			memoryservice.SearchVariantSemanticImportance,
 		}
 	}
-	bench, err := newHarness(ctx, dataset)
+	bench, err := newHarness(ctx, dataset, options.Embedding)
 	if err != nil {
 		return BenchmarkReport{}, err
 	}
@@ -86,6 +90,7 @@ func RunBenchmark(ctx context.Context, dataset Dataset, options RunOptions) (Ben
 		Dataset:      dataset.Name,
 		Description:  dataset.Description,
 		GeneratedAt:  time.Now().UTC(),
+		Embedding:    bench.embedding,
 		Expectations: dataset.SmokeExpectations,
 	}
 	for _, variant := range variants {
@@ -101,20 +106,36 @@ func RunBenchmark(ctx context.Context, dataset Dataset, options RunOptions) (Ben
 	return report, nil
 }
 
-func newHarness(ctx context.Context, dataset Dataset) (*harness, error) {
+func newHarness(ctx context.Context, dataset Dataset, embeddingOptions EmbeddingOptions) (*harness, error) {
+	normalizedEmbedding, err := normalizeEmbeddingOptions(embeddingOptions)
+	if err != nil {
+		return nil, err
+	}
 	repo := sqlstore.NewInMemoryMemoryRepository()
 	vectors := vectorstore.NewPGVectorStore(nil)
+	embedder, err := newEvalEmbeddingClient(normalizedEmbedding)
+	if err != nil {
+		return nil, err
+	}
+	if embedder != nil {
+		vectors.SetEmbedder(embedder)
+	}
 	for _, item := range dataset.Documents {
 		doc := item.ToDomain()
 		if err := repo.StoreDocument(ctx, doc); err != nil {
 			return nil, err
 		}
+		generationID := doc.GenerationID
+		if generationID == "" && doc.Type != domain.MemoryTypeKeyMemory {
+			generationID = memorygenCurrentGenerationID(doc.UserID)
+		}
 		if err := vectors.Upsert(ctx, domain.VectorUpsertRequest{
+			GenerationID:     generationID,
 			UserID:           doc.UserID,
 			NodeID:           doc.NodeID,
 			NodeType:         string(doc.Type),
 			EmbeddingVersion: 1,
-			EmbeddingModel:   "benchmark-local-deterministic",
+			EmbeddingModel:   normalizedEmbedding.Model,
 			Content:          doc.Content,
 		}); err != nil {
 			return nil, err
@@ -125,7 +146,14 @@ func newHarness(ctx context.Context, dataset Dataset) (*harness, error) {
 			return nil, err
 		}
 	}
-	return &harness{engine: memoryservice.NewEngine(repo, vectors)}, nil
+	return &harness{
+		engine:    memoryservice.NewEngine(repo, vectors),
+		embedding: normalizedEmbedding.runInfo(),
+	}, nil
+}
+
+func memorygenCurrentGenerationID(userID string) string {
+	return "gen:current:" + userID
 }
 
 func runVariant(ctx context.Context, bench *harness, dataset Dataset, variant memoryservice.SearchVariant, topN int) (VariantReport, []FailureSample, error) {
@@ -144,24 +172,26 @@ func runVariant(ctx context.Context, bench *harness, dataset Dataset, variant me
 			limit = 10
 		}
 		debug, err := bench.engine.SearchWithVariant(ctx, domain.SearchInput{
-			UserID:      query.UserID,
-			Query:       query.Query,
-			TopN:        limit,
-			MemoryTypes: query.MemoryTypes,
+			UserID:       query.UserID,
+			GenerationID: query.GenerationID,
+			Query:        query.Query,
+			TopN:         limit,
+			MemoryTypes:  query.MemoryTypes,
 		}, variant)
 		if err != nil {
 			return VariantReport{}, nil, fmt.Errorf("run case %s: %w", query.CaseID, err)
 		}
 		results := rankResults(query, debug)
 		caseReport := CaseReport{
-			CaseID:  query.CaseID,
-			UserID:  query.UserID,
-			Query:   query.Query,
-			Variant: variant,
-			TopN:    limit,
-			Metrics: computeCaseMetrics(query, results),
-			Results: results,
-			Notes:   query.Notes,
+			CaseID:       query.CaseID,
+			UserID:       query.UserID,
+			GenerationID: query.GenerationID,
+			Query:        query.Query,
+			Variant:      variant,
+			TopN:         limit,
+			Metrics:      computeCaseMetrics(query, results),
+			Results:      results,
+			Notes:        query.Notes,
 		}
 		report.Cases = append(report.Cases, caseReport)
 		if sample := buildFailure(caseReport); sample != nil {
@@ -268,6 +298,9 @@ func ValidateSmokeExpectations(report BenchmarkReport) error {
 	}
 	if full.Aggregate.NDCGAt5 < report.Expectations.MinNDCGAt5 {
 		return fmt.Errorf("full ndcg@5 %.4f is below %.4f", full.Aggregate.NDCGAt5, report.Expectations.MinNDCGAt5)
+	}
+	if full.Aggregate.NegativeLeakage > report.Expectations.MaxNegativeLeakage {
+		return fmt.Errorf("negative leakage %.4f exceeds %.4f", full.Aggregate.NegativeLeakage, report.Expectations.MaxNegativeLeakage)
 	}
 	if full.Aggregate.WrongUserLeakage > report.Expectations.MaxWrongUserLeakage {
 		return fmt.Errorf("wrong-user leakage %.4f exceeds %.4f", full.Aggregate.WrongUserLeakage, report.Expectations.MaxWrongUserLeakage)
