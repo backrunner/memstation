@@ -10,11 +10,13 @@ import (
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/observability"
 	"memstation/apps/server/internal/ports"
+	memorygenservice "memstation/apps/server/internal/service/memorygen"
 )
 
 type Engine struct {
-	repo    ports.MemoryRepository
-	vectors ports.VectorStore
+	repo        ports.MemoryRepository
+	vectors     ports.VectorStore
+	generations *memorygenservice.Service
 }
 
 type DebugSearchResult struct {
@@ -26,6 +28,10 @@ type DebugSearchResult struct {
 
 func NewEngine(repo ports.MemoryRepository, vectors ports.VectorStore) *Engine {
 	return &Engine{repo: repo, vectors: vectors}
+}
+
+func (e *Engine) SetGenerationService(service *memorygenservice.Service) {
+	e.generations = service
 }
 
 func (e *Engine) Inject(ctx context.Context, req domain.UnifiedRequest) (domain.UnifiedRequest, domain.InjectionResult, error) {
@@ -235,63 +241,91 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 	if input.TopN <= 0 {
 		input.TopN = 10
 	}
+	embeddingVersion := 1
+	embeddingModel := ""
+	if e.generations != nil && strings.TrimSpace(input.UserID) != "" {
+		generation, err := e.generations.ResolveGeneration(ctx, input.UserID, input.GenerationID)
+		if err != nil {
+			return DebugSearchResult{}, err
+		}
+		input.GenerationID = generation.GenerationID
+		if generation.EmbeddingVersion > 0 {
+			embeddingVersion = generation.EmbeddingVersion
+		}
+		embeddingModel = generation.EmbeddingModel
+	} else if strings.TrimSpace(input.GenerationID) == "" && strings.TrimSpace(input.UserID) != "" {
+		input.GenerationID = memorygenservice.CurrentGenerationID(input.UserID)
+	}
 	query := strings.TrimSpace(input.Query)
 	if query == "" {
 		return e.searchWithoutVectors(ctx, input, variant)
 	}
 
-	directScores := map[string]float64{}
+	semanticScores := map[string]float64{}
+	keywordScores := map[string]float64{}
 	keywordMatches := map[string]domain.KeywordMatch{}
-	keywordResults, err := e.repo.SearchKeywordMatches(ctx, input.UserID, query, max(input.TopN*4, 10))
+	keywordResults, err := e.repo.SearchKeywordMatches(ctx, input.UserID, input.GenerationID, query, max(input.TopN*4, 10))
 	if err != nil {
 		return DebugSearchResult{}, err
 	}
 	for _, item := range keywordResults {
-		if item.Score > directScores[item.NodeID] {
-			directScores[item.NodeID] = item.Score
+		if item.Score > keywordScores[item.NodeID] {
+			keywordScores[item.NodeID] = item.Score
+			keywordMatches[item.NodeID] = item
 		}
-		keywordMatches[item.NodeID] = item
 	}
 
 	if e.vectors != nil {
 		vectorResults, vectorErr := e.vectors.Search(ctx, domain.VectorSearchInput{
 			UserID:           input.UserID,
+			GenerationID:     input.GenerationID,
 			Query:            query,
 			TopK:             max(input.TopN*4, 10),
 			AllowedTypes:     vectorAllowedTypes(input),
-			EmbeddingVersion: 1,
+			EmbeddingVersion: embeddingVersion,
+			EmbeddingModel:   embeddingModel,
 		})
 		if vectorErr == nil {
 			for _, item := range vectorResults {
-				if item.Score > directScores[item.NodeID] {
-					directScores[item.NodeID] = item.Score
+				if item.Score > semanticScores[item.NodeID] {
+					semanticScores[item.NodeID] = item.Score
 				}
 			}
 		}
 	}
-	if len(directScores) == 0 {
+	seedScores := make(map[string]float64, len(semanticScores)+len(keywordScores))
+	for nodeID, score := range semanticScores {
+		seedScores[nodeID] = combineDirectSignal(score, keywordScores[nodeID])
+	}
+	for nodeID, score := range keywordScores {
+		if _, ok := seedScores[nodeID]; ok {
+			continue
+		}
+		seedScores[nodeID] = combineDirectSignal(semanticScores[nodeID], score)
+	}
+	if len(seedScores) == 0 {
 		return e.searchWithoutVectors(ctx, input, variant)
 	}
 
-	baseNodeIDs := make([]string, 0, len(directScores))
-	for nodeID := range directScores {
+	baseNodeIDs := make([]string, 0, len(seedScores))
+	for nodeID := range seedScores {
 		baseNodeIDs = append(baseNodeIDs, nodeID)
 	}
-	scoreMap := cloneScoreMap(directScores)
+	scoreMap := cloneScoreMap(seedScores)
 	relatedMap := map[string][]domain.RelatedMemory{}
 	if cfg.useRelations {
-		relations, relErr := e.repo.ListRelations(ctx, input.UserID, baseNodeIDs, 2)
+		relations, relErr := e.repo.ListRelations(ctx, input.UserID, input.GenerationID, baseNodeIDs, 2)
 		if relErr != nil {
 			return DebugSearchResult{}, relErr
 		}
-		scoreMap, relatedMap = expandRelationScores(directScores, relations, 2)
+		scoreMap, relatedMap = expandRelationScores(seedScores, relations, 2)
 	}
 
 	candidateNodeIDs := make([]string, 0, len(scoreMap))
 	for nodeID := range scoreMap {
 		candidateNodeIDs = append(candidateNodeIDs, nodeID)
 	}
-	docs, err := e.repo.ListDocumentsByNodeIDs(ctx, input.UserID, candidateNodeIDs)
+	docs, err := e.repo.ListDocumentsByNodeIDsInGeneration(ctx, input.UserID, input.GenerationID, candidateNodeIDs)
 	if err != nil {
 		return DebugSearchResult{}, err
 	}
@@ -306,11 +340,10 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 		if semanticScore == 0 {
 			continue
 		}
-		baseScore := directScores[doc.NodeID]
+		baseScore := seedScores[doc.NodeID]
 		relationExpansion := maxFloat(semanticScore-baseScore, 0)
-		components := scoreDocument(doc, baseScore, relationExpansion, cfg)
+		components := scoreDocument(doc, semanticScores[doc.NodeID], keywordScores[doc.NodeID], relationExpansion, cfg)
 		if match, ok := keywordMatches[doc.NodeID]; ok {
-			components.KeywordScore = match.Score
 			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
 				"matched_keywords": match.Keywords,
 			})
@@ -346,35 +379,52 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 		},
 		Variant:    variant,
 		Components: componentsByID,
-		BaseScores: directScores,
+		BaseScores: seedScores,
 	}, nil
 }
 
 func (e *Engine) searchWithoutVectors(ctx context.Context, input domain.SearchInput, variant SearchVariant) (DebugSearchResult, error) {
 	repoInput := input
 	repoInput.MemoryTypes = repoSearchTypes(input)
+	repoInput.MinScore = 0
+	if repoInput.TopN > 0 {
+		repoInput.TopN = max(repoInput.TopN*4, 20)
+	} else {
+		repoInput.TopN = 200
+	}
 	result, err := e.repo.Search(ctx, repoInput)
 	if err != nil {
 		return DebugSearchResult{}, err
 	}
 	componentsByID := make(map[string]ScoreComponents, len(result.Memories))
+	baseScores := make(map[string]float64, len(result.Memories))
 	cfg := configForVariant(variant)
 	for idx, doc := range result.Memories {
-		if !matchesTemporalSearchInput(doc, input) || !matchesSearchDocument(doc, input) {
-			continue
-		}
-		components := scoreDocument(doc, doc.Score, 0, cfg)
+		components := scoreDocument(doc, doc.Score, 0, 0, cfg)
 		doc.Score = components.SemanticScore
 		doc.EffectiveScore = components.EffectiveScore
 		result.Memories[idx] = doc
 		componentsByID[doc.ID] = components
+		baseScores[doc.NodeID] = components.BaseSemanticScore
 	}
 	filtered := make([]domain.MemoryDocument, 0, len(result.Memories))
 	for _, doc := range result.Memories {
 		if doc.ID == "" || !matchesTemporalSearchInput(doc, input) || !matchesSearchDocument(doc, input) {
 			continue
 		}
+		if doc.EffectiveScore < input.MinScore {
+			continue
+		}
 		filtered = append(filtered, doc)
+	}
+	sort.Slice(filtered, func(i, j int) bool {
+		if filtered[i].EffectiveScore == filtered[j].EffectiveScore {
+			return filtered[i].UpdatedAt.After(filtered[j].UpdatedAt)
+		}
+		return filtered[i].EffectiveScore > filtered[j].EffectiveScore
+	})
+	if input.TopN > 0 && len(filtered) > input.TopN {
+		filtered = filtered[:input.TopN]
 	}
 	result.Memories = filtered
 	result.Total = len(filtered)
@@ -382,7 +432,7 @@ func (e *Engine) searchWithoutVectors(ctx context.Context, input domain.SearchIn
 		Result:     result,
 		Variant:    variant,
 		Components: componentsByID,
-		BaseScores: map[string]float64{},
+		BaseScores: baseScores,
 	}, nil
 }
 
@@ -459,9 +509,14 @@ func repoSearchTypes(input domain.SearchInput) []domain.MemoryType {
 				domain.MemoryTypeKeyMemory,
 			}
 		}
-		return nil
+		return []domain.MemoryType{
+			domain.MemoryTypeSummary,
+			domain.MemoryTypeImpression,
+			domain.MemoryTypeFact,
+			domain.MemoryTypeKeyMemory,
+		}
 	}
-	return vectorAllowedTypes(input)
+	return append([]domain.MemoryType{}, input.MemoryTypes...)
 }
 
 func vectorAllowedTypes(input domain.SearchInput) []domain.MemoryType {
@@ -499,8 +554,6 @@ func cloneScoreMap(items map[string]float64) map[string]float64 {
 }
 
 func expandRelationScores(base map[string]float64, relations []domain.MemoryRelation, depth int) (map[string]float64, map[string][]domain.RelatedMemory) {
-	const relationBoostFactor = 0.01
-
 	type edge struct {
 		nodeID       string
 		relationType string
@@ -515,16 +568,13 @@ func expandRelationScores(base map[string]float64, relations []domain.MemoryRela
 		if isTemporalRelationType(relation.RelationType) {
 			continue
 		}
-		graph[relation.SrcNodeID] = append(graph[relation.SrcNodeID], edge{
-			nodeID:       relation.DstNodeID,
-			relationType: relation.RelationType,
-			weight:       relation.Weight,
-		})
-		graph[relation.DstNodeID] = append(graph[relation.DstNodeID], edge{
-			nodeID:       relation.SrcNodeID,
-			relationType: relation.RelationType,
-			weight:       relation.Weight,
-		})
+		for _, traversal := range relationTraversalEdges(relation) {
+			graph[traversal.fromNodeID] = append(graph[traversal.fromNodeID], edge{
+				nodeID:       traversal.toNodeID,
+				relationType: relation.RelationType,
+				weight:       relation.Weight,
+			})
+		}
 		relatedMap[relation.SrcNodeID] = append(relatedMap[relation.SrcNodeID], domain.RelatedMemory{
 			ID:     relation.DstNodeID,
 			Type:   relation.RelationType,
@@ -545,14 +595,14 @@ func expandRelationScores(base map[string]float64, relations []domain.MemoryRela
 		next := map[string]float64{}
 		for nodeID, score := range frontier {
 			for _, edge := range graph[nodeID] {
-				if _, hasDirectScore := base[edge.nodeID]; hasDirectScore {
-					continue
-				}
-				candidateScore := clamp(score+relationBoostFactor*clamp(edge.weight, 0.2, 1.0), 0, 1)
+				candidateScore := score * (1 + relationBoostFactor(edge.relationType)*clamp(edge.weight, 0.2, 1.0))
 				if candidateScore <= scoreMap[edge.nodeID] {
 					continue
 				}
 				scoreMap[edge.nodeID] = candidateScore
+				if _, hasDirectScore := base[edge.nodeID]; hasDirectScore {
+					continue
+				}
 				if candidateScore > next[edge.nodeID] {
 					next[edge.nodeID] = candidateScore
 				}
@@ -562,6 +612,38 @@ func expandRelationScores(base map[string]float64, relations []domain.MemoryRela
 	}
 
 	return scoreMap, relatedMap
+}
+
+type relationTraversalEdge struct {
+	fromNodeID string
+	toNodeID   string
+}
+
+func relationTraversalEdges(relation domain.MemoryRelation) []relationTraversalEdge {
+	switch strings.TrimSpace(strings.ToLower(relation.RelationType)) {
+	case "derived_from", "summarized_into", "promoted_to_key_memory":
+		return []relationTraversalEdge{{fromNodeID: relation.SrcNodeID, toNodeID: relation.DstNodeID}}
+	case "supports":
+		return []relationTraversalEdge{{fromNodeID: relation.DstNodeID, toNodeID: relation.SrcNodeID}}
+	default:
+		return []relationTraversalEdge{
+			{fromNodeID: relation.SrcNodeID, toNodeID: relation.DstNodeID},
+			{fromNodeID: relation.DstNodeID, toNodeID: relation.SrcNodeID},
+		}
+	}
+}
+
+func relationBoostFactor(relationType string) float64 {
+	switch strings.TrimSpace(strings.ToLower(relationType)) {
+	case "derived_from", "promoted_to_key_memory":
+		return 0.35
+	case "supports":
+		return 0.12
+	case "summarized_into":
+		return 0.2
+	default:
+		return 0.18
+	}
 }
 
 func clamp(value, minValue, maxValue float64) float64 {
@@ -660,7 +742,7 @@ func matchesTemporalSearchInput(doc domain.MemoryDocument, input domain.SearchIn
 
 func isTemporalRelationType(relationType string) bool {
 	switch relationType {
-	case "indexed_in_tier", "occurred_on_day", "day_in_month", "month_in_year":
+	case "indexed_in_tier", "occurred_on_day", "day_in_month", "month_in_year", "supersedes":
 		return true
 	default:
 		return false

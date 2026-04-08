@@ -34,6 +34,7 @@ import (
 	embeddingservice "memstation/apps/server/internal/service/embedding"
 	gatewayservice "memstation/apps/server/internal/service/gateway"
 	memoryservice "memstation/apps/server/internal/service/memory"
+	memorygenservice "memstation/apps/server/internal/service/memorygen"
 	providerconfigservice "memstation/apps/server/internal/service/providerconfig"
 	settingsservice "memstation/apps/server/internal/service/settings"
 	systemconfigservice "memstation/apps/server/internal/service/systemconfig"
@@ -63,6 +64,7 @@ type Container struct {
 	Audit         *auditsvc.Service
 	Conversations *conversationservice.Service
 	Memory        *memoryservice.Service
+	Generations   *memorygenservice.Service
 	Admin         *adminservice.Service
 	Usage         *usageservice.Service
 	Gateway       *gatewayservice.Service
@@ -171,6 +173,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	}
 	vectorStore := vector.NewPGVectorStore(db)
 	vectorStore.SetEmbedder(embeddingservice.NewService(providerCfg, settings, cfg.ProviderTimeout))
+	generations := memorygenservice.NewService(db, cfg.EmbeddingModel)
 	health.Add("vectorstore", observability.CheckFunc(vectorStore.Health))
 	health.Add("outbox", observability.CheckFunc(func(ctx context.Context) error {
 		_, err := outboxRepo.Pending(ctx, 1)
@@ -178,6 +181,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	}))
 
 	memoryEngine := memoryservice.NewEngine(memoryRepo, vectorStore)
+	memoryEngine.SetGenerationService(generations)
 	conversations := conversationservice.NewService(conversationRepo, outboxRepo, cfg.MessageThreshold, cfg.TokenThreshold)
 	providerRegistry := provider.NewRegistry(
 		cfg.DefaultProvider,
@@ -190,8 +194,10 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	memories.SetKeyMemoryCache(jsonCache)
 	memories.SetVectorStore(vectorStore)
 	memories.SetScorer(memoryservice.NewScorer(providerRegistry, settings))
+	memories.SetGenerationService(generations)
 	gateway.SetToolRuntime(gatewayservice.NewToolRuntime(memories, audit, keySet(cfg.KeyMemoryWriteKeys), 3))
 	admin := adminservice.NewService(conversationRepo, memoryRepo, settings, audit, models)
+	admin.SetGenerationService(generations)
 	usage := usageservice.NewService(db, conversationRepo)
 	admin.AttachUserRuntime(users, apiKeys, usage)
 	analysis := analysisservice.NewService()
@@ -247,6 +253,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	workerMux := worker.NewServeMux(logger, worker.Services{
 		Conversations:        conversationRepo,
 		Memories:             memoryRepo,
+		Generations:          generations,
 		Vectors:              vectorStore,
 		Publisher:            publisher,
 		Analysis:             analysis,
@@ -279,6 +286,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		GraphQL:        graphQLResolver,
 		Gateway:        gateway,
 		Memory:         memories,
+		Generations:    generations,
 		Admin:          admin,
 		Audit:          audit,
 		Usage:          usage,
@@ -309,6 +317,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		Audit:         audit,
 		Conversations: conversations,
 		Memory:        memories,
+		Generations:   generations,
 		Admin:         admin,
 		Usage:         usage,
 		Gateway:       gateway,

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -154,6 +155,10 @@ func (r *PostgresConversationRepository) PersistExchange(ctx context.Context, co
 }
 
 func (r *PostgresConversationRepository) GetConversation(ctx context.Context, userID, conversationID string) (domain.ConversationRecord, error) {
+	return r.GetConversationInGeneration(ctx, userID, conversationID, "")
+}
+
+func (r *PostgresConversationRepository) GetConversationInGeneration(ctx context.Context, userID, conversationID, generationID string) (domain.ConversationRecord, error) {
 	row := r.db.QueryRowContext(ctx, `
         SELECT request_format, upstream_provider, mode, finalize_status, summary_status, analysis_status, metadata, created_at, updated_at
         FROM conversations
@@ -187,11 +192,20 @@ func (r *PostgresConversationRepository) GetConversation(ctx context.Context, us
 		return domain.ConversationRecord{}, err
 	}
 	record.Messages = messages
-	segments, err := r.loadSegments(ctx, userID, conversationID)
+	resolvedGenerationID := strings.TrimSpace(generationID)
+	if resolvedGenerationID == "" {
+		resolvedGenerationID = conversationSegmentGenerationForSQL(userID, record.Metadata)
+	}
+	segments, err := r.loadSegments(ctx, userID, conversationID, resolvedGenerationID)
 	if err != nil {
 		return domain.ConversationRecord{}, err
 	}
 	record.Segments = segments
+	record.Metadata = cloneMetadata(record.Metadata)
+	if record.Metadata == nil {
+		record.Metadata = map[string]any{}
+	}
+	record.Metadata["memory_generation_id"] = resolvedGenerationID
 
 	usageRow := r.db.QueryRowContext(ctx, `
         SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0), COALESCE(SUM(total_tokens), 0)
@@ -299,25 +313,47 @@ func (r *PostgresConversationRepository) ReplaceSegments(ctx context.Context, us
 	}
 	defer rollback(tx)
 
+	targetGenerationID := currentGenerationIDForSQL(userID)
+	if len(segments) > 0 && strings.TrimSpace(segments[0].GenerationID) != "" {
+		targetGenerationID = strings.TrimSpace(segments[0].GenerationID)
+	}
+	for idx := range segments {
+		if strings.TrimSpace(segments[idx].GenerationID) == "" {
+			segments[idx].GenerationID = targetGenerationID
+		}
+		if segments[idx].Metadata == nil {
+			segments[idx].Metadata = map[string]any{}
+		}
+		segments[idx].Metadata["generation_id"] = segments[idx].GenerationID
+	}
+
 	if _, err = tx.ExecContext(ctx, `
         DELETE FROM conversation_segments
         WHERE user_id = $1 AND conversation_id = $2
-    `, userID, conversationID); err != nil {
+    `+generationFilterClause("generation_id", 3, userID, targetGenerationID, false), generationFilterArgs(userID, targetGenerationID, userID, conversationID)...); err != nil {
 		return err
 	}
 	for _, segment := range segments {
 		if _, err = tx.ExecContext(ctx, `
             INSERT INTO conversation_segments (
-                id, user_id, conversation_id, segment_index, start_sequence, end_sequence,
+                id, generation_id, user_id, conversation_id, segment_index, start_sequence, end_sequence,
                 message_count, overlap_from_sequence, overlap_message_count, content, content_hash,
                 metadata, created_at, updated_at
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-        `, segment.ID, segment.UserID, segment.ConversationID, segment.SegmentIndex, segment.StartSequence,
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+        `, segment.ID, segment.GenerationID, segment.UserID, segment.ConversationID, segment.SegmentIndex, segment.StartSequence,
 			segment.EndSequence, segment.MessageCount, segment.OverlapFromSequence, segment.OverlapMessageCount,
 			segment.Content, segment.ContentHash, marshalJSON(segment.Metadata), zeroTime(segment.CreatedAt),
 			zeroTime(segment.UpdatedAt)); err != nil {
 			return err
 		}
+	}
+	if _, err = tx.ExecContext(ctx, `
+        UPDATE conversations
+        SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb,
+            updated_at = $2
+        WHERE id = $3 AND user_id = $4
+    `, string(marshalJSON(map[string]any{"memory_generation_id": targetGenerationID})), time.Now().UTC(), conversationID, userID); err != nil {
+		return err
 	}
 	return tx.Commit()
 }
@@ -437,15 +473,16 @@ func (r *PostgresConversationRepository) loadMessagesTx(ctx context.Context, tx 
 	return out, rows.Err()
 }
 
-func (r *PostgresConversationRepository) loadSegments(ctx context.Context, userID, conversationID string) ([]domain.ConversationSegment, error) {
+func (r *PostgresConversationRepository) loadSegments(ctx context.Context, userID, conversationID, generationID string) ([]domain.ConversationSegment, error) {
 	rows, err := r.db.QueryContext(ctx, `
-        SELECT id, segment_index, start_sequence, end_sequence, message_count,
+        SELECT id, generation_id, segment_index, start_sequence, end_sequence, message_count,
                overlap_from_sequence, overlap_message_count, content, content_hash,
                metadata, created_at, updated_at
         FROM conversation_segments
         WHERE user_id = $1 AND conversation_id = $2
+    `+generationFilterClause("generation_id", 3, userID, generationID, false)+`
         ORDER BY segment_index ASC
-    `, userID, conversationID)
+    `, generationFilterArgs(userID, generationID, userID, conversationID)...)
 	if err != nil {
 		return nil, err
 	}
@@ -457,7 +494,7 @@ func (r *PostgresConversationRepository) loadSegments(ctx context.Context, userI
 		var metadataBytes []byte
 		segment.UserID = userID
 		segment.ConversationID = conversationID
-		if err := rows.Scan(&segment.ID, &segment.SegmentIndex, &segment.StartSequence, &segment.EndSequence,
+		if err := rows.Scan(&segment.ID, &segment.GenerationID, &segment.SegmentIndex, &segment.StartSequence, &segment.EndSequence,
 			&segment.MessageCount, &segment.OverlapFromSequence, &segment.OverlapMessageCount,
 			&segment.Content, &segment.ContentHash, &metadataBytes, &segment.CreatedAt, &segment.UpdatedAt); err != nil {
 			return nil, err
@@ -482,7 +519,7 @@ func NewPostgresMemoryRepository(db *sqlpkg.DB) *PostgresMemoryRepository {
 }
 
 func (r *PostgresMemoryRepository) Search(ctx context.Context, input domain.SearchInput) (domain.SearchResult, error) {
-	docs, err := r.ListDocuments(ctx, input.UserID, input.MemoryTypes, 200)
+	docs, err := r.ListDocumentsInGeneration(ctx, input.UserID, input.GenerationID, input.MemoryTypes, 200)
 	if err != nil {
 		return domain.SearchResult{}, err
 	}
@@ -524,6 +561,9 @@ func (r *PostgresMemoryRepository) Search(ctx context.Context, input domain.Sear
 }
 
 func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain.MemoryDocument) error {
+	if doc.Type != domain.MemoryTypeKeyMemory && strings.TrimSpace(doc.GenerationID) == "" {
+		doc.GenerationID = currentGenerationIDForSQL(doc.UserID)
+	}
 	if doc.ID == "" {
 		doc.ID = uuid.NewString()
 	}
@@ -550,6 +590,14 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 	doc.Metadata = cloneMetadata(doc.Metadata)
 	doc.Metadata["activity_at"] = doc.ActivityAt.Format(time.RFC3339)
 	doc.Metadata["time_tier"] = doc.TimeTier
+	if doc.GenerationID != "" {
+		doc.Metadata["generation_id"] = doc.GenerationID
+	}
+	if stale, err := r.shouldSkipDocumentStore(ctx, doc); err != nil {
+		return err
+	} else if stale {
+		return nil
+	}
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -558,9 +606,10 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 	defer rollback(tx)
 
 	_, err = tx.ExecContext(ctx, `
-	        INSERT INTO memory_nodes (id, user_id, node_type, entity_id, importance, decay_factor, activity_at, time_tier, embedding_status, created_at, updated_at)
-	        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+	        INSERT INTO memory_nodes (id, generation_id, user_id, node_type, entity_id, importance, decay_factor, activity_at, time_tier, embedding_status, created_at, updated_at)
+	        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
 	        ON CONFLICT (id) DO UPDATE SET
+	            generation_id = EXCLUDED.generation_id,
 	            node_type = EXCLUDED.node_type,
 	            entity_id = EXCLUDED.entity_id,
 	            importance = EXCLUDED.importance,
@@ -568,7 +617,7 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 	            activity_at = EXCLUDED.activity_at,
 	            time_tier = EXCLUDED.time_tier,
 	            updated_at = EXCLUDED.updated_at
-	    `, doc.NodeID, doc.UserID, string(doc.Type), doc.ID, doc.Importance, doc.DecayFactor, doc.ActivityAt, string(doc.TimeTier), "pending", doc.CreatedAt, doc.UpdatedAt)
+	    `, doc.NodeID, doc.GenerationID, doc.UserID, string(doc.Type), doc.ID, doc.Importance, doc.DecayFactor, doc.ActivityAt, string(doc.TimeTier), "pending", doc.CreatedAt, doc.UpdatedAt)
 	if err != nil {
 		return err
 	}
@@ -576,13 +625,14 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 	switch doc.Type {
 	case domain.MemoryTypeSummary:
 		_, err = tx.ExecContext(ctx, `
-            INSERT INTO memory_summaries (id, user_id, conversation_id, node_id, summary, topic_label, summary_version, chunk_index, chunk_total, created_at, updated_at)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+            INSERT INTO memory_summaries (id, generation_id, user_id, conversation_id, node_id, summary, topic_label, summary_version, chunk_index, chunk_total, created_at, updated_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
             ON CONFLICT (id) DO UPDATE SET
+                generation_id = EXCLUDED.generation_id,
                 summary = EXCLUDED.summary,
                 topic_label = EXCLUDED.topic_label,
                 updated_at = EXCLUDED.updated_at
-        `, doc.ID, doc.UserID, doc.ConversationID, doc.NodeID, doc.Content, stringValue(doc.Metadata, "topic_label"), 1, 0, 1, doc.CreatedAt, doc.UpdatedAt)
+        `, doc.ID, doc.GenerationID, doc.UserID, doc.ConversationID, doc.NodeID, doc.Content, stringValue(doc.Metadata, "topic_label"), 1, 0, 1, doc.CreatedAt, doc.UpdatedAt)
 		if err == nil {
 			if _, err = tx.ExecContext(ctx, `DELETE FROM memory_keywords WHERE summary_id = $1 AND user_id = $2`, doc.ID, doc.UserID); err != nil {
 				return err
@@ -599,12 +649,13 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 	case domain.MemoryTypeSegment:
 		_, err = tx.ExecContext(ctx, `
             INSERT INTO conversation_segments (
-                id, user_id, conversation_id, segment_index, start_sequence, end_sequence,
+                id, generation_id, user_id, conversation_id, segment_index, start_sequence, end_sequence,
                 message_count, overlap_from_sequence, overlap_message_count, content, content_hash,
                 metadata, created_at, updated_at
             )
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
             ON CONFLICT (id) DO UPDATE SET
+                generation_id = EXCLUDED.generation_id,
                 conversation_id = EXCLUDED.conversation_id,
                 segment_index = EXCLUDED.segment_index,
                 start_sequence = EXCLUDED.start_sequence,
@@ -616,20 +667,21 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
                 content_hash = EXCLUDED.content_hash,
                 metadata = EXCLUDED.metadata,
                 updated_at = EXCLUDED.updated_at
-        `, doc.ID, doc.UserID, doc.ConversationID, intValue(doc.Metadata, "segment_index", 0), intValue(doc.Metadata, "start_sequence", 0),
+        `, doc.ID, doc.GenerationID, doc.UserID, doc.ConversationID, intValue(doc.Metadata, "segment_index", 0), intValue(doc.Metadata, "start_sequence", 0),
 			intValue(doc.Metadata, "end_sequence", 0), intValue(doc.Metadata, "message_count", 0),
 			intValue(doc.Metadata, "overlap_from_sequence", 0), intValue(doc.Metadata, "overlap_message_count", 0),
 			doc.Content, defaultString(stringValue(doc.Metadata, "content_hash"), doc.ID), marshalJSON(doc.Metadata), doc.CreatedAt, doc.UpdatedAt)
 	case domain.MemoryTypeImpression:
 		_, err = tx.ExecContext(ctx, `
-            INSERT INTO impressions (id, user_id, conversation_id, node_id, subject, subject_type, evaluation, sentiment, familiarity, description, created_at, updated_at)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+            INSERT INTO impressions (id, generation_id, user_id, conversation_id, node_id, subject, subject_type, evaluation, sentiment, familiarity, description, created_at, updated_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
             ON CONFLICT (id) DO UPDATE SET
+                generation_id = EXCLUDED.generation_id,
                 description = EXCLUDED.description,
                 subject = EXCLUDED.subject,
                 subject_type = EXCLUDED.subject_type,
                 updated_at = EXCLUDED.updated_at
-        `, doc.ID, doc.UserID, doc.ConversationID, doc.NodeID, stringValue(doc.Metadata, "subject"), stringValue(doc.Metadata, "subject_type"), stringValue(doc.Metadata, "evaluation"), stringValue(doc.Metadata, "sentiment"), stringValue(doc.Metadata, "familiarity"), doc.Content, doc.CreatedAt, doc.UpdatedAt)
+        `, doc.ID, doc.GenerationID, doc.UserID, doc.ConversationID, doc.NodeID, stringValue(doc.Metadata, "subject"), stringValue(doc.Metadata, "subject_type"), stringValue(doc.Metadata, "evaluation"), stringValue(doc.Metadata, "sentiment"), stringValue(doc.Metadata, "familiarity"), doc.Content, doc.CreatedAt, doc.UpdatedAt)
 	case domain.MemoryTypeFact:
 		supersededByIDValue := stringValue(doc.Metadata, "superseded_by_id")
 		var supersededByID any
@@ -637,15 +689,16 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 			supersededByID = supersededByIDValue
 		}
 		_, err = tx.ExecContext(ctx, `
-            INSERT INTO facts (id, user_id, conversation_id, node_id, category, subject, content, confidence, is_superseded, superseded_by_id, valid_from, valid_to, created_at, updated_at)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+            INSERT INTO facts (id, generation_id, user_id, conversation_id, node_id, category, subject, content, confidence, is_superseded, superseded_by_id, valid_from, valid_to, created_at, updated_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
             ON CONFLICT (id) DO UPDATE SET
+                generation_id = EXCLUDED.generation_id,
                 content = EXCLUDED.content,
                 category = EXCLUDED.category,
                 subject = EXCLUDED.subject,
                 confidence = EXCLUDED.confidence,
                 updated_at = EXCLUDED.updated_at
-		`, doc.ID, doc.UserID, doc.ConversationID, doc.NodeID, stringValue(doc.Metadata, "category"), stringValue(doc.Metadata, "subject"), doc.Content, floatValue(doc.Metadata, "confidence", 0.8), supersededByID != nil, supersededByID, nil, nil, doc.CreatedAt, doc.UpdatedAt)
+		`, doc.ID, doc.GenerationID, doc.UserID, doc.ConversationID, doc.NodeID, stringValue(doc.Metadata, "category"), stringValue(doc.Metadata, "subject"), doc.Content, floatValue(doc.Metadata, "confidence", 0.8), supersededByID != nil, supersededByID, nil, nil, doc.CreatedAt, doc.UpdatedAt)
 		if err == nil {
 			if _, err = tx.ExecContext(ctx, `
                 DELETE FROM memory_relations
@@ -657,18 +710,19 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 			if supersededByIDValue != "" {
 				var supersedingNodeID string
 				switch scanErr := tx.QueryRowContext(ctx, `
-                    SELECT node_id FROM facts WHERE user_id = $1 AND id = $2
-                `, doc.UserID, supersededByIDValue).Scan(&supersedingNodeID); scanErr {
+                    SELECT node_id FROM facts WHERE user_id = $1 AND generation_id = $2 AND id = $3
+                `, doc.UserID, doc.GenerationID, supersededByIDValue).Scan(&supersedingNodeID); scanErr {
 				case nil:
 					if _, err = tx.ExecContext(ctx, `
-                        INSERT INTO memory_relations (id, user_id, src_node_id, dst_node_id, relation_type, weight, source, metadata, created_at, updated_at)
-                        VALUES ($1,$2,$3,$4,'supersedes',1,'fact_supersession',$5,$6,$6)
+                        INSERT INTO memory_relations (id, generation_id, user_id, src_node_id, dst_node_id, relation_type, weight, source, metadata, created_at, updated_at)
+                        VALUES ($1,$2,$3,$4,$5,'supersedes',1,'fact_supersession',$6,$7,$7)
                         ON CONFLICT (user_id, src_node_id, dst_node_id, relation_type) DO UPDATE SET
+                            generation_id = EXCLUDED.generation_id,
                             weight = EXCLUDED.weight,
                             source = EXCLUDED.source,
                             metadata = EXCLUDED.metadata,
                             updated_at = EXCLUDED.updated_at
-					`, uuid.NewString(), doc.UserID, supersedingNodeID, doc.NodeID, marshalJSON(map[string]any{
+					`, uuid.NewString(), doc.GenerationID, doc.UserID, supersedingNodeID, doc.NodeID, marshalJSON(map[string]any{
 						"superseded_fact_id":  doc.ID,
 						"superseding_fact_id": supersededByIDValue,
 					}), doc.UpdatedAt); err != nil {
@@ -683,8 +737,8 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 			rows, queryErr := tx.QueryContext(ctx, `
                 SELECT id, node_id
                 FROM facts
-                WHERE user_id = $1 AND superseded_by_id = $2 AND id <> $3
-            `, doc.UserID, doc.ID, doc.ID)
+                WHERE user_id = $1 AND generation_id = $2 AND superseded_by_id = $3 AND id <> $4
+            `, doc.UserID, doc.GenerationID, doc.ID, doc.ID)
 			if queryErr != nil {
 				return queryErr
 			}
@@ -696,14 +750,15 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 					return err
 				}
 				if _, err = tx.ExecContext(ctx, `
-                    INSERT INTO memory_relations (id, user_id, src_node_id, dst_node_id, relation_type, weight, source, metadata, created_at, updated_at)
-                    VALUES ($1,$2,$3,$4,'supersedes',1,'fact_supersession',$5,$6,$6)
+                    INSERT INTO memory_relations (id, generation_id, user_id, src_node_id, dst_node_id, relation_type, weight, source, metadata, created_at, updated_at)
+                    VALUES ($1,$2,$3,$4,$5,'supersedes',1,'fact_supersession',$6,$7,$7)
                     ON CONFLICT (user_id, src_node_id, dst_node_id, relation_type) DO UPDATE SET
+                        generation_id = EXCLUDED.generation_id,
                         weight = EXCLUDED.weight,
                         source = EXCLUDED.source,
                         metadata = EXCLUDED.metadata,
                         updated_at = EXCLUDED.updated_at
-                `, uuid.NewString(), doc.UserID, doc.NodeID, supersededNodeID, marshalJSON(map[string]any{
+                `, uuid.NewString(), doc.GenerationID, doc.UserID, doc.NodeID, supersededNodeID, marshalJSON(map[string]any{
 					"superseded_fact_id":  supersededFactID,
 					"superseding_fact_id": doc.ID,
 				}), doc.UpdatedAt); err != nil {
@@ -720,7 +775,7 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 	if err != nil {
 		return err
 	}
-	if err = syncTemporalRelationsTx(tx, doc.UserID, doc.NodeID, doc.ActivityAt, doc.TimeTier, doc.UpdatedAt); err != nil {
+	if err = syncTemporalRelationsTx(tx, doc.UserID, doc.GenerationID, doc.NodeID, doc.ActivityAt, doc.TimeTier, doc.UpdatedAt); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -784,6 +839,10 @@ func (r *PostgresMemoryRepository) DeleteDocument(ctx context.Context, userID, i
 }
 
 func (r *PostgresMemoryRepository) DeleteSegmentsByConversation(ctx context.Context, userID, conversationID string, keepIDs []string) ([]string, error) {
+	return r.DeleteSegmentsByConversationInGeneration(ctx, userID, "", conversationID, keepIDs)
+}
+
+func (r *PostgresMemoryRepository) DeleteSegmentsByConversationInGeneration(ctx context.Context, userID, generationID, conversationID string, keepIDs []string) ([]string, error) {
 	if userID == "" || conversationID == "" {
 		return nil, nil
 	}
@@ -797,7 +856,7 @@ func (r *PostgresMemoryRepository) DeleteSegmentsByConversation(ctx context.Cont
         SELECT id, entity_id
         FROM memory_nodes
         WHERE user_id = $1 AND node_type = $2 AND entity_id LIKE $3 ESCAPE '\'
-    `, userID, string(domain.MemoryTypeSegment), segmentEntityPrefixPattern(conversationID))
+    `+generationFilterClause("generation_id", 4, userID, generationID, false), generationFilterArgs(userID, generationID, userID, string(domain.MemoryTypeSegment), segmentEntityPrefixPattern(conversationID))...)
 	if err != nil {
 		return nil, err
 	}
@@ -828,7 +887,7 @@ func (r *PostgresMemoryRepository) DeleteSegmentsByConversation(ctx context.Cont
 	}
 	defer rollback(tx)
 
-	if err := deleteConversationSegmentsByConversationTx(ctx, tx, userID, conversationID, keepIDs); err != nil {
+	if err := deleteConversationSegmentsByConversationTx(ctx, tx, userID, generationID, conversationID, keepIDs); err != nil {
 		return nil, err
 	}
 	if len(nodeIDs) == 0 {
@@ -851,7 +910,11 @@ func (r *PostgresMemoryRepository) DeleteSegmentsByConversation(ctx context.Cont
 }
 
 func (r *PostgresMemoryRepository) GetDocument(ctx context.Context, userID, id string, kind domain.MemoryType) (domain.MemoryDocument, error) {
-	docs, err := r.listByType(ctx, userID, kind, 1000)
+	return r.GetDocumentInGeneration(ctx, userID, "", id, kind)
+}
+
+func (r *PostgresMemoryRepository) GetDocumentInGeneration(ctx context.Context, userID, generationID, id string, kind domain.MemoryType) (domain.MemoryDocument, error) {
+	docs, err := r.listByType(ctx, userID, generationID, kind, 1000)
 	if err != nil {
 		return domain.MemoryDocument{}, err
 	}
@@ -864,6 +927,10 @@ func (r *PostgresMemoryRepository) GetDocument(ctx context.Context, userID, id s
 }
 
 func (r *PostgresMemoryRepository) ListDocuments(ctx context.Context, userID string, memoryTypes []domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
+	return r.ListDocumentsInGeneration(ctx, userID, "", memoryTypes, limit)
+}
+
+func (r *PostgresMemoryRepository) ListDocumentsInGeneration(ctx context.Context, userID, generationID string, memoryTypes []domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
 	types := memoryTypes
 	if len(types) == 0 {
 		types = []domain.MemoryType{
@@ -876,7 +943,7 @@ func (r *PostgresMemoryRepository) ListDocuments(ctx context.Context, userID str
 	}
 	out := make([]domain.MemoryDocument, 0)
 	for _, kind := range types {
-		docs, err := r.listByType(ctx, userID, kind, limit)
+		docs, err := r.listByType(ctx, userID, generationID, kind, limit)
 		if err != nil {
 			return nil, err
 		}
@@ -890,10 +957,14 @@ func (r *PostgresMemoryRepository) ListDocuments(ctx context.Context, userID str
 }
 
 func (r *PostgresMemoryRepository) ListDocumentsByNodeIDs(ctx context.Context, userID string, nodeIDs []string) ([]domain.MemoryDocument, error) {
+	return r.ListDocumentsByNodeIDsInGeneration(ctx, userID, "", nodeIDs)
+}
+
+func (r *PostgresMemoryRepository) ListDocumentsByNodeIDsInGeneration(ctx context.Context, userID, generationID string, nodeIDs []string) ([]domain.MemoryDocument, error) {
 	if len(nodeIDs) == 0 {
 		return nil, nil
 	}
-	allDocs, err := r.ListDocuments(ctx, userID, []domain.MemoryType{
+	allDocs, err := r.ListDocumentsInGeneration(ctx, userID, generationID, []domain.MemoryType{
 		domain.MemoryTypeSummary,
 		domain.MemoryTypeSegment,
 		domain.MemoryTypeImpression,
@@ -917,7 +988,11 @@ func (r *PostgresMemoryRepository) ListDocumentsByNodeIDs(ctx context.Context, u
 }
 
 func (r *PostgresMemoryRepository) ListDocumentsByConversation(ctx context.Context, userID, conversationID string) ([]domain.MemoryDocument, error) {
-	docs, err := r.ListDocuments(ctx, userID, []domain.MemoryType{domain.MemoryTypeSummary, domain.MemoryTypeImpression, domain.MemoryTypeFact}, 500)
+	return r.ListDocumentsByConversationInGeneration(ctx, userID, "", conversationID)
+}
+
+func (r *PostgresMemoryRepository) ListDocumentsByConversationInGeneration(ctx context.Context, userID, generationID, conversationID string) ([]domain.MemoryDocument, error) {
+	docs, err := r.ListDocumentsInGeneration(ctx, userID, generationID, []domain.MemoryType{domain.MemoryTypeSummary, domain.MemoryTypeImpression, domain.MemoryTypeFact}, 500)
 	if err != nil {
 		return nil, err
 	}
@@ -930,7 +1005,7 @@ func (r *PostgresMemoryRepository) ListDocumentsByConversation(ctx context.Conte
 	return out, nil
 }
 
-func (r *PostgresMemoryRepository) SearchKeywordMatches(ctx context.Context, userID, query string, limit int) ([]domain.KeywordMatch, error) {
+func (r *PostgresMemoryRepository) SearchKeywordMatches(ctx context.Context, userID, generationID, query string, limit int) ([]domain.KeywordMatch, error) {
 	terms := normalizeKeywordTerms(query)
 	if len(terms) == 0 {
 		return nil, nil
@@ -939,30 +1014,61 @@ func (r *PostgresMemoryRepository) SearchKeywordMatches(ctx context.Context, use
 		limit = 20
 	}
 
-	args := make([]any, 0, len(terms)+2)
+	fetchLimit := limit * 4
+	if fetchLimit < 20 {
+		fetchLimit = 20
+	}
+
+	args := make([]any, 0, len(terms)+4)
 	args = append(args, userID)
-	placeholders := make([]string, 0, len(terms))
-	for idx, term := range terms {
-		placeholders = append(placeholders, fmt.Sprintf("$%d", idx+2))
+	termPlaceholders := make([]string, 0, len(terms))
+	contentPredicates := make([]string, 0, len(terms))
+	for _, term := range terms {
+		placeholder := fmt.Sprintf("$%d", len(args)+1)
+		termPlaceholders = append(termPlaceholders, placeholder)
+		contentPredicates = append(contentPredicates, fmt.Sprintf("LOWER(s.summary) LIKE '%%' || %s || '%%'", placeholder))
 		args = append(args, term)
 	}
-	args = append(args, limit)
+
+	generationStart := len(args) + 1
+	generationClause := generationFilterClause("s.generation_id", generationStart, userID, generationID, false)
+	args = appendGenerationArg(args, userID, generationID)
+	limitPosition := len(args) + 1
+	args = append(args, fetchLimit)
+
+	keywordPredicate := "FALSE"
+	if len(termPlaceholders) > 0 {
+		keywordPredicate = fmt.Sprintf(`
+            EXISTS (
+                SELECT 1
+                FROM memory_keywords mk
+                WHERE mk.user_id = s.user_id
+                  AND mk.summary_id = s.id
+                  AND mk.keyword IN (%s)
+            )
+        `, strings.Join(termPlaceholders, ","))
+	}
+	contentPredicate := "FALSE"
+	if len(contentPredicates) > 0 {
+		contentPredicate = strings.Join(contentPredicates, " OR ")
+	}
 
 	querySQL := fmt.Sprintf(`
         SELECT
             s.node_id,
-            COALESCE(json_agg(mk.keyword ORDER BY mk.weight DESC), '[]'::json),
-            COALESCE(SUM(mk.weight), 0)
-        FROM memory_keywords mk
-        JOIN memory_summaries s
-          ON s.id = mk.summary_id
-         AND s.user_id = mk.user_id
-        WHERE mk.user_id = $1
-          AND mk.keyword IN (%s)
-        GROUP BY s.node_id
-        ORDER BY SUM(mk.weight) DESC, COUNT(*) DESC
+            s.summary,
+            COALESCE((
+                SELECT json_agg(k.keyword ORDER BY k.weight DESC)
+                FROM memory_keywords k
+                WHERE k.summary_id = s.id AND k.user_id = s.user_id
+            ), '[]'::json)
+        FROM memory_summaries s
+        WHERE s.user_id = $1
+          %s
+          AND ((%s) OR (%s))
+        ORDER BY s.updated_at DESC
         LIMIT $%d
-    `, strings.Join(placeholders, ","), len(args))
+    `, generationClause, keywordPredicate, contentPredicate, limitPosition)
 
 	rows, err := r.db.QueryContext(ctx, querySQL, args...)
 	if err != nil {
@@ -972,20 +1078,37 @@ func (r *PostgresMemoryRepository) SearchKeywordMatches(ctx context.Context, use
 
 	out := make([]domain.KeywordMatch, 0)
 	for rows.Next() {
-		var item domain.KeywordMatch
+		var nodeID string
+		var summary string
 		var keywordsJSON []byte
-		if err := rows.Scan(&item.NodeID, &keywordsJSON, &item.TotalWeight); err != nil {
+		if err := rows.Scan(&nodeID, &summary, &keywordsJSON); err != nil {
 			return nil, err
 		}
+		var keywords []string
 		if len(keywordsJSON) > 0 {
-			if err := json.Unmarshal(keywordsJSON, &item.Keywords); err != nil {
+			if err := json.Unmarshal(keywordsJSON, &keywords); err != nil {
 				return nil, err
 			}
 		}
-		item.Score = keywordMatchScore(item.TotalWeight, len(item.Keywords))
+		item, ok := buildSummaryKeywordMatch(nodeID, query, summary, keywords)
+		if !ok {
+			continue
+		}
 		out = append(out, item)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Score == out[j].Score {
+			return out[i].NodeID < out[j].NodeID
+		}
+		return out[i].Score > out[j].Score
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
 }
 
 func (r *PostgresMemoryRepository) UpdateDocument(ctx context.Context, userID, id string, kind domain.MemoryType, content string) (domain.MemoryDocument, error) {
@@ -1143,7 +1266,7 @@ func (r *PostgresMemoryRepository) UpsertKeyMemory(ctx context.Context, km domai
 	if err != nil {
 		return err
 	}
-	if err = syncTemporalRelationsTx(tx, km.UserID, nodeID, km.ActivityAt, km.TimeTier, now); err != nil {
+	if err = syncTemporalRelationsTx(tx, km.UserID, "", nodeID, km.ActivityAt, km.TimeTier, now); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -1177,15 +1300,21 @@ func (r *PostgresMemoryRepository) LinkDocuments(ctx context.Context, relation d
 	if relation.CreatedAt.IsZero() {
 		relation.CreatedAt = time.Now().UTC()
 	}
+	if stale, err := r.shouldSkipRelationStore(ctx, relation); err != nil {
+		return err
+	} else if stale {
+		return nil
+	}
 	_, err := r.db.ExecContext(ctx, `
-        INSERT INTO memory_relations (id, user_id, src_node_id, dst_node_id, relation_type, weight, source, metadata, created_at, updated_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)
+        INSERT INTO memory_relations (id, generation_id, user_id, src_node_id, dst_node_id, relation_type, weight, source, metadata, created_at, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10)
         ON CONFLICT (user_id, src_node_id, dst_node_id, relation_type) DO UPDATE SET
+            generation_id = EXCLUDED.generation_id,
             weight = EXCLUDED.weight,
             source = EXCLUDED.source,
             metadata = EXCLUDED.metadata,
             updated_at = EXCLUDED.updated_at
-	`, relation.ID, relation.UserID, relation.SrcNodeID, relation.DstNodeID, relation.RelationType, relation.Weight, relation.Source, marshalJSON(relation.Metadata), relation.CreatedAt)
+	`, relation.ID, relation.GenerationID, relation.UserID, relation.SrcNodeID, relation.DstNodeID, relation.RelationType, relation.Weight, relation.Source, marshalJSON(relation.Metadata), relation.CreatedAt)
 	return err
 }
 
@@ -1197,7 +1326,7 @@ func (r *PostgresMemoryRepository) DeleteRelationsByTarget(ctx context.Context, 
 	return err
 }
 
-func (r *PostgresMemoryRepository) ListRelations(ctx context.Context, userID string, nodeIDs []string, depth int) ([]domain.MemoryRelation, error) {
+func (r *PostgresMemoryRepository) ListRelations(ctx context.Context, userID, generationID string, nodeIDs []string, depth int) ([]domain.MemoryRelation, error) {
 	if len(nodeIDs) == 0 {
 		return nil, nil
 	}
@@ -1213,7 +1342,7 @@ func (r *PostgresMemoryRepository) ListRelations(ctx context.Context, userID str
 	collected := make([]domain.MemoryRelation, 0)
 	frontier := append([]string{}, nodeIDs...)
 	for hop := 0; hop < depth && len(frontier) > 0; hop++ {
-		query, args := relationQuery(userID, frontier)
+		query, args := relationQuery(userID, generationID, frontier)
 		rows, err := r.db.QueryContext(ctx, query, args...)
 		if err != nil {
 			return nil, err
@@ -1222,7 +1351,7 @@ func (r *PostgresMemoryRepository) ListRelations(ctx context.Context, userID str
 		for rows.Next() {
 			var item domain.MemoryRelation
 			var metadataBytes []byte
-			if err := rows.Scan(&item.ID, &item.UserID, &item.SrcNodeID, &item.DstNodeID, &item.RelationType, &item.Weight, &item.Source, &metadataBytes, &item.CreatedAt); err != nil {
+			if err := rows.Scan(&item.ID, &item.GenerationID, &item.UserID, &item.SrcNodeID, &item.DstNodeID, &item.RelationType, &item.Weight, &item.Source, &metadataBytes, &item.CreatedAt); err != nil {
 				rows.Close()
 				return nil, err
 			}
@@ -1232,6 +1361,9 @@ func (r *PostgresMemoryRepository) ListRelations(ctx context.Context, userID str
 			_ = json.Unmarshal(metadataBytes, &item.Metadata)
 			seenRelations[item.ID] = struct{}{}
 			collected = append(collected, item)
+			if isTemporalRelationType(item.RelationType) {
+				continue
+			}
 			if _, ok := seenNodes[item.SrcNodeID]; !ok {
 				seenNodes[item.SrcNodeID] = struct{}{}
 				nextFrontier = append(nextFrontier, item.SrcNodeID)
@@ -1251,15 +1383,16 @@ func (r *PostgresMemoryRepository) ListRelations(ctx context.Context, userID str
 	return collected, nil
 }
 
-func (r *PostgresMemoryRepository) listByType(ctx context.Context, userID string, kind domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
+func (r *PostgresMemoryRepository) listByType(ctx context.Context, userID, generationID string, kind domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
 	if limit <= 0 {
 		limit = 100
 	}
 	var query string
+	var args []any
 	switch kind {
 	case domain.MemoryTypeSummary:
 		query = `
-	            SELECT s.id, s.node_id, s.conversation_id, s.summary, COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, s.updated_at), COALESCE(n.time_tier, ''), s.created_at, s.updated_at,
+	            SELECT s.id, s.node_id, s.generation_id, s.conversation_id, s.summary, COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, s.updated_at), COALESCE(n.time_tier, ''), s.created_at, s.updated_at,
 	                   json_build_object(
 	                       'topic_label', s.topic_label,
 	                       'keywords', COALESCE((
@@ -1270,13 +1403,14 @@ func (r *PostgresMemoryRepository) listByType(ctx context.Context, userID string
                    )
             FROM memory_summaries s
             LEFT JOIN memory_nodes n ON n.id = s.node_id
-            WHERE s.user_id = $1
+            WHERE s.user_id = $1` + generationFilterClause("s.generation_id", 3, userID, generationID, false) + `
             ORDER BY s.updated_at DESC
             LIMIT $2
         `
+		args = generationFilterArgs(userID, generationID, userID, limit)
 	case domain.MemoryTypeSegment:
 		query = `
-	            SELECT cs.id, n.id AS node_id, cs.conversation_id, cs.content, COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, cs.updated_at), COALESCE(n.time_tier, ''), cs.created_at, cs.updated_at,
+	            SELECT cs.id, n.id AS node_id, cs.generation_id, cs.conversation_id, cs.content, COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, cs.updated_at), COALESCE(n.time_tier, ''), cs.created_at, cs.updated_at,
 	                   jsonb_build_object(
 	                       'segment_index', cs.segment_index,
 	                       'start_sequence', cs.start_sequence,
@@ -1291,33 +1425,36 @@ func (r *PostgresMemoryRepository) listByType(ctx context.Context, userID string
               ON n.user_id = cs.user_id
              AND n.entity_id = cs.id
              AND n.node_type = 'segment'
-            WHERE cs.user_id = $1
+            WHERE cs.user_id = $1` + generationFilterClause("cs.generation_id", 3, userID, generationID, false) + `
             ORDER BY cs.updated_at DESC, cs.segment_index DESC
             LIMIT $2
         `
+		args = generationFilterArgs(userID, generationID, userID, limit)
 	case domain.MemoryTypeImpression:
 		query = `
-	            SELECT i.id, i.node_id, i.conversation_id, i.description, COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, i.updated_at), COALESCE(n.time_tier, ''), i.created_at, i.updated_at,
+	            SELECT i.id, i.node_id, i.generation_id, i.conversation_id, i.description, COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, i.updated_at), COALESCE(n.time_tier, ''), i.created_at, i.updated_at,
 	                   json_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity)
             FROM impressions i
             LEFT JOIN memory_nodes n ON n.id = i.node_id
-            WHERE i.user_id = $1
+            WHERE i.user_id = $1` + generationFilterClause("i.generation_id", 3, userID, generationID, false) + `
             ORDER BY i.updated_at DESC
             LIMIT $2
         `
+		args = generationFilterArgs(userID, generationID, userID, limit)
 	case domain.MemoryTypeFact:
 		query = `
-	            SELECT f.id, f.node_id, f.conversation_id, f.content, COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, f.updated_at), COALESCE(n.time_tier, ''), f.created_at, f.updated_at,
+	            SELECT f.id, f.node_id, f.generation_id, f.conversation_id, f.content, COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, f.updated_at), COALESCE(n.time_tier, ''), f.created_at, f.updated_at,
 	                   json_build_object('category', f.category, 'confidence', f.confidence, 'valid_from', f.valid_from, 'valid_to', f.valid_to, 'superseded_by_id', f.superseded_by_id)
             FROM facts f
             LEFT JOIN memory_nodes n ON n.id = f.node_id
-            WHERE f.user_id = $1
+            WHERE f.user_id = $1` + generationFilterClause("f.generation_id", 3, userID, generationID, false) + `
             ORDER BY f.updated_at DESC
             LIMIT $2
         `
+		args = generationFilterArgs(userID, generationID, userID, limit)
 	case domain.MemoryTypeKeyMemory:
 		query = `
-	            SELECT k.id, k.node_id, '' AS conversation_id, CONCAT(k.key, ': ', k.value), COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, k.updated_at), COALESCE(n.time_tier, ''), k.created_at, k.updated_at,
+	            SELECT k.id, k.node_id, '' AS generation_id, '' AS conversation_id, CONCAT(k.key, ': ', k.value), COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, k.updated_at), COALESCE(n.time_tier, ''), k.created_at, k.updated_at,
 	                   json_build_object('key', k.key, 'value', k.value, 'category', k.category, 'source', k.source, 'review_status', k.review_status, 'last_confirmed_at', k.last_confirmed_at)
             FROM key_memories k
             LEFT JOIN memory_nodes n ON n.id = k.node_id
@@ -1325,10 +1462,11 @@ func (r *PostgresMemoryRepository) listByType(ctx context.Context, userID string
             ORDER BY k.updated_at DESC
             LIMIT $2
         `
+		args = []any{userID, limit}
 	default:
 		return nil, nil
 	}
-	rows, err := r.db.QueryContext(ctx, query, userID, limit)
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1341,7 +1479,7 @@ func (r *PostgresMemoryRepository) listByType(ctx context.Context, userID string
 		var timeTier string
 		item.UserID = userID
 		item.Type = kind
-		if err := rows.Scan(&item.ID, &item.NodeID, &item.ConversationID, &item.Content, &item.Importance, &item.DecayFactor, &item.ActivityAt, &timeTier, &item.CreatedAt, &item.UpdatedAt, &metadataBytes); err != nil {
+		if err := rows.Scan(&item.ID, &item.NodeID, &item.GenerationID, &item.ConversationID, &item.Content, &item.Importance, &item.DecayFactor, &item.ActivityAt, &timeTier, &item.CreatedAt, &item.UpdatedAt, &metadataBytes); err != nil {
 			return nil, err
 		}
 		if len(metadataBytes) > 0 {
@@ -1357,12 +1495,15 @@ func (r *PostgresMemoryRepository) listByType(ctx context.Context, userID string
 		item.Metadata["activity_at"] = item.ActivityAt.Format(time.RFC3339)
 		item.Metadata["time_tier"] = item.TimeTier
 		item.Metadata["temporal"] = temporalMetadata(item.UserID, item.ActivityAt, item.TimeTier)
+		if item.GenerationID != "" {
+			item.Metadata["generation_id"] = item.GenerationID
+		}
 		out = append(out, item)
 	}
 	return out, rows.Err()
 }
 
-func syncTemporalRelationsTx(tx *sqlpkg.Tx, userID, nodeID string, activityAt time.Time, tier domain.TimeTier, updatedAt time.Time) error {
+func syncTemporalRelationsTx(tx *sqlpkg.Tx, userID, generationID, nodeID string, activityAt time.Time, tier domain.TimeTier, updatedAt time.Time) error {
 	if tx == nil || userID == "" || nodeID == "" {
 		return nil
 	}
@@ -1375,41 +1516,42 @@ func syncTemporalRelationsTx(tx *sqlpkg.Tx, userID, nodeID string, activityAt ti
 	}
 	if _, err := tx.Exec(`
 	        DELETE FROM memory_relations
-	        WHERE user_id = $1 AND src_node_id = $2 AND relation_type IN ('indexed_in_tier', 'occurred_on_day')
-	    `, userID, nodeID); err != nil {
+	        WHERE user_id = $1 AND generation_id = $2 AND src_node_id = $3 AND relation_type IN ('indexed_in_tier', 'occurred_on_day')
+	    `, userID, generationID, nodeID); err != nil {
 		return err
 	}
 	tierNodeID := temporalTierNodeID(userID, tier)
 	dayNodeID := temporalDayNodeID(userID, activityAt)
 	monthNodeID := temporalMonthNodeID(userID, activityAt)
 	yearNodeID := temporalYearNodeID(userID, activityAt)
-	if err := upsertTemporalNodeTx(tx, tierNodeID, userID, "time_tier", string(tier), activityAt, updatedAt); err != nil {
+	if err := upsertTemporalNodeTx(tx, tierNodeID, userID, generationID, "time_tier", string(tier), activityAt, updatedAt); err != nil {
 		return err
 	}
-	if err := upsertTemporalNodeTx(tx, dayNodeID, userID, "calendar_day", activityAt.UTC().Format("2006-01-02"), activityAt, updatedAt); err != nil {
+	if err := upsertTemporalNodeTx(tx, dayNodeID, userID, generationID, "calendar_day", activityAt.UTC().Format("2006-01-02"), activityAt, updatedAt); err != nil {
 		return err
 	}
-	if err := upsertTemporalNodeTx(tx, monthNodeID, userID, "calendar_month", activityAt.UTC().Format("2006-01"), activityAt, updatedAt); err != nil {
+	if err := upsertTemporalNodeTx(tx, monthNodeID, userID, generationID, "calendar_month", activityAt.UTC().Format("2006-01"), activityAt, updatedAt); err != nil {
 		return err
 	}
-	if err := upsertTemporalNodeTx(tx, yearNodeID, userID, "calendar_year", activityAt.UTC().Format("2006"), activityAt, updatedAt); err != nil {
+	if err := upsertTemporalNodeTx(tx, yearNodeID, userID, generationID, "calendar_year", activityAt.UTC().Format("2006"), activityAt, updatedAt); err != nil {
 		return err
 	}
 	for _, relation := range []domain.MemoryRelation{
-		{UserID: userID, SrcNodeID: nodeID, DstNodeID: tierNodeID, RelationType: "indexed_in_tier", Weight: 1, Source: "temporal", CreatedAt: updatedAt},
-		{UserID: userID, SrcNodeID: nodeID, DstNodeID: dayNodeID, RelationType: "occurred_on_day", Weight: 1, Source: "temporal", CreatedAt: updatedAt},
-		{UserID: userID, SrcNodeID: dayNodeID, DstNodeID: monthNodeID, RelationType: "day_in_month", Weight: 1, Source: "temporal", CreatedAt: updatedAt},
-		{UserID: userID, SrcNodeID: monthNodeID, DstNodeID: yearNodeID, RelationType: "month_in_year", Weight: 1, Source: "temporal", CreatedAt: updatedAt},
+		{GenerationID: generationID, UserID: userID, SrcNodeID: nodeID, DstNodeID: tierNodeID, RelationType: "indexed_in_tier", Weight: 1, Source: "temporal", CreatedAt: updatedAt},
+		{GenerationID: generationID, UserID: userID, SrcNodeID: nodeID, DstNodeID: dayNodeID, RelationType: "occurred_on_day", Weight: 1, Source: "temporal", CreatedAt: updatedAt},
+		{GenerationID: generationID, UserID: userID, SrcNodeID: dayNodeID, DstNodeID: monthNodeID, RelationType: "day_in_month", Weight: 1, Source: "temporal", CreatedAt: updatedAt},
+		{GenerationID: generationID, UserID: userID, SrcNodeID: monthNodeID, DstNodeID: yearNodeID, RelationType: "month_in_year", Weight: 1, Source: "temporal", CreatedAt: updatedAt},
 	} {
 		if _, err := tx.Exec(`
-	            INSERT INTO memory_relations (id, user_id, src_node_id, dst_node_id, relation_type, weight, source, metadata, created_at, updated_at)
-	            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)
+	            INSERT INTO memory_relations (id, generation_id, user_id, src_node_id, dst_node_id, relation_type, weight, source, metadata, created_at, updated_at)
+	            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10)
 	            ON CONFLICT (user_id, src_node_id, dst_node_id, relation_type) DO UPDATE SET
+	                generation_id = EXCLUDED.generation_id,
 	                weight = EXCLUDED.weight,
 	                source = EXCLUDED.source,
 	                metadata = EXCLUDED.metadata,
 	                updated_at = EXCLUDED.updated_at
-	        `, uuid.NewString(), relation.UserID, relation.SrcNodeID, relation.DstNodeID, relation.RelationType, relation.Weight, relation.Source, marshalJSON(map[string]any{
+	        `, uuid.NewString(), relation.GenerationID, relation.UserID, relation.SrcNodeID, relation.DstNodeID, relation.RelationType, relation.Weight, relation.Source, marshalJSON(map[string]any{
 			"activity_at": activityAt.Format(time.RFC3339),
 		}), relation.CreatedAt); err != nil {
 			return err
@@ -1418,17 +1560,17 @@ func syncTemporalRelationsTx(tx *sqlpkg.Tx, userID, nodeID string, activityAt ti
 	return nil
 }
 
-func deleteConversationSegmentsByConversationTx(ctx context.Context, tx *sqlpkg.Tx, userID, conversationID string, keepIDs []string) error {
+func deleteConversationSegmentsByConversationTx(ctx context.Context, tx *sqlpkg.Tx, userID, generationID, conversationID string, keepIDs []string) error {
 	if tx == nil || userID == "" || conversationID == "" {
 		return nil
 	}
-	args := []any{userID, conversationID}
+	args := generationFilterArgs(userID, generationID, userID, conversationID)
 	query := `
         DELETE FROM conversation_segments
         WHERE user_id = $1 AND conversation_id = $2
-    `
+    ` + generationFilterClause("generation_id", 3, userID, generationID, false)
 	if len(keepIDs) > 0 {
-		query += fmt.Sprintf(" AND id NOT IN (%s)", placeholders(3, len(keepIDs)))
+		query += fmt.Sprintf(" AND id NOT IN (%s)", placeholders(len(args)+1, len(keepIDs)))
 		for _, id := range keepIDs {
 			args = append(args, id)
 		}
@@ -1469,14 +1611,15 @@ func deleteMemoryNodesByIDsTx(ctx context.Context, tx *sqlpkg.Tx, userID string,
 	return err
 }
 
-func upsertTemporalNodeTx(tx *sqlpkg.Tx, nodeID, userID, nodeType, entityID string, activityAt, updatedAt time.Time) error {
+func upsertTemporalNodeTx(tx *sqlpkg.Tx, nodeID, userID, generationID, nodeType, entityID string, activityAt, updatedAt time.Time) error {
 	_, err := tx.Exec(`
-	        INSERT INTO memory_nodes (id, user_id, node_type, entity_id, importance, decay_factor, activity_at, time_tier, embedding_status, created_at, updated_at)
-	        VALUES ($1,$2,$3,$4,1,1,$5,'',$6,$7,$7)
+	        INSERT INTO memory_nodes (id, generation_id, user_id, node_type, entity_id, importance, decay_factor, activity_at, time_tier, embedding_status, created_at, updated_at)
+	        VALUES ($1,$2,$3,$4,$5,1,1,$6,'',$7,$8,$8)
 	        ON CONFLICT (id) DO UPDATE SET
+	            generation_id = EXCLUDED.generation_id,
 	            activity_at = EXCLUDED.activity_at,
 	            updated_at = EXCLUDED.updated_at
-	    `, nodeID, userID, nodeType, entityID, activityAt, "ready", updatedAt)
+	    `, nodeID, generationID, userID, nodeType, entityID, activityAt, "ready", updatedAt)
 	return err
 }
 
@@ -1825,21 +1968,24 @@ func stringSlice(metadata map[string]any, key string) []string {
 	}
 }
 
-func relationQuery(userID string, nodeIDs []string) (string, []any) {
-	args := make([]any, 0, len(nodeIDs)*2+1)
+func relationQuery(userID, generationID string, nodeIDs []string) (string, []any) {
+	args := make([]any, 0, len(nodeIDs)*2+2)
 	args = append(args, userID)
 	placeholders := make([]string, 0, len(nodeIDs))
 	for idx, nodeID := range nodeIDs {
 		placeholders = append(placeholders, fmt.Sprintf("$%d", idx+2))
 		args = append(args, nodeID)
 	}
+	generationArgIndex := len(args) + 1
+	generationClause := generationFilterClause("generation_id", generationArgIndex, userID, generationID, true)
+	args = appendGenerationArg(args, userID, generationID)
 	inClause := strings.Join(placeholders, ",")
 	query := fmt.Sprintf(`
-        SELECT id, user_id, src_node_id, dst_node_id, relation_type, weight, source, metadata, created_at
+        SELECT id, generation_id, user_id, src_node_id, dst_node_id, relation_type, weight, source, metadata, created_at
         FROM memory_relations
-        WHERE user_id = $1 AND (src_node_id IN (%s) OR dst_node_id IN (%s))
+        WHERE user_id = $1 AND (src_node_id IN (%s) OR dst_node_id IN (%s))%s
         ORDER BY created_at DESC
-    `, inClause, inClause)
+    `, inClause, inClause, generationClause)
 	return query, args
 }
 
@@ -1857,6 +2003,113 @@ func placeholders(start, count int) string {
 		items = append(items, fmt.Sprintf("$%d", start+idx))
 	}
 	return strings.Join(items, ",")
+}
+
+func generationFilterArgs(userID, generationID string, args ...any) []any {
+	out := append([]any{}, args...)
+	return appendGenerationArg(out, userID, generationID)
+}
+
+func appendGenerationArg(args []any, userID, generationID string) []any {
+	if strings.TrimSpace(generationID) == "" {
+		return args
+	}
+	return append(args, generationID)
+}
+
+func generationFilterClause(column string, argIndex int, userID, generationID string, includeGenerationless bool) string {
+	generationID = strings.TrimSpace(generationID)
+	if generationID == "" {
+		return ""
+	}
+	if includeGenerationless {
+		return fmt.Sprintf(" AND (%s = $%d OR %s = '')", column, argIndex, column)
+	}
+	return fmt.Sprintf(" AND %s = $%d", column, argIndex)
+}
+
+func currentGenerationIDForSQL(userID string) string {
+	return "gen:current:" + strings.TrimSpace(userID)
+}
+
+func conversationSegmentGenerationForSQL(userID string, metadata map[string]any) string {
+	if generationID := strings.TrimSpace(stringValue(metadata, "memory_generation_id")); generationID != "" {
+		return generationID
+	}
+	return currentGenerationIDForSQL(userID)
+}
+
+func (r *PostgresMemoryRepository) shouldSkipDocumentStore(ctx context.Context, doc domain.MemoryDocument) (bool, error) {
+	if sourceSnapshotVersionSQL(doc.Metadata) <= 0 {
+		return false, nil
+	}
+	existing, err := r.GetDocumentInGeneration(ctx, doc.UserID, doc.GenerationID, doc.ID, doc.Type)
+	if err != nil {
+		if isMemoryDocumentNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return shouldKeepExistingSnapshotSQL(existing.Metadata, doc.Metadata), nil
+}
+
+func (r *PostgresMemoryRepository) shouldSkipRelationStore(ctx context.Context, relation domain.MemoryRelation) (bool, error) {
+	if sourceSnapshotVersionSQL(relation.Metadata) <= 0 {
+		return false, nil
+	}
+	row := r.db.QueryRowContext(ctx, `
+        SELECT metadata
+        FROM memory_relations
+        WHERE user_id = $1 AND src_node_id = $2 AND dst_node_id = $3 AND relation_type = $4
+    `, relation.UserID, relation.SrcNodeID, relation.DstNodeID, relation.RelationType)
+	var metadataBytes []byte
+	if err := row.Scan(&metadataBytes); err != nil {
+		if errors.Is(err, sqlpkg.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	existingMetadata := map[string]any{}
+	if len(metadataBytes) > 0 {
+		if err := json.Unmarshal(metadataBytes, &existingMetadata); err != nil {
+			return false, err
+		}
+	}
+	return shouldKeepExistingSnapshotSQL(existingMetadata, relation.Metadata), nil
+}
+
+func shouldKeepExistingSnapshotSQL(existingMetadata, incomingMetadata map[string]any) bool {
+	incomingVersion := sourceSnapshotVersionSQL(incomingMetadata)
+	if incomingVersion <= 0 {
+		return false
+	}
+	return sourceSnapshotVersionSQL(existingMetadata) > incomingVersion
+}
+
+func sourceSnapshotVersionSQL(metadata map[string]any) int {
+	if len(metadata) == 0 {
+		return 0
+	}
+	switch typed := metadata["source_snapshot_version"].(type) {
+	case int:
+		return typed
+	case int32:
+		return int(typed)
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	case string:
+		value, err := strconv.Atoi(strings.TrimSpace(typed))
+		if err == nil {
+			return value
+		}
+	}
+	return 0
+}
+
+func isMemoryDocumentNotFound(err error) bool {
+	return err != nil && err.Error() == "memory document not found"
 }
 
 func segmentEntityPrefixPattern(conversationID string) string {

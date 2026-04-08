@@ -116,6 +116,7 @@ type UnifiedRequest struct {
 	ToolWriteEnabled   bool             `json:"tool_write_enabled"`
 	MaxInjectionTokens int              `json:"max_injection_tokens,omitempty"`
 	MemoryPersist      *bool            `json:"memory_persist,omitempty"`
+	SourceRetain       *bool            `json:"source_retain,omitempty"`
 	Messages           []UnifiedMessage `json:"messages,omitempty"`
 	Tools              []ToolDefinition `json:"tools,omitempty"`
 	ProviderMetadata   map[string]any   `json:"provider_metadata,omitempty"`
@@ -125,6 +126,13 @@ type UnifiedRequest struct {
 
 func (r UnifiedRequest) PersistMemoryEnabled() bool {
 	return r.MemoryPersist == nil || *r.MemoryPersist
+}
+
+func (r UnifiedRequest) SourceRetainEnabled(defaultValue bool) bool {
+	if r.SourceRetain == nil {
+		return defaultValue
+	}
+	return *r.SourceRetain
 }
 
 type UnifiedResponse struct {

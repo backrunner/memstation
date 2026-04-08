@@ -57,11 +57,17 @@ func (s *PGVectorStore) Search(ctx context.Context, input domain.VectorSearchInp
 	limitArgPosition := 4
 	filterClause := ""
 	args := []any{input.UserID, input.EmbeddingVersion}
-	if strings.TrimSpace(embeddingModel) != "" {
-		filterClause = " AND embedding_model = $3"
-		args = append(args, embeddingModel)
+	if strings.TrimSpace(input.GenerationID) != "" {
+		filterClause += " AND (generation_id = $3 OR (generation_id = '' AND node_type = 'key_memory'))"
+		args = append(args, input.GenerationID)
 		vectorArgPosition = 4
 		limitArgPosition = 5
+	}
+	if strings.TrimSpace(embeddingModel) != "" {
+		filterClause += fmt.Sprintf(" AND embedding_model = $%d", len(args)+1)
+		args = append(args, embeddingModel)
+		vectorArgPosition++
+		limitArgPosition++
 	}
 	query := fmt.Sprintf(`
         SELECT node_id, node_type, 1 - (vector <=> $%d::vector) AS score
@@ -125,7 +131,7 @@ func (s *PGVectorStore) Upsert(ctx context.Context, input domain.VectorUpsertReq
 	if s.db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		s.items[input.UserID+"::"+input.NodeID+"::"+fmt.Sprintf("%d", input.EmbeddingVersion)] = input
+		s.items[input.UserID+"::"+input.GenerationID+"::"+input.NodeID+"::"+fmt.Sprintf("%d", input.EmbeddingVersion)] = input
 		return nil
 	}
 
@@ -133,16 +139,17 @@ func (s *PGVectorStore) Upsert(ctx context.Context, input domain.VectorUpsertReq
 	embeddingID := fmt.Sprintf("%s:%s:%d", input.UserID, input.NodeID, input.EmbeddingVersion)
 	if _, err := s.db.ExecContext(ctx, `
         INSERT INTO memory_embeddings (
-            embedding_id, user_id, node_id, node_type, embedding_version, embedding_model,
+            embedding_id, generation_id, user_id, node_id, node_type, embedding_version, embedding_model,
             content_hash, vector, created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::vector,$9,$9)
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::vector,$10,$10)
         ON CONFLICT (user_id, node_id, embedding_version) DO UPDATE SET
+            generation_id = EXCLUDED.generation_id,
             node_type = EXCLUDED.node_type,
             embedding_model = EXCLUDED.embedding_model,
             content_hash = EXCLUDED.content_hash,
             vector = EXCLUDED.vector,
             updated_at = EXCLUDED.updated_at
-    `, embeddingID, input.UserID, input.NodeID, input.NodeType, input.EmbeddingVersion, input.EmbeddingModel, input.ContentHash, vectorLiteral(input.Vector), now); err != nil {
+    `, embeddingID, input.GenerationID, input.UserID, input.NodeID, input.NodeType, input.EmbeddingVersion, input.EmbeddingModel, input.ContentHash, vectorLiteral(input.Vector), now); err != nil {
 		return err
 	}
 	_, err := s.db.ExecContext(ctx, `UPDATE memory_nodes SET embedding_status = 'ready', updated_at = $1 WHERE id = $2 AND user_id = $3`, now, input.NodeID, input.UserID)
@@ -154,7 +161,7 @@ func (s *PGVectorStore) DeleteByNode(ctx context.Context, userID, nodeID string)
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		for key := range s.items {
-			if strings.HasPrefix(key, userID+"::"+nodeID+"::") {
+			if strings.Contains(key, "::"+nodeID+"::") && strings.HasPrefix(key, userID+"::") {
 				delete(s.items, key)
 			}
 		}
@@ -272,6 +279,9 @@ func (s *PGVectorStore) searchInMemory(input domain.VectorSearchInput, queryVect
 		if item.UserID != input.UserID || item.EmbeddingVersion != input.EmbeddingVersion {
 			continue
 		}
+		if strings.TrimSpace(input.GenerationID) != "" && !matchesVectorGeneration(input.GenerationID, item.GenerationID, item.NodeType) {
+			continue
+		}
 		if strings.TrimSpace(embeddingModel) != "" && item.EmbeddingModel != embeddingModel {
 			continue
 		}
@@ -295,6 +305,18 @@ func (s *PGVectorStore) searchInMemory(input domain.VectorSearchInput, queryVect
 		results = results[:input.TopK]
 	}
 	return results
+}
+
+func matchesVectorGeneration(requestedGenerationID, actualGenerationID, nodeType string) bool {
+	requestedGenerationID = strings.TrimSpace(requestedGenerationID)
+	actualGenerationID = strings.TrimSpace(actualGenerationID)
+	if requestedGenerationID == "" {
+		return true
+	}
+	if actualGenerationID == requestedGenerationID {
+		return true
+	}
+	return actualGenerationID == "" && nodeType == string(domain.MemoryTypeKeyMemory)
 }
 
 func vectorLiteral(vector []float32) string {

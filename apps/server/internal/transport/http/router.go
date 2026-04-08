@@ -29,6 +29,7 @@ import (
 	auditsvc "memstation/apps/server/internal/service/audit"
 	gatewayservice "memstation/apps/server/internal/service/gateway"
 	memoryservice "memstation/apps/server/internal/service/memory"
+	memorygenservice "memstation/apps/server/internal/service/memorygen"
 	providerconfigservice "memstation/apps/server/internal/service/providerconfig"
 	settingsservice "memstation/apps/server/internal/service/settings"
 	systemconfigservice "memstation/apps/server/internal/service/systemconfig"
@@ -50,6 +51,7 @@ type Dependencies struct {
 	GraphQL        *resolver.Resolver
 	Gateway        *gatewayservice.Service
 	Memory         *memoryservice.Service
+	Generations    *memorygenservice.Service
 	Admin          *admin.Service
 	Audit          *auditsvc.Service
 	Usage          *usageservice.Service
@@ -100,16 +102,22 @@ func NewRouter(deps Dependencies) http.Handler {
 		r.Get("/api/admin/overview", adminOverviewHandler(deps.Admin))
 		r.Get("/api/admin/users", adminUsersHandler(deps.Admin))
 		r.Get("/api/admin/users/{id}", adminUserDetailHandler(deps.Admin))
+		r.Get("/api/admin/users/{id}/sources", adminUserSourcesHandler(deps.Generations))
 		r.Put("/api/admin/users/{id}/settings", adminUserSettingsHandler(deps.Settings, deps.Publisher, deps.Audit))
 		r.Post("/api/admin/users/{id}/api-keys", adminUserAPIKeyCreateHandler(deps.APIKeys, deps.Audit))
 		r.Delete("/api/admin/users/{id}/api-keys/{keyID}", adminUserAPIKeyRevokeHandler(deps.APIKeys, deps.Audit))
 		r.Get("/api/admin/conversations", adminConversationsHandler(deps.Admin))
 		r.Get("/api/admin/conversations/{id}", adminConversationDetailHandler(deps.Admin))
-		r.Get("/api/admin/conversations/{id}/memory", adminConversationMemoryHandler(deps.Admin))
+		r.Get("/api/admin/conversations/{id}/memory", adminConversationMemoryHandler(deps.Admin, deps.Memory, deps.Generations))
+		r.Get("/api/admin/conversations/{id}/sources", adminConversationSourcesHandler(deps.Generations))
 		r.Get("/api/admin/memory/documents", adminMemoryDocumentsHandler(deps.Memory))
 		r.Get("/api/admin/memory/documents/{kind}/{id}", adminMemoryDocumentGetHandler(deps.Memory))
 		r.Put("/api/admin/memory/documents/{kind}/{id}", adminMemoryDocumentUpdateHandler(deps.Memory, deps.Audit))
 		r.Post("/api/admin/memory/search", adminMemorySearchHandler(deps.Memory))
+		r.Get("/api/admin/memory/rebuilds", adminMemoryRebuildListHandler(deps.Generations))
+		r.Post("/api/admin/memory/rebuilds", adminMemoryRebuildCreateHandler(deps.Generations, deps.Publisher, deps.Audit))
+		r.Get("/api/admin/memory/rebuilds/{id}", adminMemoryRebuildGetHandler(deps.Generations))
+		r.Post("/api/admin/memory/rebuilds/{id}/activate", adminMemoryRebuildActivateHandler(deps.Generations, deps.Audit))
 		r.Get("/api/admin/memory/keys", adminMemoryKeysHandler(deps.Memory))
 		r.Post("/api/admin/memory/keys", adminMemoryKeyCreateHandler(deps.Memory, deps.Audit))
 		r.Get("/api/admin/memory/keys/{id}", adminMemoryKeyGetHandler(deps.Memory))
@@ -295,6 +303,12 @@ func chatHandler(service *gatewayservice.Service) http.HandlerFunc {
 		}
 		unified := protocol.NormalizeChatCompletion(request, protocol.ParseHeaderOptions(r))
 		unified.UserID = security.UserIDFromContext(r.Context())
+		if service != nil {
+			resolved, err := service.ResolveRequestDefaults(r.Context(), unified)
+			if err == nil {
+				unified = resolved
+			}
+		}
 		setGatewayResponseHeaders(w, unified)
 		if request.Stream {
 			streamWriter, err := protocol.NewChatCompletionStreamWriter(w)
@@ -334,6 +348,12 @@ func responsesHandler(service *gatewayservice.Service) http.HandlerFunc {
 		}
 		unified := protocol.NormalizeResponses(request, protocol.ParseHeaderOptions(r))
 		unified.UserID = security.UserIDFromContext(r.Context())
+		if service != nil {
+			resolved, err := service.ResolveRequestDefaults(r.Context(), unified)
+			if err == nil {
+				unified = resolved
+			}
+		}
 		setGatewayResponseHeaders(w, unified)
 		if request.Stream {
 			streamWriter, err := protocol.NewResponsesStreamWriter(w)
@@ -373,6 +393,12 @@ func anthropicHandler(service *gatewayservice.Service) http.HandlerFunc {
 		}
 		unified := protocol.NormalizeAnthropic(request, protocol.ParseHeaderOptions(r))
 		unified.UserID = security.UserIDFromContext(r.Context())
+		if service != nil {
+			resolved, err := service.ResolveRequestDefaults(r.Context(), unified)
+			if err == nil {
+				unified = resolved
+			}
+		}
 		setGatewayResponseHeaders(w, unified)
 		if request.Stream {
 			streamWriter, err := protocol.NewAnthropicStreamWriter(w)
@@ -621,7 +647,7 @@ func adminUserSettingsHandler(settings *settingsservice.Service, publisher ports
 			return
 		}
 		fields := map[string]any{}
-		for _, key := range []string{"chat_model", "summary_model", "analysis_model", "embedding_model", "embedding_base_url", "embedding_api_key", "clear_embedding_api_key", "tool_write_enabled", "max_injection_tokens"} {
+		for _, key := range []string{"chat_model", "summary_model", "analysis_model", "embedding_model", "embedding_base_url", "embedding_api_key", "clear_embedding_api_key", "retain_source_materials", "tool_write_enabled", "max_injection_tokens"} {
 			if value, ok := payload[key]; ok {
 				fields[key] = value
 			}
@@ -631,9 +657,12 @@ func adminUserSettingsHandler(settings *settingsservice.Service, publisher ports
 			writeError(w, http.StatusInternalServerError, "settings_failed", err.Error())
 			return
 		}
-		triggerEmbeddingRebuild(r.Context(), publisher, userID, 1, before, snapshot, fields)
+		rebuildRequired := settingsRebuildRequired(before, snapshot, fields)
 		recordAdminAudit(r, audit, "update_user_setting", "user_setting", userID, redactSensitiveSettingsFields(fields))
-		writeJSON(w, http.StatusOK, snapshot)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"settings":                snapshot,
+			"memory_rebuild_required": rebuildRequired,
+		})
 	}
 }
 
@@ -695,7 +724,8 @@ func adminConversationsHandler(service *admin.Service) http.HandlerFunc {
 func adminConversationDetailHandler(service *admin.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := queryUserID(r)
-		item, err := service.ConversationDetail(r.Context(), userID, chi.URLParam(r, "id"))
+		generationID := strings.TrimSpace(r.URL.Query().Get("generation_id"))
+		item, err := service.ConversationDetail(r.Context(), userID, chi.URLParam(r, "id"), generationID)
 		if err != nil {
 			writeError(w, http.StatusNotFound, "conversation_not_found", err.Error())
 			return
@@ -704,10 +734,50 @@ func adminConversationDetailHandler(service *admin.Service) http.HandlerFunc {
 	}
 }
 
-func adminConversationMemoryHandler(service *admin.Service) http.HandlerFunc {
+func adminConversationMemoryHandler(service *admin.Service, memories *memoryservice.Service, generations *memorygenservice.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := queryUserID(r)
-		item, err := service.ConversationMemory(r.Context(), userID, chi.URLParam(r, "id"))
+		conversationID := chi.URLParam(r, "id")
+		generationID := strings.TrimSpace(r.URL.Query().Get("generation_id"))
+		if memories != nil {
+			resolvedGenerationID := generationID
+			if resolvedGenerationID == "" {
+				if generations != nil {
+					generation, err := generations.GetActiveGeneration(r.Context(), userID)
+					if err != nil {
+						writeError(w, http.StatusInternalServerError, "conversation_memory_failed", err.Error())
+						return
+					}
+					resolvedGenerationID = generation.GenerationID
+				} else {
+					resolvedGenerationID = memorygenservice.CurrentGenerationID(userID)
+				}
+			}
+			documents, err := memories.ListDocumentsByConversationInGeneration(r.Context(), userID, resolvedGenerationID, conversationID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "conversation_memory_failed", err.Error())
+				return
+			}
+			keyMemories, err := memories.ListKeyMemories(r.Context(), userID, 200)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "conversation_memory_failed", err.Error())
+				return
+			}
+			filtered := make([]domain.KeyMemory, 0)
+			for _, item := range keyMemories {
+				if item.Value == conversationID || anyString(item.Metadata["conversation_id"]) == conversationID {
+					filtered = append(filtered, item)
+				}
+			}
+			writeJSON(w, http.StatusOK, map[string]any{
+				"conversation_id": conversationID,
+				"generation_id":   resolvedGenerationID,
+				"documents":       documents,
+				"key_memories":    filtered,
+			})
+			return
+		}
+		item, err := service.ConversationMemory(r.Context(), userID, conversationID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "conversation_memory_failed", err.Error())
 			return
@@ -716,9 +786,224 @@ func adminConversationMemoryHandler(service *admin.Service) http.HandlerFunc {
 	}
 }
 
+func adminUserSourcesHandler(service *memorygenservice.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if service == nil {
+			writeError(w, http.StatusServiceUnavailable, "memory_generation_unavailable", "memory generation service is not configured")
+			return
+		}
+		userID := chi.URLParam(r, "id")
+		stats, err := service.SourceStatsForUser(r.Context(), userID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "user_sources_failed", err.Error())
+			return
+		}
+		generations, err := service.ListGenerations(r.Context(), userID, 20)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "user_sources_failed", err.Error())
+			return
+		}
+		active, err := service.GetActiveGeneration(r.Context(), userID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "user_sources_failed", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"user_id":           userID,
+			"source_stats":      stats,
+			"active_generation": active,
+			"generations":       generations,
+		})
+	}
+}
+
+func adminConversationSourcesHandler(service *memorygenservice.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if service == nil {
+			writeError(w, http.StatusServiceUnavailable, "memory_generation_unavailable", "memory generation service is not configured")
+			return
+		}
+		userID := queryUserID(r)
+		conversationID := chi.URLParam(r, "id")
+		latest, ok, err := service.GetLatestSourceSnapshot(r.Context(), userID, conversationID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "conversation_sources_failed", err.Error())
+			return
+		}
+		snapshots, err := service.ListSourceSnapshots(r.Context(), userID, conversationID, 20)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "conversation_sources_failed", err.Error())
+			return
+		}
+		payload := map[string]any{
+			"user_id":         userID,
+			"conversation_id": conversationID,
+			"snapshots":       snapshots,
+			"has_snapshot":    ok,
+		}
+		if ok {
+			payload["latest_snapshot"] = latest
+		}
+		writeJSON(w, http.StatusOK, payload)
+	}
+}
+
+func adminMemoryRebuildListHandler(service *memorygenservice.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if service == nil {
+			writeError(w, http.StatusServiceUnavailable, "memory_generation_unavailable", "memory generation service is not configured")
+			return
+		}
+		userID := strings.TrimSpace(r.URL.Query().Get("user_id"))
+		if userID == "" {
+			writeError(w, http.StatusBadRequest, "invalid_request", "user_id is required")
+			return
+		}
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		items, err := service.ListGenerations(r.Context(), userID, limit)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "memory_rebuilds_failed", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"items": items})
+	}
+}
+
+func adminMemoryRebuildGetHandler(service *memorygenservice.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if service == nil {
+			writeError(w, http.StatusServiceUnavailable, "memory_generation_unavailable", "memory generation service is not configured")
+			return
+		}
+		userID := strings.TrimSpace(r.URL.Query().Get("user_id"))
+		if userID == "" {
+			writeError(w, http.StatusBadRequest, "invalid_request", "user_id is required")
+			return
+		}
+		item, err := service.GetGeneration(r.Context(), userID, chi.URLParam(r, "id"))
+		if err != nil {
+			writeError(w, http.StatusNotFound, "memory_rebuild_not_found", err.Error())
+			return
+		}
+		sources, err := service.ListGenerationSources(r.Context(), userID, item.GenerationID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "memory_rebuild_not_found", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"item":    item,
+			"sources": sources,
+		})
+	}
+}
+
+func adminMemoryRebuildCreateHandler(service *memorygenservice.Service, publisher ports.TaskPublisher, audit *auditsvc.Service) http.HandlerFunc {
+	type requestBody struct {
+		Scope                  string `json:"scope"`
+		UserID                 string `json:"user_id"`
+		ConversationID         string `json:"conversation_id"`
+		ActivateOnSuccess      *bool  `json:"activate_on_success"`
+		EmbeddingModelOverride string `json:"embedding_model_override"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if service == nil {
+			writeError(w, http.StatusServiceUnavailable, "memory_generation_unavailable", "memory generation service is not configured")
+			return
+		}
+		if publisher == nil {
+			writeError(w, http.StatusServiceUnavailable, "queue_unavailable", "task publisher is not configured")
+			return
+		}
+		var body requestBody
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		userID := strings.TrimSpace(body.UserID)
+		if userID == "" {
+			writeError(w, http.StatusBadRequest, "invalid_request", "user_id is required")
+			return
+		}
+		activateOnSuccess := true
+		if body.ActivateOnSuccess != nil {
+			activateOnSuccess = *body.ActivateOnSuccess
+		}
+		generation, sources, err := service.CreateRebuildGeneration(r.Context(), memorygenservice.CreateRebuildInput{
+			UserID:                 userID,
+			Scope:                  strings.TrimSpace(body.Scope),
+			ConversationID:         strings.TrimSpace(body.ConversationID),
+			ActivateOnSuccess:      activateOnSuccess,
+			EmbeddingModelOverride: strings.TrimSpace(body.EmbeddingModelOverride),
+		})
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "memory_rebuild_create_failed", err.Error())
+			return
+		}
+		for _, source := range sources {
+			if err := publisher.Publish(r.Context(), domain.TaskMessage{
+				Type:      worker.TypeMemoryRebuildConversation,
+				Queue:     worker.QueueBulk,
+				UniqueKey: worker.TypeMemoryRebuildConversation + ":" + generation.GenerationID + ":" + source.SnapshotID,
+				Payload: map[string]any{
+					"user_id":       userID,
+					"generation_id": generation.GenerationID,
+					"snapshot_id":   source.SnapshotID,
+				},
+			}); err != nil {
+				_, _ = service.MarkGenerationSourceFailed(r.Context(), userID, generation.GenerationID, source.SnapshotID, err.Error())
+				writeError(w, http.StatusInternalServerError, "memory_rebuild_create_failed", err.Error())
+				return
+			}
+		}
+		recordAdminAudit(r, audit, "create_memory_rebuild", "memory_generation", generation.GenerationID, map[string]any{
+			"user_id":             userID,
+			"scope":               generation.Scope,
+			"conversation_id":     generation.ConversationID,
+			"source_count":        generation.SourceCount,
+			"activate_on_success": generation.ActivateOnSuccess,
+		})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"item":    generation,
+			"sources": sources,
+		})
+	}
+}
+
+func adminMemoryRebuildActivateHandler(service *memorygenservice.Service, audit *auditsvc.Service) http.HandlerFunc {
+	type requestBody struct {
+		UserID string `json:"user_id"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if service == nil {
+			writeError(w, http.StatusServiceUnavailable, "memory_generation_unavailable", "memory generation service is not configured")
+			return
+		}
+		var body requestBody
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		userID := strings.TrimSpace(body.UserID)
+		if userID == "" {
+			userID = strings.TrimSpace(r.URL.Query().Get("user_id"))
+		}
+		if userID == "" {
+			writeError(w, http.StatusBadRequest, "invalid_request", "user_id is required")
+			return
+		}
+		item, err := service.ActivateGeneration(r.Context(), userID, chi.URLParam(r, "id"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "memory_rebuild_activate_failed", err.Error())
+			return
+		}
+		recordAdminAudit(r, audit, "activate_memory_generation", "memory_generation", item.GenerationID, map[string]any{
+			"user_id": userID,
+		})
+		writeJSON(w, http.StatusOK, item)
+	}
+}
+
 func adminMemoryDocumentsHandler(service *memoryservice.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := queryUserID(r)
+		generationID := strings.TrimSpace(r.URL.Query().Get("generation_id"))
 		kinds, err := parseMemoryKinds(r.URL.Query().Get("kind"))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
@@ -728,7 +1013,7 @@ func adminMemoryDocumentsHandler(service *memoryservice.Service) http.HandlerFun
 		if limit <= 0 {
 			limit = 100
 		}
-		items, err := service.ListDocuments(r.Context(), userID, kinds, limit)
+		items, err := service.ListDocumentsInGeneration(r.Context(), userID, generationID, kinds, limit)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "memory_documents_failed", err.Error())
 			return
@@ -736,9 +1021,10 @@ func adminMemoryDocumentsHandler(service *memoryservice.Service) http.HandlerFun
 		writeJSON(w, http.StatusOK, map[string]any{
 			"items": items,
 			"query": map[string]any{
-				"user_id": userID,
-				"kind":    r.URL.Query().Get("kind"),
-				"limit":   limit,
+				"user_id":       userID,
+				"generation_id": generationID,
+				"kind":          r.URL.Query().Get("kind"),
+				"limit":         limit,
 			},
 		})
 	}
@@ -747,12 +1033,13 @@ func adminMemoryDocumentsHandler(service *memoryservice.Service) http.HandlerFun
 func adminMemoryDocumentGetHandler(service *memoryservice.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := queryUserID(r)
+		generationID := strings.TrimSpace(r.URL.Query().Get("generation_id"))
 		kind, err := parseMemoryKind(chi.URLParam(r, "kind"))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 			return
 		}
-		item, err := service.GetDocument(r.Context(), userID, chi.URLParam(r, "id"), kind)
+		item, err := service.GetDocumentInGeneration(r.Context(), userID, generationID, chi.URLParam(r, "id"), kind)
 		if err != nil {
 			writeError(w, http.StatusNotFound, "memory_document_not_found", err.Error())
 			return
@@ -801,13 +1088,14 @@ func adminMemoryDocumentUpdateHandler(service *memoryservice.Service, audit *aud
 
 func adminMemorySearchHandler(service *memoryservice.Service) http.HandlerFunc {
 	type requestBody struct {
-		Query       string   `json:"query"`
-		TopN        int      `json:"top_n"`
-		MemoryTypes []string `json:"memory_types"`
-		TimeTiers   []string `json:"time_tiers"`
-		DateFrom    string   `json:"date_from"`
-		DateTo      string   `json:"date_to"`
-		MinScore    float64  `json:"min_score"`
+		Query        string   `json:"query"`
+		TopN         int      `json:"top_n"`
+		GenerationID string   `json:"generation_id"`
+		MemoryTypes  []string `json:"memory_types"`
+		TimeTiers    []string `json:"time_tiers"`
+		DateFrom     string   `json:"date_from"`
+		DateTo       string   `json:"date_to"`
+		MinScore     float64  `json:"min_score"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := queryUserID(r)
@@ -837,14 +1125,15 @@ func adminMemorySearchHandler(service *memoryservice.Service) http.HandlerFunc {
 			return
 		}
 		result, err := service.Search(r.Context(), domain.SearchInput{
-			UserID:      userID,
-			Query:       body.Query,
-			TopN:        body.TopN,
-			MemoryTypes: memoryTypes,
-			TimeTiers:   timeTiers,
-			DateFrom:    dateFrom,
-			DateTo:      dateTo,
-			MinScore:    body.MinScore,
+			UserID:       userID,
+			GenerationID: strings.TrimSpace(body.GenerationID),
+			Query:        body.Query,
+			TopN:         body.TopN,
+			MemoryTypes:  memoryTypes,
+			TimeTiers:    timeTiers,
+			DateFrom:     dateFrom,
+			DateTo:       dateTo,
+			MinScore:     body.MinScore,
 		})
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "memory_search_failed", err.Error())
@@ -1124,7 +1413,7 @@ func adminConfigPutHandler(cfg bootstrap.Config, settings *settingsservice.Servi
 		}
 		var before map[string]any
 		settingsPayload := map[string]any{}
-		for _, key := range []string{"chat_model", "summary_model", "analysis_model", "embedding_model", "embedding_base_url", "embedding_api_key", "clear_embedding_api_key", "tool_write_enabled", "max_injection_tokens"} {
+		for _, key := range []string{"chat_model", "summary_model", "analysis_model", "embedding_model", "embedding_base_url", "embedding_api_key", "clear_embedding_api_key", "retain_source_materials", "tool_write_enabled", "max_injection_tokens"} {
 			if value, ok := payload[key]; ok {
 				settingsPayload[key] = value
 			}
@@ -1146,9 +1435,6 @@ func adminConfigPutHandler(cfg bootstrap.Config, settings *settingsservice.Servi
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, "config_failed", err.Error())
 				return
-			}
-			if len(settingsPayload) > 0 {
-				triggerEmbeddingRebuild(r.Context(), publisher, userID, 1, before, snapshot, settingsPayload)
 			}
 		}
 		if providerConfig != nil {
@@ -1201,6 +1487,9 @@ func adminConfigPutHandler(cfg bootstrap.Config, settings *settingsservice.Servi
 				Payload:    redactConfigPayload(payload),
 				CreatedAt:  time.Now().UTC(),
 			})
+		}
+		if len(settingsPayload) > 0 {
+			snapshot["memory_rebuild_required"] = settingsRebuildRequired(before, snapshot, settingsPayload)
 		}
 		writeJSON(w, http.StatusOK, snapshot)
 	}
@@ -1471,7 +1760,11 @@ func adminRequeueHandler(publisher ports.TaskPublisher, inspector *asynq.Inspect
 		if taskType == "" {
 			taskType = "analysis.extract"
 		}
-		if taskType != "embedding.rebuild" && body.ConversationID == "" {
+		if !supportsManualTaskPublish(taskType) {
+			writeError(w, http.StatusBadRequest, "invalid_request", "manual publish is only supported for conversation.finalize, summary.generate, analysis.extract, and keymemory.reconcile")
+			return
+		}
+		if body.ConversationID == "" {
 			writeError(w, http.StatusBadRequest, "invalid_request", "conversation_id is required when task_id is not provided")
 			return
 		}
@@ -1491,32 +1784,19 @@ func adminRequeueHandler(publisher ports.TaskPublisher, inspector *asynq.Inspect
 				"summary_ids":     []string{},
 			},
 		}
-		switch taskType {
-		case "embedding.rebuild":
-			if body.EmbeddingVersion <= 0 {
-				body.EmbeddingVersion = 1
-			}
-			message.UniqueKey = taskType + ":" + body.UserID + ":" + strconv.Itoa(body.EmbeddingVersion) + ":manual"
-			message.Payload = map[string]any{
-				"user_id":           body.UserID,
-				"embedding_version": body.EmbeddingVersion,
-			}
-		default:
-			message.UniqueKey = taskType + ":" + body.ConversationID + ":manual"
-		}
+		message.UniqueKey = taskType + ":" + body.ConversationID + ":manual"
 		err := publisher.Publish(r.Context(), message)
 		if err != nil {
 			writeError(w, http.StatusBadGateway, "requeue_failed", err.Error())
 			return
 		}
 		recordAdminAudit(r, audit, "requeue_task", "task", taskType, map[string]any{
-			"task_type":         taskType,
-			"queue":             queue,
-			"conversation_id":   body.ConversationID,
-			"user_id":           body.UserID,
-			"embedding_version": body.EmbeddingVersion,
+			"task_type":       taskType,
+			"queue":           queue,
+			"conversation_id": body.ConversationID,
+			"user_id":         body.UserID,
 		})
-		writeJSON(w, http.StatusOK, map[string]any{"requeued": true, "task_type": taskType, "conversation_id": body.ConversationID, "queue": queue, "embedding_version": body.EmbeddingVersion})
+		writeJSON(w, http.StatusOK, map[string]any{"requeued": true, "task_type": taskType, "conversation_id": body.ConversationID, "queue": queue})
 	}
 }
 
@@ -1701,6 +1981,7 @@ func setGatewayResponseHeaders(w http.ResponseWriter, req domain.UnifiedRequest)
 	w.Header().Set("X-MemStation-Conversation-ID", req.ConversationID)
 	w.Header().Set("X-MemStation-Request-ID", req.RequestID)
 	w.Header().Set("X-MemStation-Memory-Persist", strconv.FormatBool(req.PersistMemoryEnabled()))
+	w.Header().Set("X-MemStation-Source-Retain", strconv.FormatBool(req.SourceRetainEnabled(false)))
 }
 
 func corsMiddleware(cfg bootstrap.Config) func(http.Handler) http.Handler {
@@ -1720,12 +2001,14 @@ func corsMiddleware(cfg bootstrap.Config) func(http.Handler) http.Handler {
 		"X-MemStation-Mode",
 		"X-MemStation-Provider",
 		"X-MemStation-Session",
+		"X-MemStation-Source-Retain",
 		"X-MemStation-Tool-Write",
 	}, ", ")
 	exposedHeaders := strings.Join([]string{
 		"X-MemStation-Conversation-ID",
 		"X-MemStation-Request-ID",
 		"X-MemStation-Memory-Persist",
+		"X-MemStation-Source-Retain",
 	}, ", ")
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1819,10 +2102,17 @@ func queueForTaskType(taskType string) string {
 		return "critical"
 	case "analysis.extract", "keymemory.reconcile":
 		return "low"
-	case "embedding.rebuild":
-		return "bulk"
 	default:
 		return "default"
+	}
+}
+
+func supportsManualTaskPublish(taskType string) bool {
+	switch strings.TrimSpace(taskType) {
+	case "conversation.finalize", "summary.generate", "analysis.extract", "keymemory.reconcile":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -2000,25 +2290,19 @@ func ternaryString(condition bool, whenTrue, whenFalse string) string {
 	return whenFalse
 }
 
-func triggerEmbeddingRebuild(ctx context.Context, publisher ports.TaskPublisher, userID string, embeddingVersion int, before, after, fields map[string]any) {
-	if publisher == nil || !embeddingSettingsChanged(before, after, fields) {
-		return
+func settingsRebuildRequired(before, after, fields map[string]any) bool {
+	if embeddingSettingsChanged(before, after, fields) {
+		return true
 	}
-	if embeddingVersion <= 0 {
-		embeddingVersion = 1
+	for _, key := range []string{"summary_model", "analysis_model"} {
+		if _, ok := fields[key]; !ok {
+			continue
+		}
+		if anyString(before[key]) != anyString(after[key]) {
+			return true
+		}
 	}
-	err := publisher.Publish(ctx, domain.TaskMessage{
-		Type:      worker.TypeEmbeddingRebuild,
-		Queue:     worker.QueueBulk,
-		UniqueKey: worker.TypeEmbeddingRebuild + ":" + userID + ":" + strconv.Itoa(embeddingVersion) + ":settings",
-		Payload: map[string]any{
-			"user_id":           userID,
-			"embedding_version": embeddingVersion,
-		},
-	})
-	if errors.Is(err, worker.ErrQueueUnavailable) || err == nil {
-		return
-	}
+	return false
 }
 
 func embeddingSettingsChanged(before, after, fields map[string]any) bool {

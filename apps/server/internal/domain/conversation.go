@@ -44,6 +44,7 @@ type ConversationRecord struct {
 
 type ConversationSegment struct {
 	ID                  string         `json:"id"`
+	GenerationID        string         `json:"generation_id,omitempty"`
 	UserID              string         `json:"user_id"`
 	ConversationID      string         `json:"conversation_id"`
 	SegmentIndex        int            `json:"segment_index"`

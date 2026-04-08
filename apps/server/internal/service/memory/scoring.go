@@ -47,11 +47,12 @@ func configForVariant(variant SearchVariant) searchConfig {
 	}
 }
 
-func scoreDocument(doc domain.MemoryDocument, baseSemanticScore, relationExpansion float64, cfg searchConfig) ScoreComponents {
+func scoreDocument(doc domain.MemoryDocument, baseSemanticScore, keywordScore, relationExpansion float64, cfg searchConfig) ScoreComponents {
 	components := ScoreComponents{
 		BaseSemanticScore: baseSemanticScore,
+		KeywordScore:      keywordScore,
 		RelationExpansion: relationExpansion,
-		SemanticScore:     baseSemanticScore + relationExpansion,
+		SemanticScore:     combineDirectSignal(baseSemanticScore, keywordScore) + relationExpansion,
 		ImportanceWeight:  1,
 		TimeDecay:         1,
 		FreshnessPenalty:  1,
@@ -70,6 +71,24 @@ func scoreDocument(doc domain.MemoryDocument, baseSemanticScore, relationExpansi
 	return components
 }
 
-func ExplainDocumentScore(doc domain.MemoryDocument, baseSemanticScore, relationExpansion float64, variant SearchVariant) ScoreComponents {
-	return scoreDocument(doc, baseSemanticScore, relationExpansion, configForVariant(variant))
+func ExplainDocumentScore(doc domain.MemoryDocument, baseSemanticScore, keywordScore, relationExpansion float64, variant SearchVariant) ScoreComponents {
+	return scoreDocument(doc, baseSemanticScore, keywordScore, relationExpansion, configForVariant(variant))
+}
+
+func keywordSignalBoost(keywordScore float64) float64 {
+	if keywordScore <= 0 {
+		return 0
+	}
+	return keywordScore * 0.35
+}
+
+func combineDirectSignal(baseSemanticScore, keywordScore float64) float64 {
+	switch {
+	case baseSemanticScore <= 0:
+		return keywordScore
+	case keywordScore <= 0:
+		return baseSemanticScore
+	default:
+		return baseSemanticScore + keywordSignalBoost(keywordScore)
+	}
 }

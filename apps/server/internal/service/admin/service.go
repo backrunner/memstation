@@ -13,6 +13,8 @@ import (
 	analysisservice "memstation/apps/server/internal/service/analysis"
 	apikeyservice "memstation/apps/server/internal/service/apikey"
 	auditsvc "memstation/apps/server/internal/service/audit"
+	conversationservice "memstation/apps/server/internal/service/conversation"
+	memorygenservice "memstation/apps/server/internal/service/memorygen"
 	settingssvc "memstation/apps/server/internal/service/settings"
 	usageservice "memstation/apps/server/internal/service/usage"
 	userservice "memstation/apps/server/internal/service/user"
@@ -27,6 +29,7 @@ type Service struct {
 	users         *userservice.Service
 	apiKeys       *apikeyservice.Service
 	usage         *usageservice.Service
+	generations   *memorygenservice.Service
 }
 
 type ConversationListItem struct {
@@ -94,6 +97,10 @@ func (s *Service) AttachUserRuntime(users *userservice.Service, apiKeys *apikeys
 	s.usage = usage
 }
 
+func (s *Service) SetGenerationService(service *memorygenservice.Service) {
+	s.generations = service
+}
+
 func (s *Service) Overview(ctx context.Context, userID string) (map[string]any, error) {
 	conversations, err := s.conversations.ListConversations(ctx, userID)
 	if err != nil {
@@ -123,7 +130,7 @@ func (s *Service) Overview(ctx context.Context, userID string) (map[string]any, 
 	return map[string]any{
 		"active_conversations": activeConversations,
 		"conversation_count":   len(conversations),
-		"memory_count":         countDocumentsByType(ctx, s.memories, userID, nil),
+		"memory_count":         countDocumentsByType(ctx, s.memories, s.generations, userID, nil),
 		"key_memory_count":     len(keyMemories),
 		"models":               s.models.List(),
 		"config":               config,
@@ -166,12 +173,16 @@ func (s *Service) ListConversations(ctx context.Context, userID string, limit in
 	return items, nil
 }
 
-func (s *Service) ConversationDetail(ctx context.Context, userID, conversationID string) (domain.ConversationRecord, error) {
-	return s.conversations.GetConversation(ctx, userID, conversationID)
+func (s *Service) ConversationDetail(ctx context.Context, userID, conversationID, generationID string) (domain.ConversationRecord, error) {
+	return s.conversations.GetConversationInGeneration(ctx, userID, conversationID, generationID)
 }
 
 func (s *Service) ConversationMemory(ctx context.Context, userID, conversationID string) (ConversationMemory, error) {
-	documents, err := s.memories.ListDocumentsByConversation(ctx, userID, conversationID)
+	generationID, err := s.activeGenerationID(ctx, userID)
+	if err != nil {
+		return ConversationMemory{}, err
+	}
+	documents, err := s.memories.ListDocumentsByConversationInGeneration(ctx, userID, generationID, conversationID)
 	if err != nil {
 		return ConversationMemory{}, err
 	}
@@ -431,11 +442,22 @@ func (s *Service) UserDetail(ctx context.Context, userID string) (UserDetail, er
 	}, nil
 }
 
-func countDocumentsByType(ctx context.Context, repo ports.MemoryRepository, userID string, kinds []domain.MemoryType) int {
+func countDocumentsByType(ctx context.Context, repo ports.MemoryRepository, generations *memorygenservice.Service, userID string, kinds []domain.MemoryType) int {
 	if repo == nil {
 		return 0
 	}
-	items, err := repo.ListDocuments(ctx, userID, kinds, 1000)
+	generationID := ""
+	if generations != nil && userID != "" {
+		generation, err := generations.GetActiveGeneration(ctx, userID)
+		if err != nil {
+			return 0
+		}
+		generationID = generation.GenerationID
+	}
+	if generationID == "" && userID != "" {
+		generationID = memorygenservice.CurrentGenerationID(userID)
+	}
+	items, err := repo.ListDocumentsInGeneration(ctx, userID, generationID, kinds, 1000)
 	if err != nil {
 		return 0
 	}
@@ -443,28 +465,7 @@ func countDocumentsByType(ctx context.Context, repo ports.MemoryRepository, user
 }
 
 func previewSummary(messages []domain.UnifiedMessage) string {
-	parts := make([]string, 0, len(messages))
-	for _, message := range messages {
-		if message.Role != domain.RoleUser && message.Role != domain.RoleAssistant {
-			continue
-		}
-		text := strings.TrimSpace(message.Text)
-		if text == "" && len(message.Blocks) > 0 {
-			text = strings.TrimSpace(message.Blocks[0].Text)
-		}
-		if text == "" {
-			continue
-		}
-		parts = append(parts, string(message.Role)+": "+text)
-	}
-	summary := strings.Join(parts, " | ")
-	if len(summary) > 400 {
-		return summary[:400] + "..."
-	}
-	if summary == "" {
-		return "No summary content available."
-	}
-	return summary
+	return conversationservice.SummarizeMessages(messages)
 }
 
 func previewKeywords(summary string) []string {
@@ -512,6 +513,20 @@ func countKeyMemories(ctx context.Context, repo ports.MemoryRepository, userID s
 		return 0
 	}
 	return len(items)
+}
+
+func (s *Service) activeGenerationID(ctx context.Context, userID string) (string, error) {
+	if strings.TrimSpace(userID) == "" {
+		return "", nil
+	}
+	if s.generations == nil {
+		return memorygenservice.CurrentGenerationID(userID), nil
+	}
+	generation, err := s.generations.GetActiveGeneration(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	return generation.GenerationID, nil
 }
 
 func (s *Service) totalsForUser(ctx context.Context, userID string, conversations []ConversationListItem) (map[string]int, error) {

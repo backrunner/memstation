@@ -4,6 +4,7 @@ import "time"
 
 type SearchInput struct {
 	UserID              string       `json:"user_id"`
+	GenerationID        string       `json:"generation_id,omitempty"`
 	Query               string       `json:"query"`
 	TopN                int          `json:"top_n"`
 	IncludeConversation bool         `json:"include_conversation"`
@@ -24,6 +25,7 @@ type RelatedMemory struct {
 type MemoryDocument struct {
 	ID             string          `json:"id"`
 	NodeID         string          `json:"node_id"`
+	GenerationID   string          `json:"generation_id,omitempty"`
 	UserID         string          `json:"user_id"`
 	ConversationID string          `json:"conversation_id,omitempty"`
 	Type           MemoryType      `json:"type"`
@@ -96,6 +98,7 @@ type KeyMemoryQuery struct {
 
 type MemoryRelation struct {
 	ID           string         `json:"id"`
+	GenerationID string         `json:"generation_id,omitempty"`
 	UserID       string         `json:"user_id"`
 	SrcNodeID    string         `json:"src_node_id"`
 	DstNodeID    string         `json:"dst_node_id"`
@@ -113,6 +116,7 @@ type InjectionResult struct {
 
 type VectorSearchInput struct {
 	UserID           string       `json:"user_id"`
+	GenerationID     string       `json:"generation_id,omitempty"`
 	Query            string       `json:"query"`
 	TopK             int          `json:"top_k"`
 	AllowedTypes     []MemoryType `json:"allowed_types,omitempty"`
@@ -129,6 +133,7 @@ type VectorSearchResult struct {
 
 type VectorUpsertRequest struct {
 	UserID           string    `json:"user_id"`
+	GenerationID     string    `json:"generation_id,omitempty"`
 	NodeID           string    `json:"node_id"`
 	NodeType         string    `json:"node_type"`
 	EmbeddingVersion int       `json:"embedding_version"`
@@ -136,4 +141,77 @@ type VectorUpsertRequest struct {
 	Content          string    `json:"content"`
 	ContentHash      string    `json:"content_hash"`
 	Vector           []float32 `json:"vector"`
+}
+
+type MemoryGenerationStatus string
+
+const (
+	MemoryGenerationStatusQueued    MemoryGenerationStatus = "queued"
+	MemoryGenerationStatusRunning   MemoryGenerationStatus = "running"
+	MemoryGenerationStatusCompleted MemoryGenerationStatus = "completed"
+	MemoryGenerationStatusFailed    MemoryGenerationStatus = "failed"
+	MemoryGenerationStatusActivated MemoryGenerationStatus = "activated"
+)
+
+type MemoryGeneration struct {
+	GenerationID      string                 `json:"generation_id"`
+	UserID            string                 `json:"user_id"`
+	Status            MemoryGenerationStatus `json:"status"`
+	Scope             string                 `json:"scope"`
+	ConversationID    string                 `json:"conversation_id,omitempty"`
+	IsActive          bool                   `json:"is_active"`
+	StructureVersion  int                    `json:"structure_version"`
+	EmbeddingVersion  int                    `json:"embedding_version"`
+	EmbeddingModel    string                 `json:"embedding_model"`
+	ActivateOnSuccess bool                   `json:"activate_on_success"`
+	SourceCount       int                    `json:"source_count"`
+	ProcessedCount    int                    `json:"processed_count"`
+	EmbeddingCount    int                    `json:"embedding_count"`
+	FailureCount      int                    `json:"failure_count"`
+	LastError         string                 `json:"last_error,omitempty"`
+	Metadata          map[string]any         `json:"metadata,omitempty"`
+	CreatedAt         time.Time              `json:"created_at"`
+	UpdatedAt         time.Time              `json:"updated_at"`
+	ActivatedAt       *time.Time             `json:"activated_at,omitempty"`
+}
+
+type MemoryGenerationSourceStatus string
+
+const (
+	MemoryGenerationSourceStatusQueued    MemoryGenerationSourceStatus = "queued"
+	MemoryGenerationSourceStatusRunning   MemoryGenerationSourceStatus = "running"
+	MemoryGenerationSourceStatusCompleted MemoryGenerationSourceStatus = "completed"
+	MemoryGenerationSourceStatusFailed    MemoryGenerationSourceStatus = "failed"
+)
+
+type MemorySourceSnapshot struct {
+	SnapshotID      string           `json:"snapshot_id"`
+	UserID          string           `json:"user_id"`
+	ConversationID  string           `json:"conversation_id"`
+	SnapshotVersion int              `json:"snapshot_version"`
+	SourceHash      string           `json:"source_hash"`
+	RequestFormat   string           `json:"request_format"`
+	Provider        Provider         `json:"provider"`
+	Mode            Mode             `json:"mode"`
+	FinalizeStatus  FinalizeStatus   `json:"finalize_status"`
+	Metadata        map[string]any   `json:"metadata,omitempty"`
+	Usage           UsageRecord      `json:"usage"`
+	MessageCount    int              `json:"message_count"`
+	Messages        []UnifiedMessage `json:"messages,omitempty"`
+	CreatedAt       time.Time        `json:"created_at"`
+	UpdatedAt       time.Time        `json:"updated_at"`
+}
+
+type MemoryGenerationSource struct {
+	ID             string                       `json:"id"`
+	GenerationID   string                       `json:"generation_id"`
+	UserID         string                       `json:"user_id"`
+	SnapshotID     string                       `json:"snapshot_id"`
+	ConversationID string                       `json:"conversation_id"`
+	SourceHash     string                       `json:"source_hash"`
+	Status         MemoryGenerationSourceStatus `json:"status"`
+	LastError      string                       `json:"last_error,omitempty"`
+	CreatedAt      time.Time                    `json:"created_at"`
+	UpdatedAt      time.Time                    `json:"updated_at"`
+	ProcessedAt    *time.Time                   `json:"processed_at,omitempty"`
 }

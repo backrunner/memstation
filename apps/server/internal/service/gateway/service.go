@@ -92,6 +92,16 @@ func (s *Service) ProxyStream(ctx context.Context, req domain.UnifiedRequest, em
 	return s.finishRequest(ctx, updatedReq, response, injection)
 }
 
+func (s *Service) ResolveRequestDefaults(ctx context.Context, req domain.UnifiedRequest) (domain.UnifiedRequest, error) {
+	if req.RequestID == "" {
+		req.RequestID = uuid.NewString()
+	}
+	if req.ReceivedAt.IsZero() {
+		req.ReceivedAt = time.Now().UTC()
+	}
+	return s.resolveRequest(ctx, req)
+}
+
 func (s *Service) prepareRequest(ctx context.Context, req domain.UnifiedRequest) (domain.UnifiedRequest, domain.InjectionResult, error) {
 	ctx, span := observability.TraceSpan(ctx, "gateway.prepare_request",
 		attribute.String("gateway.protocol", string(req.Protocol)),
@@ -99,14 +109,7 @@ func (s *Service) prepareRequest(ctx context.Context, req domain.UnifiedRequest)
 	)
 	defer span.End()
 
-	if req.RequestID == "" {
-		req.RequestID = uuid.NewString()
-	}
-	if req.ReceivedAt.IsZero() {
-		req.ReceivedAt = time.Now().UTC()
-	}
-
-	resolvedReq, err := s.resolveRequest(ctx, req)
+	resolvedReq, err := s.ResolveRequestDefaults(ctx, req)
 	if err != nil {
 		return domain.UnifiedRequest{}, domain.InjectionResult{}, err
 	}
@@ -136,6 +139,7 @@ func (s *Service) finishRequest(ctx context.Context, req domain.UnifiedRequest, 
 		req.RequestMetadata = map[string]any{}
 	}
 	req.RequestMetadata["memory_persist_enabled"] = req.PersistMemoryEnabled()
+	req.RequestMetadata["source_retain_enabled"] = req.SourceRetainEnabled(false)
 	req.RequestMetadata["session_id"] = req.SessionID
 	if serializedInjection := injectionMetadata(injection); len(serializedInjection) > 0 {
 		req.RequestMetadata["injection"] = serializedInjection
@@ -151,6 +155,7 @@ func (s *Service) finishRequest(ctx context.Context, req domain.UnifiedRequest, 
 	response.Raw["conversation_id"] = conversationID
 	response.Raw["request_id"] = req.RequestID
 	response.Raw["memory_persist_enabled"] = req.PersistMemoryEnabled()
+	response.Raw["source_retain_enabled"] = req.SourceRetainEnabled(false)
 	if serializedInjection := injectionMetadata(injection); len(serializedInjection) > 0 {
 		response.Raw["injection"] = serializedInjection
 	}
@@ -324,6 +329,9 @@ func (s *Service) resolveRequest(ctx context.Context, req domain.UnifiedRequest)
 			req.MaxInjectionTokens = 2048
 		}
 	}
+	if req.SourceRetain == nil {
+		req.SourceRetain = boolPtr(boolValue(snapshot["retain_source_materials"]))
+	}
 
 	return req, nil
 }
@@ -420,4 +428,8 @@ func intValue(value any) int {
 	default:
 		return 0
 	}
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }

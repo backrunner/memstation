@@ -12,14 +12,16 @@ import (
 	"memstation/apps/server/internal/cache"
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/ports"
+	memorygenservice "memstation/apps/server/internal/service/memorygen"
 )
 
 type Service struct {
-	engine  ports.MemoryEngine
-	repo    ports.MemoryRepository
-	cache   *cache.JSONStore
-	vectors ports.VectorStore
-	scorer  *Scorer
+	engine      ports.MemoryEngine
+	repo        ports.MemoryRepository
+	cache       *cache.JSONStore
+	vectors     ports.VectorStore
+	scorer      *Scorer
+	generations *memorygenservice.Service
 }
 
 func NewService(engine ports.MemoryEngine, repo ports.MemoryRepository) *Service {
@@ -38,12 +40,24 @@ func (s *Service) SetScorer(scorer *Scorer) {
 	s.scorer = scorer
 }
 
+func (s *Service) SetGenerationService(service *memorygenservice.Service) {
+	s.generations = service
+}
+
 func (s *Service) Search(ctx context.Context, input domain.SearchInput) (domain.SearchResult, error) {
 	return s.engine.Search(ctx, input)
 }
 
 func (s *Service) GetDocument(ctx context.Context, userID, id string, kind domain.MemoryType) (domain.MemoryDocument, error) {
-	item, err := s.repo.GetDocument(ctx, userID, id, kind)
+	return s.GetDocumentInGeneration(ctx, userID, "", id, kind)
+}
+
+func (s *Service) GetDocumentInGeneration(ctx context.Context, userID, generationID, id string, kind domain.MemoryType) (domain.MemoryDocument, error) {
+	resolvedGenerationID, err := s.resolveGenerationID(ctx, userID, generationID)
+	if err != nil {
+		return domain.MemoryDocument{}, err
+	}
+	item, err := s.repo.GetDocumentInGeneration(ctx, userID, resolvedGenerationID, id, kind)
 	if err != nil {
 		return domain.MemoryDocument{}, err
 	}
@@ -52,7 +66,23 @@ func (s *Service) GetDocument(ctx context.Context, userID, id string, kind domai
 }
 
 func (s *Service) ListDocuments(ctx context.Context, userID string, kinds []domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
-	return s.repo.ListDocuments(ctx, userID, kinds, limit)
+	return s.ListDocumentsInGeneration(ctx, userID, "", kinds, limit)
+}
+
+func (s *Service) ListDocumentsInGeneration(ctx context.Context, userID, generationID string, kinds []domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
+	resolvedGenerationID, err := s.resolveGenerationID(ctx, userID, generationID)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.ListDocumentsInGeneration(ctx, userID, resolvedGenerationID, kinds, limit)
+}
+
+func (s *Service) ListDocumentsByConversationInGeneration(ctx context.Context, userID, generationID, conversationID string) ([]domain.MemoryDocument, error) {
+	resolvedGenerationID, err := s.resolveGenerationID(ctx, userID, generationID)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.ListDocumentsByConversationInGeneration(ctx, userID, resolvedGenerationID, conversationID)
 }
 
 func (s *Service) UpdateDocument(ctx context.Context, userID, id string, kind domain.MemoryType, content string) (domain.MemoryDocument, error) {
@@ -338,11 +368,16 @@ func (s *Service) syncKeyMemoryRelations(ctx context.Context, km domain.KeyMemor
 	if err != nil {
 		return err
 	}
+	generationID, err := s.resolveGenerationID(ctx, km.UserID, stringMetadataValue(km.Metadata, "generation_id"))
+	if err != nil {
+		return err
+	}
 	for _, sourceNodeID := range sourceNodeIDs {
 		if sourceNodeID == "" || sourceNodeID == nodeID {
 			continue
 		}
 		if err := s.repo.LinkDocuments(ctx, domain.MemoryRelation{
+			GenerationID: generationID,
 			UserID:       km.UserID,
 			SrcNodeID:    sourceNodeID,
 			DstNodeID:    nodeID,
@@ -363,6 +398,10 @@ func (s *Service) syncKeyMemoryRelations(ctx context.Context, km domain.KeyMemor
 func (s *Service) resolveKeyMemorySourceNodes(ctx context.Context, km domain.KeyMemory) ([]string, error) {
 	seen := map[string]struct{}{}
 	out := make([]string, 0)
+	generationID, err := s.resolveGenerationID(ctx, km.UserID, stringMetadataValue(km.Metadata, "generation_id"))
+	if err != nil {
+		return nil, err
+	}
 	addNode := func(nodeID string) {
 		nodeID = strings.TrimSpace(nodeID)
 		if nodeID == "" {
@@ -380,13 +419,13 @@ func (s *Service) resolveKeyMemorySourceNodes(ctx context.Context, km domain.Key
 		for _, nodeID := range stringSliceMetadataValue(km.Metadata, "source_node_ids") {
 			addNode(nodeID)
 		}
-		s.addDocumentNodeByID(ctx, km.UserID, stringMetadataValue(km.Metadata, "source_summary_id"), domain.MemoryTypeSummary, addNode)
-		s.addDocumentNodeByID(ctx, km.UserID, stringMetadataValue(km.Metadata, "source_fact_id"), domain.MemoryTypeFact, addNode)
-		s.addDocumentNodeByID(ctx, km.UserID, stringMetadataValue(km.Metadata, "source_impression_id"), domain.MemoryTypeImpression, addNode)
+		s.addDocumentNodeByID(ctx, km.UserID, generationID, stringMetadataValue(km.Metadata, "source_summary_id"), domain.MemoryTypeSummary, addNode)
+		s.addDocumentNodeByID(ctx, km.UserID, generationID, stringMetadataValue(km.Metadata, "source_fact_id"), domain.MemoryTypeFact, addNode)
+		s.addDocumentNodeByID(ctx, km.UserID, generationID, stringMetadataValue(km.Metadata, "source_impression_id"), domain.MemoryTypeImpression, addNode)
 	}
 
 	if conversationID := inferKeyMemoryConversationID(km); conversationID != "" {
-		docs, err := s.repo.ListDocumentsByConversation(ctx, km.UserID, conversationID)
+		docs, err := s.repo.ListDocumentsByConversationInGeneration(ctx, km.UserID, generationID, conversationID)
 		if err != nil {
 			return nil, err
 		}
@@ -398,11 +437,11 @@ func (s *Service) resolveKeyMemorySourceNodes(ctx context.Context, km domain.Key
 	return out, nil
 }
 
-func (s *Service) addDocumentNodeByID(ctx context.Context, userID, documentID string, kind domain.MemoryType, add func(string)) {
+func (s *Service) addDocumentNodeByID(ctx context.Context, userID, generationID, documentID string, kind domain.MemoryType, add func(string)) {
 	if s.repo == nil || strings.TrimSpace(documentID) == "" {
 		return
 	}
-	doc, err := s.repo.GetDocument(ctx, userID, strings.TrimSpace(documentID), kind)
+	doc, err := s.repo.GetDocumentInGeneration(ctx, userID, generationID, strings.TrimSpace(documentID), kind)
 	if err != nil {
 		return
 	}
@@ -526,7 +565,7 @@ func (s *Service) hydrateRelatedDocuments(ctx context.Context, item *domain.Memo
 	if s.repo == nil || item == nil || item.NodeID == "" || item.UserID == "" {
 		return
 	}
-	relations, err := s.repo.ListRelations(ctx, item.UserID, []string{item.NodeID}, 1)
+	relations, err := s.repo.ListRelations(ctx, item.UserID, item.GenerationID, []string{item.NodeID}, 1)
 	if err != nil || len(relations) == 0 {
 		return
 	}
@@ -550,7 +589,7 @@ func (s *Service) hydrateRelatedDocuments(ctx context.Context, item *domain.Memo
 		return
 	}
 
-	documents, err := s.repo.ListDocumentsByNodeIDs(ctx, item.UserID, relatedNodeIDs)
+	documents, err := s.repo.ListDocumentsByNodeIDsInGeneration(ctx, item.UserID, item.GenerationID, relatedNodeIDs)
 	if err != nil || len(documents) == 0 {
 		return
 	}
@@ -575,4 +614,18 @@ func (s *Service) hydrateRelatedDocuments(ctx context.Context, item *domain.Memo
 		return related[i].Weight > related[j].Weight
 	})
 	item.Related = related
+}
+
+func (s *Service) resolveGenerationID(ctx context.Context, userID, generationID string) (string, error) {
+	if generationID != "" || userID == "" {
+		return generationID, nil
+	}
+	if s.generations == nil {
+		return memorygenservice.CurrentGenerationID(userID), nil
+	}
+	generation, err := s.generations.GetActiveGeneration(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	return generation.GenerationID, nil
 }

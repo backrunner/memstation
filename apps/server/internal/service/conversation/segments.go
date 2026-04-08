@@ -123,6 +123,24 @@ func SummarizeSegments(segments []domain.ConversationSegment) string {
 	return truncateSummary(strings.Join(parts, " || "), 400)
 }
 
+func SummarizeMessages(messages []domain.UnifiedMessage) string {
+	parts := make([]string, 0, len(messages))
+	for _, message := range messages {
+		if message.Role != domain.RoleUser && message.Role != domain.RoleAssistant && message.Role != domain.RoleTool {
+			continue
+		}
+		contentParts := summarizedMessageParts(message)
+		if len(contentParts) == 0 {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s: %s", message.Role, strings.Join(contentParts, " | ")))
+	}
+	if len(parts) > 0 {
+		return truncateSummary(strings.Join(parts, " | "), 400)
+	}
+	return summarizeMessageEnvelope(messages)
+}
+
 func collectDialogueMessages(messages []domain.UnifiedMessage) []dialogueMessage {
 	dialogue := make([]dialogueMessage, 0, len(messages))
 	for idx, message := range messages {
@@ -171,6 +189,88 @@ func renderSegmentContent(messages []dialogueMessage) string {
 	return strings.Join(lines, " | ")
 }
 
+func summarizedMessageParts(message domain.UnifiedMessage) []string {
+	parts := make([]string, 0, 1+len(message.Blocks)+len(message.ToolCalls)+len(message.ToolResults))
+	appendUnique := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		for _, existing := range parts {
+			if existing == value {
+				return
+			}
+		}
+		parts = append(parts, value)
+	}
+
+	appendUnique(message.Text)
+	for _, block := range message.Blocks {
+		appendUnique(firstNonEmptyString(block.Text, block.Raw))
+	}
+	for _, call := range message.ToolCalls {
+		name := strings.TrimSpace(call.Name)
+		if name == "" {
+			continue
+		}
+		appendUnique("tool call: " + name)
+	}
+	for _, result := range message.ToolResults {
+		name := strings.TrimSpace(result.Name)
+		if name == "" {
+			name = strings.TrimSpace(result.ToolCallID)
+		}
+		if name == "" {
+			continue
+		}
+		appendUnique("tool result: " + name)
+	}
+	return parts
+}
+
+func summarizeMessageEnvelope(messages []domain.UnifiedMessage) string {
+	if len(messages) == 0 {
+		return "Conversation captured no persisted messages."
+	}
+	userCount := 0
+	assistantCount := 0
+	toolCount := 0
+	toolCalls := 0
+	toolResults := 0
+	for _, message := range messages {
+		switch message.Role {
+		case domain.RoleUser:
+			userCount++
+		case domain.RoleAssistant:
+			assistantCount++
+		case domain.RoleTool:
+			toolCount++
+		}
+		toolCalls += len(message.ToolCalls)
+		toolResults += len(message.ToolResults)
+	}
+	parts := make([]string, 0, 5)
+	if userCount > 0 {
+		parts = append(parts, pluralizeCount(userCount, "user message"))
+	}
+	if assistantCount > 0 {
+		parts = append(parts, pluralizeCount(assistantCount, "assistant message"))
+	}
+	if toolCount > 0 {
+		parts = append(parts, pluralizeCount(toolCount, "tool message"))
+	}
+	if toolCalls > 0 {
+		parts = append(parts, pluralizeCount(toolCalls, "tool call"))
+	}
+	if toolResults > 0 {
+		parts = append(parts, pluralizeCount(toolResults, "tool result"))
+	}
+	if len(parts) == 0 {
+		return pluralizeCount(len(messages), "message") + " persisted without user-visible text."
+	}
+	return "Conversation captured " + strings.Join(parts, ", ") + "."
+}
+
 func truncateSummary(value string, limit int) string {
 	value = strings.TrimSpace(value)
 	if limit <= 0 || len(value) <= limit {
@@ -200,4 +300,21 @@ func max(left, right int) int {
 		return left
 	}
 	return right
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func pluralizeCount(count int, label string) string {
+	if count == 1 {
+		return fmt.Sprintf("1 %s", label)
+	}
+	return fmt.Sprintf("%d %ss", count, label)
 }

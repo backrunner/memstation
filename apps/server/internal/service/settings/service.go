@@ -21,6 +21,7 @@ type Snapshot struct {
 	EmbeddingModel            string `json:"embedding_model"`
 	EmbeddingBaseURL          string `json:"embedding_base_url"`
 	EmbeddingAPIKeyConfigured bool   `json:"embedding_api_key_configured"`
+	RetainSourceMaterials     bool   `json:"retain_source_materials"`
 	ToolWriteEnabled          bool   `json:"tool_write_enabled"`
 	MaxInjectionTokens        int    `json:"max_injection_tokens"`
 }
@@ -132,6 +133,7 @@ func (s *Service) UpdateForUser(ctx context.Context, userID string, fields map[s
 		EmbeddingModel:            anyString(current["embedding_model"]),
 		EmbeddingBaseURL:          anyString(current["embedding_base_url"]),
 		EmbeddingAPIKeyConfigured: anyBool(current["embedding_api_key_configured"]),
+		RetainSourceMaterials:     anyBool(current["retain_source_materials"]),
 		ToolWriteEnabled:          anyBool(current["tool_write_enabled"]),
 		MaxInjectionTokens:        anyInt(current["max_injection_tokens"]),
 	}
@@ -149,6 +151,9 @@ func (s *Service) UpdateForUser(ctx context.Context, userID string, fields map[s
 	}
 	if value, ok := fields["embedding_base_url"]; ok {
 		snapshot.EmbeddingBaseURL = strings.TrimSpace(stringValue(value))
+	}
+	if value, ok := fields["retain_source_materials"]; ok {
+		snapshot.RetainSourceMaterials = boolOrDefault(value, snapshot.RetainSourceMaterials)
 	}
 	if value, ok := fields["tool_write_enabled"]; ok {
 		snapshot.ToolWriteEnabled = boolOrDefault(value, snapshot.ToolWriteEnabled)
@@ -203,9 +208,9 @@ func (s *Service) UpdateForUser(ctx context.Context, userID string, fields map[s
 	_, err = s.db.ExecContext(ctx, `
         INSERT INTO user_settings (
             id, user_id, chat_model, summary_model, analysis_model, embedding_model,
-            embedding_base_url, embedding_api_key_encrypted, tool_write_enabled,
-            max_injection_tokens, created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11)
+            embedding_base_url, embedding_api_key_encrypted, retain_source_materials,
+            tool_write_enabled, max_injection_tokens, created_at, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)
         ON CONFLICT (user_id) DO UPDATE SET
             chat_model = EXCLUDED.chat_model,
             summary_model = EXCLUDED.summary_model,
@@ -213,6 +218,7 @@ func (s *Service) UpdateForUser(ctx context.Context, userID string, fields map[s
             embedding_model = EXCLUDED.embedding_model,
             embedding_base_url = EXCLUDED.embedding_base_url,
             embedding_api_key_encrypted = EXCLUDED.embedding_api_key_encrypted,
+            retain_source_materials = EXCLUDED.retain_source_materials,
             tool_write_enabled = EXCLUDED.tool_write_enabled,
             max_injection_tokens = EXCLUDED.max_injection_tokens,
             updated_at = EXCLUDED.updated_at
@@ -225,6 +231,7 @@ func (s *Service) UpdateForUser(ctx context.Context, userID string, fields map[s
 		snapshot.EmbeddingModel,
 		nullString(snapshot.EmbeddingBaseURL),
 		nullString(encryptedEmbeddingAPIKey),
+		snapshot.RetainSourceMaterials,
 		snapshot.ToolWriteEnabled,
 		snapshot.MaxInjectionTokens,
 		now,
@@ -278,7 +285,7 @@ func (s *Service) ResolveEmbeddingRuntime(ctx context.Context, userID string) (E
 func (s *Service) loadSnapshotFromDB(ctx context.Context, userID string, defaults Snapshot) (Snapshot, error) {
 	row := s.db.QueryRowContext(ctx, `
         SELECT chat_model, summary_model, analysis_model, embedding_model, embedding_base_url,
-               embedding_api_key_encrypted, tool_write_enabled, max_injection_tokens
+               embedding_api_key_encrypted, retain_source_materials, tool_write_enabled, max_injection_tokens
         FROM user_settings
         WHERE user_id = $1
     `, userID)
@@ -289,6 +296,7 @@ func (s *Service) loadSnapshotFromDB(ctx context.Context, userID string, default
 	var embeddingModel sqlpkg.NullString
 	var embeddingBaseURL sqlpkg.NullString
 	var embeddingAPIKeyEncrypted sqlpkg.NullString
+	var retainSourceMaterials bool
 	var toolWriteEnabled bool
 	var maxInjectionTokens int
 	err := row.Scan(
@@ -298,6 +306,7 @@ func (s *Service) loadSnapshotFromDB(ctx context.Context, userID string, default
 		&embeddingModel,
 		&embeddingBaseURL,
 		&embeddingAPIKeyEncrypted,
+		&retainSourceMaterials,
 		&toolWriteEnabled,
 		&maxInjectionTokens,
 	)
@@ -325,6 +334,7 @@ func (s *Service) loadSnapshotFromDB(ctx context.Context, userID string, default
 		snapshot.EmbeddingBaseURL = embeddingBaseURL.String
 	}
 	snapshot.EmbeddingAPIKeyConfigured = strings.TrimSpace(embeddingAPIKeyEncrypted.String) != ""
+	snapshot.RetainSourceMaterials = retainSourceMaterials
 	snapshot.ToolWriteEnabled = toolWriteEnabled
 	if maxInjectionTokens > 0 {
 		snapshot.MaxInjectionTokens = maxInjectionTokens
@@ -383,6 +393,7 @@ func (s Snapshot) asMap() map[string]any {
 		"embedding_model":              s.EmbeddingModel,
 		"embedding_base_url":           s.EmbeddingBaseURL,
 		"embedding_api_key_configured": s.EmbeddingAPIKeyConfigured,
+		"retain_source_materials":      s.RetainSourceMaterials,
 		"tool_write_enabled":           s.ToolWriteEnabled,
 		"max_injection_tokens":         s.MaxInjectionTokens,
 	}

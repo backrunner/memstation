@@ -20,6 +20,7 @@ type HeaderOptions struct {
 	InjectTools      bool
 	ToolWriteEnabled bool
 	MemoryPersist    bool
+	SourceRetain     *bool
 }
 
 func ParseHeaderOptions(r *http.Request) HeaderOptions {
@@ -33,6 +34,7 @@ func ParseHeaderOptions(r *http.Request) HeaderOptions {
 		InjectTools:      strings.EqualFold(r.Header.Get("X-MemStation-Inject-Tools"), "true"),
 		ToolWriteEnabled: memoryPersist && strings.EqualFold(r.Header.Get("X-MemStation-Tool-Write"), "true"),
 		MemoryPersist:    memoryPersist,
+		SourceRetain:     parseOptionalBooleanHeader(r.Header.Get("X-MemStation-Source-Retain")),
 	}
 }
 
@@ -84,6 +86,7 @@ func buildRequest(protocol domain.Protocol, model string, stream bool, headers H
 		InjectTools:      headers.InjectTools,
 		ToolWriteEnabled: headers.ToolWriteEnabled,
 		MemoryPersist:    boolPtr(headers.MemoryPersist),
+		SourceRetain:     headers.SourceRetain,
 		Messages:         messages,
 		Tools:            tools,
 		ReceivedAt:       time.Now().UTC(),
@@ -107,4 +110,13 @@ func parseBooleanHeader(value string, fallback bool) bool {
 
 func boolPtr(value bool) *bool {
 	return &value
+}
+
+func parseOptionalBooleanHeader(value string) *bool {
+	trimmed := strings.TrimSpace(strings.ToLower(value))
+	if trimmed == "" {
+		return nil
+	}
+	parsed := parseBooleanHeader(trimmed, false)
+	return &parsed
 }

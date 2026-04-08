@@ -60,13 +60,14 @@ func (s *Service) PersistExchange(ctx context.Context, req domain.UnifiedRequest
 			"request_id":              req.RequestID,
 			"session_id":              req.SessionID,
 			"memory_persist_enabled":  req.PersistMemoryEnabled(),
+			"source_retain_enabled":   req.SourceRetainEnabled(false),
 			"tool_write_enabled":      req.ToolWriteEnabled,
 			"request_received_at_utc": req.ReceivedAt.Format(time.RFC3339),
 		}),
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
-	if !req.PersistMemoryEnabled() {
+	if !req.PersistMemoryEnabled() && !req.SourceRetainEnabled(false) {
 		record.SummaryStatus = domain.ProcessingStatusSkipped
 		record.AnalysisStatus = domain.ProcessingStatusSkipped
 	}
@@ -124,7 +125,7 @@ func (s *Service) FinalizeIfNeeded(ctx context.Context, req domain.UnifiedReques
 	}); err != nil {
 		return err
 	}
-	if !req.PersistMemoryEnabled() {
+	if !req.PersistMemoryEnabled() && !req.SourceRetainEnabled(false) {
 		skipped := domain.ProcessingStatusSkipped
 		return s.repo.UpdateConversationState(ctx, domain.ConversationStateUpdate{
 			ConversationID: req.ConversationID,
@@ -136,6 +137,7 @@ func (s *Service) FinalizeIfNeeded(ctx context.Context, req domain.UnifiedReques
 				"finalize_reason":        reason,
 				"finalize_target":        string(targetStatus),
 				"memory_persist_enabled": false,
+				"source_retain_enabled":  req.SourceRetainEnabled(false),
 			},
 			UpdatedAt: time.Now().UTC(),
 		})
@@ -147,10 +149,12 @@ func (s *Service) FinalizeIfNeeded(ctx context.Context, req domain.UnifiedReques
 		AggregateType: "conversation",
 		AggregateID:   req.ConversationID,
 		Payload: map[string]any{
-			"conversation_id": req.ConversationID,
-			"user_id":         req.UserID,
-			"finalize_reason": reason,
-			"finalize_status": string(targetStatus),
+			"conversation_id":        req.ConversationID,
+			"user_id":                req.UserID,
+			"finalize_reason":        reason,
+			"finalize_status":        string(targetStatus),
+			"memory_persist_enabled": req.PersistMemoryEnabled(),
+			"source_retain_enabled":  req.SourceRetainEnabled(false),
 		},
 		Status:      "pending",
 		AvailableAt: time.Now().UTC(),
@@ -174,7 +178,7 @@ func (s *Service) FinalizeTimedOut(ctx context.Context, before time.Time) error 
 		return err
 	}
 	for _, conversation := range conversations {
-		if !metadataBool(conversation.Metadata, "memory_persist_enabled", true) {
+		if !metadataBool(conversation.Metadata, "memory_persist_enabled", true) && !metadataBool(conversation.Metadata, "source_retain_enabled", false) {
 			targetStatus := domain.FinalizeStatusTimeout
 			skipped := domain.ProcessingStatusSkipped
 			if err := s.repo.UpdateConversationState(ctx, domain.ConversationStateUpdate{
@@ -187,6 +191,7 @@ func (s *Service) FinalizeTimedOut(ctx context.Context, before time.Time) error 
 					"finalize_reason":        "timeout",
 					"finalize_target":        string(domain.FinalizeStatusTimeout),
 					"memory_persist_enabled": false,
+					"source_retain_enabled":  false,
 				},
 				UpdatedAt: time.Now().UTC(),
 			}); err != nil {
@@ -214,10 +219,12 @@ func (s *Service) FinalizeTimedOut(ctx context.Context, before time.Time) error 
 			AggregateType: "conversation",
 			AggregateID:   conversation.ConversationID,
 			Payload: map[string]any{
-				"conversation_id": conversation.ConversationID,
-				"user_id":         conversation.UserID,
-				"finalize_reason": "timeout",
-				"finalize_status": string(domain.FinalizeStatusTimeout),
+				"conversation_id":        conversation.ConversationID,
+				"user_id":                conversation.UserID,
+				"finalize_reason":        "timeout",
+				"finalize_status":        string(domain.FinalizeStatusTimeout),
+				"memory_persist_enabled": metadataBool(conversation.Metadata, "memory_persist_enabled", true),
+				"source_retain_enabled":  metadataBool(conversation.Metadata, "source_retain_enabled", false),
 			},
 			Status:      "pending",
 			AvailableAt: time.Now().UTC(),

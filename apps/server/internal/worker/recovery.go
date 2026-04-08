@@ -112,7 +112,6 @@ func RunRecoveryDrill(ctx context.Context, options RecoveryOptions) (RecoveryRep
 		TypeEmbeddingGenerate:    handleEmbeddingGenerate(logger, services),
 		TypeAnalysisExtract:      handleAnalysisExtract(logger, services),
 		TypeKeyMemoryReconcile:   handleKeyMemoryReconcile(logger, services),
-		TypeEmbeddingRebuild:     handleEmbeddingRebuild(logger, services),
 	}
 
 	start := time.Now()

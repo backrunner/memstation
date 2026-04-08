@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -79,20 +80,41 @@ func (r *InMemoryConversationRepository) PersistExchange(_ context.Context, conv
 	conversation.Metadata["history_rewrite_detected"] = plan.Mode == "rewrite"
 	conversation.Metadata["history_partial_snapshot"] = plan.Mode == "partial_snapshot"
 	if ok {
-		conversation.Segments = append([]domain.ConversationSegment{}, r.segments[key(conversation.UserID, conversation.ConversationID)]...)
+		conversation.Segments = filterConversationSegments(
+			conversation.UserID,
+			conversationSegmentGeneration(conversation.UserID, conversation.Metadata),
+			r.segments[key(conversation.UserID, conversation.ConversationID)],
+		)
 	}
 	r.conversations[key(conversation.UserID, conversation.ConversationID)] = conversation
 	return nil
 }
 
 func (r *InMemoryConversationRepository) GetConversation(_ context.Context, userID, conversationID string) (domain.ConversationRecord, error) {
+	return r.GetConversationInGeneration(context.Background(), userID, conversationID, "")
+}
+
+func (r *InMemoryConversationRepository) GetConversationInGeneration(_ context.Context, userID, conversationID, generationID string) (domain.ConversationRecord, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	conversation, ok := r.conversations[key(userID, conversationID)]
 	if !ok {
 		return domain.ConversationRecord{}, errors.New("conversation not found")
 	}
-	conversation.Segments = append([]domain.ConversationSegment{}, r.segments[key(userID, conversationID)]...)
+	resolvedGenerationID := strings.TrimSpace(generationID)
+	if resolvedGenerationID == "" {
+		resolvedGenerationID = conversationSegmentGeneration(userID, conversation.Metadata)
+	}
+	conversation.Segments = filterConversationSegments(
+		userID,
+		resolvedGenerationID,
+		r.segments[key(userID, conversationID)],
+	)
+	conversation.Metadata = cloneMetadata(conversation.Metadata)
+	if conversation.Metadata == nil {
+		conversation.Metadata = map[string]any{}
+	}
+	conversation.Metadata["memory_generation_id"] = resolvedGenerationID
 	return conversation, nil
 }
 
@@ -128,11 +150,37 @@ func (r *InMemoryConversationRepository) ListTimedOutConversations(_ context.Con
 func (r *InMemoryConversationRepository) ReplaceSegments(_ context.Context, userID, conversationID string, segments []domain.ConversationSegment) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	next := make([]domain.ConversationSegment, 0, len(segments))
+	targetGenerationID := currentGenerationID(userID)
+	if len(segments) > 0 && strings.TrimSpace(segments[0].GenerationID) != "" {
+		targetGenerationID = strings.TrimSpace(segments[0].GenerationID)
+	} else if conversation, ok := r.conversations[key(userID, conversationID)]; ok {
+		targetGenerationID = conversationSegmentGeneration(userID, conversation.Metadata)
+	}
+
+	next := make([]domain.ConversationSegment, 0, len(r.segments[key(userID, conversationID)])+len(segments))
+	for _, existing := range r.segments[key(userID, conversationID)] {
+		if matchesConversationSegmentGeneration(userID, targetGenerationID, existing.GenerationID) {
+			continue
+		}
+		next = append(next, existing)
+	}
+	for idx := range segments {
+		if strings.TrimSpace(segments[idx].GenerationID) == "" {
+			segments[idx].GenerationID = targetGenerationID
+		}
+		if segments[idx].Metadata == nil {
+			segments[idx].Metadata = map[string]any{}
+		}
+		segments[idx].Metadata["generation_id"] = segments[idx].GenerationID
+	}
 	next = append(next, segments...)
 	r.segments[key(userID, conversationID)] = next
 	if conversation, ok := r.conversations[key(userID, conversationID)]; ok {
-		conversation.Segments = append([]domain.ConversationSegment{}, next...)
+		if conversation.Metadata == nil {
+			conversation.Metadata = map[string]any{}
+		}
+		conversation.Metadata["memory_generation_id"] = targetGenerationID
+		conversation.Segments = filterConversationSegments(userID, targetGenerationID, next)
 		r.conversations[key(userID, conversationID)] = conversation
 	}
 	return nil
@@ -201,6 +249,9 @@ func (r *InMemoryMemoryRepository) Search(_ context.Context, input domain.Search
 		if doc.UserID != input.UserID {
 			continue
 		}
+		if !matchesDocumentGeneration(input.UserID, input.GenerationID, doc) {
+			continue
+		}
 		if len(input.MemoryTypes) > 0 {
 			matchedType := false
 			for _, memoryType := range input.MemoryTypes {
@@ -241,6 +292,9 @@ func (r *InMemoryMemoryRepository) StoreDocument(_ context.Context, doc domain.M
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := time.Now().UTC()
+	if doc.Type != domain.MemoryTypeKeyMemory && strings.TrimSpace(doc.GenerationID) == "" {
+		doc.GenerationID = currentGenerationID(doc.UserID)
+	}
 	if doc.ID == "" {
 		doc.ID = uuid.NewString()
 	}
@@ -266,11 +320,17 @@ func (r *InMemoryMemoryRepository) StoreDocument(_ context.Context, doc domain.M
 	doc.Metadata = cloneMetadata(doc.Metadata)
 	doc.Metadata["activity_at"] = doc.ActivityAt.Format(time.RFC3339)
 	doc.Metadata["time_tier"] = doc.TimeTier
+	if doc.GenerationID != "" {
+		doc.Metadata["generation_id"] = doc.GenerationID
+	}
+	if existing, ok := r.documents[key(doc.UserID, doc.ID)]; ok && shouldKeepExistingSnapshot(existing.Metadata, doc.Metadata) {
+		return nil
+	}
 	r.documents[key(doc.UserID, doc.ID)] = doc
 	if doc.Type == domain.MemoryTypeFact {
 		r.syncFactSupersedesLocked(doc)
 	}
-	r.syncTemporalRelationsLocked(doc.UserID, doc.NodeID, doc.ActivityAt)
+	r.syncTemporalRelationsLocked(doc.UserID, doc.GenerationID, doc.NodeID, doc.ActivityAt)
 	return nil
 }
 
@@ -296,6 +356,10 @@ func (r *InMemoryMemoryRepository) DeleteDocument(_ context.Context, userID, id 
 }
 
 func (r *InMemoryMemoryRepository) DeleteSegmentsByConversation(_ context.Context, userID, conversationID string, keepIDs []string) ([]string, error) {
+	return r.DeleteSegmentsByConversationInGeneration(context.Background(), userID, "", conversationID, keepIDs)
+}
+
+func (r *InMemoryMemoryRepository) DeleteSegmentsByConversationInGeneration(_ context.Context, userID, generationID, conversationID string, keepIDs []string) ([]string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -312,6 +376,9 @@ func (r *InMemoryMemoryRepository) DeleteSegmentsByConversation(_ context.Contex
 	deletedNodes := make(map[string]struct{})
 	for docKey, doc := range r.documents {
 		if doc.UserID != userID || doc.Type != domain.MemoryTypeSegment || doc.ConversationID != conversationID {
+			continue
+		}
+		if !matchesDocumentGeneration(userID, generationID, doc) {
 			continue
 		}
 		if _, ok := keep[doc.ID]; ok {
@@ -346,21 +413,32 @@ func (r *InMemoryMemoryRepository) DeleteSegmentsByConversation(_ context.Contex
 }
 
 func (r *InMemoryMemoryRepository) GetDocument(_ context.Context, userID, id string, kind domain.MemoryType) (domain.MemoryDocument, error) {
+	return r.GetDocumentInGeneration(context.Background(), userID, "", id, kind)
+}
+
+func (r *InMemoryMemoryRepository) GetDocumentInGeneration(_ context.Context, userID, generationID, id string, kind domain.MemoryType) (domain.MemoryDocument, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	doc, ok := r.documents[key(userID, id)]
-	if !ok || doc.Type != kind {
+	if !ok || doc.Type != kind || !matchesDocumentGeneration(userID, generationID, doc) {
 		return domain.MemoryDocument{}, errors.New("memory document not found")
 	}
 	return doc, nil
 }
 
 func (r *InMemoryMemoryRepository) ListDocuments(_ context.Context, userID string, memoryTypes []domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
+	return r.ListDocumentsInGeneration(context.Background(), userID, "", memoryTypes, limit)
+}
+
+func (r *InMemoryMemoryRepository) ListDocumentsInGeneration(_ context.Context, userID, generationID string, memoryTypes []domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make([]domain.MemoryDocument, 0)
 	for _, doc := range r.documents {
 		if doc.UserID != userID {
+			continue
+		}
+		if !matchesDocumentGeneration(userID, generationID, doc) {
 			continue
 		}
 		if !matchesMemoryType(doc.Type, memoryTypes) {
@@ -376,6 +454,10 @@ func (r *InMemoryMemoryRepository) ListDocuments(_ context.Context, userID strin
 }
 
 func (r *InMemoryMemoryRepository) ListDocumentsByNodeIDs(_ context.Context, userID string, nodeIDs []string) ([]domain.MemoryDocument, error) {
+	return r.ListDocumentsByNodeIDsInGeneration(context.Background(), userID, "", nodeIDs)
+}
+
+func (r *InMemoryMemoryRepository) ListDocumentsByNodeIDsInGeneration(_ context.Context, userID, generationID string, nodeIDs []string) ([]domain.MemoryDocument, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if len(nodeIDs) == 0 {
@@ -390,6 +472,9 @@ func (r *InMemoryMemoryRepository) ListDocumentsByNodeIDs(_ context.Context, use
 		if doc.UserID != userID {
 			continue
 		}
+		if !matchesDocumentGeneration(userID, generationID, doc) {
+			continue
+		}
 		if _, ok := allowed[doc.NodeID]; ok {
 			out = append(out, doc)
 		}
@@ -398,20 +483,15 @@ func (r *InMemoryMemoryRepository) ListDocumentsByNodeIDs(_ context.Context, use
 	return out, nil
 }
 
-func (r *InMemoryMemoryRepository) SearchKeywordMatches(_ context.Context, userID, query string, limit int) ([]domain.KeywordMatch, error) {
+func (r *InMemoryMemoryRepository) SearchKeywordMatches(_ context.Context, userID, generationID, query string, limit int) ([]domain.KeywordMatch, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	terms := normalizeKeywordTerms(query)
-	if len(terms) == 0 {
+	if len(normalizeKeywordTerms(query)) == 0 {
 		return nil, nil
 	}
 	if limit <= 0 {
 		limit = 20
-	}
-	allowed := make(map[string]struct{}, len(terms))
-	for _, term := range terms {
-		allowed[term] = struct{}{}
 	}
 
 	matches := make([]domain.KeywordMatch, 0)
@@ -419,33 +499,14 @@ func (r *InMemoryMemoryRepository) SearchKeywordMatches(_ context.Context, userI
 		if doc.UserID != userID || doc.Type != domain.MemoryTypeSummary {
 			continue
 		}
-		keywords := stringSliceMetadataValue(doc.Metadata, "keywords")
-		if len(keywords) == 0 {
+		if !matchesDocumentGeneration(userID, generationID, doc) {
 			continue
 		}
-		totalWeight := 0.0
-		matched := make([]string, 0)
-		for idx, keyword := range keywords {
-			normalized := strings.ToLower(strings.TrimSpace(keyword))
-			if _, ok := allowed[normalized]; !ok {
-				continue
-			}
-			matched = append(matched, normalized)
-			weight := 1.0 - float64(idx)*0.1
-			if weight < 0.1 {
-				weight = 0.1
-			}
-			totalWeight += weight
-		}
-		if len(matched) == 0 {
+		match, ok := buildSummaryKeywordMatch(doc.NodeID, query, doc.Content, stringSliceMetadataValue(doc.Metadata, "keywords"))
+		if !ok {
 			continue
 		}
-		matches = append(matches, domain.KeywordMatch{
-			NodeID:      doc.NodeID,
-			Keywords:    matched,
-			TotalWeight: totalWeight,
-			Score:       keywordMatchScore(totalWeight, len(matched)),
-		})
+		matches = append(matches, match)
 	}
 
 	sort.Slice(matches, func(i, j int) bool {
@@ -461,11 +522,18 @@ func (r *InMemoryMemoryRepository) SearchKeywordMatches(_ context.Context, userI
 }
 
 func (r *InMemoryMemoryRepository) ListDocumentsByConversation(_ context.Context, userID, conversationID string) ([]domain.MemoryDocument, error) {
+	return r.ListDocumentsByConversationInGeneration(context.Background(), userID, "", conversationID)
+}
+
+func (r *InMemoryMemoryRepository) ListDocumentsByConversationInGeneration(_ context.Context, userID, generationID, conversationID string) ([]domain.MemoryDocument, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make([]domain.MemoryDocument, 0)
 	for _, doc := range r.documents {
 		if doc.UserID == userID && doc.ConversationID == conversationID && doc.Type != domain.MemoryTypeSegment {
+			if !matchesDocumentGeneration(userID, generationID, doc) {
+				continue
+			}
 			out = append(out, doc)
 		}
 	}
@@ -615,7 +683,7 @@ func (r *InMemoryMemoryRepository) UpsertKeyMemory(_ context.Context, km domain.
 		CreatedAt: km.CreatedAt,
 		UpdatedAt: km.UpdatedAt,
 	}
-	r.syncTemporalRelationsLocked(km.UserID, nodeID, km.ActivityAt)
+	r.syncTemporalRelationsLocked(km.UserID, "", nodeID, km.ActivityAt)
 	return nil
 }
 
@@ -654,6 +722,9 @@ func (r *InMemoryMemoryRepository) LinkDocuments(_ context.Context, relation dom
 			existing.SrcNodeID == relation.SrcNodeID &&
 			existing.DstNodeID == relation.DstNodeID &&
 			existing.RelationType == relation.RelationType {
+			if shouldKeepExistingSnapshot(existing.Metadata, relation.Metadata) {
+				return nil
+			}
 			relation.ID = existing.ID
 			r.relations[idx] = relation
 			return nil
@@ -677,7 +748,7 @@ func (r *InMemoryMemoryRepository) DeleteRelationsByTarget(_ context.Context, us
 	return nil
 }
 
-func (r *InMemoryMemoryRepository) ListRelations(_ context.Context, userID string, nodeIDs []string, depth int) ([]domain.MemoryRelation, error) {
+func (r *InMemoryMemoryRepository) ListRelations(_ context.Context, userID, generationID string, nodeIDs []string, depth int) ([]domain.MemoryRelation, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if len(nodeIDs) == 0 {
@@ -701,6 +772,9 @@ func (r *InMemoryMemoryRepository) ListRelations(_ context.Context, userID strin
 			if relation.UserID != userID {
 				continue
 			}
+			if !matchesGenerationValue(userID, generationID, relation.GenerationID, true) {
+				continue
+			}
 			_, srcMatch := frontier[relation.SrcNodeID]
 			_, dstMatch := frontier[relation.DstNodeID]
 			if !srcMatch && !dstMatch {
@@ -711,6 +785,9 @@ func (r *InMemoryMemoryRepository) ListRelations(_ context.Context, userID strin
 			}
 			collected = append(collected, relation)
 			visitedRelations[relation.ID] = struct{}{}
+			if isTemporalRelationType(relation.RelationType) {
+				continue
+			}
 			nextFrontier[relation.SrcNodeID] = struct{}{}
 			nextFrontier[relation.DstNodeID] = struct{}{}
 		}
@@ -731,6 +808,7 @@ func (r *InMemoryMemoryRepository) syncFactSupersedesLocked(doc domain.MemoryDoc
 
 	if supersedingNodeID := r.resolveFactNodeIDLocked(doc.UserID, stringMetadataValue(doc.Metadata, "superseded_by_id")); supersedingNodeID != "" {
 		r.upsertRelationLocked(domain.MemoryRelation{
+			GenerationID: doc.GenerationID,
 			UserID:       doc.UserID,
 			SrcNodeID:    supersedingNodeID,
 			DstNodeID:    doc.NodeID,
@@ -748,10 +826,14 @@ func (r *InMemoryMemoryRepository) syncFactSupersedesLocked(doc domain.MemoryDoc
 		if candidate.UserID != doc.UserID || candidate.Type != domain.MemoryTypeFact {
 			continue
 		}
+		if candidate.GenerationID != doc.GenerationID {
+			continue
+		}
 		if stringMetadataValue(candidate.Metadata, "superseded_by_id") != doc.ID {
 			continue
 		}
 		r.upsertRelationLocked(domain.MemoryRelation{
+			GenerationID: doc.GenerationID,
 			UserID:       doc.UserID,
 			SrcNodeID:    doc.NodeID,
 			DstNodeID:    candidate.NodeID,
@@ -786,6 +868,7 @@ func (r *InMemoryMemoryRepository) upsertRelationLocked(relation domain.MemoryRe
 	}
 	for idx, existing := range r.relations {
 		if existing.UserID == relation.UserID &&
+			existing.GenerationID == relation.GenerationID &&
 			existing.SrcNodeID == relation.SrcNodeID &&
 			existing.DstNodeID == relation.DstNodeID &&
 			existing.RelationType == relation.RelationType {
@@ -797,7 +880,7 @@ func (r *InMemoryMemoryRepository) upsertRelationLocked(relation domain.MemoryRe
 	r.relations = append(r.relations, relation)
 }
 
-func (r *InMemoryMemoryRepository) syncTemporalRelationsLocked(userID, nodeID string, activityAt time.Time) {
+func (r *InMemoryMemoryRepository) syncTemporalRelationsLocked(userID, generationID, nodeID string, activityAt time.Time) {
 	if userID == "" || nodeID == "" {
 		return
 	}
@@ -805,7 +888,7 @@ func (r *InMemoryMemoryRepository) syncTemporalRelationsLocked(userID, nodeID st
 	tier := domain.ClassifyTimeTier(activityAt, time.Now().UTC())
 	filtered := r.relations[:0]
 	for _, relation := range r.relations {
-		if relation.UserID == userID && relation.SrcNodeID == nodeID && isTemporalRelationType(relation.RelationType) {
+		if relation.UserID == userID && relation.SrcNodeID == nodeID && relation.GenerationID == generationID && isTemporalRelationType(relation.RelationType) {
 			continue
 		}
 		filtered = append(filtered, relation)
@@ -817,10 +900,10 @@ func (r *InMemoryMemoryRepository) syncTemporalRelationsLocked(userID, nodeID st
 	monthNodeID := temporalMonthNodeID(userID, activityAt)
 	yearNodeID := temporalYearNodeID(userID, activityAt)
 
-	r.upsertRelationLocked(domain.MemoryRelation{UserID: userID, SrcNodeID: nodeID, DstNodeID: tierNodeID, RelationType: "indexed_in_tier", Weight: 1, Source: "temporal"})
-	r.upsertRelationLocked(domain.MemoryRelation{UserID: userID, SrcNodeID: nodeID, DstNodeID: dayNodeID, RelationType: "occurred_on_day", Weight: 1, Source: "temporal"})
-	r.upsertRelationLocked(domain.MemoryRelation{UserID: userID, SrcNodeID: dayNodeID, DstNodeID: monthNodeID, RelationType: "day_in_month", Weight: 1, Source: "temporal"})
-	r.upsertRelationLocked(domain.MemoryRelation{UserID: userID, SrcNodeID: monthNodeID, DstNodeID: yearNodeID, RelationType: "month_in_year", Weight: 1, Source: "temporal"})
+	r.upsertRelationLocked(domain.MemoryRelation{GenerationID: generationID, UserID: userID, SrcNodeID: nodeID, DstNodeID: tierNodeID, RelationType: "indexed_in_tier", Weight: 1, Source: "temporal"})
+	r.upsertRelationLocked(domain.MemoryRelation{GenerationID: generationID, UserID: userID, SrcNodeID: nodeID, DstNodeID: dayNodeID, RelationType: "occurred_on_day", Weight: 1, Source: "temporal"})
+	r.upsertRelationLocked(domain.MemoryRelation{GenerationID: generationID, UserID: userID, SrcNodeID: dayNodeID, DstNodeID: monthNodeID, RelationType: "day_in_month", Weight: 1, Source: "temporal"})
+	r.upsertRelationLocked(domain.MemoryRelation{GenerationID: generationID, UserID: userID, SrcNodeID: monthNodeID, DstNodeID: yearNodeID, RelationType: "month_in_year", Weight: 1, Source: "temporal"})
 }
 
 func matchesTemporalInput(doc domain.MemoryDocument, input domain.SearchInput) bool {
@@ -982,6 +1065,94 @@ func matchesMemoryType(value domain.MemoryType, filters []domain.MemoryType) boo
 	return false
 }
 
+func matchesDocumentGeneration(userID, requestedGenerationID string, doc domain.MemoryDocument) bool {
+	if doc.Type == domain.MemoryTypeKeyMemory {
+		return true
+	}
+	return matchesGenerationValue(userID, requestedGenerationID, doc.GenerationID, false)
+}
+
+func matchesGenerationValue(userID, requestedGenerationID, actualGenerationID string, includeGenerationless bool) bool {
+	requestedGenerationID = strings.TrimSpace(requestedGenerationID)
+	actualGenerationID = strings.TrimSpace(actualGenerationID)
+	if requestedGenerationID == "" {
+		return true
+	}
+	if actualGenerationID == requestedGenerationID {
+		return true
+	}
+	if !includeGenerationless {
+		return false
+	}
+	return actualGenerationID == ""
+}
+
+func currentGenerationID(userID string) string {
+	return "gen:current:" + strings.TrimSpace(userID)
+}
+
+func conversationSegmentGeneration(userID string, metadata map[string]any) string {
+	if generationID := stringMetadataValue(metadata, "memory_generation_id"); generationID != "" {
+		return generationID
+	}
+	return currentGenerationID(userID)
+}
+
+func filterConversationSegments(userID, targetGenerationID string, segments []domain.ConversationSegment) []domain.ConversationSegment {
+	out := make([]domain.ConversationSegment, 0, len(segments))
+	for _, segment := range segments {
+		if matchesConversationSegmentGeneration(userID, targetGenerationID, segment.GenerationID) {
+			out = append(out, segment)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].SegmentIndex == out[j].SegmentIndex {
+			return out[i].UpdatedAt.Before(out[j].UpdatedAt)
+		}
+		return out[i].SegmentIndex < out[j].SegmentIndex
+	})
+	return out
+}
+
+func matchesConversationSegmentGeneration(userID, targetGenerationID, segmentGenerationID string) bool {
+	targetGenerationID = strings.TrimSpace(targetGenerationID)
+	if targetGenerationID == "" {
+		targetGenerationID = currentGenerationID(userID)
+	}
+	segmentGenerationID = strings.TrimSpace(segmentGenerationID)
+	return segmentGenerationID == targetGenerationID
+}
+
+func shouldKeepExistingSnapshot(existingMetadata, incomingMetadata map[string]any) bool {
+	incomingVersion := sourceSnapshotVersion(incomingMetadata)
+	if incomingVersion <= 0 {
+		return false
+	}
+	return sourceSnapshotVersion(existingMetadata) > incomingVersion
+}
+
+func sourceSnapshotVersion(metadata map[string]any) int {
+	if len(metadata) == 0 {
+		return 0
+	}
+	switch typed := metadata["source_snapshot_version"].(type) {
+	case int:
+		return typed
+	case int32:
+		return int(typed)
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	case string:
+		value, err := strconv.Atoi(strings.TrimSpace(typed))
+		if err == nil {
+			return value
+		}
+	}
+	return 0
+}
+
 func stringMetadataValue(metadata map[string]any, field string) string {
 	if metadata == nil {
 		return ""
@@ -1033,7 +1204,7 @@ func normalizeKeywordTerms(query string) []string {
 		term := strings.TrimSpace(strings.TrimFunc(field, func(r rune) bool {
 			return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '-'
 		}))
-		if term == "" {
+		if !shouldKeepKeywordTerm(term) {
 			continue
 		}
 		if _, ok := seen[term]; ok {
@@ -1043,6 +1214,130 @@ func normalizeKeywordTerms(query string) []string {
 		out = append(out, term)
 	}
 	return out
+}
+
+func buildSummaryKeywordMatch(nodeID, query, content string, keywords []string) (domain.KeywordMatch, bool) {
+	terms := normalizeKeywordTerms(query)
+	if len(terms) == 0 {
+		return domain.KeywordMatch{}, false
+	}
+
+	matched := make([]string, 0, len(terms))
+	matchedSet := make(map[string]struct{}, len(terms))
+	totalWeight := 0.0
+	for idx, keyword := range keywords {
+		normalized := normalizeSingleKeywordTerm(keyword)
+		if normalized == "" {
+			continue
+		}
+		if !containsKeywordTerm(terms, normalized) {
+			continue
+		}
+		if _, ok := matchedSet[normalized]; ok {
+			continue
+		}
+		matchedSet[normalized] = struct{}{}
+		matched = append(matched, normalized)
+		weight := 1.0 - float64(idx)*0.1
+		if weight < 0.1 {
+			weight = 0.1
+		}
+		totalWeight += weight
+	}
+
+	normalizedContent := strings.ToLower(strings.TrimSpace(content))
+	for _, term := range terms {
+		if _, ok := matchedSet[term]; ok {
+			continue
+		}
+		if strings.Contains(normalizedContent, term) {
+			matchedSet[term] = struct{}{}
+			matched = append(matched, term)
+			totalWeight += lexicalKeywordWeight(term)
+		}
+	}
+
+	if len(matched) == 0 {
+		return domain.KeywordMatch{}, false
+	}
+
+	return domain.KeywordMatch{
+		NodeID:      nodeID,
+		Keywords:    matched,
+		TotalWeight: totalWeight,
+		Score:       keywordMatchScore(totalWeight, len(matched)),
+	}, true
+}
+
+func normalizeSingleKeywordTerm(value string) string {
+	normalized := strings.TrimSpace(strings.ToLower(value))
+	if !shouldKeepKeywordTerm(normalized) {
+		return ""
+	}
+	return normalized
+}
+
+func containsKeywordTerm(terms []string, target string) bool {
+	for _, term := range terms {
+		if term == target {
+			return true
+		}
+	}
+	return false
+}
+
+func lexicalKeywordWeight(term string) float64 {
+	for _, r := range term {
+		if r > unicode.MaxASCII {
+			return 0.75
+		}
+	}
+	if len(term) >= 8 {
+		return 0.65
+	}
+	return 0.55
+}
+
+func shouldKeepKeywordTerm(term string) bool {
+	if strings.TrimSpace(term) == "" {
+		return false
+	}
+	if _, ok := keywordStopwords[term]; ok {
+		return false
+	}
+	if len(term) == 1 {
+		for _, r := range term {
+			if r <= unicode.MaxASCII {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+var keywordStopwords = map[string]struct{}{
+	"a":        {},
+	"an":       {},
+	"and":      {},
+	"are":      {},
+	"as":       {},
+	"at":       {},
+	"be":       {},
+	"for":      {},
+	"from":     {},
+	"in":       {},
+	"includes": {},
+	"is":       {},
+	"of":       {},
+	"on":       {},
+	"or":       {},
+	"the":      {},
+	"their":    {},
+	"this":     {},
+	"to":       {},
+	"user":     {},
+	"uses":     {},
+	"with":     {},
 }
 
 func keywordMatchScore(totalWeight float64, matched int) float64 {

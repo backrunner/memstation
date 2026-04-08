@@ -7,6 +7,7 @@ import (
 
 	"memstation/apps/server/internal/cache"
 	"memstation/apps/server/internal/domain"
+	memorygenservice "memstation/apps/server/internal/service/memorygen"
 	sqlstore "memstation/apps/server/internal/store/sql"
 	vectorstore "memstation/apps/server/internal/store/vector"
 )
@@ -120,6 +121,57 @@ func TestServiceUpsertKeyMemoryCreatesSearchableEmbedding(t *testing.T) {
 	}
 }
 
+func TestListDocumentsByConversationInGenerationDefaultsToActiveGeneration(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := sqlstore.NewInMemoryMemoryRepository()
+	service := NewService(nil, repo)
+	generations := memorygenservice.NewService(nil, "text-embedding-3-large")
+	service.SetGenerationService(generations)
+
+	active, err := generations.EnsureActiveGeneration(ctx, "user-1")
+	if err != nil {
+		t.Fatalf("ensure active generation: %v", err)
+	}
+
+	for _, doc := range []domain.MemoryDocument{
+		{
+			ID:             "summary-active",
+			NodeID:         "node-summary-active",
+			UserID:         "user-1",
+			ConversationID: "conv-1",
+			GenerationID:   active.GenerationID,
+			Type:           domain.MemoryTypeSummary,
+			Content:        "Active generation summary.",
+		},
+		{
+			ID:             "summary-candidate",
+			NodeID:         "node-summary-candidate",
+			UserID:         "user-1",
+			ConversationID: "conv-1",
+			GenerationID:   "gen:rebuild:user-1",
+			Type:           domain.MemoryTypeSummary,
+			Content:        "Candidate generation summary.",
+		},
+	} {
+		if err := repo.StoreDocument(ctx, doc); err != nil {
+			t.Fatalf("store document %s: %v", doc.ID, err)
+		}
+	}
+
+	documents, err := service.ListDocumentsByConversationInGeneration(ctx, "user-1", "", "conv-1")
+	if err != nil {
+		t.Fatalf("list documents in active generation: %v", err)
+	}
+	if len(documents) != 1 {
+		t.Fatalf("expected 1 active-generation document, got %d", len(documents))
+	}
+	if documents[0].ID != "summary-active" {
+		t.Fatalf("expected active-generation summary, got %s", documents[0].ID)
+	}
+}
+
 func TestServiceUpsertKeyMemoryLinksConversationSources(t *testing.T) {
 	t.Parallel()
 
@@ -160,7 +212,7 @@ func TestServiceUpsertKeyMemoryLinksConversationSources(t *testing.T) {
 	}
 
 	nodeID, _ := record.Metadata["node_id"].(string)
-	relations, err := repo.ListRelations(ctx, "user-1", []string{nodeID}, 1)
+	relations, err := repo.ListRelations(ctx, "user-1", "", []string{nodeID}, 1)
 	if err != nil {
 		t.Fatalf("list key memory relations: %v", err)
 	}
@@ -214,7 +266,7 @@ func TestStoreDocumentSyncsFactSupersedesRelations(t *testing.T) {
 		t.Fatalf("store newer fact: %v", err)
 	}
 
-	relations, err := repo.ListRelations(ctx, "user-1", []string{newer.NodeID}, 1)
+	relations, err := repo.ListRelations(ctx, "user-1", "", []string{newer.NodeID}, 1)
 	if err != nil {
 		t.Fatalf("list supersedes relations: %v", err)
 	}
@@ -236,7 +288,7 @@ func TestStoreDocumentSyncsFactSupersedesRelations(t *testing.T) {
 	if err := repo.StoreDocument(ctx, older); err != nil {
 		t.Fatalf("clear superseded state: %v", err)
 	}
-	relations, err = repo.ListRelations(ctx, "user-1", []string{newer.NodeID}, 1)
+	relations, err = repo.ListRelations(ctx, "user-1", "", []string{newer.NodeID}, 1)
 	if err != nil {
 		t.Fatalf("list supersedes relations after clear: %v", err)
 	}
