@@ -80,13 +80,31 @@ func (l *RateLimiter) Update(ratePerSecond float64, burst int) {
 }
 
 func RateLimitKey(userID string, r *http.Request) string {
+	return RateLimitKeyFromToken(userID, bearerToken(r.Header.Get("Authorization")), "")
+}
+
+func RateLimitKeyFromToken(userID, token, scope string) string {
 	if userID == "" {
 		return ""
 	}
-	token := bearerToken(r.Header.Get("Authorization"))
+	token = strings.TrimSpace(token)
 	if token == "" {
+		if scope == "" {
+			return userID
+		}
+		return userID + ":" + scope
+	}
+	sum := sha256.Sum256([]byte(token))
+	key := userID + ":" + hex.EncodeToString(sum[:8])
+	if scope != "" {
+		key += ":" + scope
+	}
+	return key
+}
+
+func RateLimitKeyForRequest(userID, scope string, r *http.Request) string {
+	if userID == "" {
 		return userID
 	}
-	sum := sha256.Sum256([]byte(strings.TrimSpace(token)))
-	return userID + ":" + hex.EncodeToString(sum[:8])
+	return RateLimitKeyFromToken(userID, bearerToken(r.Header.Get("Authorization")), scope)
 }

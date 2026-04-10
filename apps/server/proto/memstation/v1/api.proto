@@ -1,0 +1,328 @@
+syntax = "proto3";
+
+package memstation.v1;
+
+option go_package = "memstation/apps/server/proto/memstation/v1;memstationv1";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+service HealthService {
+  rpc GetStatus(google.protobuf.Empty) returns (HealthStatusResponse);
+}
+
+service GatewayService {
+  rpc ListModels(google.protobuf.Empty) returns (ListModelsResponse);
+  rpc Complete(CompleteRequest) returns (CompleteResponse);
+}
+
+service MemoryService {
+  rpc Search(SearchRequest) returns (SearchResponse);
+  rpc ListKeyMemories(ListKeyMemoriesRequest) returns (ListKeyMemoriesResponse);
+  rpc UpsertKeyMemory(UpsertKeyMemoryRequest) returns (KeyMemory);
+  rpc DeleteKeyMemory(DeleteKeyMemoryRequest) returns (DeleteKeyMemoryResponse);
+}
+
+service AdminService {
+  rpc Overview(OverviewRequest) returns (OverviewResponse);
+  rpc ListConversations(ListConversationsRequest) returns (ListConversationsResponse);
+  rpc GetConversation(GetConversationRequest) returns (ConversationRecord);
+  rpc GetConversationMemory(GetConversationMemoryRequest) returns (ConversationMemoryResponse);
+}
+
+message HealthStatusResponse {
+  string status = 1;
+  string version = 2;
+  string mode = 3;
+  repeated HealthComponent components = 4;
+}
+
+message HealthComponent {
+  string name = 1;
+  string status = 2;
+  string error = 3;
+}
+
+message ModelCapability {
+  string id = 1;
+  string provider = 2;
+  string role = 3;
+  bool supports_tools = 4;
+  bool supports_stream = 5;
+}
+
+message ListModelsResponse {
+  repeated ModelCapability items = 1;
+}
+
+message CompleteRequest {
+  UnifiedRequest request = 1;
+}
+
+message CompleteResponse {
+  UnifiedResponse response = 1;
+  InjectionResult injection = 2;
+}
+
+message UnifiedRequest {
+  string request_id = 1;
+  string conversation_id = 2;
+  string session_id = 3;
+  string protocol = 4;
+  string provider = 5;
+  string mode = 6;
+  string model = 7;
+  bool stream = 8;
+  bool end_conversation = 9;
+  bool inject_context = 10;
+  bool inject_tools = 11;
+  bool tool_write_enabled = 12;
+  int32 max_injection_tokens = 13;
+  google.protobuf.BoolValue memory_persist = 14;
+  google.protobuf.BoolValue source_retain = 15;
+  repeated UnifiedMessage messages = 16;
+  repeated ToolDefinition tools = 17;
+  google.protobuf.Struct provider_metadata = 18;
+  google.protobuf.Struct request_metadata = 19;
+  google.protobuf.Timestamp received_at = 20;
+}
+
+message UnifiedResponse {
+  string response_id = 1;
+  string protocol = 2;
+  string provider = 3;
+  string model = 4;
+  UnifiedMessage message = 5;
+  UsageRecord usage = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Struct raw = 8;
+}
+
+message UnifiedMessage {
+  string role = 1;
+  string text = 2;
+  repeated ContentBlock blocks = 3;
+  repeated ToolCall tool_calls = 4;
+  repeated ToolResult tool_results = 5;
+  google.protobuf.Struct metadata = 6;
+}
+
+message ContentBlock {
+  string type = 1;
+  string text = 2;
+  string raw = 3;
+  google.protobuf.Struct metadata = 4;
+}
+
+message ToolDefinition {
+  string name = 1;
+  string description = 2;
+  google.protobuf.Struct input_schema = 3;
+  bool read_only = 4;
+}
+
+message ToolCall {
+  string id = 1;
+  string name = 2;
+  google.protobuf.Struct arguments = 3;
+}
+
+message ToolResult {
+  string tool_call_id = 1;
+  string name = 2;
+  google.protobuf.Struct output = 3;
+}
+
+message UsageRecord {
+  int32 input_tokens = 1;
+  int32 output_tokens = 2;
+  int32 total_tokens = 3;
+}
+
+message SearchRequest {
+  string generation_id = 1;
+  string query = 2;
+  int32 top_n = 3;
+  bool include_conversation = 4;
+  bool include_segments = 5;
+  repeated string memory_types = 6;
+  repeated string time_tiers = 7;
+  google.protobuf.Timestamp date_from = 8;
+  google.protobuf.Timestamp date_to = 9;
+  double min_score = 10;
+}
+
+message SearchResponse {
+  repeated MemoryDocument memories = 1;
+  int32 total = 2;
+  int32 query_embedding_tokens = 3;
+}
+
+message InjectionResult {
+  string query = 1;
+  SearchResponse search = 2;
+}
+
+message MemoryDocument {
+  string id = 1;
+  string node_id = 2;
+  string generation_id = 3;
+  string user_id = 4;
+  string conversation_id = 5;
+  string type = 6;
+  string content = 7;
+  double score = 8;
+  double effective_score = 9;
+  double importance = 10;
+  double decay_factor = 11;
+  google.protobuf.Timestamp activity_at = 12;
+  string time_tier = 13;
+  google.protobuf.Struct metadata = 14;
+  repeated RelatedMemory related = 15;
+  google.protobuf.Timestamp created_at = 16;
+  google.protobuf.Timestamp updated_at = 17;
+}
+
+message RelatedMemory {
+  string id = 1;
+  string type = 2;
+  double weight = 3;
+}
+
+message ListKeyMemoriesRequest {
+  string query = 1;
+  int32 top_k = 2;
+  repeated string time_tiers = 3;
+  google.protobuf.Timestamp date_from = 4;
+  google.protobuf.Timestamp date_to = 5;
+}
+
+message ListKeyMemoriesResponse {
+  repeated KeyMemory items = 1;
+}
+
+message KeyMemory {
+  string id = 1;
+  string user_id = 2;
+  string key = 3;
+  string value = 4;
+  string category = 5;
+  string source = 6;
+  string review_status = 7;
+  google.protobuf.Timestamp last_confirmed_at = 8;
+  double importance = 9;
+  double decay_factor = 10;
+  google.protobuf.Timestamp activity_at = 11;
+  string time_tier = 12;
+  double effective_score = 13;
+  google.protobuf.Struct metadata = 14;
+  google.protobuf.Timestamp created_at = 15;
+  google.protobuf.Timestamp updated_at = 16;
+}
+
+message UpsertKeyMemoryRequest {
+  string key = 1;
+  string value = 2;
+  string category = 3;
+  string source = 4;
+  string review_status = 5;
+  google.protobuf.Timestamp last_confirmed_at = 6;
+  google.protobuf.Struct metadata = 7;
+}
+
+message DeleteKeyMemoryRequest {
+  string key = 1;
+}
+
+message DeleteKeyMemoryResponse {
+  bool deleted = 1;
+}
+
+message OverviewRequest {
+  string user_id = 1;
+}
+
+message OverviewResponse {
+  google.protobuf.Struct overview = 1;
+}
+
+message ListConversationsRequest {
+  string user_id = 1;
+  int32 limit = 2;
+}
+
+message ListConversationsResponse {
+  repeated ConversationListItem items = 1;
+}
+
+message ConversationListItem {
+  string conversation_id = 1;
+  string user_id = 2;
+  string provider = 3;
+  string protocol = 4;
+  string mode = 5;
+  string finalize_status = 6;
+  string summary_status = 7;
+  string analysis_status = 8;
+  int32 message_count = 9;
+  int32 total_tokens = 10;
+  google.protobuf.Timestamp updated_at = 11;
+  google.protobuf.Struct metadata = 12;
+}
+
+message GetConversationRequest {
+  string user_id = 1;
+  string conversation_id = 2;
+  string generation_id = 3;
+}
+
+message ConversationRecord {
+  string conversation_id = 1;
+  string user_id = 2;
+  string request_format = 3;
+  string provider = 4;
+  string mode = 5;
+  string finalize_status = 6;
+  string summary_status = 7;
+  string analysis_status = 8;
+  repeated UnifiedMessage messages = 9;
+  repeated ConversationSegment segments = 10;
+  UnifiedResponse response = 11;
+  UsageRecord usage = 12;
+  google.protobuf.Struct metadata = 13;
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp updated_at = 15;
+}
+
+message ConversationSegment {
+  string id = 1;
+  string generation_id = 2;
+  string user_id = 3;
+  string conversation_id = 4;
+  int32 segment_index = 5;
+  int32 start_sequence = 6;
+  int32 end_sequence = 7;
+  int32 message_count = 8;
+  int32 overlap_from_sequence = 9;
+  int32 overlap_message_count = 10;
+  string content = 11;
+  string content_hash = 12;
+  google.protobuf.Struct metadata = 13;
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp updated_at = 15;
+}
+
+message GetConversationMemoryRequest {
+  string user_id = 1;
+  string conversation_id = 2;
+  string generation_id = 3;
+}
+
+message ConversationMemoryResponse {
+  string conversation_id = 1;
+  string generation_id = 2;
+  repeated MemoryDocument documents = 3;
+  repeated KeyMemory key_memories = 4;
+}

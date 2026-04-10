@@ -15,7 +15,11 @@ type Authenticator struct {
 }
 
 func (a Authenticator) AuthenticateAPIKey(ctx context.Context, r *http.Request) (string, error) {
-	token := bearerToken(r.Header.Get("Authorization"))
+	return a.AuthenticateAPIKeyToken(ctx, bearerToken(r.Header.Get("Authorization")))
+}
+
+func (a Authenticator) AuthenticateAPIKeyToken(ctx context.Context, token string) (string, error) {
+	token = strings.TrimSpace(token)
 	if token == "" {
 		return "", errors.New("missing api key")
 	}
@@ -40,11 +44,16 @@ func (a Authenticator) AuthenticateAPIKey(ctx context.Context, r *http.Request) 
 }
 
 func (a Authenticator) AuthenticateAdmin(r *http.Request) bool {
-	if token := bearerToken(r.Header.Get("Authorization")); token != "" && token == a.AdminToken {
+	if a.AuthenticateAdminToken(bearerToken(r.Header.Get("Authorization"))) {
 		return true
 	}
 	cookie, err := r.Cookie(AdminSessionCookieName)
 	return err == nil && a.SessionManager != nil && a.SessionManager.Verify(cookie.Value)
+}
+
+func (a Authenticator) AuthenticateAdminToken(token string) bool {
+	token = strings.TrimSpace(token)
+	return token != "" && token == a.AdminToken
 }
 
 func bearerToken(header string) string {

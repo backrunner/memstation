@@ -4,6 +4,7 @@ metadata:
   name: memstation-config
 data:
   MEMSTATION_PORT: "8080"
+  MEMSTATION_GRPC_PORT: "9090"
   MEMSTATION_DEFAULT_PROVIDER: "openai"
   DATABASE_URL: "postgres://memstation:memstation_dev@postgres:5432/memstation?sslmode=disable"
   REDIS_URL: "redis://redis:6379/0"

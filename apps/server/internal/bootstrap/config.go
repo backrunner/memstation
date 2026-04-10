@@ -18,6 +18,7 @@ const (
 type Config struct {
 	AppName                string
 	Version                string
+	GRPCPort               int
 	Port                   int
 	DefaultProvider        domain.Provider
 	DatabaseURL            string
@@ -68,6 +69,7 @@ func LoadConfig() (Config, error) {
 	bind("app_name", "MEMSTATION_APP_NAME")
 	bind("version", "MEMSTATION_VERSION")
 	bind("port", "MEMSTATION_PORT")
+	bind("grpc_port", "MEMSTATION_GRPC_PORT")
 	bind("default_provider", "MEMSTATION_DEFAULT_PROVIDER")
 	bind("database_url", "DATABASE_URL")
 	bind("redis_url", "REDIS_URL")
@@ -105,6 +107,7 @@ func LoadConfig() (Config, error) {
 	setDefault("app_name", "memstation")
 	setDefault("version", "0.1.0")
 	setDefault("port", 8080)
+	setDefault("grpc_port", 9090)
 	setDefault("default_provider", string(domain.ProviderOpenAI))
 	setDefault("vector_store_backend", "pgvector")
 	setDefault("conversation_timeout_minutes", 15)
@@ -130,6 +133,7 @@ func LoadConfig() (Config, error) {
 	return Config{
 		AppName:                v.GetString("app_name"),
 		Version:                v.GetString("version"),
+		GRPCPort:               v.GetInt("grpc_port"),
 		Port:                   v.GetInt("port"),
 		DefaultProvider:        domain.Provider(v.GetString("default_provider")),
 		DatabaseURL:            v.GetString("database_url"),

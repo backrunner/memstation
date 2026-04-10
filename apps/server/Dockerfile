@@ -7,5 +7,6 @@ FROM gcr.io/distroless/base-debian12
 WORKDIR /app
 COPY --from=build /out/memstation /usr/local/bin/memstation
 EXPOSE 8080
+EXPOSE 9090
 ENTRYPOINT ["/usr/local/bin/memstation"]
 CMD ["serve"]

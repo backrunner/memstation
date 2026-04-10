@@ -38,7 +38,7 @@ func newRootCommand() *cobra.Command {
 func newServeCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "serve",
-		Short: "Run HTTP gateway, GraphQL, memory and admin APIs",
+		Short: "Run HTTP, GraphQL and gRPC gateway, memory and admin APIs",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()

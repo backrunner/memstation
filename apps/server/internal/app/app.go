@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc"
 
 	graphresolver "memstation/apps/server/graph/resolver"
 	"memstation/apps/server/internal/bootstrap"
@@ -42,6 +44,7 @@ import (
 	userservice "memstation/apps/server/internal/service/user"
 	sqlstore "memstation/apps/server/internal/store/sql"
 	"memstation/apps/server/internal/store/vector"
+	grpctransport "memstation/apps/server/internal/transport/grpc"
 	httptransport "memstation/apps/server/internal/transport/http"
 	"memstation/apps/server/internal/worker"
 )
@@ -71,6 +74,7 @@ type Container struct {
 	GraphQL       *graphresolver.Resolver
 	VectorStore   *vector.PGVectorStore
 	Router        http.Handler
+	GRPCServer    *grpc.Server
 	Publisher     *worker.Publisher
 	Inspector     *asynq.Inspector
 	Relay         *worker.Relay
@@ -298,6 +302,19 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		Publisher:      publisher,
 		Inspector:      inspector,
 	})
+	grpcServer := grpctransport.NewServer(grpctransport.Dependencies{
+		Config:      cfg,
+		Logger:      logger,
+		Health:      health,
+		Auth:        auth,
+		RateLimiter: rateLimiter,
+		Models:      models,
+		Gateway:     gateway,
+		Memory:      memories,
+		Generations: generations,
+		Admin:       admin,
+		Audit:       audit,
+	})
 
 	return &Container{
 		Config:        cfg,
@@ -324,6 +341,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		GraphQL:       graphQLResolver,
 		VectorStore:   vectorStore,
 		Router:        router,
+		GRPCServer:    grpcServer,
 		Publisher:     publisher,
 		Inspector:     inspector,
 		Relay:         relay,
@@ -347,20 +365,49 @@ func RunServe(ctx context.Context) error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	errCh := make(chan error, 1)
+	errCh := make(chan error, 2)
 	go func() {
 		container.Logger.InfoContext(ctx, "starting HTTP server", "addr", server.Addr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
-		close(errCh)
 	}()
+
+	var grpcListener net.Listener
+	if container.Config.GRPCPort > 0 && container.GRPCServer != nil {
+		grpcListener, err = net.Listen("tcp", ":"+itoa(container.Config.GRPCPort))
+		if err != nil {
+			return err
+		}
+		go func() {
+			container.Logger.InfoContext(ctx, "starting gRPC server", "addr", grpcListener.Addr().String())
+			if err := container.GRPCServer.Serve(grpcListener); err != nil {
+				errCh <- err
+			}
+		}()
+	}
 
 	select {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), container.Config.ShutdownTimeout)
 		defer cancel()
-		return server.Shutdown(shutdownCtx)
+		var shutdownErrs []error
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			shutdownErrs = append(shutdownErrs, err)
+		}
+		if container.GRPCServer != nil {
+			done := make(chan struct{})
+			go func() {
+				container.GRPCServer.GracefulStop()
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-shutdownCtx.Done():
+				container.GRPCServer.Stop()
+			}
+		}
+		return errors.Join(shutdownErrs...)
 	case err := <-errCh:
 		return err
 	}
