@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
+ROOT_DIR=$(cd "$(dirname "$0")/../.." && pwd)
 OUT_DIR=${1:-"$ROOT_DIR/.artifacts/eval/nightly"}
 DATASET_PATH=${LOCOMO_DATASET_PATH:-}
 DATASET_URL=${LOCOMO_DATASET_URL:-https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json}
@@ -71,14 +71,16 @@ if [[ "$EMBEDDING_MODE" == "provider" ]]; then
   fi
 fi
 
-if [[ \( "$LONGMEMEVAL_ENABLED" == "true" || -n "$LONGMEMEVAL_QA_HYPOTHESES_PATH" \) && -z "$LONGMEMEVAL_DATASET_URL" ]]; then
-  LONGMEMEVAL_DATASET_URL=$(resolve_longmemeval_url)
-fi
+if [[ "$LONGMEMEVAL_ENABLED" == "true" || -n "$LONGMEMEVAL_QA_HYPOTHESES_PATH" ]]; then
+  if [[ -z "$LONGMEMEVAL_DATASET_URL" ]]; then
+    LONGMEMEVAL_DATASET_URL=$(resolve_longmemeval_url)
+  fi
 
-if [[ \( "$LONGMEMEVAL_ENABLED" == "true" || -n "$LONGMEMEVAL_QA_HYPOTHESES_PATH" \) && -z "$LONGMEMEVAL_DATASET_PATH" ]]; then
-  TMP_LONGMEMEVAL_FILE=$(mktemp)
-  curl -fsSL "$LONGMEMEVAL_DATASET_URL" -o "$TMP_LONGMEMEVAL_FILE"
-  LONGMEMEVAL_DATASET_PATH="$TMP_LONGMEMEVAL_FILE"
+  if [[ -z "$LONGMEMEVAL_DATASET_PATH" ]]; then
+    TMP_LONGMEMEVAL_FILE=$(mktemp)
+    curl -fsSL "$LONGMEMEVAL_DATASET_URL" -o "$TMP_LONGMEMEVAL_FILE"
+    LONGMEMEVAL_DATASET_PATH="$TMP_LONGMEMEVAL_FILE"
+  fi
 fi
 if [[ -n "$LONGMEMEVAL_DATASET_PATH" && "$LONGMEMEVAL_DATASET_PATH" != /* ]]; then
   LONGMEMEVAL_DATASET_PATH="$ROOT_DIR/$LONGMEMEVAL_DATASET_PATH"

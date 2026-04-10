@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
+ROOT_DIR=$(cd "$(dirname "$0")/../.." && pwd)
 SERVER_THRESHOLD=${MEMSTATION_SERVER_COVERAGE_THRESHOLD:-55}
 MANAGER_THRESHOLD=${MEMSTATION_MANAGER_COVERAGE_THRESHOLD:-20}
 COVER_PROFILE=$(mktemp)

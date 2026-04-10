@@ -28,13 +28,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile=false
       - name: Run repo-native nightly eval bundle
-        run: ./scripts/perf-smoke.sh "$RUNNER_TEMP/memstation-nightly-repo-native"
+        run: bash ./scripts/eval/run-performance-smoke.sh "$RUNNER_TEMP/memstation-nightly-repo-native"
       - name: Run LOCOMO nightly benchmark
-        run: ./scripts/eval-memory-nightly.sh "$RUNNER_TEMP/memstation-nightly"
+        run: bash ./scripts/eval/run-memory-nightly.sh "$RUNNER_TEMP/memstation-nightly"
       - name: Run worker recovery nightly drill
-        run: ./scripts/worker-backlog-nightly.sh "$RUNNER_TEMP/memstation-nightly-recovery"
+        run: bash ./scripts/ops/run-worker-recovery-nightly.sh "$RUNNER_TEMP/memstation-nightly-recovery"
       - name: Run backup/restore nightly drill
-        run: ./scripts/backup-restore-drill.sh --out-dir "$RUNNER_TEMP/memstation-backup-drill"
+        run: bash ./scripts/ops/run-backup-restore-drill.sh --out-dir "$RUNNER_TEMP/memstation-backup-drill"
       - name: Upload nightly artifacts
         if: always()
         uses: actions/upload-artifact@v4

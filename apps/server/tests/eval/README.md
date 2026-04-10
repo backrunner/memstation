@@ -23,19 +23,19 @@ LongMemEval policy
 - Embedding-model leaderboards such as MTEB, BEIR, and MIRACL are optional provider bake-off inputs only. They are not MemStation long-memory release gates.
 
 Commands
-- Repo-native smoke: `./scripts/eval-memory.sh`
+- Repo-native smoke: `./scripts/eval/run-memory-smoke.sh`
   This always runs in explicit `deterministic` embedding mode for CI-safe regression smoke.
-- External LOCOMO run: `./scripts/eval-memory-locomo.sh`
+- External LOCOMO run: `./scripts/eval/run-memory-locomo.sh`
   By default this expects `provider` embedding mode and requires `EMBEDDING_MODEL`, `EMBEDDING_BASE_URL`, and `EMBEDDING_API_KEY`.
   Override the dataset source with `LOCOMO_DATASET_PATH` or `LOCOMO_DATASET_URL`.
-- External LongMemEval run: `./scripts/eval-memory-longmemeval.sh`
+- External LongMemEval run: `./scripts/eval/run-memory-longmemeval.sh`
   By default this expects `provider` embedding mode and uses `longmemeval_s_cleaned.json` at `session` granularity.
   Override the dataset source with `LONGMEMEVAL_DATASET_PATH` or `LONGMEMEVAL_DATASET_URL`, and granularity with `LONGMEMEVAL_GRANULARITY=session|turn`.
-- LongMemEval QA auto-eval: `./scripts/eval-memory-longmemeval-qa.sh path/to/hypotheses.jsonl`
+- LongMemEval QA auto-eval: `./scripts/eval/run-memory-longmemeval-qa.sh path/to/hypotheses.jsonl`
   This expects `LONGMEMEVAL_QA_JUDGE_MODEL`, `LONGMEMEVAL_QA_JUDGE_BASE_URL`, and `LONGMEMEVAL_QA_JUDGE_API_KEY`.
-- Nightly bundle: `./scripts/eval-memory-nightly.sh`
-- Worker recovery smoke: `./scripts/worker-backlog-smoke.sh`
-- Worker recovery nightly: `./scripts/worker-backlog-nightly.sh`
+- Nightly bundle: `./scripts/eval/run-memory-nightly.sh`
+- Worker recovery smoke: `./scripts/ops/run-worker-recovery-smoke.sh`
+- Worker recovery nightly: `./scripts/ops/run-worker-recovery-nightly.sh`
 
 Embedding modes
 - `deterministic`: local deterministic vectors, only for smoke/regression and offline CI. This is not a real embedding-quality benchmark.

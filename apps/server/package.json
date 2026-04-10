@@ -2,15 +2,15 @@
   "name": "@memstation/server",
   "private": true,
   "scripts": {
-    "dev": "go run ./cmd/memstation serve",
+    "dev": "bash ../../scripts/dev/run-server-watch.sh",
     "build": "mkdir -p dist && go build -o dist/memstation ./cmd/memstation",
-    "lint": "bash ../../scripts/go-lint.sh",
+    "lint": "bash ../../scripts/go/lint.sh",
     "test": "go test ./...",
     "test:contract": "go test ./tests/contract/... -count=1",
     "test:eval": "go test ./tests/eval/... -count=1",
     "eval": "go run ./tests/eval/cmd/evalrun",
     "generate": "go generate ./...",
-    "format": "bash ../../scripts/go-format.sh",
-    "format:check": "bash ../../scripts/go-format.sh --check"
+    "format": "bash ../../scripts/go/format.sh",
+    "format:check": "bash ../../scripts/go/format.sh --check"
   }
 }

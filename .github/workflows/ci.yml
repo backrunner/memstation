@@ -42,7 +42,7 @@ jobs:
       - name: Go test
         run: cd apps/server && go test ./...
       - name: Go format check
-        run: bash ./scripts/go-format.sh --check
+        run: bash ./scripts/go/format.sh --check
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
@@ -52,23 +52,23 @@ jobs:
       - name: Go generate check
         run: cd apps/server && go generate ./... && git diff --exit-code
       - name: Atlas migration lint and dry-run
-        run: ./scripts/atlas-check.sh
+        run: bash ./scripts/ops/check-atlas-migrations.sh
       - name: Contract tests
-        run: ./scripts/contract-test.sh
+        run: bash ./scripts/test/run-contract-tests.sh
       - name: Benchmark smoke
-        run: ./scripts/eval-memory.sh "$RUNNER_TEMP/memstation-eval"
+        run: bash ./scripts/eval/run-memory-smoke.sh "$RUNNER_TEMP/memstation-eval"
       - name: Performance smoke
-        run: ./scripts/perf-smoke.sh "$RUNNER_TEMP/memstation-perf"
+        run: bash ./scripts/eval/run-performance-smoke.sh "$RUNNER_TEMP/memstation-perf"
       - name: Worker recovery smoke
-        run: ./scripts/worker-backlog-smoke.sh "$RUNNER_TEMP/memstation-recovery"
+        run: bash ./scripts/ops/run-worker-recovery-smoke.sh "$RUNNER_TEMP/memstation-recovery"
       - name: Backup/restore drill dry-run
-        run: ./scripts/backup-restore-drill.sh --dry-run --out-dir "$RUNNER_TEMP/memstation-backup-drill"
+        run: bash ./scripts/ops/run-backup-restore-drill.sh --dry-run --out-dir "$RUNNER_TEMP/memstation-backup-drill"
       - name: pnpm lint
         run: pnpm lint
       - name: pnpm test
         run: pnpm test
       - name: Coverage thresholds
-        run: ./scripts/coverage-check.sh
+        run: bash ./scripts/test/check-coverage.sh
       - name: Install Playwright browser
         run: cd apps/manager && pnpm exec playwright install --with-deps chromium
       - name: Manager Playwright E2E

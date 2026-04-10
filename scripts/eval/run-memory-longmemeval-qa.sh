@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
+ROOT_DIR=$(cd "$(dirname "$0")/../.." && pwd)
 OUT_DIR=${2:-"$ROOT_DIR/.artifacts/eval/longmemeval-qa"}
 HYPOTHESES_PATH=${1:-${LONGMEMEVAL_QA_HYPOTHESES_PATH:-}}
 LONGMEMEVAL_VARIANT=${LONGMEMEVAL_VARIANT:-s}

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
+ROOT_DIR=$(cd "$(dirname "$0")/../.." && pwd)
 DATASET_PATH=${LOCOMO_DATASET_PATH:-}
 DATASET_URL=${LOCOMO_DATASET_URL:-https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json}
 OUT_DIR=${1:-"$ROOT_DIR/.artifacts/eval/locomo"}

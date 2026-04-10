@@ -2,8 +2,18 @@
   "name": "MemStation",
   "dockerComposeFile": ["../deploy/compose/docker-compose.yml"],
   "service": "workspace",
+  "runServices": ["workspace", "postgres", "redis"],
   "workspaceFolder": "/workspace/memstation",
   "shutdownAction": "stopCompose",
+  "forwardPorts": [8080, 5173],
+  "portsAttributes": {
+    "8080": {
+      "label": "MemStation Server"
+    },
+    "5173": {
+      "label": "MemStation Manager Debug"
+    }
+  },
   "customizations": {
     "vscode": {
       "settings": {

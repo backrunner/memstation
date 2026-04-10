@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
+ROOT_DIR=$(cd "$(dirname "$0")/../.." && pwd)
 OUT_DIR=${1:-"$ROOT_DIR/.artifacts/eval/recovery-nightly"}
 CONVERSATIONS=${MEMSTATION_RECOVERY_CONVERSATIONS:-256}
 WORKER_CONCURRENCY=${MEMSTATION_RECOVERY_WORKER_CONCURRENCY:-12}

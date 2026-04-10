@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
+ROOT_DIR=$(cd "$(dirname "$0")/../.." && pwd)
 COMPOSE_FILE="$ROOT_DIR/deploy/compose/docker-compose.yml"
 PROJECT_NAME=${MEMSTATION_COMPOSE_PROJECT:-memstation-dev}
 ENV_FILE=${MEMSTATION_ENV_FILE:-"$ROOT_DIR/.env.memstation-dev"}
