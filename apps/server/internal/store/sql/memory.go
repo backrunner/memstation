@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"memstation/apps/server/internal/domain"
+	conversationservice "memstation/apps/server/internal/service/conversation"
 )
 
 type InMemoryConversationRepository struct {
@@ -57,6 +58,7 @@ func (r *InMemoryConversationRepository) PersistExchange(_ context.Context, conv
 	if conversation.Metadata == nil {
 		conversation.Metadata = map[string]any{}
 	}
+	conversation.Messages = conversationservice.PrepareMessagesForStorage(conversation.Messages)
 	plan := planConversationMessages(existing.Messages, conversation.Messages)
 	conversation.Messages = plan.Stored
 	conversation.UpdatedAt = time.Now().UTC()

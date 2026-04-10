@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"memstation/apps/server/internal/domain"
+	conversationservice "memstation/apps/server/internal/service/conversation"
 )
 
 const (
@@ -1236,7 +1237,7 @@ func snapshotFromConversation(conversation domain.ConversationRecord) domain.Mem
 	}
 	metadata["captured_from_conversation"] = conversation.ConversationID
 	metadata["captured_at"] = now.Format(time.RFC3339)
-	messages := append([]domain.UnifiedMessage{}, conversation.Messages...)
+	messages := conversationservice.PrepareMessagesForStorage(conversation.Messages)
 	return domain.MemorySourceSnapshot{
 		UserID:         conversation.UserID,
 		ConversationID: conversation.ConversationID,
@@ -1244,7 +1245,7 @@ func snapshotFromConversation(conversation domain.ConversationRecord) domain.Mem
 			"request_format": conversation.RequestFormat,
 			"provider":       conversation.Provider,
 			"mode":           conversation.Mode,
-			"messages":       messages,
+			"messages":       messagesWithoutDerivedPromptText(messages),
 		}),
 		RequestFormat:  conversation.RequestFormat,
 		Provider:       conversation.Provider,
@@ -1255,6 +1256,25 @@ func snapshotFromConversation(conversation domain.ConversationRecord) domain.Mem
 		MessageCount:   len(messages),
 		Messages:       messages,
 	}
+}
+
+func messagesWithoutDerivedPromptText(messages []domain.UnifiedMessage) []domain.UnifiedMessage {
+	if len(messages) == 0 {
+		return nil
+	}
+	out := make([]domain.UnifiedMessage, 0, len(messages))
+	for _, message := range messages {
+		cloned := message
+		if len(message.Metadata) > 0 {
+			cloned.Metadata = cloneMap(message.Metadata)
+			delete(cloned.Metadata, conversationservice.MemoryPromptTextMetadataKey)
+			if len(cloned.Metadata) == 0 {
+				cloned.Metadata = nil
+			}
+		}
+		out = append(out, cloned)
+	}
+	return out
 }
 
 func scanGeneration(scanner interface{ Scan(dest ...any) error }) (domain.MemoryGeneration, error) {

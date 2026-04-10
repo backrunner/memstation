@@ -189,21 +189,7 @@ func ImpressionNodeID(conversationID string) string {
 }
 
 func summarizeConversation(messages []domain.UnifiedMessage) string {
-	parts := make([]string, 0, len(messages))
-	for _, message := range messages {
-		if message.Role != domain.RoleUser && message.Role != domain.RoleAssistant {
-			continue
-		}
-		text := strings.TrimSpace(message.Text)
-		if text == "" && len(message.Blocks) > 0 {
-			text = strings.TrimSpace(message.Blocks[0].Text)
-		}
-		if text == "" {
-			continue
-		}
-		parts = append(parts, string(message.Role)+": "+text)
-	}
-	return truncate(strings.Join(parts, " | "), 400)
+	return conversationservice.BuildMemoryPromptInput(messages)
 }
 
 func inferImpression(summary string) (string, map[string]any) {

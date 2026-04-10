@@ -304,6 +304,96 @@ func TestSummaryGenerateHandlerStoresSegmentGraphAndEmbeddings(t *testing.T) {
 	}
 }
 
+func TestSummaryGenerateHandlerCompactsToolPayloadsForMemory(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conversations := sql.NewInMemoryConversationRepository()
+	memories := sql.NewInMemoryMemoryRepository()
+	publisher := &recordingPublisher{}
+	hugePayload := strings.Repeat("tool schema fragment ", 80)
+
+	messages := []domain.UnifiedMessage{
+		{Role: domain.RoleUser, Text: "Please recall who owns rollback and the rollout playbook note."},
+		{
+			Role: domain.RoleAssistant,
+			Text: "I'll check memory.",
+			ToolCalls: []domain.ToolCall{{
+				ID:   "call-1",
+				Name: "recall_memory",
+				Arguments: map[string]any{
+					"query": hugePayload + " rollback owner",
+					"top_n": 2,
+				},
+			}},
+		},
+		{
+			Role: domain.RoleTool,
+			Text: hugePayload,
+			ToolResults: []domain.ToolResult{{
+				ToolCallID: "call-1",
+				Name:       "recall_memory",
+				Output: map[string]any{
+					"ok":    true,
+					"total": 2,
+					"items": []map[string]any{
+						{"type": "summary", "content": "Rollback owner is Alice."},
+						{"key": "playbook_note", "value": "Keep the deployment playbook visible."},
+					},
+					"debug": hugePayload,
+				},
+			}},
+		},
+		{Role: domain.RoleAssistant, Text: "Rollback owner is Alice, and the deployment playbook should stay visible."},
+	}
+
+	if err := conversations.PersistExchange(ctx, domain.ConversationRecord{
+		ConversationID: "conv-tool-summary",
+		UserID:         "user-1",
+		RequestFormat:  string(domain.ProtocolOpenAIChat),
+		Provider:       domain.ProviderOpenAI,
+		Mode:           domain.ModeTransparent,
+		FinalizeStatus: domain.FinalizeStatusEnded,
+		SummaryStatus:  domain.ProcessingStatusQueued,
+		AnalysisStatus: domain.ProcessingStatusPending,
+		Messages:       messages,
+		CreatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("persist conversation: %v", err)
+	}
+
+	handler := handleSummaryGenerate(nilLogger(), Services{
+		Conversations:  conversations,
+		Memories:       memories,
+		Vectors:        vector.NewPGVectorStore(nil),
+		Publisher:      publisher,
+		EmbeddingModel: "test-embedding",
+	})
+	if err := handler(ctx, newTask(t, TypeSummaryGenerate, SummaryPayload{
+		ConversationID: "conv-tool-summary",
+		UserID:         "user-1",
+		SummaryVersion: 1,
+		FinalizeReason: "explicit",
+	})); err != nil {
+		t.Fatalf("handle summary: %v", err)
+	}
+
+	doc, err := memories.GetDocument(ctx, "user-1", "summary:conv-tool-summary:v1", domain.MemoryTypeSummary)
+	if err != nil {
+		t.Fatalf("get summary doc: %v", err)
+	}
+	if !strings.Contains(doc.Content, "recall_memory(") {
+		t.Fatalf("expected summary doc to retain tool name, got %q", doc.Content)
+	}
+	if !strings.Contains(doc.Content, "Alice") {
+		t.Fatalf("expected summary doc to retain tool result meaning, got %q", doc.Content)
+	}
+	if strings.Count(doc.Content, "tool schema fragment") > 3 {
+		t.Fatalf("expected summary doc to compact huge tool payloads, got %q", doc.Content)
+	}
+}
+
 func TestSummaryGenerateHandlerRemovesStaleSegmentsAfterRewrite(t *testing.T) {
 	t.Parallel()
 

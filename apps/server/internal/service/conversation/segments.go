@@ -204,6 +204,13 @@ func summarizedMessageParts(message domain.UnifiedMessage) []string {
 		parts = append(parts, value)
 	}
 
+	if digest := memoryPromptTextFromMetadata(message.Metadata); digest != "" {
+		appendUnique(digest)
+		if len(message.ToolCalls) > 0 || len(message.ToolResults) > 0 || hasNonTextBlocks(message.Blocks) {
+			return parts
+		}
+	}
+
 	appendUnique(message.Text)
 	for _, block := range message.Blocks {
 		appendUnique(firstNonEmptyString(block.Text, block.Raw))

@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"memstation/apps/server/internal/domain"
+	conversationservice "memstation/apps/server/internal/service/conversation"
 )
 
 type PostgresConversationRepository struct {
@@ -35,6 +36,7 @@ func (r *PostgresConversationRepository) PersistExchange(ctx context.Context, co
 	if err != nil {
 		return err
 	}
+	conversation.Messages = conversationservice.PrepareMessagesForStorage(conversation.Messages)
 	plan := planConversationMessages(existingMessages, conversation.Messages)
 	if conversation.Metadata == nil {
 		conversation.Metadata = map[string]any{}
@@ -1824,8 +1826,25 @@ func messageFingerprint(message domain.UnifiedMessage) []byte {
 		Blocks:      message.Blocks,
 		ToolCalls:   message.ToolCalls,
 		ToolResults: message.ToolResults,
-		Metadata:    message.Metadata,
+		Metadata:    comparableMessageMetadata(message.Metadata),
 	})
+}
+
+func comparableMessageMetadata(metadata map[string]any) map[string]any {
+	if len(metadata) == 0 {
+		return nil
+	}
+	cloned := make(map[string]any, len(metadata))
+	for key, value := range metadata {
+		if key == conversationservice.MemoryPromptTextMetadataKey {
+			continue
+		}
+		cloned[key] = value
+	}
+	if len(cloned) == 0 {
+		return nil
+	}
+	return cloned
 }
 
 func stableMessageID(conversationID string, idx int, message domain.UnifiedMessage) string {

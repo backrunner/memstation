@@ -556,7 +556,7 @@ func syncConversationKeyMemoryRelations(ctx context.Context, repo ports.MemoryRe
 }
 
 func buildSummary(messages []domain.UnifiedMessage) string {
-	return conversationservice.SummarizeMessages(messages)
+	return conversationservice.BuildMemoryPromptInput(messages)
 }
 
 func embeddingContentForDocument(doc domain.MemoryDocument) string {

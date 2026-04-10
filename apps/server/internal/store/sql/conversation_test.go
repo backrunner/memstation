@@ -2,6 +2,7 @@ package sql
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -176,5 +177,73 @@ func TestInMemoryConversationRepositoryKeepsExistingHistoryForPartialSnapshots(t
 	}
 	if got := conversation.Metadata["message_storage_mode"]; got != "partial_snapshot" {
 		t.Fatalf("expected partial snapshot mode, got %v", got)
+	}
+}
+
+func TestInMemoryConversationRepositoryStoresCompactToolMessageDigest(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := NewInMemoryConversationRepository()
+	now := time.Date(2026, 3, 22, 12, 0, 0, 0, time.UTC)
+	hugePayload := strings.Repeat("tool schema fragment ", 80)
+
+	if err := repo.PersistExchange(ctx, domain.ConversationRecord{
+		ConversationID: "conv-tools",
+		UserID:         "user-1",
+		RequestFormat:  string(domain.ProtocolOpenAIChat),
+		Provider:       domain.ProviderOpenAI,
+		Mode:           domain.ModeTransparent,
+		Messages: []domain.UnifiedMessage{
+			{
+				Role: domain.RoleAssistant,
+				ToolCalls: []domain.ToolCall{{
+					ID:   "call-1",
+					Name: "recall_memory",
+					Arguments: map[string]any{
+						"query": hugePayload + " rollback owner",
+						"top_n": 2,
+					},
+				}},
+			},
+			{
+				Role: domain.RoleTool,
+				Text: hugePayload,
+				Blocks: []domain.ContentBlock{{
+					Type: domain.ContentBlockJSON,
+					Raw:  hugePayload,
+				}},
+				ToolResults: []domain.ToolResult{{
+					ToolCallID: "call-1",
+					Name:       "recall_memory",
+					Output: map[string]any{
+						"ok":    true,
+						"total": 1,
+						"items": []map[string]any{{"key": "owner", "value": "Alice"}},
+					},
+				}},
+			},
+		},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("persist exchange: %v", err)
+	}
+
+	conversation, err := repo.GetConversation(ctx, "user-1", "conv-tools")
+	if err != nil {
+		t.Fatalf("get conversation: %v", err)
+	}
+	if digest := conversation.Messages[0].Metadata["memory_prompt_text"]; digest == nil {
+		t.Fatalf("expected assistant tool call digest, got %+v", conversation.Messages[0].Metadata)
+	}
+	if digest := conversation.Messages[1].Metadata["memory_prompt_text"]; digest == nil {
+		t.Fatalf("expected tool result digest, got %+v", conversation.Messages[1].Metadata)
+	}
+	if conversation.Messages[1].Text != "" {
+		t.Fatalf("expected stored tool message text to be removed in favor of digest metadata, got %q", conversation.Messages[1].Text)
+	}
+	if len(conversation.Messages[1].Blocks) != 0 {
+		t.Fatalf("expected stored tool message blocks to be removed, got %+v", conversation.Messages[1].Blocks)
 	}
 }
