@@ -2,6 +2,7 @@ export type TargetKind = 'single' | 'cluster-entry' | 'node';
 export type GatewayProtocol = 'chat_completions' | 'responses' | 'anthropic_messages';
 export type GatewayMode = 'transparent' | 'inject';
 export type ChatRole = 'system' | 'user' | 'assistant' | 'tool';
+export type JSONValue = string | number | boolean | null | { [key: string]: JSONValue } | JSONValue[];
 
 export interface MemStationTarget {
   id: string;
@@ -32,13 +33,13 @@ export interface UsageRecord {
 export interface ToolCall {
   id: string;
   name: string;
-  arguments?: Record<string, unknown>;
+  arguments?: JSONValue;
 }
 
 export interface ToolResult {
   tool_call_id: string;
   name?: string;
-  output?: Record<string, unknown>;
+  output?: JSONValue;
 }
 
 export interface ContentBlock {

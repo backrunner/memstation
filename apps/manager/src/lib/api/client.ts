@@ -5,6 +5,7 @@ import type {
   AuditEventRecord,
   CacheStatusPayload,
   ChatThreadMessage,
+  ContentBlock,
   ConversationListItem,
   ConversationMemoryPayload,
   ConversationRecord,
@@ -21,6 +22,7 @@ import type {
   MemoryDocument,
   MemoryGeneration,
   MemoryGenerationSource,
+  JSONValue,
   MemoryRebuildDetailPayload,
   MemorySourceSnapshot,
   MemoryPreviewPayload,
@@ -231,7 +233,9 @@ export async function fetchConversation(
   const payload = await adminRequest<ConversationRecord>(target, `/api/admin/conversations/${conversationId}${suffix}`);
   return {
     ...payload,
-    messages: (payload.messages ?? []).map((message) => normalizeMessage(message as unknown as Record<string, unknown>)),
+    messages: (payload.messages ?? []).map((message) => normalizeMessage(message as unknown as Record<string, unknown>, target.baseUrl)),
+    parts: Array.isArray(payload.parts) ? payload.parts.map((item) => normalizeMessagePart(item as unknown as Record<string, unknown>, target.baseUrl)) : undefined,
+    artifacts: Array.isArray(payload.artifacts) ? payload.artifacts.map((item) => normalizeMessagePartArtifact(item as unknown as Record<string, unknown>)) : undefined,
     segments: Array.isArray(payload.segments)
       ? payload.segments.map((segment) => normalizeConversationSegment(segment as unknown as Record<string, unknown>))
       : undefined
@@ -736,12 +740,12 @@ function chatMessages(messages: ChatThreadMessage[]): Array<Record<string, unkno
       return {
         role: 'tool',
         tool_call_id: toolResult?.tool_call_id ?? '',
-        content: message.text
+        content: toolResult?.output ?? openAIChatContent(message)
       };
     }
     const payload: Record<string, unknown> = {
       role: message.role,
-      content: message.text
+      content: openAIChatContent(message)
     };
     if (message.toolCalls?.length) {
       payload.tool_calls = message.toolCalls.map((call) => ({
@@ -749,7 +753,7 @@ function chatMessages(messages: ChatThreadMessage[]): Array<Record<string, unkno
         type: 'function',
         function: {
           name: call.name,
-          arguments: JSON.stringify(call.arguments ?? {})
+          arguments: serializeJSONValue(call.arguments, '{}')
         }
       }));
     }
@@ -760,12 +764,13 @@ function chatMessages(messages: ChatThreadMessage[]): Array<Record<string, unkno
 function responsesInput(messages: ChatThreadMessage[]): Array<Record<string, unknown>> {
   const items: Array<Record<string, unknown>> = [];
   for (const message of messages) {
+    const content = openAIResponsesContent(message, false);
     if (message.role === 'tool') {
       const toolResult = message.toolResults?.[0];
       items.push({
         type: 'function_call_output',
         call_id: toolResult?.tool_call_id ?? '',
-        output: message.text
+        output: toolResult?.output ?? message.text
       });
       continue;
     }
@@ -776,17 +781,17 @@ function responsesInput(messages: ChatThreadMessage[]): Array<Record<string, unk
           id: call.id,
           call_id: call.id,
           name: call.name,
-          arguments: JSON.stringify(call.arguments ?? {})
+          arguments: serializeJSONValue(call.arguments, '{}')
         });
       }
-      if (!message.text.trim()) {
+      if (content.length === 0) {
         continue;
       }
     }
     items.push({
       type: 'message',
       role: message.role,
-      content: [{ type: 'input_text', text: message.text }]
+      content
     });
   }
   return items;
@@ -802,16 +807,13 @@ function anthropicMessages(messages: ChatThreadMessage[]): Array<Record<string, 
           {
             type: 'tool_result',
             tool_use_id: toolResult?.tool_call_id ?? '',
-            content: message.text
+            content: toolResult?.output ?? anthropicContent(message)
           }
         ]
       };
     }
 
-    const content: Array<Record<string, unknown>> = [];
-    if (message.text.trim()) {
-      content.push({ type: 'text', text: message.text });
-    }
+    const content = anthropicContentItems(message);
     for (const call of message.toolCalls ?? []) {
       content.push({
         type: 'tool_use',
@@ -823,7 +825,7 @@ function anthropicMessages(messages: ChatThreadMessage[]): Array<Record<string, 
 
     return {
       role: message.role,
-      content: content.length === 1 && content[0]?.type === 'text' ? message.text : content
+      content: content.length === 1 && content[0]?.type === 'text' ? String(content[0].text ?? message.text) : content
     };
   });
 }
@@ -864,10 +866,12 @@ function parseGatewayJSON(protocol: GatewayProtocol, payload: Record<string, unk
 function parseChatPayload(payload: Record<string, unknown>): ChatThreadMessage {
   const choice = asRecord(asArray(payload.choices)[0]);
   const message = asRecord(choice.message);
+  const blocks = gatewayBlocks(message.content);
   return {
     id: String(payload.id ?? makeId('chat')),
     role: 'assistant',
-    text: contentText(message.content),
+    text: blocksText(blocks) || contentText(message.content),
+    blocks: blocks.length > 0 ? blocks : undefined,
     thinking: thinkingText(message.reasoning ?? message.thinking),
     toolCalls: openAIToolCalls(message.tool_calls),
     usage: normalizeUsage(asRecord(payload.usage))
@@ -877,6 +881,7 @@ function parseChatPayload(payload: Record<string, unknown>): ChatThreadMessage {
 function parseResponsesPayload(payload: Record<string, unknown>): ChatThreadMessage {
   const output = asArray(payload.output);
   const toolCalls: ToolCall[] = [];
+  const blocks: ContentBlock[] = [];
   let text = '';
   let thinking = '';
   for (const item of output) {
@@ -885,7 +890,7 @@ function parseResponsesPayload(payload: Record<string, unknown>): ChatThreadMess
       toolCalls.push({
         id: String(record.call_id ?? record.id ?? makeId('tool-call')),
         name: String(record.name ?? ''),
-        arguments: safeJSON(String(record.arguments ?? '{}'))
+        arguments: parseJSONValue(record.arguments, {})
       });
       continue;
     }
@@ -894,7 +899,9 @@ function parseResponsesPayload(payload: Record<string, unknown>): ChatThreadMess
       continue;
     }
     if (record.type === 'message') {
-      text += contentText(record.content);
+      const contentBlocks = gatewayBlocks(record.content);
+      blocks.push(...contentBlocks);
+      text += blocksText(contentBlocks) || contentText(record.content);
       thinking += thinkingText(record.content);
     }
   }
@@ -902,6 +909,7 @@ function parseResponsesPayload(payload: Record<string, unknown>): ChatThreadMess
     id: String(payload.id ?? makeId('response')),
     role: 'assistant',
     text,
+    blocks: blocks.length > 0 ? blocks : undefined,
     thinking,
     toolCalls,
     usage: normalizeUsage(asRecord(payload.usage))
@@ -911,6 +919,7 @@ function parseResponsesPayload(payload: Record<string, unknown>): ChatThreadMess
 function parseAnthropicPayload(payload: Record<string, unknown>): ChatThreadMessage {
   const content = asArray(payload.content);
   const toolCalls: ToolCall[] = [];
+  const blocks: ContentBlock[] = [];
   let text = '';
   let thinking = '';
   for (const item of content) {
@@ -919,7 +928,7 @@ function parseAnthropicPayload(payload: Record<string, unknown>): ChatThreadMess
       toolCalls.push({
         id: String(record.id ?? makeId('anthropic-tool')),
         name: String(record.name ?? ''),
-        arguments: asRecord(record.input)
+        arguments: jsonValue(record.input)
       });
       continue;
     }
@@ -927,12 +936,15 @@ function parseAnthropicPayload(payload: Record<string, unknown>): ChatThreadMess
       thinking += thinkingText(record);
       continue;
     }
-    text += contentText(record);
+    const contentBlocks = gatewayBlocks(record);
+    blocks.push(...contentBlocks);
+    text += blocksText(contentBlocks) || contentText(record);
   }
   return {
     id: String(payload.id ?? makeId('anthropic')),
     role: 'assistant',
     text,
+    blocks: blocks.length > 0 ? blocks : undefined,
     thinking,
     toolCalls,
     usage: normalizeUsage(asRecord(payload.usage))
@@ -982,8 +994,8 @@ async function consumeGatewayStream(
     if (!data || data === '[DONE]') {
       return;
     }
-    const parsed = safeJSON(data);
-    if (!parsed || Array.isArray(parsed)) {
+    const parsed = asRecord(parseJSONValue(data, {}));
+    if (Object.keys(parsed).length === 0) {
       return;
     }
     debug.rawEvents.push(parsed);
@@ -1088,20 +1100,20 @@ function normalizeUsage(payload: Record<string, unknown>): UsageRecord {
   };
 }
 
-function normalizeMessage(payload: Record<string, unknown>): ChatThreadMessage {
+function normalizeMessage(payload: Record<string, unknown>, baseUrl?: string): ChatThreadMessage {
   return {
     id: String(payload.id ?? makeId('message')),
     role: String(payload.role ?? 'assistant') as ChatThreadMessage['role'],
     text: String(payload.text ?? ''),
     blocks: Array.isArray(payload.blocks)
-      ? (payload.blocks as Array<{ type: string; text?: string; raw?: string }>)
+      ? payload.blocks.map((item) => normalizeContentBlock(item as Record<string, unknown>, baseUrl))
       : undefined,
     toolCalls: asArray(payload.tool_calls).map((item) => {
       const record = asRecord(item);
       return {
         id: String(record.id ?? makeId('tool-call')),
         name: String(record.name ?? ''),
-        arguments: asRecord(record.arguments)
+        arguments: jsonValue(record.arguments)
       };
     }),
     toolResults: asArray(payload.tool_results).map((item) => {
@@ -1109,7 +1121,7 @@ function normalizeMessage(payload: Record<string, unknown>): ChatThreadMessage {
       return {
         tool_call_id: String(record.tool_call_id ?? ''),
         name: typeof record.name === 'string' ? record.name : undefined,
-        output: asRecord(record.output)
+        output: jsonValue(record.output)
       };
     }),
     thinking: thinkingText(payload.thinking ?? payload.metadata),
@@ -1143,8 +1155,97 @@ function normalizeMemoryDocument(payload: Record<string, unknown>): MemoryDocume
             weight: Number(value.weight ?? 0)
           }))
       : undefined,
+    evidences: Array.isArray(payload.evidences) ? payload.evidences.map((value) => normalizeMemoryEvidence(value as Record<string, unknown>)) : undefined,
     created_at: stringOrUndefined(payload.created_at),
     updated_at: stringOrUndefined(payload.updated_at)
+  };
+}
+
+function normalizeContentBlock(payload: Record<string, unknown>, baseUrl?: string) {
+  return {
+    type: String(payload.type ?? ''),
+    mime_type: stringOrUndefined(payload.mime_type),
+    blob_id: stringOrUndefined(payload.blob_id),
+    source_url: absoluteUrl(stringOrUndefined(payload.source_url), baseUrl),
+    provider_file_id: stringOrUndefined(payload.provider_file_id),
+    filename: stringOrUndefined(payload.filename),
+    size_bytes: numberOrUndefined(payload.size_bytes),
+    sha256: stringOrUndefined(payload.sha256),
+    page_index: numberOrUndefined(payload.page_index),
+    start_ms: numberOrUndefined(payload.start_ms),
+    end_ms: numberOrUndefined(payload.end_ms),
+    duration_ms: numberOrUndefined(payload.duration_ms),
+    text: stringOrUndefined(payload.text),
+    raw: stringOrUndefined(payload.raw),
+    metadata: objectOrUndefined(payload.metadata)
+  };
+}
+
+function normalizeMessagePart(payload: Record<string, unknown>, baseUrl?: string) {
+  return {
+    part_id: String(payload.part_id ?? ''),
+    user_id: String(payload.user_id ?? ''),
+    conversation_id: String(payload.conversation_id ?? ''),
+    sequence_num: Number(payload.sequence_num ?? 0),
+    part_index: Number(payload.part_index ?? 0),
+    role: String(payload.role ?? 'assistant') as ChatThreadMessage['role'],
+    part_type: String(payload.part_type ?? ''),
+    mime_type: stringOrUndefined(payload.mime_type),
+    blob_id: stringOrUndefined(payload.blob_id),
+    source_url: absoluteUrl(stringOrUndefined(payload.source_url), baseUrl),
+    provider_file_id: stringOrUndefined(payload.provider_file_id),
+    filename: stringOrUndefined(payload.filename),
+    text_content: stringOrUndefined(payload.text_content),
+    raw_payload: stringOrUndefined(payload.raw_payload),
+    page_index: numberOrUndefined(payload.page_index),
+    start_ms: numberOrUndefined(payload.start_ms),
+    end_ms: numberOrUndefined(payload.end_ms),
+    duration_ms: numberOrUndefined(payload.duration_ms),
+    metadata: objectOrUndefined(payload.metadata),
+    created_at: stringOrUndefined(payload.created_at),
+    updated_at: stringOrUndefined(payload.updated_at)
+  };
+}
+
+function normalizeMessagePartArtifact(payload: Record<string, unknown>) {
+  return {
+    artifact_id: String(payload.artifact_id ?? ''),
+    user_id: String(payload.user_id ?? ''),
+    conversation_id: String(payload.conversation_id ?? ''),
+    part_id: String(payload.part_id ?? ''),
+    artifact_type: String(payload.artifact_type ?? ''),
+    status: String(payload.status ?? ''),
+    extractor_kind: stringOrUndefined(payload.extractor_kind),
+    model_name: stringOrUndefined(payload.model_name),
+    text_content: stringOrUndefined(payload.text_content),
+    page_index: numberOrUndefined(payload.page_index),
+    start_ms: numberOrUndefined(payload.start_ms),
+    end_ms: numberOrUndefined(payload.end_ms),
+    confidence: numberOrUndefined(payload.confidence),
+    metadata: objectOrUndefined(payload.metadata),
+    created_at: stringOrUndefined(payload.created_at),
+    updated_at: stringOrUndefined(payload.updated_at)
+  };
+}
+
+function normalizeMemoryEvidence(payload: Record<string, unknown>) {
+  return {
+    id: String(payload.id ?? ''),
+    generation_id: stringOrUndefined(payload.generation_id),
+    user_id: String(payload.user_id ?? ''),
+    node_id: String(payload.node_id ?? ''),
+    conversation_id: String(payload.conversation_id ?? ''),
+    sequence_num: Number(payload.sequence_num ?? 0),
+    part_id: stringOrUndefined(payload.part_id),
+    artifact_id: stringOrUndefined(payload.artifact_id),
+    page_index: numberOrUndefined(payload.page_index),
+    start_ms: numberOrUndefined(payload.start_ms),
+    end_ms: numberOrUndefined(payload.end_ms),
+    evidence_kind: String(payload.evidence_kind ?? ''),
+    excerpt_text: stringOrUndefined(payload.excerpt_text),
+    weight: numberOrUndefined(payload.weight),
+    metadata: objectOrUndefined(payload.metadata),
+    created_at: stringOrUndefined(payload.created_at)
   };
 }
 
@@ -1281,6 +1382,19 @@ function objectOrUndefined(value: unknown): Record<string, unknown> | undefined 
   return value as Record<string, unknown>;
 }
 
+function absoluteUrl(value: string | undefined, baseUrl?: string): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  if (/^https?:\/\//i.test(value)) {
+    return value;
+  }
+  if (!baseUrl) {
+    return value;
+  }
+  return `${normalizeBaseUrl(baseUrl)}${value.startsWith('/') ? value : `/${value}`}`;
+}
+
 function openAIToolCalls(raw: unknown): ToolCall[] {
   return asArray(raw).map((item) => {
     const record = asRecord(item);
@@ -1288,7 +1402,7 @@ function openAIToolCalls(raw: unknown): ToolCall[] {
     return {
       id: String(record.id ?? makeId('tool-call')),
       name: String(fn.name ?? ''),
-      arguments: safeJSON(String(fn.arguments ?? '{}'))
+      arguments: parseJSONValue(fn.arguments, {})
     };
   });
 }
@@ -1298,6 +1412,9 @@ function toUnifiedMessage(message: ChatThreadMessage): Record<string, unknown> {
     role: message.role,
     text: message.text
   };
+  if (message.blocks?.length) {
+    result.blocks = message.blocks;
+  }
   if (message.toolCalls?.length) {
     result.tool_calls = message.toolCalls;
   }
@@ -1321,6 +1438,13 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function jsonValue(value: unknown): JSONValue | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return value as JSONValue;
+}
+
 function numberValue(value: unknown): number | undefined {
   if (typeof value === 'number') {
     return value;
@@ -1332,15 +1456,35 @@ function numberValue(value: unknown): number | undefined {
   return undefined;
 }
 
-function safeJSON(value: string): Record<string, unknown> {
+function parseJSONValue(value: unknown, fallback: JSONValue): JSONValue {
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+  if (typeof value !== 'string') {
+    return value as JSONValue;
+  }
   try {
-    const parsed = JSON.parse(value) as Record<string, unknown>;
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed;
-    }
-    return {};
+    return JSON.parse(value) as JSONValue;
   } catch {
-    return {};
+    return value as JSONValue;
+  }
+}
+
+function serializeJSONValue(value: JSONValue | undefined, fallback: string): string {
+  if (value === undefined) {
+    return fallback;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      return value;
+    }
+  }
+  try {
+    const serialized = JSON.stringify(value);
+    return serialized ?? fallback;
+  } catch {
+    return fallback;
   }
 }
 
@@ -1349,6 +1493,387 @@ function appendChunk(current: string | undefined, chunk: string): string {
     return current ?? '';
   }
   return `${current ?? ''}${chunk}`;
+}
+
+function canonicalBlocks(message: ChatThreadMessage): ContentBlock[] {
+  if (message.blocks?.length) {
+    return message.blocks;
+  }
+  if (message.text.trim()) {
+    return [{ type: 'text', text: message.text }];
+  }
+  return [];
+}
+
+function openAIChatContent(message: ChatThreadMessage): string | Array<Record<string, unknown>> {
+  const blocks = canonicalBlocks(message);
+  if (blocks.length === 0) {
+    return message.text;
+  }
+  if (blocks.length === 1 && blocks[0]?.type === 'text') {
+    return blocks[0].text ?? message.text;
+  }
+  const items = blocks.map((block) => openAIContentBlock(block, false)).filter((item): item is Record<string, unknown> => Boolean(item));
+  return items.length > 0 ? items : [{ type: 'input_text', text: message.text }];
+}
+
+function openAIResponsesContent(message: ChatThreadMessage, output: boolean): Array<Record<string, unknown>> {
+  const blocks = canonicalBlocks(message);
+  if (blocks.length === 0) {
+    return message.text.trim() ? [{ type: output ? 'output_text' : 'input_text', text: message.text }] : [];
+  }
+  return blocks.map((block) => openAIContentBlock(block, output)).filter((item): item is Record<string, unknown> => Boolean(item));
+}
+
+function anthropicContent(message: ChatThreadMessage): string | Array<Record<string, unknown>> {
+  const items = anthropicContentItems(message);
+  if (items.length === 0) {
+    return message.text;
+  }
+  if (items.length === 1 && items[0]?.type === 'text') {
+    return String(items[0].text ?? message.text);
+  }
+  return items;
+}
+
+function anthropicContentItems(message: ChatThreadMessage): Array<Record<string, unknown>> {
+  const blocks = canonicalBlocks(message);
+  if (blocks.length === 0) {
+    return message.text.trim() ? [{ type: 'text', text: message.text }] : [];
+  }
+  const items = blocks.map((block) => anthropicContentBlock(block)).filter((item): item is Record<string, unknown> => Boolean(item));
+  return items;
+}
+
+function openAIContentBlock(block: ContentBlock, output: boolean): Record<string, unknown> | null {
+  switch (block.type) {
+    case 'text':
+      return {
+        type: output ? 'output_text' : 'input_text',
+        text: block.text ?? block.raw ?? ''
+      };
+    case 'image': {
+      const item: Record<string, unknown> = { type: 'input_image' };
+      if (block.mime_type) {
+        item.image_url = { url: block.source_url, mime_type: block.mime_type };
+      } else if (block.source_url) {
+        item.image_url = block.source_url;
+      }
+      if (block.provider_file_id) {
+        item.file_id = block.provider_file_id;
+      }
+      if (block.blob_id) {
+        item.blob_id = block.blob_id;
+      }
+      if (block.filename) {
+        item.filename = block.filename;
+      }
+      if (block.text) {
+        item.text = block.text;
+      }
+      return item;
+    }
+    case 'audio': {
+      const item: Record<string, unknown> = { type: 'input_audio' };
+      const audio: Record<string, unknown> = {};
+      if (block.source_url) {
+        audio.url = block.source_url;
+      }
+      if (block.provider_file_id) {
+        audio.file_id = block.provider_file_id;
+      }
+      if (block.mime_type) {
+        audio.mime_type = block.mime_type;
+      }
+      if (Object.keys(audio).length > 0) {
+        item.audio = audio;
+      }
+      if (block.blob_id) {
+        item.blob_id = block.blob_id;
+      }
+      if (block.filename) {
+        item.filename = block.filename;
+      }
+      if (block.text) {
+        item.text = block.text;
+      }
+      if (block.start_ms !== undefined) {
+        item.start_ms = block.start_ms;
+      }
+      if (block.end_ms !== undefined) {
+        item.end_ms = block.end_ms;
+      }
+      if (block.duration_ms !== undefined) {
+        item.duration_ms = block.duration_ms;
+      }
+      return item;
+    }
+    case 'video': {
+      const item: Record<string, unknown> = { type: 'input_video' };
+      const video: Record<string, unknown> = {};
+      if (block.source_url) {
+        video.url = block.source_url;
+      }
+      if (block.provider_file_id) {
+        video.file_id = block.provider_file_id;
+      }
+      if (block.mime_type) {
+        video.mime_type = block.mime_type;
+      }
+      if (Object.keys(video).length > 0) {
+        item.video = video;
+      }
+      if (block.blob_id) {
+        item.blob_id = block.blob_id;
+      }
+      if (block.filename) {
+        item.filename = block.filename;
+      }
+      if (block.text) {
+        item.text = block.text;
+      }
+      if (block.start_ms !== undefined) {
+        item.start_ms = block.start_ms;
+      }
+      if (block.end_ms !== undefined) {
+        item.end_ms = block.end_ms;
+      }
+      if (block.duration_ms !== undefined) {
+        item.duration_ms = block.duration_ms;
+      }
+      return item;
+    }
+    case 'file': {
+      const item: Record<string, unknown> = { type: 'file' };
+      if (block.source_url) {
+        item.source_url = block.source_url;
+      }
+      if (block.provider_file_id) {
+        item.file_id = block.provider_file_id;
+      }
+      if (block.blob_id) {
+        item.blob_id = block.blob_id;
+      }
+      if (block.filename) {
+        item.filename = block.filename;
+      }
+      if (block.mime_type) {
+        item.mime_type = block.mime_type;
+      }
+      if (block.page_index !== undefined) {
+        item.page_index = block.page_index;
+      }
+      if (block.start_ms !== undefined) {
+        item.start_ms = block.start_ms;
+      }
+      if (block.end_ms !== undefined) {
+        item.end_ms = block.end_ms;
+      }
+      if (block.text) {
+        item.text = block.text;
+      }
+      return item;
+    }
+    default:
+      return block.text || block.raw ? { type: output ? 'output_text' : 'input_text', text: block.text ?? block.raw ?? '' } : null;
+  }
+}
+
+function anthropicContentBlock(block: ContentBlock): Record<string, unknown> | null {
+  switch (block.type) {
+    case 'text':
+      return { type: 'text', text: block.text ?? block.raw ?? '' };
+    case 'image': {
+      const item: Record<string, unknown> = { type: 'image' };
+      if (block.source_url) {
+        item.source_url = block.source_url;
+      }
+      if (block.provider_file_id) {
+        item.file_id = block.provider_file_id;
+      }
+      if (block.mime_type) {
+        item.mime_type = block.mime_type;
+      }
+      if (block.blob_id) {
+        item.blob_id = block.blob_id;
+      }
+      if (block.filename) {
+        item.filename = block.filename;
+      }
+      if (block.text) {
+        item.text = block.text;
+      }
+      return item;
+    }
+    case 'audio': {
+      const item: Record<string, unknown> = { type: 'audio' };
+      if (block.source_url) {
+        item.source_url = block.source_url;
+      }
+      if (block.provider_file_id) {
+        item.file_id = block.provider_file_id;
+      }
+      if (block.mime_type) {
+        item.mime_type = block.mime_type;
+      }
+      if (block.filename) {
+        item.filename = block.filename;
+      }
+      if (block.text) {
+        item.text = block.text;
+      }
+      if (block.start_ms !== undefined) {
+        item.start_ms = block.start_ms;
+      }
+      if (block.end_ms !== undefined) {
+        item.end_ms = block.end_ms;
+      }
+      return item;
+    }
+    case 'video': {
+      const item: Record<string, unknown> = { type: 'video' };
+      if (block.source_url) {
+        item.source_url = block.source_url;
+      }
+      if (block.provider_file_id) {
+        item.file_id = block.provider_file_id;
+      }
+      if (block.mime_type) {
+        item.mime_type = block.mime_type;
+      }
+      if (block.filename) {
+        item.filename = block.filename;
+      }
+      if (block.text) {
+        item.text = block.text;
+      }
+      if (block.start_ms !== undefined) {
+        item.start_ms = block.start_ms;
+      }
+      if (block.end_ms !== undefined) {
+        item.end_ms = block.end_ms;
+      }
+      return item;
+    }
+    case 'file': {
+      const item: Record<string, unknown> = { type: 'document' };
+      if (block.source_url) {
+        item.source_url = block.source_url;
+      }
+      if (block.provider_file_id) {
+        item.file_id = block.provider_file_id;
+      }
+      if (block.mime_type) {
+        item.mime_type = block.mime_type;
+      }
+      if (block.filename) {
+        item.filename = block.filename;
+      }
+      if (block.page_index !== undefined) {
+        item.page_index = block.page_index;
+      }
+      if (block.text) {
+        item.text = block.text;
+      }
+      return item;
+    }
+    default:
+      return block.text || block.raw ? { type: 'text', text: block.text ?? block.raw ?? '' } : null;
+  }
+}
+
+function gatewayBlocks(value: unknown): ContentBlock[] {
+  if (typeof value === 'string') {
+    return value.trim() ? [{ type: 'text', text: value }] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => gatewayBlocks(item));
+  }
+  const record = asRecord(value);
+  if (Object.keys(record).length === 0) {
+    return [];
+  }
+
+  const type = String(record.type ?? '').toLowerCase();
+  switch (type) {
+    case 'text':
+    case 'input_text':
+    case 'output_text':
+      return [{ type: 'text', text: String(record.text ?? record.output_text ?? '') }];
+    case 'image':
+    case 'image_url':
+    case 'input_image': {
+      const image = asRecord(record.image_url ?? record.image);
+      return [{
+        type: 'image',
+        source_url: stringOrUndefined(image.url) ?? stringOrUndefined(image.image_url) ?? stringOrUndefined(record.source_url) ?? stringOrUndefined(record.image_url),
+        provider_file_id: stringOrUndefined(record.file_id) ?? stringOrUndefined(image.file_id) ?? stringOrUndefined(record.provider_file_id),
+        blob_id: stringOrUndefined(record.blob_id) ?? stringOrUndefined(image.blob_id),
+        mime_type: stringOrUndefined(record.mime_type) ?? stringOrUndefined(image.mime_type),
+        filename: stringOrUndefined(record.filename),
+        text: stringOrUndefined(record.text)
+      }];
+    }
+    case 'audio':
+    case 'input_audio': {
+      const audio = asRecord(record.audio);
+      return [{
+        type: 'audio',
+        source_url: stringOrUndefined(audio.url) ?? stringOrUndefined(audio.source_url) ?? stringOrUndefined(record.source_url),
+        provider_file_id: stringOrUndefined(audio.file_id) ?? stringOrUndefined(record.file_id),
+        blob_id: stringOrUndefined(record.blob_id),
+        mime_type: stringOrUndefined(audio.mime_type) ?? stringOrUndefined(record.mime_type),
+        filename: stringOrUndefined(record.filename),
+        text: stringOrUndefined(record.text),
+        start_ms: numberOrUndefined(record.start_ms),
+        end_ms: numberOrUndefined(record.end_ms),
+        duration_ms: numberOrUndefined(record.duration_ms)
+      }];
+    }
+    case 'video':
+    case 'input_video': {
+      const video = asRecord(record.video);
+      return [{
+        type: 'video',
+        source_url: stringOrUndefined(video.url) ?? stringOrUndefined(video.source_url) ?? stringOrUndefined(record.source_url),
+        provider_file_id: stringOrUndefined(video.file_id) ?? stringOrUndefined(record.file_id),
+        blob_id: stringOrUndefined(record.blob_id),
+        mime_type: stringOrUndefined(video.mime_type) ?? stringOrUndefined(record.mime_type),
+        filename: stringOrUndefined(record.filename),
+        text: stringOrUndefined(record.text),
+        start_ms: numberOrUndefined(record.start_ms),
+        end_ms: numberOrUndefined(record.end_ms),
+        duration_ms: numberOrUndefined(record.duration_ms)
+      }];
+    }
+    case 'file':
+    case 'input_file':
+    case 'document':
+      return [{
+        type: 'file',
+        source_url: stringOrUndefined(record.source_url),
+        provider_file_id: stringOrUndefined(record.file_id) ?? stringOrUndefined(record.provider_file_id),
+        blob_id: stringOrUndefined(record.blob_id),
+        mime_type: stringOrUndefined(record.mime_type),
+        filename: stringOrUndefined(record.filename),
+        text: stringOrUndefined(record.text),
+        page_index: numberOrUndefined(record.page_index),
+        start_ms: numberOrUndefined(record.start_ms),
+        end_ms: numberOrUndefined(record.end_ms)
+      }];
+    default:
+      if (typeof record.content === 'string' || Array.isArray(record.content) || (record.content && typeof record.content === 'object')) {
+        return gatewayBlocks(record.content);
+      }
+      return typeof record.text === 'string' && record.text.trim() ? [{ type: 'text', text: record.text }] : [];
+  }
+}
+
+function blocksText(blocks: ContentBlock[]): string {
+  return blocks
+    .map((block) => block.text ?? block.raw ?? '')
+    .filter((value) => typeof value === 'string' && value.trim().length > 0)
+    .join('');
 }
 
 function isThinkingType(value: unknown): boolean {

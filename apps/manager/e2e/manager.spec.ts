@@ -228,6 +228,25 @@ test('playground persisted flow writes memory and is inspectable in admin views'
   await expect(page.getByText('analysis completed')).toBeVisible();
 });
 
+test('conversation detail renders multimodal tool payloads from raw messages and timeline parts', async ({ page }) => {
+  await page.goto('/conversations/conv-mm-tool-1');
+  await expect(page.getByRole('heading', { name: /^conv-mm-tool-1$/i })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Tool calls (1)' }).click();
+  await expect(page.getByText('Tool input media · tool_input.attachments[0]')).toBeVisible();
+  await expect(page.getByAltText('diagram-tool.png').first()).toBeVisible();
+  await expect(page.getByText('tool-brief.pdf').first()).toBeVisible();
+
+  await page.getByRole('button', { name: 'Tool results (1)' }).click();
+  await expect(page.getByText('Tool output media · tool_output.content[1]')).toBeVisible();
+  await expect(page.getByText('audio transcript says Alice approved the exception').first()).toBeVisible();
+  await expect(page.getByText('inspection-report.pdf').first()).toBeVisible();
+
+  await expect(page.getByText('image_caption').first()).toBeVisible();
+  await expect(page.getByText('transcript').first()).toBeVisible();
+  await expect(page.getByText('document_text').first()).toBeVisible();
+});
+
 test('system runtime settings persist direct target overrides and can reset to defaults', async ({ page }) => {
   await page.goto('/settings/system');
   await expect(page.getByRole('heading', { name: /Control deployment-level runtime policy/i })).toBeVisible();

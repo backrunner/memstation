@@ -29,7 +29,15 @@
     type MemoryRouteKind
   } from '$lib/memory/routes';
   import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { AuditEventRecord, ConversationRecord, KeyMemoryRecord, MemoryDocument } from '$lib/types';
+  import type {
+    AuditEventRecord,
+    ConversationRecord,
+    KeyMemoryRecord,
+    MemoryDocument,
+    MemoryEvidence,
+    MessagePart,
+    MessagePartArtifact
+  } from '$lib/types';
 
   let loading = true;
   let saving = false;
@@ -53,6 +61,8 @@
   let currentCollectionHref = '/memory';
   let currentItemHref = '/memory';
   let sourcePreview: ConversationRecord['messages'] = [];
+  let sourcePartsByID = new Map<string, MessagePart>();
+  let sourceArtifactsByID = new Map<string, MessagePartArtifact>();
 
   $: activeUserId = $page.url.searchParams.get('user_id') ?? undefined;
   $: routeKind = normalizeMemoryRouteKind($page.params.kind ?? '');
@@ -72,6 +82,8 @@
   $: currentCollectionHref = routeKind ? memoryCollectionHref(routeKind, activeUserId) : '/memory';
   $: currentItemHref = routeKind ? memoryDetailHref(routeKind, $page.params.id ?? '', activeUserId) : '/memory';
   $: sourcePreview = sourceConversation?.messages?.slice(-4) ?? [];
+  $: sourcePartsByID = new Map((sourceConversation?.parts ?? []).map((part) => [part.part_id, part]));
+  $: sourceArtifactsByID = new Map((sourceConversation?.artifacts ?? []).map((artifact) => [artifact.artifact_id, artifact]));
 
   async function loadDetail(): Promise<void> {
     if (!$selectedTarget || !$targetState.session.authenticated || !routeKind || !$page.params.id) {
@@ -252,6 +264,51 @@
     return Object.entries(temporal as Record<string, unknown>)
       .filter(([, value]) => typeof value === 'string' && value.length > 0)
       .map(([key, value]) => [key, String(value)]);
+  }
+
+  function formatMilliseconds(value?: number): string {
+    if (value === undefined || value < 0) {
+      return '';
+    }
+    const totalSeconds = Math.floor(value / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    const millis = value % 1000;
+    return `${minutes}:${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
+  }
+
+  function formatLocator(evidence: MemoryEvidence, part?: MessagePart, artifact?: MessagePartArtifact): string {
+    const labels: string[] = [];
+    const sequenceNum = part?.sequence_num ?? evidence.sequence_num;
+    labels.push(`sequence ${sequenceNum}`);
+    if ((artifact?.page_index ?? part?.page_index ?? evidence.page_index) !== undefined) {
+      labels.push(`page ${artifact?.page_index ?? part?.page_index ?? evidence.page_index}`);
+    }
+    const start = artifact?.start_ms ?? evidence.start_ms;
+    const end = artifact?.end_ms ?? evidence.end_ms;
+    if (start !== undefined || end !== undefined) {
+      const startLabel = formatMilliseconds(start ?? 0) || '0:00.000';
+      const endLabel = formatMilliseconds(end ?? 0);
+      labels.push(endLabel ? `${startLabel} -> ${endLabel}` : startLabel);
+    }
+    return labels.join(' · ');
+  }
+
+  function evidencePreview(evidence: MemoryEvidence, part?: MessagePart, artifact?: MessagePartArtifact): string {
+    return evidence.excerpt_text ?? artifact?.text_content ?? part?.text_content ?? 'No excerpt captured.';
+  }
+
+  function evidenceTone(kind?: string): 'brand' | 'success' | 'warning' | 'danger' | 'muted' {
+    if (kind === 'artifact') {
+      return 'brand';
+    }
+    if (kind === 'source_part') {
+      return 'success';
+    }
+    if (kind === 'segment') {
+      return 'warning';
+    }
+    return 'muted';
   }
 </script>
 
@@ -551,6 +608,52 @@
                 <div class="toolbar">
                   {#each sourcePreview as message, index}
                     <ChatMessageCard message={{ ...message, id: `${sourceConversation.conversation_id}-${index}` }} />
+                  {/each}
+                </div>
+              {/if}
+            </div>
+
+            <div class="debug-block">
+              <div class="page-header">
+                <div>
+                  <div class="sidebar-label">Evidence</div>
+                  <h3 style="margin: 0;">Source parts and derived artifacts</h3>
+                </div>
+                <StatusBadge tone="muted" label={`${documentItem.evidences?.length ?? 0} item${(documentItem.evidences?.length ?? 0) === 1 ? '' : 's'}`} />
+              </div>
+              {#if (documentItem.evidences?.length ?? 0) === 0}
+                <div class="helper-text">No source evidence is attached to this memory document yet.</div>
+              {:else}
+                <div class="toolbar">
+                  {#each documentItem.evidences ?? [] as evidence}
+                    {@const part = evidence.part_id ? sourcePartsByID.get(evidence.part_id) : undefined}
+                    {@const artifact = evidence.artifact_id ? sourceArtifactsByID.get(evidence.artifact_id) : undefined}
+                    <div class="debug-block" style="background: var(--bg-panel-muted);">
+                      <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px; align-items: flex-start;">
+                        <div>
+                          <strong>{evidence.evidence_kind}</strong>
+                          <div class="subtle-text">{formatLocator(evidence, part, artifact)}</div>
+                        </div>
+                        <div class="runtime-field-status">
+                          <StatusBadge tone={evidenceTone(evidence.evidence_kind)} label={artifact?.artifact_type ?? part?.part_type ?? 'evidence'} />
+                          {#if evidence.weight !== undefined}
+                            <StatusBadge tone="muted" label={`weight ${evidence.weight.toFixed(2)}`} />
+                          {/if}
+                        </div>
+                      </div>
+                      <div class="message-body">{evidencePreview(evidence, part, artifact)}</div>
+                      <div class="inline-group" style="margin-top: 10px; flex-wrap: wrap;">
+                        {#if part}
+                          <StatusBadge tone="muted" label={`part ${part.part_id}`} />
+                        {/if}
+                        {#if artifact}
+                          <StatusBadge tone="brand" label={`artifact ${artifact.artifact_id}`} />
+                        {/if}
+                        {#if documentItem.conversation_id}
+                          <a class="button-ghost" href={`/conversations/${documentItem.conversation_id}?user_id=${encodeURIComponent(documentItem.user_id)}`}>Open conversation timeline</a>
+                        {/if}
+                      </div>
+                    </div>
                   {/each}
                 </div>
               {/if}

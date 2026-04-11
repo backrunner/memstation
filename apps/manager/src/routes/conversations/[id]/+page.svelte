@@ -154,6 +154,54 @@
             <ChatMessageCard message={{ ...message, id: message.id ?? `${detail.conversation_id}-${index}` }} />
           {/each}
         </div>
+        {#if (detail.parts?.length ?? 0) > 0}
+          <div class="debug-block" style="margin-top: 18px;">
+            <div class="page-header">
+              <div>
+                <div class="sidebar-label">Materialized timeline</div>
+                <h2 class="page-title" style="font-size: 1.15rem;">Message parts and extracted artifacts</h2>
+              </div>
+            </div>
+            <div class="toolbar" style="display: grid; gap: 12px;">
+              {#each detail.parts ?? [] as part}
+                <div class="debug-block" style="background: var(--bg-panel-muted);">
+                  <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
+                    <strong>{part.role} · {part.part_type}</strong>
+                    <span class="subtle-text">seq {part.sequence_num} · part {part.part_index}</span>
+                  </div>
+                  {#if part.source_url && part.part_type === 'image'}
+                    <img src={part.source_url} alt={part.filename ?? 'image part'} style="max-width: 100%; border-radius: 10px;" />
+                  {:else if part.source_url && part.part_type === 'audio'}
+                    <audio controls style="width: 100%;" src={part.source_url}></audio>
+                  {:else if part.source_url && part.part_type === 'video'}
+                    <!-- svelte-ignore a11y_media_has_caption -->
+                    <video controls style="width: 100%; border-radius: 10px;" src={part.source_url}></video>
+                  {:else if part.source_url && part.part_type === 'file'}
+                    <a class="link-inline" href={part.source_url} target="_blank" rel="noreferrer">{part.filename ?? 'Open file'}</a>
+                  {/if}
+                  {#if part.text_content}
+                    <div class="subtle-text" style="margin-top: 8px;">{part.text_content}</div>
+                  {/if}
+                  {#if (detail.artifacts ?? []).filter((artifact) => artifact.part_id === part.part_id).length > 0}
+                    <div class="toolbar" style="display: grid; gap: 8px; margin-top: 10px;">
+                      {#each (detail.artifacts ?? []).filter((artifact) => artifact.part_id === part.part_id) as artifact}
+                        <div class="debug-block">
+                          <div class="inline-group" style="justify-content: space-between;">
+                            <strong>{artifact.artifact_type}</strong>
+                            <span class="subtle-text">{artifact.status}</span>
+                          </div>
+                          {#if artifact.text_content}
+                            <div class="message-body">{artifact.text_content}</div>
+                          {/if}
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
       </section>
 
       <section class="debug-column">

@@ -263,6 +263,9 @@ function createConversationRecord({
   conversationId,
   userId,
   messages,
+  parts = [],
+  artifacts = [],
+  segments = [],
   metadata = {},
   finalizeStatus = 'ended',
   summaryStatus = 'completed',
@@ -283,6 +286,9 @@ function createConversationRecord({
     summary_status: summaryStatus,
     analysis_status: analysisStatus,
     messages,
+    parts,
+    artifacts,
+    segments,
     usage,
     metadata,
     created_at: updatedAt,
@@ -1016,6 +1022,7 @@ function handleGatewayRequest(protocol, req, res, body) {
 function createState() {
   const createdAt = isoOffset(180);
   const secondConversationAt = isoOffset(90);
+  const multimodalConversationAt = isoOffset(30);
   const now = isoOffset(5);
 
   const conversations = {
@@ -1088,6 +1095,270 @@ function createState() {
       provider: 'anthropic',
       requestFormat: 'anthropic_messages',
       usage: { input_tokens: 22, output_tokens: 18, total_tokens: 40 }
+    }),
+    'conv-mm-tool-1': createConversationRecord({
+      conversationId: 'conv-mm-tool-1',
+      userId: 'admin',
+      messages: [
+        {
+          id: 'msg-mm-user-1',
+          role: 'user',
+          text: 'Inspect the screenshot and meeting clip from the agent tool payload.',
+          blocks: [
+            {
+              type: 'text',
+              text: 'Inspect the screenshot and meeting clip from the agent tool payload.'
+            }
+          ]
+        },
+        {
+          id: 'msg-mm-assistant-1',
+          role: 'assistant',
+          text: 'Calling inspect_assets on the tool payload.',
+          tool_calls: [
+            {
+              id: 'tool-mm-1',
+              name: 'inspect_assets',
+              arguments: {
+                prompt: 'extract release evidence',
+                attachments: [
+                  {
+                    type: 'input_image',
+                    image_url: {
+                      url: 'https://example.com/tool-diagram.png',
+                      mime_type: 'image/png'
+                    },
+                    filename: 'diagram-tool.png',
+                    text: 'diagram notes that Chen owns the rollback plan'
+                  },
+                  {
+                    type: 'file',
+                    source_url: 'https://example.com/tool-brief.pdf',
+                    mime_type: 'application/pdf',
+                    filename: 'tool-brief.pdf',
+                    text: 'page 2 mentions Chen as the rollback owner'
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          id: 'msg-mm-tool-1',
+          role: 'tool',
+          text: 'inspect_assets returned multimodal evidence.',
+          tool_results: [
+            {
+              tool_call_id: 'tool-mm-1',
+              name: 'inspect_assets',
+              output: {
+                summary: 'Agent extracted evidence from image, audio, and PDF assets.',
+                content: [
+                  {
+                    type: 'image',
+                    source_url: 'https://example.com/frame-17.png',
+                    mime_type: 'image/png',
+                    filename: 'frame-17.png',
+                    caption: 'frame 17 shows the approval badge for release 417',
+                    start_ms: 1200,
+                    end_ms: 1800
+                  },
+                  {
+                    type: 'audio',
+                    source_url: 'https://example.com/meeting-snippet.mp3',
+                    mime_type: 'audio/mpeg',
+                    filename: 'meeting-snippet.mp3',
+                    transcript: 'audio transcript says Alice approved the exception',
+                    start_ms: 1180,
+                    end_ms: 4820
+                  },
+                  {
+                    type: 'file',
+                    source_url: 'https://example.com/inspection-report.pdf',
+                    mime_type: 'application/pdf',
+                    filename: 'inspection-report.pdf',
+                    parsed_text: 'inspection report confirms Chen owns rollback approval',
+                    page_index: 2
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      parts: [
+        {
+          part_id: 'part:conv-mm-tool-1:001:000',
+          user_id: 'admin',
+          conversation_id: 'conv-mm-tool-1',
+          sequence_num: 1,
+          part_index: 0,
+          role: 'assistant',
+          part_type: 'tool_use',
+          text_content: 'inspect_assets',
+          raw_payload: '{"prompt":"extract release evidence"}',
+          metadata: {
+            tool_call_id: 'tool-mm-1',
+            name: 'inspect_assets'
+          }
+        },
+        {
+          part_id: 'part:conv-mm-tool-1:001:001',
+          user_id: 'admin',
+          conversation_id: 'conv-mm-tool-1',
+          sequence_num: 1,
+          part_index: 1,
+          role: 'assistant',
+          part_type: 'image',
+          mime_type: 'image/png',
+          source_url: 'https://example.com/tool-diagram.png',
+          filename: 'diagram-tool.png',
+          text_content: 'diagram notes that Chen owns the rollback plan',
+          metadata: {
+            tool_call_id: 'tool-mm-1',
+            tool_name: 'inspect_assets',
+            tool_payload_kind: 'tool_input',
+            tool_payload_path: 'tool_input.attachments[0]'
+          }
+        },
+        {
+          part_id: 'part:conv-mm-tool-1:001:002',
+          user_id: 'admin',
+          conversation_id: 'conv-mm-tool-1',
+          sequence_num: 1,
+          part_index: 2,
+          role: 'assistant',
+          part_type: 'file',
+          mime_type: 'application/pdf',
+          source_url: 'https://example.com/tool-brief.pdf',
+          filename: 'tool-brief.pdf',
+          text_content: 'page 2 mentions Chen as the rollback owner',
+          page_index: 2,
+          metadata: {
+            tool_call_id: 'tool-mm-1',
+            tool_name: 'inspect_assets',
+            tool_payload_kind: 'tool_input',
+            tool_payload_path: 'tool_input.attachments[1]'
+          }
+        },
+        {
+          part_id: 'part:conv-mm-tool-1:002:000',
+          user_id: 'admin',
+          conversation_id: 'conv-mm-tool-1',
+          sequence_num: 2,
+          part_index: 0,
+          role: 'tool',
+          part_type: 'tool_result',
+          text_content: 'Agent extracted evidence from image, audio, and PDF assets.',
+          raw_payload: '{"summary":"Agent extracted evidence from image, audio, and PDF assets."}',
+          metadata: {
+            tool_call_id: 'tool-mm-1',
+            name: 'inspect_assets'
+          }
+        },
+        {
+          part_id: 'part:conv-mm-tool-1:002:001',
+          user_id: 'admin',
+          conversation_id: 'conv-mm-tool-1',
+          sequence_num: 2,
+          part_index: 1,
+          role: 'tool',
+          part_type: 'image',
+          mime_type: 'image/png',
+          source_url: 'https://example.com/frame-17.png',
+          filename: 'frame-17.png',
+          text_content: 'frame 17 shows the approval badge for release 417',
+          start_ms: 1200,
+          end_ms: 1800,
+          metadata: {
+            tool_call_id: 'tool-mm-1',
+            tool_name: 'inspect_assets',
+            tool_payload_kind: 'tool_output',
+            tool_payload_path: 'tool_output.content[0]'
+          }
+        },
+        {
+          part_id: 'part:conv-mm-tool-1:002:002',
+          user_id: 'admin',
+          conversation_id: 'conv-mm-tool-1',
+          sequence_num: 2,
+          part_index: 2,
+          role: 'tool',
+          part_type: 'audio',
+          mime_type: 'audio/mpeg',
+          source_url: 'https://example.com/meeting-snippet.mp3',
+          filename: 'meeting-snippet.mp3',
+          text_content: 'audio transcript says Alice approved the exception',
+          start_ms: 1180,
+          end_ms: 4820,
+          metadata: {
+            tool_call_id: 'tool-mm-1',
+            tool_name: 'inspect_assets',
+            tool_payload_kind: 'tool_output',
+            tool_payload_path: 'tool_output.content[1]'
+          }
+        },
+        {
+          part_id: 'part:conv-mm-tool-1:002:003',
+          user_id: 'admin',
+          conversation_id: 'conv-mm-tool-1',
+          sequence_num: 2,
+          part_index: 3,
+          role: 'tool',
+          part_type: 'file',
+          mime_type: 'application/pdf',
+          source_url: 'https://example.com/inspection-report.pdf',
+          filename: 'inspection-report.pdf',
+          text_content: 'inspection report confirms Chen owns rollback approval',
+          page_index: 2,
+          metadata: {
+            tool_call_id: 'tool-mm-1',
+            tool_name: 'inspect_assets',
+            tool_payload_kind: 'tool_output',
+            tool_payload_path: 'tool_output.content[2]'
+          }
+        }
+      ],
+      artifacts: [
+        {
+          artifact_id: 'artifact-mm-tool-image-caption',
+          user_id: 'admin',
+          conversation_id: 'conv-mm-tool-1',
+          part_id: 'part:conv-mm-tool-1:002:001',
+          artifact_type: 'image_caption',
+          status: 'completed',
+          text_content: 'frame 17 shows the approval badge for release 417'
+        },
+        {
+          artifact_id: 'artifact-mm-tool-audio-transcript',
+          user_id: 'admin',
+          conversation_id: 'conv-mm-tool-1',
+          part_id: 'part:conv-mm-tool-1:002:002',
+          artifact_type: 'transcript',
+          status: 'completed',
+          text_content: 'audio transcript says Alice approved the exception',
+          start_ms: 1180,
+          end_ms: 4820
+        },
+        {
+          artifact_id: 'artifact-mm-tool-file-parse',
+          user_id: 'admin',
+          conversation_id: 'conv-mm-tool-1',
+          part_id: 'part:conv-mm-tool-1:002:003',
+          artifact_type: 'document_text',
+          status: 'completed',
+          text_content: 'inspection report confirms Chen owns rollback approval',
+          page_index: 2
+        }
+      ],
+      metadata: {
+        multimodal: true,
+        source_retain: true
+      },
+      updatedAt: multimodalConversationAt,
+      provider: 'openai_responses',
+      requestFormat: 'responses',
+      usage: { input_tokens: 32, output_tokens: 24, total_tokens: 56 }
     })
   };
 
