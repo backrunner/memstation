@@ -342,7 +342,7 @@ func TestAdminConfigRuntimeUpdates(t *testing.T) {
 	router := newTestRouter()
 	cookies := loginCookies(t, router)
 
-	updateRequest := httptest.NewRequest(http.MethodPut, "/api/admin/config", bytes.NewBufferString(`{"runtime":{"default_provider":"anthropic","message_threshold":12,"provider_timeout_seconds":45,"multimodal_enabled":false,"multimodal_storage_backend":"s3","multimodal_storage_bucket":"memstation-assets","multimodal_extract_image_model":"vision-v2","multimodal_audio_transcription_enabled":false,"multimodal_max_asset_bytes":2048,"multimodal_allowed_mime_types":["image/png","audio/mpeg"]}}`))
+	updateRequest := httptest.NewRequest(http.MethodPut, "/api/admin/config", bytes.NewBufferString(`{"runtime":{"default_provider":"anthropic","message_threshold":12,"provider_timeout_seconds":45,"memory_relation_max_hops":3,"memory_relation_hop_decay_lambda":0.5,"memory_relation_hop_decay_exponent":1.6,"multimodal_enabled":false,"multimodal_storage_backend":"s3","multimodal_storage_bucket":"memstation-assets","multimodal_extract_image_model":"vision-v2","multimodal_audio_transcription_enabled":false,"multimodal_max_asset_bytes":2048,"multimodal_allowed_mime_types":["image/png","audio/mpeg"]}}`))
 	updateRequest.Header.Set("Content-Type", "application/json")
 	for _, cookie := range cookies {
 		updateRequest.AddCookie(cookie)
@@ -366,6 +366,18 @@ func TestAdminConfigRuntimeUpdates(t *testing.T) {
 	}
 	if !strings.Contains(updateRecorder.Body.String(), `"provider_timeout_seconds":60`) {
 		t.Fatalf("expected live runtime to keep restart-only provider timeout, got %s", updateRecorder.Body.String())
+	}
+	if runtimePayload["memory_relation_max_hops"] != float64(3) {
+		t.Fatalf("expected relation max hops override, got %#v", runtimePayload["memory_relation_max_hops"])
+	}
+	if runtimeLive["memory_relation_max_hops"] != float64(3) {
+		t.Fatalf("expected live relation max hops update, got %#v", runtimeLive["memory_relation_max_hops"])
+	}
+	if runtimeLive["memory_relation_hop_decay_lambda"] != 0.5 {
+		t.Fatalf("expected live relation decay lambda update, got %#v", runtimeLive["memory_relation_hop_decay_lambda"])
+	}
+	if runtimeLive["memory_relation_hop_decay_exponent"] != 1.6 {
+		t.Fatalf("expected live relation decay exponent update, got %#v", runtimeLive["memory_relation_hop_decay_exponent"])
 	}
 	if runtimePayload["multimodal_storage_backend"] != "s3" {
 		t.Fatalf("expected multimodal storage backend override, got %#v", runtimePayload["multimodal_storage_backend"])
@@ -632,25 +644,28 @@ func newTestRouter() http.Handler {
 		Source:       "seed",
 	})
 	cfg := bootstrap.Config{
-		Version:                 "0.1.0",
-		SessionCookieSecure:     false,
-		DefaultProvider:         domain.ProviderOpenAICompatible,
-		InternalDefaultProvider: domain.ProviderOpenAICompatible,
-		VectorStoreBackend:      "pgvector",
-		OpenAIBaseURL:           "https://api.openai.com/v1",
-		AnthropicBaseURL:        "https://api.anthropic.com/v1",
-		GeminiBaseURL:           "https://generativelanguage.googleapis.com/v1beta",
-		EmbeddingBaseURL:        "https://api.openai.com/v1",
-		ConversationTimeout:     15 * time.Minute,
-		ProviderTimeout:         60 * time.Second,
-		MessageThreshold:        32,
-		TokenThreshold:          64000,
-		MaxContextTokens:        8192,
-		MaxInjectionTokens:      2048,
-		RateLimitRPS:            20,
-		RateLimitBurst:          40,
-		CacheTTL:                120 * time.Second,
-		SessionCookieCrossSite:  false,
+		Version:                        "0.1.0",
+		SessionCookieSecure:            false,
+		DefaultProvider:                domain.ProviderOpenAICompatible,
+		InternalDefaultProvider:        domain.ProviderOpenAICompatible,
+		VectorStoreBackend:             "pgvector",
+		OpenAIBaseURL:                  "https://api.openai.com/v1",
+		AnthropicBaseURL:               "https://api.anthropic.com/v1",
+		GeminiBaseURL:                  "https://generativelanguage.googleapis.com/v1beta",
+		EmbeddingBaseURL:               "https://api.openai.com/v1",
+		ConversationTimeout:            15 * time.Minute,
+		ProviderTimeout:                60 * time.Second,
+		MessageThreshold:               32,
+		TokenThreshold:                 64000,
+		MaxContextTokens:               8192,
+		MaxInjectionTokens:             2048,
+		MemoryRelationMaxHops:          2,
+		MemoryRelationHopDecayLambda:   0.35,
+		MemoryRelationHopDecayExponent: 1.25,
+		RateLimitRPS:                   20,
+		RateLimitBurst:                 40,
+		CacheTTL:                       120 * time.Second,
+		SessionCookieCrossSite:         false,
 		Multimodal: bootstrap.MultimodalConfig{
 			Enabled:                   true,
 			StorageBackend:            "local",
@@ -721,6 +736,11 @@ func newTestRouter() http.Handler {
 	usage := usageservice.NewService(nil, conversations)
 	admin.AttachUserRuntime(users, apiKeys, usage)
 	engine := memoryservice.NewEngine(memoryRepo, vector.NewPGVectorStore(nil))
+	engine.SetRelationRecallConfig(memoryservice.RelationRecallConfig{
+		MaxHops:          cfg.MemoryRelationMaxHops,
+		HopDecayLambda:   cfg.MemoryRelationHopDecayLambda,
+		HopDecayExponent: cfg.MemoryRelationHopDecayExponent,
+	})
 	memorySvc := memoryservice.NewService(engine, memoryRepo)
 	session := security.NewAdminSessionManager(e2eTestAdminToken, time.Hour)
 	rateLimiter := security.NewRateLimiter(float64(cfg.RateLimitRPS), cfg.RateLimitBurst)
@@ -744,6 +764,13 @@ func newTestRouter() http.Handler {
 		SetThresholds:              func(messageThreshold, tokenThreshold int) {},
 		SetConversationTimeout: func(timeout time.Duration) {
 			scheduler.UpdateTimeoutWindow(timeout)
+		},
+		SetMemoryRelationRecall: func(maxHops int, decayLambda, decayExponent float64) {
+			engine.SetRelationRecallConfig(memoryservice.RelationRecallConfig{
+				MaxHops:          maxHops,
+				HopDecayLambda:   decayLambda,
+				HopDecayExponent: decayExponent,
+			})
 		},
 		SetRateLimit: func(rps, burst int) {
 			rateLimiter.Update(float64(rps), burst)

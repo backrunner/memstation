@@ -849,6 +849,107 @@ func TestMemoryEngineSearchWithoutVectorsHonorsRequestedTypesWithoutSegmentBackf
 	}
 }
 
+func TestMemoryEngineSearchPenalizesDistantRelationHops(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := sql.NewInMemoryMemoryRepository()
+	vectors := vector.NewPGVectorStore(nil)
+	engine := memoryservice.NewEngine(repo, vectors)
+	engine.SetRelationRecallConfig(memoryservice.RelationRecallConfig{
+		MaxHops:          3,
+		HopDecayLambda:   0.35,
+		HopDecayExponent: 1.25,
+	})
+
+	seed := domain.MemoryDocument{
+		ID:          "summary:graph-hop:seed",
+		NodeID:      "node:graph-hop:seed",
+		UserID:      "user-1",
+		Type:        domain.MemoryTypeSummary,
+		Content:     "primary rollout recall anchor",
+		Importance:  1,
+		DecayFactor: 1,
+	}
+	hop1 := domain.MemoryDocument{
+		ID:          "fact:graph-hop:1",
+		NodeID:      "node:graph-hop:1",
+		UserID:      "user-1",
+		Type:        domain.MemoryTypeFact,
+		Content:     "first hop related memory",
+		Importance:  1,
+		DecayFactor: 1,
+	}
+	hop2 := domain.MemoryDocument{
+		ID:          "fact:graph-hop:2",
+		NodeID:      "node:graph-hop:2",
+		UserID:      "user-1",
+		Type:        domain.MemoryTypeFact,
+		Content:     "second hop related memory",
+		Importance:  1,
+		DecayFactor: 1,
+	}
+	hop3 := domain.MemoryDocument{
+		ID:          "fact:graph-hop:3",
+		NodeID:      "node:graph-hop:3",
+		UserID:      "user-1",
+		Type:        domain.MemoryTypeFact,
+		Content:     "third hop related memory",
+		Importance:  1,
+		DecayFactor: 1,
+	}
+	for _, doc := range []domain.MemoryDocument{seed, hop1, hop2, hop3} {
+		if err := repo.StoreDocument(ctx, doc); err != nil {
+			t.Fatalf("store graph doc %s: %v", doc.ID, err)
+		}
+	}
+	for _, relation := range []domain.MemoryRelation{
+		{UserID: "user-1", SrcNodeID: seed.NodeID, DstNodeID: hop1.NodeID, RelationType: "derived_from", Weight: 1, Source: "test"},
+		{UserID: "user-1", SrcNodeID: hop1.NodeID, DstNodeID: hop2.NodeID, RelationType: "derived_from", Weight: 1, Source: "test"},
+		{UserID: "user-1", SrcNodeID: hop2.NodeID, DstNodeID: hop3.NodeID, RelationType: "derived_from", Weight: 1, Source: "test"},
+	} {
+		if err := repo.LinkDocuments(ctx, relation); err != nil {
+			t.Fatalf("link graph relation %+v: %v", relation, err)
+		}
+	}
+	if err := vectors.Upsert(ctx, domain.VectorUpsertRequest{
+		UserID:           seed.UserID,
+		NodeID:           seed.NodeID,
+		NodeType:         string(seed.Type),
+		EmbeddingVersion: 1,
+		EmbeddingModel:   "test-embedding",
+		ContentHash:      seed.Content,
+		Vector:           vector.EmbedText(seed.Content),
+	}); err != nil {
+		t.Fatalf("upsert seed vector: %v", err)
+	}
+
+	result, err := engine.Search(ctx, domain.SearchInput{
+		UserID: "user-1",
+		Query:  seed.Content,
+		TopN:   4,
+	})
+	if err != nil {
+		t.Fatalf("search graph hop penalty: %v", err)
+	}
+
+	positions := map[string]int{}
+	for idx, item := range result.Memories {
+		positions[item.NodeID] = idx
+	}
+	for _, nodeID := range []string{hop1.NodeID, hop2.NodeID, hop3.NodeID} {
+		if _, ok := positions[nodeID]; !ok {
+			t.Fatalf("expected recalled node %s in results, got %+v", nodeID, result.Memories)
+		}
+	}
+	if positions[hop1.NodeID] >= positions[hop2.NodeID] {
+		t.Fatalf("expected 1-hop memory to rank above 2-hop memory, got %+v", result.Memories)
+	}
+	if positions[hop2.NodeID] >= positions[hop3.NodeID] {
+		t.Fatalf("expected 2-hop memory to rank above 3-hop memory, got %+v", result.Memories)
+	}
+}
+
 func TestMemoryEngineSearchIncludesGenerationlessKeyMemoriesAlongsideScopedDocs(t *testing.T) {
 	t.Parallel()
 

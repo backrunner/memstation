@@ -24,6 +24,9 @@ type Snapshot struct {
 	TokenThreshold                      int             `json:"token_threshold"`
 	MaxContextTokens                    int             `json:"max_context_tokens"`
 	MaxInjectionTokens                  int             `json:"max_injection_tokens"`
+	MemoryRelationMaxHops               int             `json:"memory_relation_max_hops"`
+	MemoryRelationHopDecayLambda        float64         `json:"memory_relation_hop_decay_lambda"`
+	MemoryRelationHopDecayExponent      float64         `json:"memory_relation_hop_decay_exponent"`
 	RateLimitRPS                        int             `json:"rate_limit_rps"`
 	RateLimitBurst                      int             `json:"rate_limit_burst"`
 	CacheTTLSeconds                     int             `json:"cache_ttl_seconds"`
@@ -55,6 +58,7 @@ type LiveApplier struct {
 	SetInternalDefaultProvider func(domain.Provider)
 	SetThresholds              func(messageThreshold, tokenThreshold int)
 	SetConversationTimeout     func(time.Duration)
+	SetMemoryRelationRecall    func(maxHops int, decayLambda, decayExponent float64)
 	SetRateLimit               func(rps, burst int)
 }
 
@@ -68,6 +72,9 @@ type Overrides struct {
 	TokenThreshold                      *int
 	MaxContextTokens                    *int
 	MaxInjectionTokens                  *int
+	MemoryRelationMaxHops               *int
+	MemoryRelationHopDecayLambda        *float64
+	MemoryRelationHopDecayExponent      *float64
 	RateLimitRPS                        *int
 	RateLimitBurst                      *int
 	CacheTTLSeconds                     *int
@@ -108,6 +115,9 @@ func DefaultsFromConfig(cfg bootstrap.Config) Snapshot {
 		TokenThreshold:                      cfg.TokenThreshold,
 		MaxContextTokens:                    cfg.MaxContextTokens,
 		MaxInjectionTokens:                  cfg.MaxInjectionTokens,
+		MemoryRelationMaxHops:               cfg.MemoryRelationMaxHops,
+		MemoryRelationHopDecayLambda:        cfg.MemoryRelationHopDecayLambda,
+		MemoryRelationHopDecayExponent:      cfg.MemoryRelationHopDecayExponent,
 		RateLimitRPS:                        cfg.RateLimitRPS,
 		RateLimitBurst:                      cfg.RateLimitBurst,
 		CacheTTLSeconds:                     int(cfg.CacheTTL.Seconds()),
@@ -221,6 +231,12 @@ func (s *Service) Update(ctx context.Context, fields map[string]any) (map[string
 		hooks.SetConversationTimeout(time.Duration(desired.ConversationTimeoutSeconds) * time.Second)
 		live.ConversationTimeoutSeconds = desired.ConversationTimeoutSeconds
 	}
+	if hooks.SetMemoryRelationRecall != nil {
+		hooks.SetMemoryRelationRecall(desired.MemoryRelationMaxHops, desired.MemoryRelationHopDecayLambda, desired.MemoryRelationHopDecayExponent)
+		live.MemoryRelationMaxHops = desired.MemoryRelationMaxHops
+		live.MemoryRelationHopDecayLambda = desired.MemoryRelationHopDecayLambda
+		live.MemoryRelationHopDecayExponent = desired.MemoryRelationHopDecayExponent
+	}
 	if hooks.SetRateLimit != nil {
 		hooks.SetRateLimit(desired.RateLimitRPS, desired.RateLimitBurst)
 		live.RateLimitRPS = desired.RateLimitRPS
@@ -246,6 +262,9 @@ func (s Snapshot) AsMap() map[string]any {
 		"token_threshold":                         s.TokenThreshold,
 		"max_context_tokens":                      s.MaxContextTokens,
 		"max_injection_tokens":                    s.MaxInjectionTokens,
+		"memory_relation_max_hops":                s.MemoryRelationMaxHops,
+		"memory_relation_hop_decay_lambda":        s.MemoryRelationHopDecayLambda,
+		"memory_relation_hop_decay_exponent":      s.MemoryRelationHopDecayExponent,
 		"rate_limit_rps":                          s.RateLimitRPS,
 		"rate_limit_burst":                        s.RateLimitBurst,
 		"cache_ttl_seconds":                       s.CacheTTLSeconds,
@@ -276,6 +295,9 @@ func (s Snapshot) ApplyConfig(cfg bootstrap.Config) bootstrap.Config {
 	cfg.TokenThreshold = s.TokenThreshold
 	cfg.MaxContextTokens = s.MaxContextTokens
 	cfg.MaxInjectionTokens = s.MaxInjectionTokens
+	cfg.MemoryRelationMaxHops = s.MemoryRelationMaxHops
+	cfg.MemoryRelationHopDecayLambda = s.MemoryRelationHopDecayLambda
+	cfg.MemoryRelationHopDecayExponent = s.MemoryRelationHopDecayExponent
 	cfg.RateLimitRPS = s.RateLimitRPS
 	cfg.RateLimitBurst = s.RateLimitBurst
 	cfg.CacheTTL = time.Duration(s.CacheTTLSeconds) * time.Second
@@ -326,6 +348,15 @@ func (o Overrides) Apply(defaults Snapshot) Snapshot {
 	}
 	if o.MaxInjectionTokens != nil {
 		snapshot.MaxInjectionTokens = *o.MaxInjectionTokens
+	}
+	if o.MemoryRelationMaxHops != nil {
+		snapshot.MemoryRelationMaxHops = *o.MemoryRelationMaxHops
+	}
+	if o.MemoryRelationHopDecayLambda != nil {
+		snapshot.MemoryRelationHopDecayLambda = *o.MemoryRelationHopDecayLambda
+	}
+	if o.MemoryRelationHopDecayExponent != nil {
+		snapshot.MemoryRelationHopDecayExponent = *o.MemoryRelationHopDecayExponent
 	}
 	if o.RateLimitRPS != nil {
 		snapshot.RateLimitRPS = *o.RateLimitRPS
@@ -397,6 +428,9 @@ func (s *Service) loadOverrides(ctx context.Context) (Overrides, error) {
 			token_threshold,
 			max_context_tokens,
 			max_injection_tokens,
+			memory_relation_max_hops,
+			memory_relation_hop_decay_lambda,
+			memory_relation_hop_decay_exponent,
 			rate_limit_rps,
 			rate_limit_burst,
 			cache_ttl_seconds,
@@ -428,6 +462,9 @@ func (s *Service) loadOverrides(ctx context.Context) (Overrides, error) {
 		tokenThreshold                      sql.NullInt64
 		maxContextTokens                    sql.NullInt64
 		maxInjectionTokens                  sql.NullInt64
+		memoryRelationMaxHops               sql.NullInt64
+		memoryRelationHopDecayLambda        sql.NullFloat64
+		memoryRelationHopDecayExponent      sql.NullFloat64
 		rateLimitRPS                        sql.NullInt64
 		rateLimitBurst                      sql.NullInt64
 		cacheTTLSeconds                     sql.NullInt64
@@ -456,6 +493,9 @@ func (s *Service) loadOverrides(ctx context.Context) (Overrides, error) {
 		&tokenThreshold,
 		&maxContextTokens,
 		&maxInjectionTokens,
+		&memoryRelationMaxHops,
+		&memoryRelationHopDecayLambda,
+		&memoryRelationHopDecayExponent,
 		&rateLimitRPS,
 		&rateLimitBurst,
 		&cacheTTLSeconds,
@@ -516,6 +556,18 @@ func (s *Service) loadOverrides(ctx context.Context) (Overrides, error) {
 	if maxInjectionTokens.Valid {
 		value := int(maxInjectionTokens.Int64)
 		overrides.MaxInjectionTokens = &value
+	}
+	if memoryRelationMaxHops.Valid {
+		value := int(memoryRelationMaxHops.Int64)
+		overrides.MemoryRelationMaxHops = &value
+	}
+	if memoryRelationHopDecayLambda.Valid {
+		value := memoryRelationHopDecayLambda.Float64
+		overrides.MemoryRelationHopDecayLambda = &value
+	}
+	if memoryRelationHopDecayExponent.Valid {
+		value := memoryRelationHopDecayExponent.Float64
+		overrides.MemoryRelationHopDecayExponent = &value
 	}
 	if rateLimitRPS.Valid {
 		value := int(rateLimitRPS.Int64)
@@ -615,6 +667,7 @@ func (s *Service) persistOverrides(ctx context.Context, overrides Overrides) err
 		}
 		allowedMIMETypesJSON = string(payload)
 	}
+	now := time.Now().UTC()
 
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO system_settings (
@@ -628,6 +681,9 @@ func (s *Service) persistOverrides(ctx context.Context, overrides Overrides) err
 			token_threshold,
 			max_context_tokens,
 			max_injection_tokens,
+			memory_relation_max_hops,
+			memory_relation_hop_decay_lambda,
+			memory_relation_hop_decay_exponent,
 			rate_limit_rps,
 			rate_limit_burst,
 			cache_ttl_seconds,
@@ -648,7 +704,7 @@ func (s *Service) persistOverrides(ctx context.Context, overrides Overrides) err
 			created_at,
 			updated_at
 		) VALUES (
-			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27::jsonb,$28,$28
+			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30::jsonb,$31,$31
 		)
 		ON CONFLICT (id) DO UPDATE SET
 			default_provider = EXCLUDED.default_provider,
@@ -660,6 +716,9 @@ func (s *Service) persistOverrides(ctx context.Context, overrides Overrides) err
 			token_threshold = EXCLUDED.token_threshold,
 			max_context_tokens = EXCLUDED.max_context_tokens,
 			max_injection_tokens = EXCLUDED.max_injection_tokens,
+			memory_relation_max_hops = EXCLUDED.memory_relation_max_hops,
+			memory_relation_hop_decay_lambda = EXCLUDED.memory_relation_hop_decay_lambda,
+			memory_relation_hop_decay_exponent = EXCLUDED.memory_relation_hop_decay_exponent,
 			rate_limit_rps = EXCLUDED.rate_limit_rps,
 			rate_limit_burst = EXCLUDED.rate_limit_burst,
 			cache_ttl_seconds = EXCLUDED.cache_ttl_seconds,
@@ -689,6 +748,9 @@ func (s *Service) persistOverrides(ctx context.Context, overrides Overrides) err
 		nullableInt(overrides.TokenThreshold),
 		nullableInt(overrides.MaxContextTokens),
 		nullableInt(overrides.MaxInjectionTokens),
+		nullableInt(overrides.MemoryRelationMaxHops),
+		nullableFloat64(overrides.MemoryRelationHopDecayLambda),
+		nullableFloat64(overrides.MemoryRelationHopDecayExponent),
 		nullableInt(overrides.RateLimitRPS),
 		nullableInt(overrides.RateLimitBurst),
 		nullableInt(overrides.CacheTTLSeconds),
@@ -706,7 +768,8 @@ func (s *Service) persistOverrides(ctx context.Context, overrides Overrides) err
 		nullableBool(overrides.MultimodalVideoFrameSamplingEnabled),
 		nullableInt64(overrides.MultimodalMaxAssetBytes),
 		allowedMIMETypesJSON,
-		time.Now().UTC(),
+		now,
+		now,
 	)
 	return err
 }
@@ -766,6 +829,24 @@ func metadataForOverrides(overrides Overrides) map[string]FieldMeta {
 			Source:      sourceFor(overrides.MaxInjectionTokens != nil),
 			Category:    "memory",
 			Description: "Injection budget used by memory context assembly and related defaults.",
+		},
+		"memory_relation_max_hops": {
+			ApplyMode:   "live",
+			Source:      sourceFor(overrides.MemoryRelationMaxHops != nil),
+			Category:    "memory",
+			Description: "Maximum bounded graph depth used by online relation expansion during memory recall.",
+		},
+		"memory_relation_hop_decay_lambda": {
+			ApplyMode:   "live",
+			Source:      sourceFor(overrides.MemoryRelationHopDecayLambda != nil),
+			Category:    "memory",
+			Description: "Strength of the stretched-exponential hop penalty; higher values suppress distant graph relations more aggressively.",
+		},
+		"memory_relation_hop_decay_exponent": {
+			ApplyMode:   "live",
+			Source:      sourceFor(overrides.MemoryRelationHopDecayExponent != nil),
+			Category:    "memory",
+			Description: "Curvature of the hop penalty; values above 1 increase the distance penalty faster than linear growth.",
 		},
 		"rate_limit_rps": {
 			ApplyMode:   "live",
@@ -942,6 +1023,33 @@ func applyFieldOverrides(base Overrides, fields map[string]any) (Overrides, erro
 				return Overrides{}, err
 			}
 			next.MaxInjectionTokens = value
+		case "memory_relation_max_hops":
+			value, err := intOverride(raw)
+			if err != nil {
+				return Overrides{}, err
+			}
+			if value != nil && (*value < 1 || *value > 4) {
+				return Overrides{}, errors.New("memory_relation_max_hops must be between 1 and 4")
+			}
+			next.MemoryRelationMaxHops = value
+		case "memory_relation_hop_decay_lambda":
+			value, err := float64Override(raw)
+			if err != nil {
+				return Overrides{}, err
+			}
+			if value != nil && (*value < 0 || *value > 2) {
+				return Overrides{}, errors.New("memory_relation_hop_decay_lambda must be between 0 and 2")
+			}
+			next.MemoryRelationHopDecayLambda = value
+		case "memory_relation_hop_decay_exponent":
+			value, err := float64Override(raw)
+			if err != nil {
+				return Overrides{}, err
+			}
+			if value != nil && (*value < 0.5 || *value > 3) {
+				return Overrides{}, errors.New("memory_relation_hop_decay_exponent must be between 0.5 and 3")
+			}
+			next.MemoryRelationHopDecayExponent = value
 		case "rate_limit_rps":
 			value, err := intOverride(raw)
 			if err != nil {
@@ -1123,6 +1231,37 @@ func int64Override(raw any) (*int64, error) {
 	}
 }
 
+func float64Override(raw any) (*float64, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	switch typed := raw.(type) {
+	case float32:
+		value := float64(typed)
+		return &value, nil
+	case float64:
+		value := typed
+		return &value, nil
+	case int:
+		value := float64(typed)
+		return &value, nil
+	case int32:
+		value := float64(typed)
+		return &value, nil
+	case int64:
+		value := float64(typed)
+		return &value, nil
+	case json.Number:
+		parsed, err := typed.Float64()
+		if err != nil {
+			return nil, err
+		}
+		return &parsed, nil
+	default:
+		return nil, fmt.Errorf("expected number, got %T", raw)
+	}
+}
+
 func boolOverride(raw any) (*bool, error) {
 	if raw == nil {
 		return nil, nil
@@ -1176,6 +1315,13 @@ func stringValue(value any) string {
 }
 
 func nullableInt64(value *int64) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
+func nullableFloat64(value *float64) any {
 	if value == nil {
 		return nil
 	}

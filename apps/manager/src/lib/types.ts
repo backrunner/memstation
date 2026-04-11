@@ -474,6 +474,9 @@ export interface SystemRuntimeConfig {
   token_threshold: number;
   max_context_tokens: number;
   max_injection_tokens: number;
+  memory_relation_max_hops: number;
+  memory_relation_hop_decay_lambda: number;
+  memory_relation_hop_decay_exponent: number;
   rate_limit_rps: number;
   rate_limit_burst: number;
   cache_ttl_seconds: number;

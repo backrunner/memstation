@@ -199,6 +199,11 @@ func buildContainer(ctx context.Context) (*Container, error) {
 
 	memoryEngine := memoryservice.NewEngine(memoryRepo, vectorStore)
 	memoryEngine.SetGenerationService(generations)
+	memoryEngine.SetRelationRecallConfig(memoryservice.RelationRecallConfig{
+		MaxHops:          cfg.MemoryRelationMaxHops,
+		HopDecayLambda:   cfg.MemoryRelationHopDecayLambda,
+		HopDecayExponent: cfg.MemoryRelationHopDecayExponent,
+	})
 	conversations := conversationservice.NewService(conversationRepo, outboxRepo, cfg.MessageThreshold, cfg.TokenThreshold)
 	multimodal := multimodalservice.NewService(mediaRepo, blobStore, cfg.Multimodal)
 	gatewayProviderRegistry := provider.NewRegistry(
@@ -272,6 +277,13 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		},
 		SetConversationTimeout: func(timeout time.Duration) {
 			scheduler.UpdateTimeoutWindow(timeout)
+		},
+		SetMemoryRelationRecall: func(maxHops int, decayLambda, decayExponent float64) {
+			memoryEngine.SetRelationRecallConfig(memoryservice.RelationRecallConfig{
+				MaxHops:          maxHops,
+				HopDecayLambda:   decayLambda,
+				HopDecayExponent: decayExponent,
+			})
 		},
 		SetRateLimit: func(rps, burst int) {
 			if rateLimiter != nil {

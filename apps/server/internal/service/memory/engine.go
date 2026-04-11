@@ -2,8 +2,10 @@ package memory
 
 import (
 	"context"
+	"math"
 	"sort"
 	"strings"
+	"sync"
 
 	"go.opentelemetry.io/otel/attribute"
 
@@ -17,6 +19,15 @@ type Engine struct {
 	repo        ports.MemoryRepository
 	vectors     ports.VectorStore
 	generations *memorygenservice.Service
+
+	configMu       sync.RWMutex
+	relationRecall RelationRecallConfig
+}
+
+type RelationRecallConfig struct {
+	MaxHops          int
+	HopDecayLambda   float64
+	HopDecayExponent float64
 }
 
 type DebugSearchResult struct {
@@ -27,11 +38,35 @@ type DebugSearchResult struct {
 }
 
 func NewEngine(repo ports.MemoryRepository, vectors ports.VectorStore) *Engine {
-	return &Engine{repo: repo, vectors: vectors}
+	return &Engine{
+		repo:           repo,
+		vectors:        vectors,
+		relationRecall: DefaultRelationRecallConfig(),
+	}
 }
 
 func (e *Engine) SetGenerationService(service *memorygenservice.Service) {
 	e.generations = service
+}
+
+func DefaultRelationRecallConfig() RelationRecallConfig {
+	return RelationRecallConfig{
+		MaxHops:          2,
+		HopDecayLambda:   0.35,
+		HopDecayExponent: 1.25,
+	}
+}
+
+func (e *Engine) SetRelationRecallConfig(cfg RelationRecallConfig) {
+	e.configMu.Lock()
+	e.relationRecall = cfg.normalized()
+	e.configMu.Unlock()
+}
+
+func (e *Engine) RelationRecallConfig() RelationRecallConfig {
+	e.configMu.RLock()
+	defer e.configMu.RUnlock()
+	return e.relationRecall.normalized()
 }
 
 func (e *Engine) Inject(ctx context.Context, req domain.UnifiedRequest) (domain.UnifiedRequest, domain.InjectionResult, error) {
@@ -316,12 +351,13 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 	relatedMap := map[string][]domain.RelatedMemory{}
 	var relations []domain.MemoryRelation
 	if cfg.useRelations {
+		relationConfig := e.RelationRecallConfig()
 		var relErr error
-		relations, relErr = e.repo.ListRelations(ctx, input.UserID, input.GenerationID, baseNodeIDs, 2)
+		relations, relErr = e.repo.ListRelations(ctx, input.UserID, input.GenerationID, baseNodeIDs, relationConfig.MaxHops)
 		if relErr != nil {
 			return DebugSearchResult{}, relErr
 		}
-		relationScores, relatedMap = expandRelationScores(seedScores, relations, 2)
+		relationScores, relatedMap = expandRelationScores(seedScores, relations, relationConfig)
 		scoreMap = cloneScoreMap(relationScores)
 	}
 
@@ -335,14 +371,12 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 	}
 	conversationBoosts := map[string]float64{}
 	if input.IncludeConversation {
-		scoreMap, conversationBoosts, docs, err = e.expandConversationCandidates(ctx, input, scoreMap, docs)
+		scoreMap, conversationBoosts, _, err = e.expandConversationCandidates(ctx, input, scoreMap, docs)
 		if err != nil {
 			return DebugSearchResult{}, err
 		}
 	}
-	supersessionBoosts := map[string]float64{}
-	supersessionAliases := map[string][]string{}
-	scoreMap, supersessionBoosts, supersessionAliases, err = e.canonicalizeSupersededScores(ctx, input, scoreMap, relations)
+	scoreMap, supersessionBoosts, supersessionAliases, err := e.canonicalizeSupersededScores(ctx, input, scoreMap, relations)
 	if err != nil {
 		return DebugSearchResult{}, err
 	}
@@ -462,9 +496,7 @@ func (e *Engine) searchWithoutVectors(ctx context.Context, input domain.SearchIn
 			scoreMap[nodeID] = score
 		}
 	}
-	supersessionBoosts := map[string]float64{}
-	supersessionAliases := map[string][]string{}
-	scoreMap, supersessionBoosts, supersessionAliases, err = e.canonicalizeSupersededScores(ctx, input, scoreMap, nil)
+	scoreMap, supersessionBoosts, supersessionAliases, err := e.canonicalizeSupersededScores(ctx, input, scoreMap, nil)
 	if err != nil {
 		return DebugSearchResult{}, err
 	}
@@ -648,13 +680,14 @@ func cloneScoreMap(items map[string]float64) map[string]float64 {
 	return cloned
 }
 
-func expandRelationScores(base map[string]float64, relations []domain.MemoryRelation, depth int) (map[string]float64, map[string][]domain.RelatedMemory) {
+func expandRelationScores(base map[string]float64, relations []domain.MemoryRelation, cfg RelationRecallConfig) (map[string]float64, map[string][]domain.RelatedMemory) {
 	type edge struct {
 		nodeID       string
 		relationType string
 		weight       float64
 	}
 
+	cfg = cfg.normalized()
 	scoreMap := cloneScoreMap(base)
 	relatedMap := map[string][]domain.RelatedMemory{}
 	graph := map[string][]edge{}
@@ -682,15 +715,13 @@ func expandRelationScores(base map[string]float64, relations []domain.MemoryRela
 		})
 	}
 
-	if depth <= 0 {
-		depth = 1
-	}
 	frontier := cloneScoreMap(base)
-	for hop := 0; hop < depth && len(frontier) > 0; hop++ {
+	for hop := 0; hop < cfg.MaxHops && len(frontier) > 0; hop++ {
 		next := map[string]float64{}
+		hopPenalty := cfg.hopPenalty(hop)
 		for nodeID, score := range frontier {
 			for _, edge := range graph[nodeID] {
-				candidateScore := score * (1 + relationBoostFactor(edge.relationType)*clamp(edge.weight, 0.2, 1.0))
+				candidateScore := score * (1 + relationBoostFactor(edge.relationType)*clamp(edge.weight, 0.2, 1.0)) * hopPenalty
 				if candidateScore <= scoreMap[edge.nodeID] {
 					continue
 				}
@@ -707,6 +738,39 @@ func expandRelationScores(base map[string]float64, relations []domain.MemoryRela
 	}
 
 	return scoreMap, relatedMap
+}
+
+func (cfg RelationRecallConfig) normalized() RelationRecallConfig {
+	if cfg.MaxHops <= 0 {
+		cfg.MaxHops = 2
+	}
+	if cfg.MaxHops > 4 {
+		cfg.MaxHops = 4
+	}
+	if cfg.HopDecayLambda < 0 {
+		cfg.HopDecayLambda = 0
+	}
+	if cfg.HopDecayLambda > 2 {
+		cfg.HopDecayLambda = 2
+	}
+	if cfg.HopDecayExponent <= 0 {
+		cfg.HopDecayExponent = 1.25
+	}
+	if cfg.HopDecayExponent > 3 {
+		cfg.HopDecayExponent = 3
+	}
+	return cfg
+}
+
+func (cfg RelationRecallConfig) hopPenalty(hop int) float64 {
+	cfg = cfg.normalized()
+	if cfg.HopDecayLambda == 0 {
+		return 1
+	}
+	// A stretched exponential keeps near associations usable while making
+	// farther hops decay faster than a simple linear penalty.
+	distance := float64(hop + 1)
+	return clamp(math.Exp(-cfg.HopDecayLambda*math.Pow(distance, cfg.HopDecayExponent)), 0, 1)
 }
 
 func (e *Engine) canonicalizeSupersededScores(ctx context.Context, input domain.SearchInput, scoreMap map[string]float64, relations []domain.MemoryRelation) (map[string]float64, map[string]float64, map[string][]string, error) {

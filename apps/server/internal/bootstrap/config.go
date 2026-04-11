@@ -16,62 +16,65 @@ const (
 )
 
 type Config struct {
-	AppName                 string
-	Version                 string
-	Port                    int
-	GRPCPort                int
-	DefaultProvider         domain.Provider
-	InternalDefaultProvider domain.Provider
-	DatabaseURL             string
-	RedisURL                string
-	VectorStoreBackend      string
-	ChatModel               string
-	SummaryModel            string
-	AnalysisModel           string
-	EmbeddingModel          string
-	ConversationTimeout     time.Duration
-	MaxContextTokens        int
-	MaxInjectionTokens      int
-	MessageThreshold        int
-	TokenThreshold          int
-	ShutdownTimeout         time.Duration
-	AdminToken              string
-	MasterKey               string
-	DevAPIKey               string
-	OpenAIAPIKey            string
-	AnthropicAPIKey         string
-	GeminiAPIKey            string
-	OpenAIBaseURL           string
-	AnthropicBaseURL        string
-	GeminiBaseURL           string
-	EmbeddingAPIKey         string
-	EmbeddingBaseURL        string
-	ProviderTimeout         time.Duration
-	KeyMemoryWriteKeys      []string
-	RateLimitRPS            int
-	RateLimitBurst          int
-	OTLPHTTPEndpoint        string
-	LogLevel                string
-	CORSAllowedOrigins      []string
-	SessionCookieSecure     bool
-	SessionCookieCrossSite  bool
-	CacheTTL                time.Duration
-	Multimodal              MultimodalConfig
+	AppName                        string
+	Version                        string
+	Port                           int
+	GRPCPort                       int
+	DefaultProvider                domain.Provider
+	InternalDefaultProvider        domain.Provider
+	DatabaseURL                    string
+	RedisURL                       string
+	VectorStoreBackend             string
+	ChatModel                      string
+	SummaryModel                   string
+	AnalysisModel                  string
+	EmbeddingModel                 string
+	ConversationTimeout            time.Duration
+	MaxContextTokens               int
+	MaxInjectionTokens             int
+	MemoryRelationMaxHops          int
+	MemoryRelationHopDecayLambda   float64
+	MemoryRelationHopDecayExponent float64
+	MessageThreshold               int
+	TokenThreshold                 int
+	ShutdownTimeout                time.Duration
+	AdminToken                     string
+	MasterKey                      string
+	DevAPIKey                      string
+	OpenAIAPIKey                   string
+	AnthropicAPIKey                string
+	GeminiAPIKey                   string
+	OpenAIBaseURL                  string
+	AnthropicBaseURL               string
+	GeminiBaseURL                  string
+	EmbeddingAPIKey                string
+	EmbeddingBaseURL               string
+	ProviderTimeout                time.Duration
+	KeyMemoryWriteKeys             []string
+	RateLimitRPS                   int
+	RateLimitBurst                 int
+	OTLPHTTPEndpoint               string
+	LogLevel                       string
+	CORSAllowedOrigins             []string
+	SessionCookieSecure            bool
+	SessionCookieCrossSite         bool
+	CacheTTL                       time.Duration
+	Multimodal                     MultimodalConfig
 }
 
 type MultimodalConfig struct {
-	Enabled                    bool
-	StorageBackend             string
-	StorageLocalRoot           string
-	StorageBucket              string
-	ImageModel                 string
-	AudioModel                 string
-	VideoModel                 string
-	FileModel                  string
-	AudioTranscriptionEnabled  bool
-	VideoFrameSamplingEnabled  bool
-	MaxAssetBytes              int64
-	AllowedMIMETypes           []string
+	Enabled                   bool
+	StorageBackend            string
+	StorageLocalRoot          string
+	StorageBucket             string
+	ImageModel                string
+	AudioModel                string
+	VideoModel                string
+	FileModel                 string
+	AudioTranscriptionEnabled bool
+	VideoFrameSamplingEnabled bool
+	MaxAssetBytes             int64
+	AllowedMIMETypes          []string
 }
 
 func LoadConfig() (Config, error) {
@@ -101,6 +104,9 @@ func LoadConfig() (Config, error) {
 	bind("conversation_timeout_minutes", "CONVERSATION_TIMEOUT_MINUTES")
 	bind("max_context_tokens", "MAX_CONTEXT_TOKENS")
 	bind("max_injection_tokens", "MAX_INJECTION_TOKENS")
+	bind("memory_relation_max_hops", "MEMSTATION_MEMORY_RELATION_MAX_HOPS")
+	bind("memory_relation_hop_decay_lambda", "MEMSTATION_MEMORY_RELATION_HOP_DECAY_LAMBDA")
+	bind("memory_relation_hop_decay_exponent", "MEMSTATION_MEMORY_RELATION_HOP_DECAY_EXPONENT")
 	bind("message_threshold", "MESSAGE_THRESHOLD")
 	bind("token_threshold", "TOKEN_THRESHOLD")
 	bind("shutdown_timeout_seconds", "MEMSTATION_SHUTDOWN_TIMEOUT_SECONDS")
@@ -148,6 +154,9 @@ func LoadConfig() (Config, error) {
 	setDefault("conversation_timeout_minutes", 15)
 	setDefault("max_context_tokens", 8192)
 	setDefault("max_injection_tokens", 2048)
+	setDefault("memory_relation_max_hops", 2)
+	setDefault("memory_relation_hop_decay_lambda", 0.35)
+	setDefault("memory_relation_hop_decay_exponent", 1.25)
 	setDefault("message_threshold", 32)
 	setDefault("token_threshold", 64000)
 	setDefault("shutdown_timeout_seconds", 20)
@@ -187,46 +196,49 @@ func LoadConfig() (Config, error) {
 	}, ","))
 
 	return Config{
-		AppName:                 v.GetString("app_name"),
-		Version:                 v.GetString("version"),
-		Port:                    v.GetInt("port"),
-		GRPCPort:                v.GetInt("grpc_port"),
-		DefaultProvider:         domain.NormalizeProvider(v.GetString("default_provider")),
-		InternalDefaultProvider: domain.NormalizeProvider(firstNonEmpty(v.GetString("internal_default_provider"), v.GetString("default_provider"))),
-		DatabaseURL:             v.GetString("database_url"),
-		RedisURL:                v.GetString("redis_url"),
-		VectorStoreBackend:      v.GetString("vector_store_backend"),
-		ChatModel:               v.GetString("chat_model"),
-		SummaryModel:            v.GetString("summary_model"),
-		AnalysisModel:           v.GetString("analysis_model"),
-		EmbeddingModel:          v.GetString("embedding_model"),
-		ConversationTimeout:     time.Duration(v.GetInt("conversation_timeout_minutes")) * time.Minute,
-		MaxContextTokens:        v.GetInt("max_context_tokens"),
-		MaxInjectionTokens:      v.GetInt("max_injection_tokens"),
-		MessageThreshold:        v.GetInt("message_threshold"),
-		TokenThreshold:          v.GetInt("token_threshold"),
-		ShutdownTimeout:         time.Duration(v.GetInt("shutdown_timeout_seconds")) * time.Second,
-		AdminToken:              v.GetString("admin_token"),
-		MasterKey:               v.GetString("master_key"),
-		DevAPIKey:               v.GetString("dev_api_key"),
-		OpenAIAPIKey:            v.GetString("openai_api_key"),
-		AnthropicAPIKey:         v.GetString("anthropic_api_key"),
-		GeminiAPIKey:            v.GetString("gemini_api_key"),
-		OpenAIBaseURL:           v.GetString("openai_base_url"),
-		AnthropicBaseURL:        v.GetString("anthropic_base_url"),
-		GeminiBaseURL:           v.GetString("gemini_base_url"),
-		EmbeddingAPIKey:         firstNonEmpty(v.GetString("embedding_api_key"), v.GetString("openai_api_key")),
-		EmbeddingBaseURL:        firstNonEmpty(v.GetString("embedding_base_url"), v.GetString("openai_base_url")),
-		ProviderTimeout:         time.Duration(v.GetInt("provider_timeout_seconds")) * time.Second,
-		KeyMemoryWriteKeys:      csvList(v.GetString("key_memory_write_keys")),
-		RateLimitRPS:            v.GetInt("rate_limit_rps"),
-		RateLimitBurst:          v.GetInt("rate_limit_burst"),
-		OTLPHTTPEndpoint:        v.GetString("otlp_http_endpoint"),
-		LogLevel:                v.GetString("log_level"),
-		CORSAllowedOrigins:      csvList(v.GetString("cors_allowed_origins")),
-		SessionCookieSecure:     v.GetBool("session_cookie_secure"),
-		SessionCookieCrossSite:  v.GetBool("session_cookie_cross_site"),
-		CacheTTL:                time.Duration(v.GetInt("cache_ttl_seconds")) * time.Second,
+		AppName:                        v.GetString("app_name"),
+		Version:                        v.GetString("version"),
+		Port:                           v.GetInt("port"),
+		GRPCPort:                       v.GetInt("grpc_port"),
+		DefaultProvider:                domain.NormalizeProvider(v.GetString("default_provider")),
+		InternalDefaultProvider:        domain.NormalizeProvider(firstNonEmpty(v.GetString("internal_default_provider"), v.GetString("default_provider"))),
+		DatabaseURL:                    v.GetString("database_url"),
+		RedisURL:                       v.GetString("redis_url"),
+		VectorStoreBackend:             v.GetString("vector_store_backend"),
+		ChatModel:                      v.GetString("chat_model"),
+		SummaryModel:                   v.GetString("summary_model"),
+		AnalysisModel:                  v.GetString("analysis_model"),
+		EmbeddingModel:                 v.GetString("embedding_model"),
+		ConversationTimeout:            time.Duration(v.GetInt("conversation_timeout_minutes")) * time.Minute,
+		MaxContextTokens:               v.GetInt("max_context_tokens"),
+		MaxInjectionTokens:             v.GetInt("max_injection_tokens"),
+		MemoryRelationMaxHops:          v.GetInt("memory_relation_max_hops"),
+		MemoryRelationHopDecayLambda:   v.GetFloat64("memory_relation_hop_decay_lambda"),
+		MemoryRelationHopDecayExponent: v.GetFloat64("memory_relation_hop_decay_exponent"),
+		MessageThreshold:               v.GetInt("message_threshold"),
+		TokenThreshold:                 v.GetInt("token_threshold"),
+		ShutdownTimeout:                time.Duration(v.GetInt("shutdown_timeout_seconds")) * time.Second,
+		AdminToken:                     v.GetString("admin_token"),
+		MasterKey:                      v.GetString("master_key"),
+		DevAPIKey:                      v.GetString("dev_api_key"),
+		OpenAIAPIKey:                   v.GetString("openai_api_key"),
+		AnthropicAPIKey:                v.GetString("anthropic_api_key"),
+		GeminiAPIKey:                   v.GetString("gemini_api_key"),
+		OpenAIBaseURL:                  v.GetString("openai_base_url"),
+		AnthropicBaseURL:               v.GetString("anthropic_base_url"),
+		GeminiBaseURL:                  v.GetString("gemini_base_url"),
+		EmbeddingAPIKey:                firstNonEmpty(v.GetString("embedding_api_key"), v.GetString("openai_api_key")),
+		EmbeddingBaseURL:               firstNonEmpty(v.GetString("embedding_base_url"), v.GetString("openai_base_url")),
+		ProviderTimeout:                time.Duration(v.GetInt("provider_timeout_seconds")) * time.Second,
+		KeyMemoryWriteKeys:             csvList(v.GetString("key_memory_write_keys")),
+		RateLimitRPS:                   v.GetInt("rate_limit_rps"),
+		RateLimitBurst:                 v.GetInt("rate_limit_burst"),
+		OTLPHTTPEndpoint:               v.GetString("otlp_http_endpoint"),
+		LogLevel:                       v.GetString("log_level"),
+		CORSAllowedOrigins:             csvList(v.GetString("cors_allowed_origins")),
+		SessionCookieSecure:            v.GetBool("session_cookie_secure"),
+		SessionCookieCrossSite:         v.GetBool("session_cookie_cross_site"),
+		CacheTTL:                       time.Duration(v.GetInt("cache_ttl_seconds")) * time.Second,
 		Multimodal: MultimodalConfig{
 			Enabled:                   v.GetBool("multimodal_enabled"),
 			StorageBackend:            v.GetString("multimodal_storage_backend"),

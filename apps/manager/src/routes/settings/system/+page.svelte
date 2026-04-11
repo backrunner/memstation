@@ -22,6 +22,9 @@
     'vector_store_backend',
     'max_context_tokens',
     'max_injection_tokens',
+    'memory_relation_max_hops',
+    'memory_relation_hop_decay_lambda',
+    'memory_relation_hop_decay_exponent',
     'cache_ttl_seconds'
   ];
   const webFields: RuntimeKey[] = [
@@ -84,6 +87,9 @@
       token_threshold: 64000,
       max_context_tokens: 8192,
       max_injection_tokens: 2048,
+      memory_relation_max_hops: 2,
+      memory_relation_hop_decay_lambda: 0.35,
+      memory_relation_hop_decay_exponent: 1.25,
       rate_limit_rps: 20,
       rate_limit_burst: 40,
       cache_ttl_seconds: 120,
@@ -115,6 +121,9 @@
       'token_threshold',
       'max_context_tokens',
       'max_injection_tokens',
+      'memory_relation_max_hops',
+      'memory_relation_hop_decay_lambda',
+      'memory_relation_hop_decay_exponent',
       'rate_limit_rps',
       'rate_limit_burst',
       'cache_ttl_seconds',
@@ -147,6 +156,9 @@
       token_threshold: Number(runtimeValue.token_threshold ?? 64000),
       max_context_tokens: Number(runtimeValue.max_context_tokens ?? 8192),
       max_injection_tokens: Number(runtimeValue.max_injection_tokens ?? 2048),
+      memory_relation_max_hops: Number(runtimeValue.memory_relation_max_hops ?? 2),
+      memory_relation_hop_decay_lambda: Number(runtimeValue.memory_relation_hop_decay_lambda ?? 0.35),
+      memory_relation_hop_decay_exponent: Number(runtimeValue.memory_relation_hop_decay_exponent ?? 1.25),
       rate_limit_rps: Number(runtimeValue.rate_limit_rps ?? 20),
       rate_limit_burst: Number(runtimeValue.rate_limit_burst ?? 40),
       cache_ttl_seconds: Number(runtimeValue.cache_ttl_seconds ?? 120),
@@ -461,6 +473,21 @@
           <label class="field">
             <span class="field-label">Max injection tokens</span>
             <input class="input" type="number" min="0" bind:value={runtime.max_injection_tokens} />
+          </label>
+          <label class="field">
+            <span class="field-label">Relation max hops</span>
+            <input class="input" type="number" min="1" max="4" bind:value={runtime.memory_relation_max_hops} />
+            <span class="field-help">Bounded graph recall depth for online memory expansion.</span>
+          </label>
+          <label class="field">
+            <span class="field-label">Hop decay lambda</span>
+            <input class="input" type="number" min="0" max="2" step="0.05" bind:value={runtime.memory_relation_hop_decay_lambda} />
+            <span class="field-help">Higher values make distant relations fade faster.</span>
+          </label>
+          <label class="field">
+            <span class="field-label">Hop decay exponent</span>
+            <input class="input" type="number" min="0.5" max="3" step="0.05" bind:value={runtime.memory_relation_hop_decay_exponent} />
+            <span class="field-help">Values above 1 create a stronger-than-linear distance penalty.</span>
           </label>
           <label class="field">
             <span class="field-label">Cache TTL (seconds)</span>
