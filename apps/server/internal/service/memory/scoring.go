@@ -19,6 +19,8 @@ type ScoreComponents struct {
 	BaseSemanticScore float64 `json:"base_semantic_score"`
 	KeywordScore      float64 `json:"keyword_score"`
 	RelationExpansion float64 `json:"relation_expansion"`
+	SupersessionBoost float64 `json:"supersession_boost"`
+	ConversationBoost float64 `json:"conversation_boost"`
 	SemanticScore     float64 `json:"semantic_score"`
 	ImportanceWeight  float64 `json:"importance_weight"`
 	TimeDecay         float64 `json:"time_decay"`
@@ -47,12 +49,14 @@ func configForVariant(variant SearchVariant) searchConfig {
 	}
 }
 
-func scoreDocument(doc domain.MemoryDocument, baseSemanticScore, keywordScore, relationExpansion float64, cfg searchConfig) ScoreComponents {
+func scoreDocument(doc domain.MemoryDocument, baseSemanticScore, keywordScore, relationExpansion, supersessionBoost, conversationBoost float64, cfg searchConfig) ScoreComponents {
 	components := ScoreComponents{
 		BaseSemanticScore: baseSemanticScore,
 		KeywordScore:      keywordScore,
 		RelationExpansion: relationExpansion,
-		SemanticScore:     combineDirectSignal(baseSemanticScore, keywordScore) + relationExpansion,
+		SupersessionBoost: supersessionBoost,
+		ConversationBoost: conversationBoost,
+		SemanticScore:     combineDirectSignal(baseSemanticScore, keywordScore) + relationExpansion + supersessionBoost + conversationBoost,
 		ImportanceWeight:  1,
 		TimeDecay:         1,
 		FreshnessPenalty:  1,
@@ -71,8 +75,8 @@ func scoreDocument(doc domain.MemoryDocument, baseSemanticScore, keywordScore, r
 	return components
 }
 
-func ExplainDocumentScore(doc domain.MemoryDocument, baseSemanticScore, keywordScore, relationExpansion float64, variant SearchVariant) ScoreComponents {
-	return scoreDocument(doc, baseSemanticScore, keywordScore, relationExpansion, configForVariant(variant))
+func ExplainDocumentScore(doc domain.MemoryDocument, baseSemanticScore, keywordScore, relationExpansion, supersessionBoost, conversationBoost float64, variant SearchVariant) ScoreComponents {
+	return scoreDocument(doc, baseSemanticScore, keywordScore, relationExpansion, supersessionBoost, conversationBoost, configForVariant(variant))
 }
 
 func keywordSignalBoost(keywordScore float64) float64 {

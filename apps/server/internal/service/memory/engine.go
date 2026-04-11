@@ -312,13 +312,17 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 		baseNodeIDs = append(baseNodeIDs, nodeID)
 	}
 	scoreMap := cloneScoreMap(seedScores)
+	relationScores := cloneScoreMap(seedScores)
 	relatedMap := map[string][]domain.RelatedMemory{}
+	var relations []domain.MemoryRelation
 	if cfg.useRelations {
-		relations, relErr := e.repo.ListRelations(ctx, input.UserID, input.GenerationID, baseNodeIDs, 2)
+		var relErr error
+		relations, relErr = e.repo.ListRelations(ctx, input.UserID, input.GenerationID, baseNodeIDs, 2)
 		if relErr != nil {
 			return DebugSearchResult{}, relErr
 		}
-		scoreMap, relatedMap = expandRelationScores(seedScores, relations, 2)
+		relationScores, relatedMap = expandRelationScores(seedScores, relations, 2)
+		scoreMap = cloneScoreMap(relationScores)
 	}
 
 	candidateNodeIDs := make([]string, 0, len(scoreMap))
@@ -326,6 +330,27 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 		candidateNodeIDs = append(candidateNodeIDs, nodeID)
 	}
 	docs, err := e.repo.ListDocumentsByNodeIDsInGeneration(ctx, input.UserID, input.GenerationID, candidateNodeIDs)
+	if err != nil {
+		return DebugSearchResult{}, err
+	}
+	conversationBoosts := map[string]float64{}
+	if input.IncludeConversation {
+		scoreMap, conversationBoosts, docs, err = e.expandConversationCandidates(ctx, input, scoreMap, docs)
+		if err != nil {
+			return DebugSearchResult{}, err
+		}
+	}
+	supersessionBoosts := map[string]float64{}
+	supersessionAliases := map[string][]string{}
+	scoreMap, supersessionBoosts, supersessionAliases, err = e.canonicalizeSupersededScores(ctx, input, scoreMap, relations)
+	if err != nil {
+		return DebugSearchResult{}, err
+	}
+	candidateNodeIDs = candidateNodeIDs[:0]
+	for nodeID := range scoreMap {
+		candidateNodeIDs = append(candidateNodeIDs, nodeID)
+	}
+	docs, err = e.repo.ListDocumentsByNodeIDsInGeneration(ctx, input.UserID, input.GenerationID, candidateNodeIDs)
 	if err != nil {
 		return DebugSearchResult{}, err
 	}
@@ -341,11 +366,28 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 			continue
 		}
 		baseScore := seedScores[doc.NodeID]
-		relationExpansion := maxFloat(semanticScore-baseScore, 0)
-		components := scoreDocument(doc, semanticScores[doc.NodeID], keywordScores[doc.NodeID], relationExpansion, cfg)
+		relationExpansion := maxFloat(relationScores[doc.NodeID]-baseScore, 0)
+		supersessionBoost := supersessionBoosts[doc.NodeID]
+		conversationBoost := conversationBoosts[doc.NodeID]
+		components := scoreDocument(doc, semanticScores[doc.NodeID], keywordScores[doc.NodeID], relationExpansion, supersessionBoost, conversationBoost, cfg)
 		if match, ok := keywordMatches[doc.NodeID]; ok {
 			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
 				"matched_keywords": match.Keywords,
+			})
+		}
+		if aliases := supersessionAliases[doc.NodeID]; len(aliases) > 0 {
+			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
+				"superseded_alias_node_ids": aliases,
+			})
+		}
+		if supersessionBoost > 0 {
+			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
+				"supersession_canonicalized": true,
+			})
+		}
+		if conversationBoost > 0 {
+			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
+				"conversation_expanded": true,
 			})
 		}
 		doc.Score = components.SemanticScore
@@ -396,16 +438,69 @@ func (e *Engine) searchWithoutVectors(ctx context.Context, input domain.SearchIn
 	if err != nil {
 		return DebugSearchResult{}, err
 	}
-	componentsByID := make(map[string]ScoreComponents, len(result.Memories))
 	baseScores := make(map[string]float64, len(result.Memories))
+	for _, doc := range result.Memories {
+		baseScores[doc.NodeID] = doc.Score
+	}
+	conversationBoosts := map[string]float64{}
+	if input.IncludeConversation {
+		resultScores, boosts, docs, err := e.expandConversationCandidates(ctx, input, baseScores, result.Memories)
+		if err != nil {
+			return DebugSearchResult{}, err
+		}
+		conversationBoosts = boosts
+		result.Memories = docs
+		for idx := range result.Memories {
+			if score, ok := resultScores[result.Memories[idx].NodeID]; ok && conversationBoosts[result.Memories[idx].NodeID] > 0 {
+				result.Memories[idx].Score = score
+			}
+		}
+	}
+	scoreMap := cloneScoreMap(baseScores)
+	for nodeID, score := range conversationBoosts {
+		if score > scoreMap[nodeID] {
+			scoreMap[nodeID] = score
+		}
+	}
+	supersessionBoosts := map[string]float64{}
+	supersessionAliases := map[string][]string{}
+	scoreMap, supersessionBoosts, supersessionAliases, err = e.canonicalizeSupersededScores(ctx, input, scoreMap, nil)
+	if err != nil {
+		return DebugSearchResult{}, err
+	}
+	candidateNodeIDs := make([]string, 0, len(scoreMap))
+	for nodeID := range scoreMap {
+		candidateNodeIDs = append(candidateNodeIDs, nodeID)
+	}
+	result.Memories, err = e.repo.ListDocumentsByNodeIDsInGeneration(ctx, input.UserID, input.GenerationID, candidateNodeIDs)
+	if err != nil {
+		return DebugSearchResult{}, err
+	}
+	componentsByID := make(map[string]ScoreComponents, len(result.Memories))
+	componentBaseScores := make(map[string]float64, len(result.Memories))
 	cfg := configForVariant(variant)
 	for idx, doc := range result.Memories {
-		components := scoreDocument(doc, doc.Score, 0, 0, cfg)
+		components := scoreDocument(doc, baseScores[doc.NodeID], 0, 0, supersessionBoosts[doc.NodeID], conversationBoosts[doc.NodeID], cfg)
+		if aliases := supersessionAliases[doc.NodeID]; len(aliases) > 0 {
+			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
+				"superseded_alias_node_ids": aliases,
+			})
+		}
+		if supersessionBoosts[doc.NodeID] > 0 {
+			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
+				"supersession_canonicalized": true,
+			})
+		}
+		if conversationBoosts[doc.NodeID] > 0 {
+			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
+				"conversation_expanded": true,
+			})
+		}
 		doc.Score = components.SemanticScore
 		doc.EffectiveScore = components.EffectiveScore
 		result.Memories[idx] = doc
 		componentsByID[doc.ID] = components
-		baseScores[doc.NodeID] = components.BaseSemanticScore
+		componentBaseScores[doc.NodeID] = components.BaseSemanticScore
 	}
 	filtered := make([]domain.MemoryDocument, 0, len(result.Memories))
 	for _, doc := range result.Memories {
@@ -432,7 +527,7 @@ func (e *Engine) searchWithoutVectors(ctx context.Context, input domain.SearchIn
 		Result:     result,
 		Variant:    variant,
 		Components: componentsByID,
-		BaseScores: baseScores,
+		BaseScores: componentBaseScores,
 	}, nil
 }
 
@@ -614,6 +709,119 @@ func expandRelationScores(base map[string]float64, relations []domain.MemoryRela
 	return scoreMap, relatedMap
 }
 
+func (e *Engine) canonicalizeSupersededScores(ctx context.Context, input domain.SearchInput, scoreMap map[string]float64, relations []domain.MemoryRelation) (map[string]float64, map[string]float64, map[string][]string, error) {
+	if e.repo == nil || len(scoreMap) == 0 {
+		return scoreMap, nil, nil, nil
+	}
+
+	nodeIDs := make([]string, 0, len(scoreMap))
+	for nodeID := range scoreMap {
+		nodeIDs = append(nodeIDs, nodeID)
+	}
+	currentRelations := append([]domain.MemoryRelation{}, relations...)
+	queriedRelations, err := e.repo.ListRelations(ctx, input.UserID, input.GenerationID, nodeIDs, 3)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	currentRelations = append(currentRelations, queriedRelations...)
+
+	newerByOlder := map[string]string{}
+	for _, relation := range currentRelations {
+		if relation.RelationType != "supersedes" || relation.SrcNodeID == "" || relation.DstNodeID == "" {
+			continue
+		}
+		newerByOlder[relation.DstNodeID] = relation.SrcNodeID
+	}
+	if len(newerByOlder) == 0 {
+		return scoreMap, nil, nil, nil
+	}
+
+	originalScores := cloneScoreMap(scoreMap)
+	canonicalizedScores := cloneScoreMap(scoreMap)
+	inheritedScores := map[string]float64{}
+	aliases := map[string][]string{}
+	for nodeID, score := range originalScores {
+		canonicalNodeID := resolveCanonicalNodeID(nodeID, newerByOlder)
+		if canonicalNodeID == nodeID {
+			continue
+		}
+		if score > inheritedScores[canonicalNodeID] {
+			inheritedScores[canonicalNodeID] = score
+		}
+		aliases[canonicalNodeID] = appendUniqueString(aliases[canonicalNodeID], nodeID)
+		delete(canonicalizedScores, nodeID)
+	}
+
+	boosts := map[string]float64{}
+	for nodeID, inherited := range inheritedScores {
+		if inherited > canonicalizedScores[nodeID] {
+			canonicalizedScores[nodeID] = inherited
+		}
+		if inherited > originalScores[nodeID] {
+			boosts[nodeID] = inherited - originalScores[nodeID]
+		}
+	}
+	return canonicalizedScores, boosts, aliases, nil
+}
+
+func (e *Engine) expandConversationCandidates(ctx context.Context, input domain.SearchInput, scoreMap map[string]float64, docs []domain.MemoryDocument) (map[string]float64, map[string]float64, []domain.MemoryDocument, error) {
+	if !input.IncludeConversation || e.repo == nil || len(docs) == 0 {
+		return scoreMap, nil, docs, nil
+	}
+
+	conversationSeeds := map[string]float64{}
+	seenNodeIDs := make(map[string]struct{}, len(docs))
+	for _, doc := range docs {
+		seenNodeIDs[doc.NodeID] = struct{}{}
+		if strings.TrimSpace(doc.ConversationID) == "" {
+			continue
+		}
+		if score := scoreMap[doc.NodeID]; score > conversationSeeds[doc.ConversationID] {
+			conversationSeeds[doc.ConversationID] = score
+		}
+	}
+	if len(conversationSeeds) == 0 {
+		return scoreMap, nil, docs, nil
+	}
+
+	expandedScores := cloneScoreMap(scoreMap)
+	conversationBoosts := map[string]float64{}
+	extraDocs := make([]domain.MemoryDocument, 0)
+	for conversationID, seedScore := range conversationSeeds {
+		if seedScore <= 0 {
+			continue
+		}
+		companions, err := e.repo.ListConversationDocumentsInGeneration(ctx, input.UserID, input.GenerationID, conversationID, input.IncludeSegments)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		for _, companion := range companions {
+			if companion.NodeID == "" || companion.ConversationID != conversationID {
+				continue
+			}
+			if _, exists := expandedScores[companion.NodeID]; exists {
+				continue
+			}
+			boost := seedScore * conversationCompanionFactor(companion.Type)
+			if boost <= 0 {
+				continue
+			}
+			expandedScores[companion.NodeID] = boost
+			conversationBoosts[companion.NodeID] = boost
+			if _, seen := seenNodeIDs[companion.NodeID]; seen {
+				continue
+			}
+			seenNodeIDs[companion.NodeID] = struct{}{}
+			extraDocs = append(extraDocs, companion)
+		}
+	}
+
+	if len(extraDocs) == 0 {
+		return expandedScores, conversationBoosts, docs, nil
+	}
+	return expandedScores, conversationBoosts, append(docs, extraDocs...), nil
+}
+
 type relationTraversalEdge struct {
 	fromNodeID string
 	toNodeID   string
@@ -644,6 +852,46 @@ func relationBoostFactor(relationType string) float64 {
 	default:
 		return 0.18
 	}
+}
+
+func conversationCompanionFactor(memoryType domain.MemoryType) float64 {
+	switch memoryType {
+	case domain.MemoryTypeFact:
+		return 0.62
+	case domain.MemoryTypeSummary:
+		return 0.56
+	case domain.MemoryTypeImpression:
+		return 0.48
+	case domain.MemoryTypeSegment:
+		return 0.42
+	default:
+		return 0.4
+	}
+}
+
+func resolveCanonicalNodeID(nodeID string, newerByOlder map[string]string) string {
+	seen := map[string]struct{}{}
+	current := nodeID
+	for {
+		next, ok := newerByOlder[current]
+		if !ok || next == "" {
+			return current
+		}
+		if _, cycle := seen[next]; cycle {
+			return current
+		}
+		seen[current] = struct{}{}
+		current = next
+	}
+}
+
+func appendUniqueString(items []string, value string) []string {
+	for _, item := range items {
+		if item == value {
+			return items
+		}
+	}
+	return append(items, value)
 }
 
 func clamp(value, minValue, maxValue float64) float64 {

@@ -76,6 +76,8 @@ type QueryCase struct {
 	GenerationID        string              `json:"generation_id,omitempty"`
 	Query               string              `json:"query"`
 	TopN                int                 `json:"top_n,omitempty"`
+	IncludeConversation bool                `json:"include_conversation,omitempty"`
+	IncludeSegments     bool                `json:"include_segments,omitempty"`
 	MemoryTypes         []domain.MemoryType `json:"memory_types,omitempty"`
 	Positives           []string            `json:"positives"`
 	Negatives           []string            `json:"negatives,omitempty"`

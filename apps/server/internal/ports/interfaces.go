@@ -50,6 +50,7 @@ type MemoryRepository interface {
 	ListDocumentsByNodeIDsInGeneration(ctx context.Context, userID, generationID string, nodeIDs []string) ([]domain.MemoryDocument, error)
 	ListDocumentsByConversation(ctx context.Context, userID, conversationID string) ([]domain.MemoryDocument, error)
 	ListDocumentsByConversationInGeneration(ctx context.Context, userID, generationID, conversationID string) ([]domain.MemoryDocument, error)
+	ListConversationDocumentsInGeneration(ctx context.Context, userID, generationID, conversationID string, includeSegments bool) ([]domain.MemoryDocument, error)
 	SearchKeywordMatches(ctx context.Context, userID, generationID, query string, limit int) ([]domain.KeywordMatch, error)
 	UpdateDocument(ctx context.Context, userID, id string, kind domain.MemoryType, content string) (domain.MemoryDocument, error)
 	ListKeyMemories(ctx context.Context, userID string, limit int) ([]domain.KeyMemory, error)

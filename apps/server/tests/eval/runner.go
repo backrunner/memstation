@@ -172,11 +172,13 @@ func runVariant(ctx context.Context, bench *harness, dataset Dataset, variant me
 			limit = 10
 		}
 		debug, err := bench.engine.SearchWithVariant(ctx, domain.SearchInput{
-			UserID:       query.UserID,
-			GenerationID: query.GenerationID,
-			Query:        query.Query,
-			TopN:         limit,
-			MemoryTypes:  query.MemoryTypes,
+			UserID:              query.UserID,
+			GenerationID:        query.GenerationID,
+			Query:               query.Query,
+			TopN:                limit,
+			IncludeConversation: query.IncludeConversation,
+			IncludeSegments:     query.IncludeSegments,
+			MemoryTypes:         query.MemoryTypes,
 		}, variant)
 		if err != nil {
 			return VariantReport{}, nil, fmt.Errorf("run case %s: %w", query.CaseID, err)

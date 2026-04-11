@@ -528,16 +528,24 @@ func (r *InMemoryMemoryRepository) ListDocumentsByConversation(_ context.Context
 }
 
 func (r *InMemoryMemoryRepository) ListDocumentsByConversationInGeneration(_ context.Context, userID, generationID, conversationID string) ([]domain.MemoryDocument, error) {
+	return r.ListConversationDocumentsInGeneration(context.Background(), userID, generationID, conversationID, false)
+}
+
+func (r *InMemoryMemoryRepository) ListConversationDocumentsInGeneration(_ context.Context, userID, generationID, conversationID string, includeSegments bool) ([]domain.MemoryDocument, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make([]domain.MemoryDocument, 0)
 	for _, doc := range r.documents {
-		if doc.UserID == userID && doc.ConversationID == conversationID && doc.Type != domain.MemoryTypeSegment {
-			if !matchesDocumentGeneration(userID, generationID, doc) {
-				continue
-			}
-			out = append(out, doc)
+		if doc.UserID != userID || doc.ConversationID != conversationID {
+			continue
 		}
+		if doc.Type == domain.MemoryTypeSegment && !includeSegments {
+			continue
+		}
+		if !matchesDocumentGeneration(userID, generationID, doc) {
+			continue
+		}
+		out = append(out, doc)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })
 	return out, nil

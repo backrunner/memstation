@@ -354,6 +354,352 @@ func TestMemoryEngineIncludesSegmentsWhenRequested(t *testing.T) {
 	}
 }
 
+func TestMemoryEngineIncludeConversationExpandsCompanionMemories(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := sql.NewInMemoryMemoryRepository()
+	vectors := vector.NewPGVectorStore(nil)
+	engine := memoryservice.NewEngine(repo, vectors)
+
+	summary := domain.MemoryDocument{
+		ID:             "summary:conv-include:v1",
+		NodeID:         "node:summary:conv-include:v1",
+		UserID:         "user-1",
+		ConversationID: "conv-include",
+		Type:           domain.MemoryTypeSummary,
+		Content:        "Deployment freeze starts every Friday evening.",
+		Importance:     1.1,
+		DecayFactor:    1,
+	}
+	fact := domain.MemoryDocument{
+		ID:             "fact:conv-include:freeze",
+		NodeID:         "node:fact:conv-include:freeze",
+		UserID:         "user-1",
+		ConversationID: "conv-include",
+		Type:           domain.MemoryTypeFact,
+		Content:        "The freeze owner is Dana.",
+		Importance:     1,
+		DecayFactor:    1,
+	}
+	segment := domain.MemoryDocument{
+		ID:             "segment:conv-include:000",
+		NodeID:         "node:segment:conv-include:000",
+		UserID:         "user-1",
+		ConversationID: "conv-include",
+		Type:           domain.MemoryTypeSegment,
+		Content:        "user: remind me about the deployment freeze owner | assistant: noted",
+		Importance:     0.9,
+		DecayFactor:    0.85,
+	}
+	for _, doc := range []domain.MemoryDocument{summary, fact, segment} {
+		if err := repo.StoreDocument(ctx, doc); err != nil {
+			t.Fatalf("store conversation doc %s: %v", doc.ID, err)
+		}
+	}
+	if err := vectors.Upsert(ctx, domain.VectorUpsertRequest{
+		UserID:           summary.UserID,
+		NodeID:           summary.NodeID,
+		NodeType:         string(summary.Type),
+		EmbeddingVersion: 1,
+		EmbeddingModel:   "test-embedding",
+		ContentHash:      summary.Content,
+		Vector:           vector.EmbedText(summary.Content),
+	}); err != nil {
+		t.Fatalf("upsert summary vector: %v", err)
+	}
+
+	withoutConversation, err := engine.Search(ctx, domain.SearchInput{
+		UserID: "user-1",
+		Query:  summary.Content,
+		TopN:   5,
+	})
+	if err != nil {
+		t.Fatalf("search without conversation expansion: %v", err)
+	}
+	if len(withoutConversation.Memories) != 1 || withoutConversation.Memories[0].NodeID != summary.NodeID {
+		t.Fatalf("expected only direct summary hit without include_conversation, got %+v", withoutConversation.Memories)
+	}
+
+	withConversation, err := engine.Search(ctx, domain.SearchInput{
+		UserID:              "user-1",
+		Query:               summary.Content,
+		TopN:                5,
+		IncludeConversation: true,
+	})
+	if err != nil {
+		t.Fatalf("search with conversation expansion: %v", err)
+	}
+	foundFact := false
+	foundSegment := false
+	for _, item := range withConversation.Memories {
+		if item.NodeID == fact.NodeID {
+			foundFact = true
+			if expanded, ok := item.Metadata["conversation_expanded"].(bool); !ok || !expanded {
+				t.Fatalf("expected fact companion to be marked as conversation expanded, got %+v", item.Metadata)
+			}
+		}
+		if item.NodeID == segment.NodeID {
+			foundSegment = true
+		}
+	}
+	if !foundFact {
+		t.Fatalf("expected same-conversation fact companion, got %+v", withConversation.Memories)
+	}
+	if foundSegment {
+		t.Fatalf("expected raw segment companion to stay hidden when IncludeSegments=false, got %+v", withConversation.Memories)
+	}
+
+	withConversationAndSegments, err := engine.Search(ctx, domain.SearchInput{
+		UserID:              "user-1",
+		Query:               summary.Content,
+		TopN:                5,
+		IncludeConversation: true,
+		IncludeSegments:     true,
+	})
+	if err != nil {
+		t.Fatalf("search with conversation+segment expansion: %v", err)
+	}
+	foundSegment = false
+	for _, item := range withConversationAndSegments.Memories {
+		if item.NodeID == segment.NodeID {
+			foundSegment = true
+			if expanded, ok := item.Metadata["conversation_expanded"].(bool); !ok || !expanded {
+				t.Fatalf("expected segment companion to be marked as conversation expanded, got %+v", item.Metadata)
+			}
+		}
+	}
+	if !foundSegment {
+		t.Fatalf("expected raw segment companion when include_conversation and include_segments are both enabled, got %+v", withConversationAndSegments.Memories)
+	}
+}
+
+func TestMemoryEngineFallbackIncludeConversationExpandsCompanionMemories(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := sql.NewInMemoryMemoryRepository()
+	engine := memoryservice.NewEngine(repo, nil)
+
+	summary := domain.MemoryDocument{
+		ID:             "summary:conv-fallback:v1",
+		NodeID:         "node:summary:conv-fallback:v1",
+		UserID:         "user-1",
+		ConversationID: "conv-fallback",
+		Type:           domain.MemoryTypeSummary,
+		Content:        "Runbook mentions the canary checklist.",
+		Importance:     1.1,
+		DecayFactor:    1,
+	}
+	impression := domain.MemoryDocument{
+		ID:             "impression:conv-fallback:ops",
+		NodeID:         "node:impression:conv-fallback:ops",
+		UserID:         "user-1",
+		ConversationID: "conv-fallback",
+		Type:           domain.MemoryTypeImpression,
+		Content:        "The team sounded cautious about the rollout.",
+		Importance:     0.9,
+		DecayFactor:    0.95,
+	}
+	for _, doc := range []domain.MemoryDocument{summary, impression} {
+		if err := repo.StoreDocument(ctx, doc); err != nil {
+			t.Fatalf("store fallback conversation doc %s: %v", doc.ID, err)
+		}
+	}
+
+	withoutConversation, err := engine.Search(ctx, domain.SearchInput{
+		UserID: "user-1",
+		Query:  "canary checklist",
+		TopN:   5,
+	})
+	if err != nil {
+		t.Fatalf("fallback search without conversation expansion: %v", err)
+	}
+	if len(withoutConversation.Memories) != 1 || withoutConversation.Memories[0].NodeID != summary.NodeID {
+		t.Fatalf("expected only lexical summary hit without include_conversation, got %+v", withoutConversation.Memories)
+	}
+
+	withConversation, err := engine.Search(ctx, domain.SearchInput{
+		UserID:              "user-1",
+		Query:               "canary checklist",
+		TopN:                5,
+		IncludeConversation: true,
+	})
+	if err != nil {
+		t.Fatalf("fallback search with conversation expansion: %v", err)
+	}
+	foundImpression := false
+	for _, item := range withConversation.Memories {
+		if item.NodeID == impression.NodeID {
+			foundImpression = true
+			if expanded, ok := item.Metadata["conversation_expanded"].(bool); !ok || !expanded {
+				t.Fatalf("expected fallback companion to be marked as conversation expanded, got %+v", item.Metadata)
+			}
+		}
+	}
+	if !foundImpression {
+		t.Fatalf("expected fallback search to include same-conversation impression, got %+v", withConversation.Memories)
+	}
+}
+
+func TestMemoryEngineCanonicalizesSupersededFactMatches(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := sql.NewInMemoryMemoryRepository()
+	engine := memoryservice.NewEngine(repo, nil)
+
+	older := domain.MemoryDocument{
+		ID:             "fact-city-old",
+		NodeID:         "node:fact-city-old",
+		UserID:         "user-1",
+		ConversationID: "conv-city",
+		Type:           domain.MemoryTypeFact,
+		Content:        "The user lives in Hangzhou.",
+		Importance:     1,
+		DecayFactor:    1,
+		Metadata: map[string]any{
+			"superseded_by_id": "fact-city-current",
+		},
+	}
+	current := domain.MemoryDocument{
+		ID:             "fact-city-current",
+		NodeID:         "node:fact-city-current",
+		UserID:         "user-1",
+		ConversationID: "conv-city",
+		Type:           domain.MemoryTypeFact,
+		Content:        "The user now lives in Shanghai.",
+		Importance:     1.1,
+		DecayFactor:    1,
+	}
+	if err := repo.StoreDocument(ctx, older); err != nil {
+		t.Fatalf("store older fact: %v", err)
+	}
+	if err := repo.StoreDocument(ctx, current); err != nil {
+		t.Fatalf("store current fact: %v", err)
+	}
+
+	result, err := engine.Search(ctx, domain.SearchInput{
+		UserID:      "user-1",
+		Query:       older.Content,
+		TopN:        3,
+		MemoryTypes: []domain.MemoryType{domain.MemoryTypeFact},
+	})
+	if err != nil {
+		t.Fatalf("search superseded fact: %v", err)
+	}
+	if len(result.Memories) != 1 {
+		t.Fatalf("expected canonicalized single fact result, got %+v", result.Memories)
+	}
+	if result.Memories[0].NodeID != current.NodeID {
+		t.Fatalf("expected current fact to replace stale fact, got %+v", result.Memories)
+	}
+	if canonicalized, ok := result.Memories[0].Metadata["supersession_canonicalized"].(bool); !ok || !canonicalized {
+		t.Fatalf("expected current fact to be marked as canonicalized, got %+v", result.Memories[0].Metadata)
+	}
+	if aliases, ok := result.Memories[0].Metadata["superseded_alias_node_ids"].([]string); !ok || len(aliases) != 1 || aliases[0] != older.NodeID {
+		t.Fatalf("expected superseded alias metadata to include stale node, got %+v", result.Memories[0].Metadata)
+	}
+}
+
+func TestMemoryEngineGraphExpansionCanonicalizesSupersededFacts(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := sql.NewInMemoryMemoryRepository()
+	vectors := vector.NewPGVectorStore(nil)
+	engine := memoryservice.NewEngine(repo, vectors)
+
+	summary := domain.MemoryDocument{
+		ID:             "summary:city-history:v1",
+		NodeID:         "node:summary:city-history:v1",
+		UserID:         "user-1",
+		ConversationID: "conv-city-history",
+		Type:           domain.MemoryTypeSummary,
+		Content:        "Conversation covered the user's relocation history and current home city.",
+		Importance:     1.1,
+		DecayFactor:    1,
+	}
+	older := domain.MemoryDocument{
+		ID:             "fact-city-history-old",
+		NodeID:         "node:fact-city-history-old",
+		UserID:         "user-1",
+		ConversationID: "conv-city-history",
+		Type:           domain.MemoryTypeFact,
+		Content:        "The user lived in Hangzhou.",
+		Importance:     1,
+		DecayFactor:    1,
+		Metadata: map[string]any{
+			"superseded_by_id": "fact-city-history-current",
+		},
+	}
+	current := domain.MemoryDocument{
+		ID:             "fact-city-history-current",
+		NodeID:         "node:fact-city-history-current",
+		UserID:         "user-1",
+		ConversationID: "conv-city-history",
+		Type:           domain.MemoryTypeFact,
+		Content:        "The user now lives in Shanghai.",
+		Importance:     1.1,
+		DecayFactor:    1,
+	}
+	for _, doc := range []domain.MemoryDocument{summary, older, current} {
+		if err := repo.StoreDocument(ctx, doc); err != nil {
+			t.Fatalf("store graph doc %s: %v", doc.ID, err)
+		}
+	}
+	if err := repo.LinkDocuments(ctx, domain.MemoryRelation{
+		UserID:       "user-1",
+		SrcNodeID:    summary.NodeID,
+		DstNodeID:    older.NodeID,
+		RelationType: "derived_from",
+		Weight:       0.9,
+		Source:       "test",
+	}); err != nil {
+		t.Fatalf("link summary to stale fact: %v", err)
+	}
+	if err := vectors.Upsert(ctx, domain.VectorUpsertRequest{
+		UserID:           summary.UserID,
+		NodeID:           summary.NodeID,
+		NodeType:         string(summary.Type),
+		EmbeddingVersion: 1,
+		EmbeddingModel:   "test-embedding",
+		ContentHash:      summary.Content,
+		Vector:           vector.EmbedText(summary.Content),
+	}); err != nil {
+		t.Fatalf("upsert summary vector: %v", err)
+	}
+
+	result, err := engine.Search(ctx, domain.SearchInput{
+		UserID: "user-1",
+		Query:  summary.Content,
+		TopN:   3,
+	})
+	if err != nil {
+		t.Fatalf("search graph canonicalization: %v", err)
+	}
+
+	foundCurrent := false
+	foundStale := false
+	for _, item := range result.Memories {
+		if item.NodeID == current.NodeID {
+			foundCurrent = true
+			if canonicalized, ok := item.Metadata["supersession_canonicalized"].(bool); !ok || !canonicalized {
+				t.Fatalf("expected current fact to be marked as canonicalized, got %+v", item.Metadata)
+			}
+		}
+		if item.NodeID == older.NodeID {
+			foundStale = true
+		}
+	}
+	if !foundCurrent {
+		t.Fatalf("expected graph expansion to surface current fact, got %+v", result.Memories)
+	}
+	if foundStale {
+		t.Fatalf("expected stale fact to be collapsed out of graph results, got %+v", result.Memories)
+	}
+}
+
 func TestMemoryEngineSearchWithoutVectorsResortsByVariantScore(t *testing.T) {
 	t.Parallel()
 
