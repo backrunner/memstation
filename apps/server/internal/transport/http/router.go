@@ -647,7 +647,7 @@ func adminUserSettingsHandler(settings *settingsservice.Service, publisher ports
 			return
 		}
 		fields := map[string]any{}
-		for _, key := range []string{"chat_model", "summary_model", "analysis_model", "embedding_model", "embedding_base_url", "embedding_api_key", "clear_embedding_api_key", "retain_source_materials", "tool_write_enabled", "max_injection_tokens"} {
+		for _, key := range []string{"chat_model", "summary_model", "analysis_model", "embedding_model", "retain_source_materials", "tool_write_enabled", "max_injection_tokens"} {
 			if value, ok := payload[key]; ok {
 				fields[key] = value
 			}
@@ -1386,12 +1386,13 @@ func adminConfigGetHandler(cfg bootstrap.Config, settings *settingsservice.Servi
 			}
 		}
 		if providerConfig != nil {
-			providers, err := providerConfig.List(r.Context())
+			providersByScope, err := providerConfig.ListByScope(r.Context())
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, "config_failed", err.Error())
 				return
 			}
-			snapshot["providers"] = providers
+			snapshot["provider_sets"] = providersByScope
+			snapshot["providers"] = providersByScope[providerconfigservice.ScopeGateway]
 		}
 		for key, value := range runtimeEnvelope(cfg, systemConfig) {
 			snapshot[key] = value
@@ -1413,7 +1414,7 @@ func adminConfigPutHandler(cfg bootstrap.Config, settings *settingsservice.Servi
 		}
 		var before map[string]any
 		settingsPayload := map[string]any{}
-		for _, key := range []string{"chat_model", "summary_model", "analysis_model", "embedding_model", "embedding_base_url", "embedding_api_key", "clear_embedding_api_key", "retain_source_materials", "tool_write_enabled", "max_injection_tokens"} {
+		for _, key := range []string{"chat_model", "summary_model", "analysis_model", "embedding_model", "retain_source_materials", "tool_write_enabled", "max_injection_tokens"} {
 			if value, ok := payload[key]; ok {
 				settingsPayload[key] = value
 			}
@@ -1438,6 +1439,21 @@ func adminConfigPutHandler(cfg bootstrap.Config, settings *settingsservice.Servi
 			}
 		}
 		if providerConfig != nil {
+			if rawProviderSets, ok := payload["provider_sets"]; ok {
+				updates, err := providerconfigservice.ParseScopedUpdatePayload(rawProviderSets)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+					return
+				}
+				for scope, scopeUpdates := range updates {
+					for providerName, update := range scopeUpdates {
+						if _, err := providerConfig.Update(r.Context(), scope, providerName, update); err != nil {
+							writeError(w, http.StatusInternalServerError, "config_failed", err.Error())
+							return
+						}
+					}
+				}
+			}
 			if rawProviders, ok := payload["providers"]; ok {
 				updates, err := providerconfigservice.ParseUpdatePayload(rawProviders)
 				if err != nil {
@@ -1445,18 +1461,19 @@ func adminConfigPutHandler(cfg bootstrap.Config, settings *settingsservice.Servi
 					return
 				}
 				for providerName, update := range updates {
-					if _, err := providerConfig.Update(r.Context(), providerName, update); err != nil {
+					if _, err := providerConfig.Update(r.Context(), providerconfigservice.ScopeGateway, providerName, update); err != nil {
 						writeError(w, http.StatusInternalServerError, "config_failed", err.Error())
 						return
 					}
 				}
 			}
-			providers, err := providerConfig.List(r.Context())
+			providersByScope, err := providerConfig.ListByScope(r.Context())
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, "config_failed", err.Error())
 				return
 			}
-			snapshot["providers"] = providers
+			snapshot["provider_sets"] = providersByScope
+			snapshot["providers"] = providersByScope[providerconfigservice.ScopeGateway]
 		}
 		if rawRuntime, ok := payload["runtime"]; ok && systemConfig != nil {
 			runtimePayload, ok := rawRuntime.(map[string]any)
@@ -1501,19 +1518,33 @@ func adminProviderDiagnosticsHandler(cfg bootstrap.Config, systemConfig *systemc
 			writeJSON(w, http.StatusOK, map[string]any{"items": []providerconfigservice.Diagnostic{}})
 			return
 		}
-		desiredDefault := cfg.DefaultProvider
-		liveDefault := cfg.DefaultProvider
+		desiredGatewayDefault := cfg.DefaultProvider
+		liveGatewayDefault := cfg.DefaultProvider
+		desiredInternalDefault := cfg.InternalDefaultProvider
+		liveInternalDefault := cfg.InternalDefaultProvider
 		desiredTimeoutSeconds := int(cfg.ProviderTimeout.Seconds())
 		liveTimeoutSeconds := int(cfg.ProviderTimeout.Seconds())
 		if systemConfig != nil {
 			desired := systemConfig.Snapshot()
 			live := systemConfig.LiveSnapshot()
-			desiredDefault = desired.DefaultProvider
-			liveDefault = live.DefaultProvider
+			desiredGatewayDefault = desired.DefaultProvider
+			liveGatewayDefault = live.DefaultProvider
+			desiredInternalDefault = desired.InternalDefaultProvider
+			liveInternalDefault = live.InternalDefaultProvider
 			desiredTimeoutSeconds = desired.ProviderTimeoutSeconds
 			liveTimeoutSeconds = live.ProviderTimeoutSeconds
 		}
-		items, err := providerConfig.Diagnostics(r.Context(), desiredDefault, liveDefault, desiredTimeoutSeconds, liveTimeoutSeconds)
+		desiredDefaults := map[providerconfigservice.Scope]domain.Provider{
+			providerconfigservice.ScopeGateway:   desiredGatewayDefault,
+			providerconfigservice.ScopeInternal:  desiredInternalDefault,
+			providerconfigservice.ScopeEmbedding: domain.ProviderOpenAICompatible,
+		}
+		liveDefaults := map[providerconfigservice.Scope]domain.Provider{
+			providerconfigservice.ScopeGateway:   liveGatewayDefault,
+			providerconfigservice.ScopeInternal:  liveInternalDefault,
+			providerconfigservice.ScopeEmbedding: domain.ProviderOpenAICompatible,
+		}
+		items, err := providerConfig.Diagnostics(r.Context(), desiredDefaults, liveDefaults, desiredTimeoutSeconds, liveTimeoutSeconds)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "provider_diagnostics_failed", err.Error())
 			return
@@ -1521,10 +1552,12 @@ func adminProviderDiagnosticsHandler(cfg bootstrap.Config, systemConfig *systemc
 		writeJSON(w, http.StatusOK, map[string]any{
 			"items": items,
 			"runtime": map[string]any{
-				"desired_default_provider": desiredDefault,
-				"live_default_provider":    liveDefault,
-				"desired_timeout_seconds":  desiredTimeoutSeconds,
-				"live_timeout_seconds":     liveTimeoutSeconds,
+				"desired_gateway_default_provider":  desiredGatewayDefault,
+				"live_gateway_default_provider":     liveGatewayDefault,
+				"desired_internal_default_provider": desiredInternalDefault,
+				"live_internal_default_provider":    liveInternalDefault,
+				"desired_timeout_seconds":           desiredTimeoutSeconds,
+				"live_timeout_seconds":              liveTimeoutSeconds,
 			},
 		})
 	}
@@ -1534,53 +1567,12 @@ func runtimeEnvelope(cfg bootstrap.Config, systemConfig *systemconfigservice.Ser
 	if systemConfig != nil {
 		return systemConfig.Envelope()
 	}
+	defaults := systemconfigservice.DefaultsFromConfig(cfg)
 	return map[string]any{
-		"runtime_defaults": map[string]any{
-			"default_provider":             cfg.DefaultProvider,
-			"vector_store_backend":         cfg.VectorStoreBackend,
-			"conversation_timeout_seconds": int(cfg.ConversationTimeout.Seconds()),
-			"provider_timeout_seconds":     int(cfg.ProviderTimeout.Seconds()),
-			"message_threshold":            cfg.MessageThreshold,
-			"token_threshold":              cfg.TokenThreshold,
-			"max_context_tokens":           cfg.MaxContextTokens,
-			"max_injection_tokens":         cfg.MaxInjectionTokens,
-			"rate_limit_rps":               cfg.RateLimitRPS,
-			"rate_limit_burst":             cfg.RateLimitBurst,
-			"cache_ttl_seconds":            int(cfg.CacheTTL.Seconds()),
-			"cors_allowed_origins":         cfg.CORSAllowedOrigins,
-			"session_cookie_cross_site":    cfg.SessionCookieCrossSite,
-		},
-		"runtime": map[string]any{
-			"default_provider":             cfg.DefaultProvider,
-			"vector_store_backend":         cfg.VectorStoreBackend,
-			"conversation_timeout_seconds": int(cfg.ConversationTimeout.Seconds()),
-			"provider_timeout_seconds":     int(cfg.ProviderTimeout.Seconds()),
-			"message_threshold":            cfg.MessageThreshold,
-			"token_threshold":              cfg.TokenThreshold,
-			"max_context_tokens":           cfg.MaxContextTokens,
-			"max_injection_tokens":         cfg.MaxInjectionTokens,
-			"rate_limit_rps":               cfg.RateLimitRPS,
-			"rate_limit_burst":             cfg.RateLimitBurst,
-			"cache_ttl_seconds":            int(cfg.CacheTTL.Seconds()),
-			"cors_allowed_origins":         cfg.CORSAllowedOrigins,
-			"session_cookie_cross_site":    cfg.SessionCookieCrossSite,
-		},
-		"runtime_live": map[string]any{
-			"default_provider":             cfg.DefaultProvider,
-			"vector_store_backend":         cfg.VectorStoreBackend,
-			"conversation_timeout_seconds": int(cfg.ConversationTimeout.Seconds()),
-			"provider_timeout_seconds":     int(cfg.ProviderTimeout.Seconds()),
-			"message_threshold":            cfg.MessageThreshold,
-			"token_threshold":              cfg.TokenThreshold,
-			"max_context_tokens":           cfg.MaxContextTokens,
-			"max_injection_tokens":         cfg.MaxInjectionTokens,
-			"rate_limit_rps":               cfg.RateLimitRPS,
-			"rate_limit_burst":             cfg.RateLimitBurst,
-			"cache_ttl_seconds":            int(cfg.CacheTTL.Seconds()),
-			"cors_allowed_origins":         cfg.CORSAllowedOrigins,
-			"session_cookie_cross_site":    cfg.SessionCookieCrossSite,
-		},
-		"runtime_meta": map[string]any{},
+		"runtime_defaults": defaults.AsMap(),
+		"runtime":          defaults.AsMap(),
+		"runtime_live":     defaults.AsMap(),
+		"runtime_meta":     map[string]any{},
 	}
 }
 
@@ -2123,29 +2115,32 @@ func redactConfigPayload(payload map[string]any) map[string]any {
 			redacted[key] = "[redacted]"
 			continue
 		}
-		if key != "providers" {
-			redacted[key] = value
-			continue
-		}
-		providers := map[string]any{}
-		if typed, ok := value.(map[string]any); ok {
-			for providerName, rawConfig := range typed {
-				configMap := map[string]any{}
-				if item, ok := rawConfig.(map[string]any); ok {
-					for configKey, configValue := range item {
-						if strings.EqualFold(configKey, "api_key") {
-							configMap[configKey] = security.RedactBearerToken(fmt.Sprintf("%v", configValue))
-							continue
-						}
-						configMap[configKey] = configValue
-					}
-				}
-				providers[providerName] = configMap
-			}
-		}
-		redacted[key] = providers
+		redacted[key] = redactProviderSecrets(value)
 	}
 	return redacted
+}
+
+func redactProviderSecrets(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		redacted := map[string]any{}
+		for key, nested := range typed {
+			if strings.EqualFold(key, "api_key") {
+				redacted[key] = security.RedactBearerToken(fmt.Sprintf("%v", nested))
+				continue
+			}
+			redacted[key] = redactProviderSecrets(nested)
+		}
+		return redacted
+	case []any:
+		redacted := make([]any, 0, len(typed))
+		for _, item := range typed {
+			redacted = append(redacted, redactProviderSecrets(item))
+		}
+		return redacted
+	default:
+		return value
+	}
 }
 
 func defaultString(value, fallback string) string {
@@ -2309,16 +2304,7 @@ func embeddingSettingsChanged(before, after, fields map[string]any) bool {
 	if len(fields) == 0 {
 		return false
 	}
-	if value, ok := fields["embedding_api_key"]; ok && strings.TrimSpace(anyString(value)) != "" {
-		return true
-	}
-	if value, ok := fields["clear_embedding_api_key"]; ok {
-		flag, ok := value.(bool)
-		if ok && flag {
-			return true
-		}
-	}
-	for _, key := range []string{"embedding_model", "embedding_base_url"} {
+	for _, key := range []string{"embedding_model"} {
 		if _, ok := fields[key]; !ok {
 			continue
 		}
@@ -2333,8 +2319,6 @@ func redactSensitiveSettingsFields(fields map[string]any) map[string]any {
 	redacted := map[string]any{}
 	for key, value := range fields {
 		switch key {
-		case "embedding_api_key":
-			redacted[key] = "[redacted]"
 		default:
 			redacted[key] = value
 		}

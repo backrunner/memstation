@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type Protocol string
 
@@ -23,9 +26,11 @@ const (
 )
 
 const (
-	ProviderOpenAI    Provider = "openai"
-	ProviderAnthropic Provider = "anthropic"
-	ProviderGemini    Provider = "gemini"
+	ProviderOpenAICompatible Provider = "openai_compatible"
+	ProviderOpenAI           Provider = ProviderOpenAICompatible
+	ProviderOpenAIResponses  Provider = "openai_responses"
+	ProviderAnthropic        Provider = "anthropic"
+	ProviderGemini           Provider = "gemini"
 )
 
 const (
@@ -41,8 +46,15 @@ const (
 )
 
 const (
-	ContentBlockText ContentBlockType = "text"
-	ContentBlockJSON ContentBlockType = "json"
+	ContentBlockText       ContentBlockType = "text"
+	ContentBlockImage      ContentBlockType = "image"
+	ContentBlockAudio      ContentBlockType = "audio"
+	ContentBlockVideo      ContentBlockType = "video"
+	ContentBlockFile       ContentBlockType = "file"
+	ContentBlockToolUse    ContentBlockType = "tool_use"
+	ContentBlockToolResult ContentBlockType = "tool_result"
+	ContentBlockJSON       ContentBlockType = "json"
+	ContentBlockUnknown    ContentBlockType = "unknown"
 )
 
 const (
@@ -60,10 +72,21 @@ const (
 )
 
 type ContentBlock struct {
-	Type     ContentBlockType `json:"type"`
-	Text     string           `json:"text,omitempty"`
-	Raw      string           `json:"raw,omitempty"`
-	Metadata map[string]any   `json:"metadata,omitempty"`
+	Type           ContentBlockType `json:"type"`
+	MIMEType       string           `json:"mime_type,omitempty"`
+	BlobID         string           `json:"blob_id,omitempty"`
+	SourceURL      string           `json:"source_url,omitempty"`
+	ProviderFileID string           `json:"provider_file_id,omitempty"`
+	Filename       string           `json:"filename,omitempty"`
+	SizeBytes      int64            `json:"size_bytes,omitempty"`
+	SHA256         string           `json:"sha256,omitempty"`
+	PageIndex      int              `json:"page_index,omitempty"`
+	StartMS        int64            `json:"start_ms,omitempty"`
+	EndMS          int64            `json:"end_ms,omitempty"`
+	DurationMS     int64            `json:"duration_ms,omitempty"`
+	Text           string           `json:"text,omitempty"`
+	Raw            string           `json:"raw,omitempty"`
+	Metadata       map[string]any   `json:"metadata,omitempty"`
 }
 
 type ToolDefinition struct {
@@ -164,4 +187,85 @@ type ModelCapability struct {
 	Role           string   `json:"role"`
 	SupportsTools  bool     `json:"supports_tools"`
 	SupportsStream bool     `json:"supports_stream"`
+}
+
+func NormalizeProvider(value string) Provider {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	normalized = strings.ReplaceAll(normalized, "-", "_")
+	switch normalized {
+	case "", "default":
+		return ""
+	case "openai", "openai_compatible", "openai_compat", "chat_completions":
+		return ProviderOpenAICompatible
+	case "openai_responses", "responses", "response":
+		return ProviderOpenAIResponses
+	case "anthropic", "anthropic_messages", "messages":
+		return ProviderAnthropic
+	case "gemini", "google", "google_genai":
+		return ProviderGemini
+	default:
+		return Provider(normalized)
+	}
+}
+
+func ParseProvider(value string) (Provider, bool) {
+	provider := NormalizeProvider(value)
+	switch provider {
+	case ProviderOpenAICompatible, ProviderOpenAIResponses, ProviderAnthropic, ProviderGemini:
+		return provider, true
+	default:
+		return "", false
+	}
+}
+
+func LLMProviders() []Provider {
+	return []Provider{
+		ProviderOpenAICompatible,
+		ProviderOpenAIResponses,
+		ProviderAnthropic,
+		ProviderGemini,
+	}
+}
+
+func EmbeddingProviders() []Provider {
+	return []Provider{
+		ProviderOpenAICompatible,
+	}
+}
+
+func (b ContentBlock) TextProxy() string {
+	if strings.TrimSpace(b.Text) != "" {
+		return strings.TrimSpace(b.Text)
+	}
+	switch b.Type {
+	case ContentBlockToolUse, ContentBlockToolResult, ContentBlockJSON, ContentBlockUnknown:
+		return strings.TrimSpace(b.Raw)
+	default:
+		if strings.TrimSpace(b.Raw) != "" {
+			return strings.TrimSpace(b.Raw)
+		}
+		if b.Metadata != nil {
+			for _, key := range []string{"text", "ocr_text", "caption", "transcript", "summary", "excerpt"} {
+				if value, ok := b.Metadata[key].(string); ok && strings.TrimSpace(value) != "" {
+					return strings.TrimSpace(value)
+				}
+			}
+		}
+		return ""
+	}
+}
+
+func (b ContentBlock) HasSource() bool {
+	return strings.TrimSpace(b.BlobID) != "" || strings.TrimSpace(b.SourceURL) != "" || strings.TrimSpace(b.ProviderFileID) != ""
+}
+
+func (b ContentBlock) Modality() string {
+	switch b.Type {
+	case ContentBlockImage, ContentBlockAudio, ContentBlockVideo, ContentBlockFile:
+		return string(b.Type)
+	case ContentBlockText, ContentBlockJSON:
+		return "text"
+	default:
+		return string(b.Type)
+	}
 }

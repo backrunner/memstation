@@ -12,6 +12,7 @@
 
   const trafficFields: RuntimeKey[] = [
     'default_provider',
+    'internal_default_provider',
     'conversation_timeout_seconds',
     'provider_timeout_seconds',
     'message_threshold',
@@ -29,6 +30,20 @@
     'session_cookie_cross_site',
     'cors_allowed_origins'
   ];
+  const multimodalFields: RuntimeKey[] = [
+    'multimodal_enabled',
+    'multimodal_storage_backend',
+    'multimodal_storage_local_root',
+    'multimodal_storage_bucket',
+    'multimodal_extract_image_model',
+    'multimodal_extract_audio_model',
+    'multimodal_extract_video_model',
+    'multimodal_extract_file_model',
+    'multimodal_audio_transcription_enabled',
+    'multimodal_video_frame_sampling_enabled',
+    'multimodal_max_asset_bytes',
+    'multimodal_allowed_mime_types'
+  ];
 
   let loading = true;
   let saving = false;
@@ -41,6 +56,7 @@
   let runtimeLive = emptyRuntime();
   let runtimeMeta: Record<string, RuntimeFieldMeta> = {};
   let corsAllowedOriginsText = '';
+  let allowedMimeTypesText = '';
   let pendingRestartCount = 0;
   let liveAppliedCount = 0;
 
@@ -59,7 +75,8 @@
 
   function emptyRuntime(): SystemRuntimeConfig {
     return {
-      default_provider: 'openai',
+      default_provider: 'openai_compatible',
+      internal_default_provider: 'openai_compatible',
       vector_store_backend: 'pgvector',
       conversation_timeout_seconds: 900,
       provider_timeout_seconds: 60,
@@ -71,13 +88,26 @@
       rate_limit_burst: 40,
       cache_ttl_seconds: 120,
       cors_allowed_origins: [],
-      session_cookie_cross_site: false
+      session_cookie_cross_site: false,
+      multimodal_enabled: true,
+      multimodal_storage_backend: 'local',
+      multimodal_storage_local_root: './data/blobs',
+      multimodal_storage_bucket: '',
+      multimodal_extract_image_model: '',
+      multimodal_extract_audio_model: '',
+      multimodal_extract_video_model: '',
+      multimodal_extract_file_model: '',
+      multimodal_audio_transcription_enabled: true,
+      multimodal_video_frame_sampling_enabled: true,
+      multimodal_max_asset_bytes: 104857600,
+      multimodal_allowed_mime_types: []
     };
   }
 
   function allRuntimeKeys(): RuntimeKey[] {
     return [
       'default_provider',
+      'internal_default_provider',
       'vector_store_backend',
       'conversation_timeout_seconds',
       'provider_timeout_seconds',
@@ -89,14 +119,27 @@
       'rate_limit_burst',
       'cache_ttl_seconds',
       'cors_allowed_origins',
-      'session_cookie_cross_site'
+      'session_cookie_cross_site',
+      'multimodal_enabled',
+      'multimodal_storage_backend',
+      'multimodal_storage_local_root',
+      'multimodal_storage_bucket',
+      'multimodal_extract_image_model',
+      'multimodal_extract_audio_model',
+      'multimodal_extract_video_model',
+      'multimodal_extract_file_model',
+      'multimodal_audio_transcription_enabled',
+      'multimodal_video_frame_sampling_enabled',
+      'multimodal_max_asset_bytes',
+      'multimodal_allowed_mime_types'
     ];
   }
 
   function normalizeRuntime(value: unknown): SystemRuntimeConfig {
     const runtimeValue = (value ?? {}) as Partial<SystemRuntimeConfig>;
     return {
-      default_provider: String(runtimeValue.default_provider ?? 'openai'),
+      default_provider: String(runtimeValue.default_provider ?? 'openai_compatible'),
+      internal_default_provider: String(runtimeValue.internal_default_provider ?? 'openai_compatible'),
       vector_store_backend: String(runtimeValue.vector_store_backend ?? 'pgvector'),
       conversation_timeout_seconds: Number(runtimeValue.conversation_timeout_seconds ?? 900),
       provider_timeout_seconds: Number(runtimeValue.provider_timeout_seconds ?? 60),
@@ -110,7 +153,21 @@
       cors_allowed_origins: Array.isArray(runtimeValue.cors_allowed_origins)
         ? runtimeValue.cors_allowed_origins.map((item) => String(item)).filter(Boolean)
         : [],
-      session_cookie_cross_site: Boolean(runtimeValue.session_cookie_cross_site)
+      session_cookie_cross_site: Boolean(runtimeValue.session_cookie_cross_site),
+      multimodal_enabled: Boolean(runtimeValue.multimodal_enabled ?? true),
+      multimodal_storage_backend: String(runtimeValue.multimodal_storage_backend ?? 'local'),
+      multimodal_storage_local_root: String(runtimeValue.multimodal_storage_local_root ?? './data/blobs'),
+      multimodal_storage_bucket: String(runtimeValue.multimodal_storage_bucket ?? ''),
+      multimodal_extract_image_model: String(runtimeValue.multimodal_extract_image_model ?? ''),
+      multimodal_extract_audio_model: String(runtimeValue.multimodal_extract_audio_model ?? ''),
+      multimodal_extract_video_model: String(runtimeValue.multimodal_extract_video_model ?? ''),
+      multimodal_extract_file_model: String(runtimeValue.multimodal_extract_file_model ?? ''),
+      multimodal_audio_transcription_enabled: Boolean(runtimeValue.multimodal_audio_transcription_enabled ?? true),
+      multimodal_video_frame_sampling_enabled: Boolean(runtimeValue.multimodal_video_frame_sampling_enabled ?? true),
+      multimodal_max_asset_bytes: Number(runtimeValue.multimodal_max_asset_bytes ?? 104857600),
+      multimodal_allowed_mime_types: Array.isArray(runtimeValue.multimodal_allowed_mime_types)
+        ? runtimeValue.multimodal_allowed_mime_types.map((item) => String(item)).filter(Boolean)
+        : []
     };
   }
 
@@ -120,6 +177,7 @@
     runtimeLive = normalizeRuntime(payload.runtime_live ?? payload.runtime);
     runtimeMeta = payload.runtime_meta ?? {};
     corsAllowedOriginsText = runtime.cors_allowed_origins.join('\n');
+    allowedMimeTypesText = runtime.multimodal_allowed_mime_types.join('\n');
   }
 
   function metaFor(key: RuntimeKey): RuntimeFieldMeta {
@@ -132,15 +190,15 @@
   }
 
   function runtimeDiffers(key: RuntimeKey): boolean {
-    if (key === 'cors_allowed_origins') {
-      return runtime.cors_allowed_origins.join(',') !== runtimeLive.cors_allowed_origins.join(',');
+    if (Array.isArray(runtime[key])) {
+      return (runtime[key] as string[]).join(',') !== (runtimeLive[key] as string[]).join(',');
     }
     return String(runtime[key]) !== String(runtimeLive[key]);
   }
 
   function formatRuntimeValue(key: RuntimeKey, value: SystemRuntimeConfig[RuntimeKey]): string {
-    if (key === 'cors_allowed_origins') {
-      return (value as string[]).length > 0 ? (value as string[]).join(', ') : 'none';
+    if (Array.isArray(value)) {
+      return value.length > 0 ? value.join(', ') : 'none';
     }
     if (typeof value === 'boolean') {
       return value ? 'enabled' : 'disabled';
@@ -153,10 +211,14 @@
   }
 
   function setLocalDefault(key: RuntimeKey): void {
-    if (key === 'cors_allowed_origins') {
-      runtime.cors_allowed_origins = [...runtimeDefaults.cors_allowed_origins];
-      corsAllowedOriginsText = runtimeDefaults.cors_allowed_origins.join('\n');
-      runtime = { ...runtime };
+    if (key === 'cors_allowed_origins' || key === 'multimodal_allowed_mime_types') {
+      if (key === 'cors_allowed_origins') {
+        runtime = { ...runtime, cors_allowed_origins: [...runtimeDefaults.cors_allowed_origins] };
+        corsAllowedOriginsText = runtimeDefaults.cors_allowed_origins.join('\n');
+      } else {
+        runtime = { ...runtime, multimodal_allowed_mime_types: [...runtimeDefaults.multimodal_allowed_mime_types] };
+        allowedMimeTypesText = runtimeDefaults.multimodal_allowed_mime_types.join('\n');
+      }
       return;
     }
     runtime = { ...runtime, [key]: runtimeDefaults[key] } as SystemRuntimeConfig;
@@ -196,6 +258,10 @@
         runtime: {
           ...runtime,
           cors_allowed_origins: corsAllowedOriginsText
+            .split(/\n|,/)
+            .map((item) => item.trim())
+            .filter(Boolean),
+          multimodal_allowed_mime_types: allowedMimeTypesText
             .split(/\n|,/)
             .map((item) => item.trim())
             .filter(Boolean)
@@ -314,9 +380,19 @@
 
         <div class="form-grid two-up">
           <label class="field">
-            <span class="field-label">Default provider</span>
+            <span class="field-label">Gateway default provider</span>
             <select class="input" bind:value={runtime.default_provider}>
-              <option value="openai">openai</option>
+              <option value="openai_compatible">openai_compatible</option>
+              <option value="openai_responses">openai_responses</option>
+              <option value="anthropic">anthropic</option>
+              <option value="gemini">gemini</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="field-label">Internal default provider</span>
+            <select class="input" bind:value={runtime.internal_default_provider}>
+              <option value="openai_compatible">openai_compatible</option>
+              <option value="openai_responses">openai_responses</option>
               <option value="anthropic">anthropic</option>
               <option value="gemini">gemini</option>
             </select>
@@ -435,6 +511,101 @@
         </div>
       </section>
     </div>
+
+    <section class="card page-stack">
+      <div class="page-header">
+        <div>
+          <div class="sidebar-label">Multimodal pipeline</div>
+          <h2 class="page-title" style="font-size: 1.35rem;">Blob retention, extractor models, and ingestion guardrails</h2>
+        </div>
+      </div>
+
+      <div class="form-grid two-up">
+        <label class="field">
+          <span class="field-label">Multimodal ingestion</span>
+          <div class="inline-group">
+            <button class={runtime.multimodal_enabled ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (runtime.multimodal_enabled = true)}>Enabled</button>
+            <button class={!runtime.multimodal_enabled ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (runtime.multimodal_enabled = false)}>Disabled</button>
+          </div>
+        </label>
+        <label class="field">
+          <span class="field-label">Blob storage backend</span>
+          <select class="input" bind:value={runtime.multimodal_storage_backend}>
+            <option value="local">local</option>
+            <option value="s3">s3</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field-label">Local blob root</span>
+          <input class="input" bind:value={runtime.multimodal_storage_local_root} />
+        </label>
+        <label class="field">
+          <span class="field-label">Remote bucket</span>
+          <input class="input" bind:value={runtime.multimodal_storage_bucket} placeholder="memstation-assets" />
+        </label>
+        <label class="field">
+          <span class="field-label">Image extractor model</span>
+          <input class="input" bind:value={runtime.multimodal_extract_image_model} placeholder="configured vision model" />
+        </label>
+        <label class="field">
+          <span class="field-label">Audio extractor model</span>
+          <input class="input" bind:value={runtime.multimodal_extract_audio_model} placeholder="configured ASR model" />
+        </label>
+        <label class="field">
+          <span class="field-label">Video extractor model</span>
+          <input class="input" bind:value={runtime.multimodal_extract_video_model} placeholder="configured video model" />
+        </label>
+        <label class="field">
+          <span class="field-label">File extractor model</span>
+          <input class="input" bind:value={runtime.multimodal_extract_file_model} placeholder="configured document model" />
+        </label>
+        <label class="field">
+          <span class="field-label">Max asset bytes</span>
+          <input class="input" type="number" min="0" bind:value={runtime.multimodal_max_asset_bytes} />
+        </label>
+        <label class="field">
+          <span class="field-label">Audio transcription</span>
+          <div class="inline-group">
+            <button class={runtime.multimodal_audio_transcription_enabled ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (runtime.multimodal_audio_transcription_enabled = true)}>Enabled</button>
+            <button class={!runtime.multimodal_audio_transcription_enabled ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (runtime.multimodal_audio_transcription_enabled = false)}>Disabled</button>
+          </div>
+        </label>
+        <label class="field">
+          <span class="field-label">Video frame sampling</span>
+          <div class="inline-group">
+            <button class={runtime.multimodal_video_frame_sampling_enabled ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (runtime.multimodal_video_frame_sampling_enabled = true)}>Enabled</button>
+            <button class={!runtime.multimodal_video_frame_sampling_enabled ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (runtime.multimodal_video_frame_sampling_enabled = false)}>Disabled</button>
+          </div>
+        </label>
+        <label class="field" style="grid-column: 1 / -1;">
+          <span class="field-label">Allowed MIME types</span>
+          <textarea class="textarea" rows="6" bind:value={allowedMimeTypesText} placeholder="image/png&#10;application/pdf&#10;audio/mpeg"></textarea>
+          <span class="field-help">One MIME type per line or separated by commas. This allow-list gates hosted uploads and extraction.</span>
+        </label>
+      </div>
+
+      <div class="runtime-field-list">
+        {#each multimodalFields as key}
+          <div class="runtime-field-row">
+            <div>
+              <strong>{key}</strong>
+              <div class="helper-text">{metaFor(key).description}</div>
+              <div class="helper-text">Default value: {formatRuntimeValue(key, defaultValueFor(key))}</div>
+              <div class="helper-text">Live value: {formatRuntimeValue(key, runtimeLive[key])}</div>
+            </div>
+            <div class="runtime-field-status">
+              <StatusBadge tone={metaFor(key).apply_mode === 'live' ? 'success' : 'warning'} label={metaFor(key).apply_mode} />
+              <StatusBadge tone={metaFor(key).source === 'override' ? 'brand' : 'muted'} label={metaFor(key).source} />
+              {#if runtimeDiffers(key)}
+                <StatusBadge tone={metaFor(key).apply_mode === 'restart' ? 'warning' : 'brand'} label={metaFor(key).apply_mode === 'restart' ? 'restart pending' : 'applied'} />
+              {/if}
+              <button class="button-ghost" type="button" disabled={saving || metaFor(key).source !== 'override'} on:click={() => resetField(key)}>Reset</button>
+              <button class="button-ghost" type="button" disabled={saving} on:click={() => setLocalDefault(key)}>Use default</button>
+            </div>
+          </div>
+        {/each}
+      </div>
+    </section>
 
     <section class="card page-stack">
       <div class="page-header">

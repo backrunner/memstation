@@ -71,11 +71,11 @@ func TestServiceEmbedsWithOpenAICompatibleEndpoint(t *testing.T) {
 	}
 }
 
-func TestServicePrefersUserEmbeddingOverride(t *testing.T) {
+func TestServicePrefersUserEmbeddingModelOverride(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get("Authorization"); got != "Bearer sk-user" {
+		if got := r.Header.Get("Authorization"); got != "Bearer sk-embed" {
 			t.Fatalf("unexpected auth header: %s", got)
 		}
 		var body map[string]any
@@ -100,17 +100,15 @@ func TestServicePrefersUserEmbeddingOverride(t *testing.T) {
 	}
 	settings := settingsservice.NewService(nil, encryptor, "", "", "", "text-embedding-3-large", 2048)
 	if _, err := settings.UpdateForUser(context.Background(), "user-1", map[string]any{
-		"embedding_model":    "text-embedding-3-small",
-		"embedding_base_url": server.URL,
-		"embedding_api_key":  "sk-user",
+		"embedding_model": "text-embedding-3-small",
 	}); err != nil {
 		t.Fatalf("update settings: %v", err)
 	}
 
 	service := NewService(provider.StaticConfigResolver{
-		domain.ProviderOpenAI: {
-			APIKey:  "sk-global",
-			BaseURL: "https://api.openai.example/v1",
+		domain.ProviderOpenAICompatible: {
+			APIKey:  "sk-embed",
+			BaseURL: server.URL,
 		},
 	}, settings, time.Second)
 

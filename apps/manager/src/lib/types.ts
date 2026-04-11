@@ -41,11 +41,29 @@ export interface ToolResult {
   output?: Record<string, unknown>;
 }
 
+export interface ContentBlock {
+  type: string;
+  mime_type?: string;
+  blob_id?: string;
+  source_url?: string;
+  provider_file_id?: string;
+  filename?: string;
+  size_bytes?: number;
+  sha256?: string;
+  page_index?: number;
+  start_ms?: number;
+  end_ms?: number;
+  duration_ms?: number;
+  text?: string;
+  raw?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface ChatThreadMessage {
   id: string;
   role: ChatRole;
   text: string;
-  blocks?: Array<{ type: string; text?: string; raw?: string }>;
+  blocks?: ContentBlock[];
   toolCalls?: ToolCall[];
   toolResults?: ToolResult[];
   thinking?: string;
@@ -79,11 +97,75 @@ export interface ConversationRecord {
   summary_status: string;
   analysis_status: string;
   messages: ChatThreadMessage[];
+  parts?: MessagePart[];
+  artifacts?: MessagePartArtifact[];
   segments?: ConversationSegment[];
   usage: UsageRecord;
   metadata?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+}
+
+export interface MessagePart {
+  part_id: string;
+  user_id: string;
+  conversation_id: string;
+  sequence_num: number;
+  part_index: number;
+  role: ChatRole;
+  part_type: string;
+  mime_type?: string;
+  blob_id?: string;
+  source_url?: string;
+  provider_file_id?: string;
+  filename?: string;
+  text_content?: string;
+  raw_payload?: string;
+  page_index?: number;
+  start_ms?: number;
+  end_ms?: number;
+  duration_ms?: number;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface MessagePartArtifact {
+  artifact_id: string;
+  user_id: string;
+  conversation_id: string;
+  part_id: string;
+  artifact_type: string;
+  status: string;
+  extractor_kind?: string;
+  model_name?: string;
+  text_content?: string;
+  page_index?: number;
+  start_ms?: number;
+  end_ms?: number;
+  confidence?: number;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface MemoryEvidence {
+  id: string;
+  generation_id?: string;
+  user_id: string;
+  node_id: string;
+  conversation_id: string;
+  sequence_num: number;
+  part_id?: string;
+  artifact_id?: string;
+  page_index?: number;
+  start_ms?: number;
+  end_ms?: number;
+  evidence_kind: string;
+  excerpt_text?: string;
+  weight?: number;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
 }
 
 export interface ConversationSegment {
@@ -135,6 +217,7 @@ export interface MemoryDocument {
   time_tier?: string;
   metadata?: Record<string, unknown>;
   related?: Array<{ id: string; type: string; weight: number }>;
+  evidences?: MemoryEvidence[];
   created_at?: string;
   updated_at?: string;
 }
@@ -341,6 +424,7 @@ export interface HealthPayload {
 }
 
 export interface ProviderSummary {
+  scope?: string;
   provider: string;
   base_url: string;
   has_api_key: boolean;
@@ -348,7 +432,14 @@ export interface ProviderSummary {
   updated_at?: string;
 }
 
+export interface ProviderSetPayload {
+  gateway?: ProviderSummary[];
+  internal?: ProviderSummary[];
+  embedding?: ProviderSummary[];
+}
+
 export interface ProviderDiagnostic {
+  scope: string;
   provider: string;
   base_url: string;
   host?: string;
@@ -374,6 +465,7 @@ export interface RuntimeFieldMeta {
 
 export interface SystemRuntimeConfig {
   default_provider: string;
+  internal_default_provider: string;
   vector_store_backend: string;
   conversation_timeout_seconds: number;
   provider_timeout_seconds: number;
@@ -386,6 +478,18 @@ export interface SystemRuntimeConfig {
   cache_ttl_seconds: number;
   cors_allowed_origins: string[];
   session_cookie_cross_site: boolean;
+  multimodal_enabled: boolean;
+  multimodal_storage_backend: string;
+  multimodal_storage_local_root: string;
+  multimodal_storage_bucket: string;
+  multimodal_extract_image_model: string;
+  multimodal_extract_audio_model: string;
+  multimodal_extract_video_model: string;
+  multimodal_extract_file_model: string;
+  multimodal_audio_transcription_enabled: boolean;
+  multimodal_video_frame_sampling_enabled: boolean;
+  multimodal_max_asset_bytes: number;
+  multimodal_allowed_mime_types: string[];
 }
 
 export interface APIKeyRecord {
@@ -440,6 +544,7 @@ export interface UpdateUserSettingsResponse {
 
 export interface AdminConfigPayload extends Record<string, unknown> {
   providers?: ProviderSummary[];
+  provider_sets?: ProviderSetPayload;
   runtime_defaults?: SystemRuntimeConfig;
   runtime?: SystemRuntimeConfig;
   runtime_live?: SystemRuntimeConfig;

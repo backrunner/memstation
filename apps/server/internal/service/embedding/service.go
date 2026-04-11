@@ -89,25 +89,27 @@ func (s *Service) resolveRuntime(ctx context.Context, input domain.EmbeddingInpu
 	if err != nil {
 		return settingsservice.EmbeddingRuntime{}, err
 	}
+	modelProvider, modelName := parseModelReference(strings.TrimSpace(input.Model))
+	if modelProvider != "" && modelProvider != domain.ProviderOpenAICompatible {
+		return settingsservice.EmbeddingRuntime{}, errors.New("embedding model provider must use openai_compatible")
+	}
 	runtime := settingsservice.EmbeddingRuntime{
-		Model:   strings.TrimSpace(input.Model),
+		Model:   strings.TrimSpace(modelName),
 		BaseURL: strings.TrimSpace(baseConfig.BaseURL),
 		APIKey:  strings.TrimSpace(baseConfig.APIKey),
 	}
 
 	if s.settings != nil && strings.TrimSpace(input.UserID) != "" {
-		override, err := s.settings.ResolveEmbeddingRuntime(ctx, input.UserID)
+		snapshot, err := s.settings.SnapshotForUser(ctx, input.UserID)
 		if err != nil {
 			return settingsservice.EmbeddingRuntime{}, err
 		}
+		overrideProvider, overrideModel := parseModelReference(strings.TrimSpace(anyString(snapshot["embedding_model"])))
+		if overrideProvider != "" && overrideProvider != domain.ProviderOpenAICompatible {
+			return settingsservice.EmbeddingRuntime{}, errors.New("embedding model provider must use openai_compatible")
+		}
 		if runtime.Model == "" {
-			runtime.Model = strings.TrimSpace(override.Model)
-		}
-		if strings.TrimSpace(override.BaseURL) != "" {
-			runtime.BaseURL = strings.TrimSpace(override.BaseURL)
-		}
-		if override.HasUserAPIKey {
-			runtime.APIKey = strings.TrimSpace(override.APIKey)
+			runtime.Model = strings.TrimSpace(overrideModel)
 		}
 	}
 
@@ -121,6 +123,28 @@ func (s *Service) resolveRuntime(ctx context.Context, input domain.EmbeddingInpu
 	default:
 		return runtime, nil
 	}
+}
+
+func parseModelReference(value string) (domain.Provider, string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", ""
+	}
+	for _, separator := range []string{":", "/"} {
+		parts := strings.SplitN(value, separator, 2)
+		if len(parts) != 2 {
+			continue
+		}
+		if providerName, ok := domain.ParseProvider(parts[0]); ok {
+			return providerName, strings.TrimSpace(parts[1])
+		}
+	}
+	return "", value
+}
+
+func anyString(value any) string {
+	typed, _ := value.(string)
+	return typed
 }
 
 func firstNonEmpty(values ...string) string {

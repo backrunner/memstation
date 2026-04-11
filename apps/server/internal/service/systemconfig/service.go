@@ -15,19 +15,32 @@ import (
 )
 
 type Snapshot struct {
-	DefaultProvider            domain.Provider `json:"default_provider"`
-	VectorStoreBackend         string          `json:"vector_store_backend"`
-	ConversationTimeoutSeconds int             `json:"conversation_timeout_seconds"`
-	ProviderTimeoutSeconds     int             `json:"provider_timeout_seconds"`
-	MessageThreshold           int             `json:"message_threshold"`
-	TokenThreshold             int             `json:"token_threshold"`
-	MaxContextTokens           int             `json:"max_context_tokens"`
-	MaxInjectionTokens         int             `json:"max_injection_tokens"`
-	RateLimitRPS               int             `json:"rate_limit_rps"`
-	RateLimitBurst             int             `json:"rate_limit_burst"`
-	CacheTTLSeconds            int             `json:"cache_ttl_seconds"`
-	CORSAllowedOrigins         []string        `json:"cors_allowed_origins"`
-	SessionCookieCrossSite     bool            `json:"session_cookie_cross_site"`
+	DefaultProvider                     domain.Provider `json:"default_provider"`
+	InternalDefaultProvider             domain.Provider `json:"internal_default_provider"`
+	VectorStoreBackend                  string          `json:"vector_store_backend"`
+	ConversationTimeoutSeconds          int             `json:"conversation_timeout_seconds"`
+	ProviderTimeoutSeconds              int             `json:"provider_timeout_seconds"`
+	MessageThreshold                    int             `json:"message_threshold"`
+	TokenThreshold                      int             `json:"token_threshold"`
+	MaxContextTokens                    int             `json:"max_context_tokens"`
+	MaxInjectionTokens                  int             `json:"max_injection_tokens"`
+	RateLimitRPS                        int             `json:"rate_limit_rps"`
+	RateLimitBurst                      int             `json:"rate_limit_burst"`
+	CacheTTLSeconds                     int             `json:"cache_ttl_seconds"`
+	CORSAllowedOrigins                  []string        `json:"cors_allowed_origins"`
+	SessionCookieCrossSite              bool            `json:"session_cookie_cross_site"`
+	MultimodalEnabled                   bool            `json:"multimodal_enabled"`
+	MultimodalStorageBackend            string          `json:"multimodal_storage_backend"`
+	MultimodalStorageLocalRoot          string          `json:"multimodal_storage_local_root"`
+	MultimodalStorageBucket             string          `json:"multimodal_storage_bucket"`
+	MultimodalExtractImageModel         string          `json:"multimodal_extract_image_model"`
+	MultimodalExtractAudioModel         string          `json:"multimodal_extract_audio_model"`
+	MultimodalExtractVideoModel         string          `json:"multimodal_extract_video_model"`
+	MultimodalExtractFileModel          string          `json:"multimodal_extract_file_model"`
+	MultimodalAudioTranscriptionEnabled bool            `json:"multimodal_audio_transcription_enabled"`
+	MultimodalVideoFrameSamplingEnabled bool            `json:"multimodal_video_frame_sampling_enabled"`
+	MultimodalMaxAssetBytes             int64           `json:"multimodal_max_asset_bytes"`
+	MultimodalAllowedMIMETypes          []string        `json:"multimodal_allowed_mime_types"`
 }
 
 type FieldMeta struct {
@@ -38,26 +51,40 @@ type FieldMeta struct {
 }
 
 type LiveApplier struct {
-	SetDefaultProvider     func(domain.Provider)
-	SetThresholds          func(messageThreshold, tokenThreshold int)
-	SetConversationTimeout func(time.Duration)
-	SetRateLimit           func(rps, burst int)
+	SetDefaultProvider         func(domain.Provider)
+	SetInternalDefaultProvider func(domain.Provider)
+	SetThresholds              func(messageThreshold, tokenThreshold int)
+	SetConversationTimeout     func(time.Duration)
+	SetRateLimit               func(rps, burst int)
 }
 
 type Overrides struct {
-	DefaultProvider            *domain.Provider
-	VectorStoreBackend         *string
-	ConversationTimeoutSeconds *int
-	ProviderTimeoutSeconds     *int
-	MessageThreshold           *int
-	TokenThreshold             *int
-	MaxContextTokens           *int
-	MaxInjectionTokens         *int
-	RateLimitRPS               *int
-	RateLimitBurst             *int
-	CacheTTLSeconds            *int
-	CORSAllowedOrigins         *[]string
-	SessionCookieCrossSite     *bool
+	DefaultProvider                     *domain.Provider
+	InternalDefaultProvider             *domain.Provider
+	VectorStoreBackend                  *string
+	ConversationTimeoutSeconds          *int
+	ProviderTimeoutSeconds              *int
+	MessageThreshold                    *int
+	TokenThreshold                      *int
+	MaxContextTokens                    *int
+	MaxInjectionTokens                  *int
+	RateLimitRPS                        *int
+	RateLimitBurst                      *int
+	CacheTTLSeconds                     *int
+	CORSAllowedOrigins                  *[]string
+	SessionCookieCrossSite              *bool
+	MultimodalEnabled                   *bool
+	MultimodalStorageBackend            *string
+	MultimodalStorageLocalRoot          *string
+	MultimodalStorageBucket             *string
+	MultimodalExtractImageModel         *string
+	MultimodalExtractAudioModel         *string
+	MultimodalExtractVideoModel         *string
+	MultimodalExtractFileModel          *string
+	MultimodalAudioTranscriptionEnabled *bool
+	MultimodalVideoFrameSamplingEnabled *bool
+	MultimodalMaxAssetBytes             *int64
+	MultimodalAllowedMIMETypes          *[]string
 }
 
 type Service struct {
@@ -72,19 +99,32 @@ type Service struct {
 
 func DefaultsFromConfig(cfg bootstrap.Config) Snapshot {
 	return Snapshot{
-		DefaultProvider:            cfg.DefaultProvider,
-		VectorStoreBackend:         cfg.VectorStoreBackend,
-		ConversationTimeoutSeconds: int(cfg.ConversationTimeout.Seconds()),
-		ProviderTimeoutSeconds:     int(cfg.ProviderTimeout.Seconds()),
-		MessageThreshold:           cfg.MessageThreshold,
-		TokenThreshold:             cfg.TokenThreshold,
-		MaxContextTokens:           cfg.MaxContextTokens,
-		MaxInjectionTokens:         cfg.MaxInjectionTokens,
-		RateLimitRPS:               cfg.RateLimitRPS,
-		RateLimitBurst:             cfg.RateLimitBurst,
-		CacheTTLSeconds:            int(cfg.CacheTTL.Seconds()),
-		CORSAllowedOrigins:         append([]string(nil), cfg.CORSAllowedOrigins...),
-		SessionCookieCrossSite:     cfg.SessionCookieCrossSite,
+		DefaultProvider:                     cfg.DefaultProvider,
+		InternalDefaultProvider:             cfg.InternalDefaultProvider,
+		VectorStoreBackend:                  cfg.VectorStoreBackend,
+		ConversationTimeoutSeconds:          int(cfg.ConversationTimeout.Seconds()),
+		ProviderTimeoutSeconds:              int(cfg.ProviderTimeout.Seconds()),
+		MessageThreshold:                    cfg.MessageThreshold,
+		TokenThreshold:                      cfg.TokenThreshold,
+		MaxContextTokens:                    cfg.MaxContextTokens,
+		MaxInjectionTokens:                  cfg.MaxInjectionTokens,
+		RateLimitRPS:                        cfg.RateLimitRPS,
+		RateLimitBurst:                      cfg.RateLimitBurst,
+		CacheTTLSeconds:                     int(cfg.CacheTTL.Seconds()),
+		CORSAllowedOrigins:                  append([]string(nil), cfg.CORSAllowedOrigins...),
+		SessionCookieCrossSite:              cfg.SessionCookieCrossSite,
+		MultimodalEnabled:                   cfg.Multimodal.Enabled,
+		MultimodalStorageBackend:            cfg.Multimodal.StorageBackend,
+		MultimodalStorageLocalRoot:          cfg.Multimodal.StorageLocalRoot,
+		MultimodalStorageBucket:             cfg.Multimodal.StorageBucket,
+		MultimodalExtractImageModel:         cfg.Multimodal.ImageModel,
+		MultimodalExtractAudioModel:         cfg.Multimodal.AudioModel,
+		MultimodalExtractVideoModel:         cfg.Multimodal.VideoModel,
+		MultimodalExtractFileModel:          cfg.Multimodal.FileModel,
+		MultimodalAudioTranscriptionEnabled: cfg.Multimodal.AudioTranscriptionEnabled,
+		MultimodalVideoFrameSamplingEnabled: cfg.Multimodal.VideoFrameSamplingEnabled,
+		MultimodalMaxAssetBytes:             cfg.Multimodal.MaxAssetBytes,
+		MultimodalAllowedMIMETypes:          append([]string(nil), cfg.Multimodal.AllowedMIMETypes...),
 	}
 }
 
@@ -168,6 +208,10 @@ func (s *Service) Update(ctx context.Context, fields map[string]any) (map[string
 		hooks.SetDefaultProvider(desired.DefaultProvider)
 		live.DefaultProvider = desired.DefaultProvider
 	}
+	if hooks.SetInternalDefaultProvider != nil {
+		hooks.SetInternalDefaultProvider(desired.InternalDefaultProvider)
+		live.InternalDefaultProvider = desired.InternalDefaultProvider
+	}
 	if hooks.SetThresholds != nil {
 		hooks.SetThresholds(desired.MessageThreshold, desired.TokenThreshold)
 		live.MessageThreshold = desired.MessageThreshold
@@ -193,24 +237,38 @@ func (s *Service) Update(ctx context.Context, fields map[string]any) (map[string
 
 func (s Snapshot) AsMap() map[string]any {
 	return map[string]any{
-		"default_provider":             s.DefaultProvider,
-		"vector_store_backend":         s.VectorStoreBackend,
-		"conversation_timeout_seconds": s.ConversationTimeoutSeconds,
-		"provider_timeout_seconds":     s.ProviderTimeoutSeconds,
-		"message_threshold":            s.MessageThreshold,
-		"token_threshold":              s.TokenThreshold,
-		"max_context_tokens":           s.MaxContextTokens,
-		"max_injection_tokens":         s.MaxInjectionTokens,
-		"rate_limit_rps":               s.RateLimitRPS,
-		"rate_limit_burst":             s.RateLimitBurst,
-		"cache_ttl_seconds":            s.CacheTTLSeconds,
-		"cors_allowed_origins":         append([]string(nil), s.CORSAllowedOrigins...),
-		"session_cookie_cross_site":    s.SessionCookieCrossSite,
+		"default_provider":                        s.DefaultProvider,
+		"internal_default_provider":               s.InternalDefaultProvider,
+		"vector_store_backend":                    s.VectorStoreBackend,
+		"conversation_timeout_seconds":            s.ConversationTimeoutSeconds,
+		"provider_timeout_seconds":                s.ProviderTimeoutSeconds,
+		"message_threshold":                       s.MessageThreshold,
+		"token_threshold":                         s.TokenThreshold,
+		"max_context_tokens":                      s.MaxContextTokens,
+		"max_injection_tokens":                    s.MaxInjectionTokens,
+		"rate_limit_rps":                          s.RateLimitRPS,
+		"rate_limit_burst":                        s.RateLimitBurst,
+		"cache_ttl_seconds":                       s.CacheTTLSeconds,
+		"cors_allowed_origins":                    append([]string(nil), s.CORSAllowedOrigins...),
+		"session_cookie_cross_site":               s.SessionCookieCrossSite,
+		"multimodal_enabled":                      s.MultimodalEnabled,
+		"multimodal_storage_backend":              s.MultimodalStorageBackend,
+		"multimodal_storage_local_root":           s.MultimodalStorageLocalRoot,
+		"multimodal_storage_bucket":               s.MultimodalStorageBucket,
+		"multimodal_extract_image_model":          s.MultimodalExtractImageModel,
+		"multimodal_extract_audio_model":          s.MultimodalExtractAudioModel,
+		"multimodal_extract_video_model":          s.MultimodalExtractVideoModel,
+		"multimodal_extract_file_model":           s.MultimodalExtractFileModel,
+		"multimodal_audio_transcription_enabled":  s.MultimodalAudioTranscriptionEnabled,
+		"multimodal_video_frame_sampling_enabled": s.MultimodalVideoFrameSamplingEnabled,
+		"multimodal_max_asset_bytes":              s.MultimodalMaxAssetBytes,
+		"multimodal_allowed_mime_types":           append([]string(nil), s.MultimodalAllowedMIMETypes...),
 	}
 }
 
 func (s Snapshot) ApplyConfig(cfg bootstrap.Config) bootstrap.Config {
 	cfg.DefaultProvider = s.DefaultProvider
+	cfg.InternalDefaultProvider = s.InternalDefaultProvider
 	cfg.VectorStoreBackend = s.VectorStoreBackend
 	cfg.ConversationTimeout = time.Duration(s.ConversationTimeoutSeconds) * time.Second
 	cfg.ProviderTimeout = time.Duration(s.ProviderTimeoutSeconds) * time.Second
@@ -223,6 +281,20 @@ func (s Snapshot) ApplyConfig(cfg bootstrap.Config) bootstrap.Config {
 	cfg.CacheTTL = time.Duration(s.CacheTTLSeconds) * time.Second
 	cfg.CORSAllowedOrigins = append([]string(nil), s.CORSAllowedOrigins...)
 	cfg.SessionCookieCrossSite = s.SessionCookieCrossSite
+	cfg.Multimodal = bootstrap.MultimodalConfig{
+		Enabled:                   s.MultimodalEnabled,
+		StorageBackend:            s.MultimodalStorageBackend,
+		StorageLocalRoot:          s.MultimodalStorageLocalRoot,
+		StorageBucket:             s.MultimodalStorageBucket,
+		ImageModel:                s.MultimodalExtractImageModel,
+		AudioModel:                s.MultimodalExtractAudioModel,
+		VideoModel:                s.MultimodalExtractVideoModel,
+		FileModel:                 s.MultimodalExtractFileModel,
+		AudioTranscriptionEnabled: s.MultimodalAudioTranscriptionEnabled,
+		VideoFrameSamplingEnabled: s.MultimodalVideoFrameSamplingEnabled,
+		MaxAssetBytes:             s.MultimodalMaxAssetBytes,
+		AllowedMIMETypes:          append([]string(nil), s.MultimodalAllowedMIMETypes...),
+	}
 	return cfg
 }
 
@@ -230,6 +302,9 @@ func (o Overrides) Apply(defaults Snapshot) Snapshot {
 	snapshot := defaults
 	if o.DefaultProvider != nil {
 		snapshot.DefaultProvider = *o.DefaultProvider
+	}
+	if o.InternalDefaultProvider != nil {
+		snapshot.InternalDefaultProvider = *o.InternalDefaultProvider
 	}
 	if o.VectorStoreBackend != nil {
 		snapshot.VectorStoreBackend = *o.VectorStoreBackend
@@ -267,6 +342,42 @@ func (o Overrides) Apply(defaults Snapshot) Snapshot {
 	if o.SessionCookieCrossSite != nil {
 		snapshot.SessionCookieCrossSite = *o.SessionCookieCrossSite
 	}
+	if o.MultimodalEnabled != nil {
+		snapshot.MultimodalEnabled = *o.MultimodalEnabled
+	}
+	if o.MultimodalStorageBackend != nil {
+		snapshot.MultimodalStorageBackend = *o.MultimodalStorageBackend
+	}
+	if o.MultimodalStorageLocalRoot != nil {
+		snapshot.MultimodalStorageLocalRoot = *o.MultimodalStorageLocalRoot
+	}
+	if o.MultimodalStorageBucket != nil {
+		snapshot.MultimodalStorageBucket = *o.MultimodalStorageBucket
+	}
+	if o.MultimodalExtractImageModel != nil {
+		snapshot.MultimodalExtractImageModel = *o.MultimodalExtractImageModel
+	}
+	if o.MultimodalExtractAudioModel != nil {
+		snapshot.MultimodalExtractAudioModel = *o.MultimodalExtractAudioModel
+	}
+	if o.MultimodalExtractVideoModel != nil {
+		snapshot.MultimodalExtractVideoModel = *o.MultimodalExtractVideoModel
+	}
+	if o.MultimodalExtractFileModel != nil {
+		snapshot.MultimodalExtractFileModel = *o.MultimodalExtractFileModel
+	}
+	if o.MultimodalAudioTranscriptionEnabled != nil {
+		snapshot.MultimodalAudioTranscriptionEnabled = *o.MultimodalAudioTranscriptionEnabled
+	}
+	if o.MultimodalVideoFrameSamplingEnabled != nil {
+		snapshot.MultimodalVideoFrameSamplingEnabled = *o.MultimodalVideoFrameSamplingEnabled
+	}
+	if o.MultimodalMaxAssetBytes != nil {
+		snapshot.MultimodalMaxAssetBytes = *o.MultimodalMaxAssetBytes
+	}
+	if o.MultimodalAllowedMIMETypes != nil {
+		snapshot.MultimodalAllowedMIMETypes = append([]string(nil), (*o.MultimodalAllowedMIMETypes)...)
+	}
 	return snapshot
 }
 
@@ -278,6 +389,7 @@ func (s *Service) loadOverrides(ctx context.Context) (Overrides, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT
 			default_provider,
+			internal_default_provider,
 			vector_store_backend,
 			conversation_timeout_seconds,
 			provider_timeout_seconds,
@@ -289,28 +401,54 @@ func (s *Service) loadOverrides(ctx context.Context) (Overrides, error) {
 			rate_limit_burst,
 			cache_ttl_seconds,
 			cors_allowed_origins,
-			session_cookie_cross_site
+			session_cookie_cross_site,
+			multimodal_enabled,
+			multimodal_storage_backend,
+			multimodal_storage_local_root,
+			multimodal_storage_bucket,
+			multimodal_extract_image_model,
+			multimodal_extract_audio_model,
+			multimodal_extract_video_model,
+			multimodal_extract_file_model,
+			multimodal_audio_transcription_enabled,
+			multimodal_video_frame_sampling_enabled,
+			multimodal_max_asset_bytes,
+			multimodal_allowed_mime_types
 		FROM system_settings
 		WHERE id = $1
 	`, "global")
 
 	var (
-		defaultProvider            sql.NullString
-		vectorStoreBackend         sql.NullString
-		conversationTimeoutSeconds sql.NullInt64
-		providerTimeoutSeconds     sql.NullInt64
-		messageThreshold           sql.NullInt64
-		tokenThreshold             sql.NullInt64
-		maxContextTokens           sql.NullInt64
-		maxInjectionTokens         sql.NullInt64
-		rateLimitRPS               sql.NullInt64
-		rateLimitBurst             sql.NullInt64
-		cacheTTLSeconds            sql.NullInt64
-		corsAllowedOrigins         sql.NullString
-		sessionCookieCrossSite     sql.NullBool
+		defaultProvider                     sql.NullString
+		internalDefaultProvider             sql.NullString
+		vectorStoreBackend                  sql.NullString
+		conversationTimeoutSeconds          sql.NullInt64
+		providerTimeoutSeconds              sql.NullInt64
+		messageThreshold                    sql.NullInt64
+		tokenThreshold                      sql.NullInt64
+		maxContextTokens                    sql.NullInt64
+		maxInjectionTokens                  sql.NullInt64
+		rateLimitRPS                        sql.NullInt64
+		rateLimitBurst                      sql.NullInt64
+		cacheTTLSeconds                     sql.NullInt64
+		corsAllowedOrigins                  sql.NullString
+		sessionCookieCrossSite              sql.NullBool
+		multimodalEnabled                   sql.NullBool
+		multimodalStorageBackend            sql.NullString
+		multimodalStorageLocalRoot          sql.NullString
+		multimodalStorageBucket             sql.NullString
+		multimodalExtractImageModel         sql.NullString
+		multimodalExtractAudioModel         sql.NullString
+		multimodalExtractVideoModel         sql.NullString
+		multimodalExtractFileModel          sql.NullString
+		multimodalAudioTranscriptionEnabled sql.NullBool
+		multimodalVideoFrameSamplingEnabled sql.NullBool
+		multimodalMaxAssetBytes             sql.NullInt64
+		multimodalAllowedMIMETypes          sql.NullString
 	)
 	if err := row.Scan(
 		&defaultProvider,
+		&internalDefaultProvider,
 		&vectorStoreBackend,
 		&conversationTimeoutSeconds,
 		&providerTimeoutSeconds,
@@ -323,6 +461,18 @@ func (s *Service) loadOverrides(ctx context.Context) (Overrides, error) {
 		&cacheTTLSeconds,
 		&corsAllowedOrigins,
 		&sessionCookieCrossSite,
+		&multimodalEnabled,
+		&multimodalStorageBackend,
+		&multimodalStorageLocalRoot,
+		&multimodalStorageBucket,
+		&multimodalExtractImageModel,
+		&multimodalExtractAudioModel,
+		&multimodalExtractVideoModel,
+		&multimodalExtractFileModel,
+		&multimodalAudioTranscriptionEnabled,
+		&multimodalVideoFrameSamplingEnabled,
+		&multimodalMaxAssetBytes,
+		&multimodalAllowedMIMETypes,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Overrides{}, nil
@@ -332,8 +482,12 @@ func (s *Service) loadOverrides(ctx context.Context) (Overrides, error) {
 
 	overrides := Overrides{}
 	if defaultProvider.Valid {
-		value := domain.Provider(defaultProvider.String)
+		value := domain.NormalizeProvider(defaultProvider.String)
 		overrides.DefaultProvider = &value
+	}
+	if internalDefaultProvider.Valid {
+		value := domain.NormalizeProvider(internalDefaultProvider.String)
+		overrides.InternalDefaultProvider = &value
 	}
 	if vectorStoreBackend.Valid {
 		value := vectorStoreBackend.String
@@ -386,6 +540,57 @@ func (s *Service) loadOverrides(ctx context.Context) (Overrides, error) {
 		value := sessionCookieCrossSite.Bool
 		overrides.SessionCookieCrossSite = &value
 	}
+	if multimodalEnabled.Valid {
+		value := multimodalEnabled.Bool
+		overrides.MultimodalEnabled = &value
+	}
+	if multimodalStorageBackend.Valid {
+		value := multimodalStorageBackend.String
+		overrides.MultimodalStorageBackend = &value
+	}
+	if multimodalStorageLocalRoot.Valid {
+		value := multimodalStorageLocalRoot.String
+		overrides.MultimodalStorageLocalRoot = &value
+	}
+	if multimodalStorageBucket.Valid {
+		value := multimodalStorageBucket.String
+		overrides.MultimodalStorageBucket = &value
+	}
+	if multimodalExtractImageModel.Valid {
+		value := multimodalExtractImageModel.String
+		overrides.MultimodalExtractImageModel = &value
+	}
+	if multimodalExtractAudioModel.Valid {
+		value := multimodalExtractAudioModel.String
+		overrides.MultimodalExtractAudioModel = &value
+	}
+	if multimodalExtractVideoModel.Valid {
+		value := multimodalExtractVideoModel.String
+		overrides.MultimodalExtractVideoModel = &value
+	}
+	if multimodalExtractFileModel.Valid {
+		value := multimodalExtractFileModel.String
+		overrides.MultimodalExtractFileModel = &value
+	}
+	if multimodalAudioTranscriptionEnabled.Valid {
+		value := multimodalAudioTranscriptionEnabled.Bool
+		overrides.MultimodalAudioTranscriptionEnabled = &value
+	}
+	if multimodalVideoFrameSamplingEnabled.Valid {
+		value := multimodalVideoFrameSamplingEnabled.Bool
+		overrides.MultimodalVideoFrameSamplingEnabled = &value
+	}
+	if multimodalMaxAssetBytes.Valid {
+		value := multimodalMaxAssetBytes.Int64
+		overrides.MultimodalMaxAssetBytes = &value
+	}
+	if multimodalAllowedMIMETypes.Valid {
+		values := []string{}
+		if err := json.Unmarshal([]byte(multimodalAllowedMIMETypes.String), &values); err != nil {
+			return Overrides{}, err
+		}
+		overrides.MultimodalAllowedMIMETypes = &values
+	}
 	return overrides, nil
 }
 
@@ -402,11 +607,20 @@ func (s *Service) persistOverrides(ctx context.Context, overrides Overrides) err
 		}
 		corsJSON = string(payload)
 	}
+	var allowedMIMETypesJSON any
+	if overrides.MultimodalAllowedMIMETypes != nil {
+		payload, err := json.Marshal(*overrides.MultimodalAllowedMIMETypes)
+		if err != nil {
+			return err
+		}
+		allowedMIMETypesJSON = string(payload)
+	}
 
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO system_settings (
 			id,
 			default_provider,
+			internal_default_provider,
 			vector_store_backend,
 			conversation_timeout_seconds,
 			provider_timeout_seconds,
@@ -419,13 +633,26 @@ func (s *Service) persistOverrides(ctx context.Context, overrides Overrides) err
 			cache_ttl_seconds,
 			cors_allowed_origins,
 			session_cookie_cross_site,
+			multimodal_enabled,
+			multimodal_storage_backend,
+			multimodal_storage_local_root,
+			multimodal_storage_bucket,
+			multimodal_extract_image_model,
+			multimodal_extract_audio_model,
+			multimodal_extract_video_model,
+			multimodal_extract_file_model,
+			multimodal_audio_transcription_enabled,
+			multimodal_video_frame_sampling_enabled,
+			multimodal_max_asset_bytes,
+			multimodal_allowed_mime_types,
 			created_at,
 			updated_at
 		) VALUES (
-			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15,$15
+			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27::jsonb,$28,$28
 		)
 		ON CONFLICT (id) DO UPDATE SET
 			default_provider = EXCLUDED.default_provider,
+			internal_default_provider = EXCLUDED.internal_default_provider,
 			vector_store_backend = EXCLUDED.vector_store_backend,
 			conversation_timeout_seconds = EXCLUDED.conversation_timeout_seconds,
 			provider_timeout_seconds = EXCLUDED.provider_timeout_seconds,
@@ -438,10 +665,23 @@ func (s *Service) persistOverrides(ctx context.Context, overrides Overrides) err
 			cache_ttl_seconds = EXCLUDED.cache_ttl_seconds,
 			cors_allowed_origins = EXCLUDED.cors_allowed_origins,
 			session_cookie_cross_site = EXCLUDED.session_cookie_cross_site,
+			multimodal_enabled = EXCLUDED.multimodal_enabled,
+			multimodal_storage_backend = EXCLUDED.multimodal_storage_backend,
+			multimodal_storage_local_root = EXCLUDED.multimodal_storage_local_root,
+			multimodal_storage_bucket = EXCLUDED.multimodal_storage_bucket,
+			multimodal_extract_image_model = EXCLUDED.multimodal_extract_image_model,
+			multimodal_extract_audio_model = EXCLUDED.multimodal_extract_audio_model,
+			multimodal_extract_video_model = EXCLUDED.multimodal_extract_video_model,
+			multimodal_extract_file_model = EXCLUDED.multimodal_extract_file_model,
+			multimodal_audio_transcription_enabled = EXCLUDED.multimodal_audio_transcription_enabled,
+			multimodal_video_frame_sampling_enabled = EXCLUDED.multimodal_video_frame_sampling_enabled,
+			multimodal_max_asset_bytes = EXCLUDED.multimodal_max_asset_bytes,
+			multimodal_allowed_mime_types = EXCLUDED.multimodal_allowed_mime_types,
 			updated_at = EXCLUDED.updated_at
 	`,
 		"global",
 		nullableProvider(overrides.DefaultProvider),
+		nullableProvider(overrides.InternalDefaultProvider),
 		nullableString(overrides.VectorStoreBackend),
 		nullableInt(overrides.ConversationTimeoutSeconds),
 		nullableInt(overrides.ProviderTimeoutSeconds),
@@ -454,6 +694,18 @@ func (s *Service) persistOverrides(ctx context.Context, overrides Overrides) err
 		nullableInt(overrides.CacheTTLSeconds),
 		corsJSON,
 		nullableBool(overrides.SessionCookieCrossSite),
+		nullableBool(overrides.MultimodalEnabled),
+		nullableString(overrides.MultimodalStorageBackend),
+		nullableString(overrides.MultimodalStorageLocalRoot),
+		nullableString(overrides.MultimodalStorageBucket),
+		nullableString(overrides.MultimodalExtractImageModel),
+		nullableString(overrides.MultimodalExtractAudioModel),
+		nullableString(overrides.MultimodalExtractVideoModel),
+		nullableString(overrides.MultimodalExtractFileModel),
+		nullableBool(overrides.MultimodalAudioTranscriptionEnabled),
+		nullableBool(overrides.MultimodalVideoFrameSamplingEnabled),
+		nullableInt64(overrides.MultimodalMaxAssetBytes),
+		allowedMIMETypesJSON,
 		time.Now().UTC(),
 	)
 	return err
@@ -465,7 +717,13 @@ func metadataForOverrides(overrides Overrides) map[string]FieldMeta {
 			ApplyMode:   "live",
 			Source:      sourceFor(overrides.DefaultProvider != nil),
 			Category:    "traffic",
-			Description: "Fallback upstream provider when the request and user profile do not pin one explicitly.",
+			Description: "Fallback upstream provider set used by gateway proxy traffic when the request and user profile do not pin one explicitly.",
+		},
+		"internal_default_provider": {
+			ApplyMode:   "live",
+			Source:      sourceFor(overrides.InternalDefaultProvider != nil),
+			Category:    "traffic",
+			Description: "Fallback upstream provider set used by internal model-driven tasks when the configured model reference does not pin one explicitly.",
 		},
 		"vector_store_backend": {
 			ApplyMode:   "restart",
@@ -539,6 +797,78 @@ func metadataForOverrides(overrides Overrides) map[string]FieldMeta {
 			Category:    "web",
 			Description: "Controls whether the admin session cookie is issued with cross-site semantics.",
 		},
+		"multimodal_enabled": {
+			ApplyMode:   "restart",
+			Source:      sourceFor(overrides.MultimodalEnabled != nil),
+			Category:    "multimodal",
+			Description: "Master switch for file/blob ingestion, timeline materialization, and multimodal extraction workers.",
+		},
+		"multimodal_storage_backend": {
+			ApplyMode:   "restart",
+			Source:      sourceFor(overrides.MultimodalStorageBackend != nil),
+			Category:    "multimodal",
+			Description: "Blob storage implementation used for retained source media.",
+		},
+		"multimodal_storage_local_root": {
+			ApplyMode:   "restart",
+			Source:      sourceFor(overrides.MultimodalStorageLocalRoot != nil),
+			Category:    "multimodal",
+			Description: "Filesystem root used by the local blob store backend in development and single-node deployments.",
+		},
+		"multimodal_storage_bucket": {
+			ApplyMode:   "restart",
+			Source:      sourceFor(overrides.MultimodalStorageBucket != nil),
+			Category:    "multimodal",
+			Description: "Bucket or container name used by remote blob storage backends.",
+		},
+		"multimodal_extract_image_model": {
+			ApplyMode:   "restart",
+			Source:      sourceFor(overrides.MultimodalExtractImageModel != nil),
+			Category:    "multimodal",
+			Description: "Configured image understanding model name used for captioning and OCR extraction.",
+		},
+		"multimodal_extract_audio_model": {
+			ApplyMode:   "restart",
+			Source:      sourceFor(overrides.MultimodalExtractAudioModel != nil),
+			Category:    "multimodal",
+			Description: "Configured audio model name used for transcription and optional audio summarization.",
+		},
+		"multimodal_extract_video_model": {
+			ApplyMode:   "restart",
+			Source:      sourceFor(overrides.MultimodalExtractVideoModel != nil),
+			Category:    "multimodal",
+			Description: "Configured video model name used for keyframe analysis and video-level summarization.",
+		},
+		"multimodal_extract_file_model": {
+			ApplyMode:   "restart",
+			Source:      sourceFor(overrides.MultimodalExtractFileModel != nil),
+			Category:    "multimodal",
+			Description: "Configured document extraction model used for scanned files and non-text-native document fallback.",
+		},
+		"multimodal_audio_transcription_enabled": {
+			ApplyMode:   "restart",
+			Source:      sourceFor(overrides.MultimodalAudioTranscriptionEnabled != nil),
+			Category:    "multimodal",
+			Description: "Enables transcript generation for supported audio inputs.",
+		},
+		"multimodal_video_frame_sampling_enabled": {
+			ApplyMode:   "restart",
+			Source:      sourceFor(overrides.MultimodalVideoFrameSamplingEnabled != nil),
+			Category:    "multimodal",
+			Description: "Enables frame sampling and visual summary extraction for video inputs.",
+		},
+		"multimodal_max_asset_bytes": {
+			ApplyMode:   "restart",
+			Source:      sourceFor(overrides.MultimodalMaxAssetBytes != nil),
+			Category:    "multimodal",
+			Description: "Maximum upload size accepted for retained multimodal assets before the proxy rejects the request.",
+		},
+		"multimodal_allowed_mime_types": {
+			ApplyMode:   "restart",
+			Source:      sourceFor(overrides.MultimodalAllowedMIMETypes != nil),
+			Category:    "multimodal",
+			Description: "Allow-list of MIME types accepted for hosted uploads and multimodal extraction.",
+		},
 	}
 }
 
@@ -551,13 +881,21 @@ func applyFieldOverrides(base Overrides, fields map[string]any) (Overrides, erro
 				next.DefaultProvider = nil
 				continue
 			}
-			value := domain.Provider(strings.TrimSpace(stringValue(raw)))
-			switch value {
-			case domain.ProviderOpenAI, domain.ProviderAnthropic, domain.ProviderGemini:
-			default:
-				return Overrides{}, fmt.Errorf("unsupported default_provider: %s", value)
+			value, ok := domain.ParseProvider(strings.TrimSpace(stringValue(raw)))
+			if !ok {
+				return Overrides{}, fmt.Errorf("unsupported default_provider: %s", raw)
 			}
 			next.DefaultProvider = &value
+		case "internal_default_provider":
+			if raw == nil {
+				next.InternalDefaultProvider = nil
+				continue
+			}
+			value, ok := domain.ParseProvider(strings.TrimSpace(stringValue(raw)))
+			if !ok {
+				return Overrides{}, fmt.Errorf("unsupported internal_default_provider: %s", raw)
+			}
+			next.InternalDefaultProvider = &value
 		case "vector_store_backend":
 			if raw == nil {
 				next.VectorStoreBackend = nil
@@ -634,6 +972,94 @@ func applyFieldOverrides(base Overrides, fields map[string]any) (Overrides, erro
 				return Overrides{}, err
 			}
 			next.SessionCookieCrossSite = value
+		case "multimodal_enabled":
+			value, err := boolOverride(raw)
+			if err != nil {
+				return Overrides{}, err
+			}
+			next.MultimodalEnabled = value
+		case "multimodal_storage_backend":
+			if raw == nil {
+				next.MultimodalStorageBackend = nil
+				continue
+			}
+			value := strings.TrimSpace(stringValue(raw))
+			if value == "" {
+				return Overrides{}, errors.New("multimodal_storage_backend cannot be empty")
+			}
+			next.MultimodalStorageBackend = &value
+		case "multimodal_storage_local_root":
+			if raw == nil {
+				next.MultimodalStorageLocalRoot = nil
+				continue
+			}
+			value := strings.TrimSpace(stringValue(raw))
+			if value == "" {
+				return Overrides{}, errors.New("multimodal_storage_local_root cannot be empty")
+			}
+			next.MultimodalStorageLocalRoot = &value
+		case "multimodal_storage_bucket":
+			if raw == nil {
+				next.MultimodalStorageBucket = nil
+				continue
+			}
+			value := strings.TrimSpace(stringValue(raw))
+			if value == "" {
+				return Overrides{}, errors.New("multimodal_storage_bucket cannot be empty")
+			}
+			next.MultimodalStorageBucket = &value
+		case "multimodal_extract_image_model":
+			if raw == nil {
+				next.MultimodalExtractImageModel = nil
+				continue
+			}
+			value := strings.TrimSpace(stringValue(raw))
+			next.MultimodalExtractImageModel = &value
+		case "multimodal_extract_audio_model":
+			if raw == nil {
+				next.MultimodalExtractAudioModel = nil
+				continue
+			}
+			value := strings.TrimSpace(stringValue(raw))
+			next.MultimodalExtractAudioModel = &value
+		case "multimodal_extract_video_model":
+			if raw == nil {
+				next.MultimodalExtractVideoModel = nil
+				continue
+			}
+			value := strings.TrimSpace(stringValue(raw))
+			next.MultimodalExtractVideoModel = &value
+		case "multimodal_extract_file_model":
+			if raw == nil {
+				next.MultimodalExtractFileModel = nil
+				continue
+			}
+			value := strings.TrimSpace(stringValue(raw))
+			next.MultimodalExtractFileModel = &value
+		case "multimodal_audio_transcription_enabled":
+			value, err := boolOverride(raw)
+			if err != nil {
+				return Overrides{}, err
+			}
+			next.MultimodalAudioTranscriptionEnabled = value
+		case "multimodal_video_frame_sampling_enabled":
+			value, err := boolOverride(raw)
+			if err != nil {
+				return Overrides{}, err
+			}
+			next.MultimodalVideoFrameSamplingEnabled = value
+		case "multimodal_max_asset_bytes":
+			value, err := int64Override(raw)
+			if err != nil {
+				return Overrides{}, err
+			}
+			next.MultimodalMaxAssetBytes = value
+		case "multimodal_allowed_mime_types":
+			value, err := stringSliceOverride(raw)
+			if err != nil {
+				return Overrides{}, err
+			}
+			next.MultimodalAllowedMIMETypes = value
 		}
 	}
 	return next, nil
@@ -662,6 +1088,35 @@ func intOverride(raw any) (*int, error) {
 			return nil, err
 		}
 		value := int(parsed)
+		return &value, nil
+	default:
+		return nil, fmt.Errorf("expected integer, got %T", raw)
+	}
+}
+
+func int64Override(raw any) (*int64, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	switch typed := raw.(type) {
+	case int:
+		value := int64(typed)
+		return &value, nil
+	case int32:
+		value := int64(typed)
+		return &value, nil
+	case int64:
+		value := typed
+		return &value, nil
+	case float64:
+		value := int64(typed)
+		return &value, nil
+	case json.Number:
+		parsed, err := typed.Int64()
+		if err != nil {
+			return nil, err
+		}
+		value := parsed
 		return &value, nil
 	default:
 		return nil, fmt.Errorf("expected integer, got %T", raw)
@@ -718,6 +1173,13 @@ func stringValue(value any) string {
 	default:
 		return fmt.Sprintf("%v", value)
 	}
+}
+
+func nullableInt64(value *int64) any {
+	if value == nil {
+		return nil
+	}
+	return *value
 }
 
 func sourceFor(overridden bool) string {

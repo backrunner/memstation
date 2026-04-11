@@ -11,7 +11,8 @@ const sessionCookieValue = 'fixture-session';
 const gatewayExposeHeaders = 'X-MemStation-Conversation-ID, X-MemStation-Request-ID, X-MemStation-Memory-Persist';
 
 const runtimeDefaults = Object.freeze({
-  default_provider: 'openai',
+  default_provider: 'openai_compatible',
+  internal_default_provider: 'openai_compatible',
   vector_store_backend: 'pgvector',
   conversation_timeout_seconds: 900,
   provider_timeout_seconds: 60,
@@ -27,7 +28,8 @@ const runtimeDefaults = Object.freeze({
 });
 
 const runtimeMeta = Object.freeze({
-  default_provider: { apply_mode: 'restart', source: 'default', category: 'traffic', description: 'Default provider for automatic routing.' },
+  default_provider: { apply_mode: 'restart', source: 'default', category: 'traffic', description: 'Default gateway provider for automatic routing.' },
+  internal_default_provider: { apply_mode: 'restart', source: 'default', category: 'traffic', description: 'Default internal provider for summary and analysis workloads.' },
   vector_store_backend: { apply_mode: 'restart', source: 'default', category: 'memory', description: 'Vector store backend selection.' },
   conversation_timeout_seconds: { apply_mode: 'live', source: 'default', category: 'traffic', description: 'Conversation idle timeout.' },
   provider_timeout_seconds: { apply_mode: 'restart', source: 'default', category: 'traffic', description: 'Per-provider upstream timeout.' },
@@ -42,32 +44,86 @@ const runtimeMeta = Object.freeze({
   session_cookie_cross_site: { apply_mode: 'restart', source: 'default', category: 'web', description: 'Cross-site cookie mode.' }
 });
 
-const providerDefaults = Object.freeze([
-  {
-    provider: 'openai',
-    base_url: 'https://api.openai.com/v1',
-    host: 'api.openai.com',
-    scheme: 'https',
-    has_api_key: true,
-    source: 'fixture'
-  },
-  {
-    provider: 'anthropic',
-    base_url: 'https://api.anthropic.com/v1',
-    host: 'api.anthropic.com',
-    scheme: 'https',
-    has_api_key: false,
-    source: 'fixture'
-  },
-  {
-    provider: 'gemini',
-    base_url: 'https://generativelanguage.googleapis.com/v1beta',
-    host: 'generativelanguage.googleapis.com',
-    scheme: 'https',
-    has_api_key: true,
-    source: 'fixture'
-  }
-]);
+const providerSetDefaults = Object.freeze({
+  gateway: [
+    {
+      provider: 'openai_compatible',
+      base_url: 'https://api.openai.com/v1',
+      host: 'api.openai.com',
+      scheme: 'https',
+      has_api_key: true,
+      source: 'fixture'
+    },
+    {
+      provider: 'openai_responses',
+      base_url: 'https://api.openai.com/v1',
+      host: 'api.openai.com',
+      scheme: 'https',
+      has_api_key: true,
+      source: 'fixture'
+    },
+    {
+      provider: 'anthropic',
+      base_url: 'https://api.anthropic.com/v1',
+      host: 'api.anthropic.com',
+      scheme: 'https',
+      has_api_key: false,
+      source: 'fixture'
+    },
+    {
+      provider: 'gemini',
+      base_url: 'https://generativelanguage.googleapis.com/v1beta',
+      host: 'generativelanguage.googleapis.com',
+      scheme: 'https',
+      has_api_key: true,
+      source: 'fixture'
+    }
+  ],
+  internal: [
+    {
+      provider: 'openai_compatible',
+      base_url: 'https://api.openai.com/v1',
+      host: 'api.openai.com',
+      scheme: 'https',
+      has_api_key: true,
+      source: 'fixture'
+    },
+    {
+      provider: 'openai_responses',
+      base_url: 'https://api.openai.com/v1',
+      host: 'api.openai.com',
+      scheme: 'https',
+      has_api_key: true,
+      source: 'fixture'
+    },
+    {
+      provider: 'anthropic',
+      base_url: 'https://api.anthropic.com/v1',
+      host: 'api.anthropic.com',
+      scheme: 'https',
+      has_api_key: false,
+      source: 'fixture'
+    },
+    {
+      provider: 'gemini',
+      base_url: 'https://generativelanguage.googleapis.com/v1beta',
+      host: 'generativelanguage.googleapis.com',
+      scheme: 'https',
+      has_api_key: false,
+      source: 'fixture'
+    }
+  ],
+  embedding: [
+    {
+      provider: 'openai_compatible',
+      base_url: 'https://api.openai.com/v1',
+      host: 'api.openai.com',
+      scheme: 'https',
+      has_api_key: true,
+      source: 'fixture'
+    }
+  ]
+});
 
 const modelDefaults = Object.freeze({
   chat_model: 'gpt-4.1-mini',
@@ -213,7 +269,7 @@ function createConversationRecord({
   analysisStatus = 'completed',
   updatedAt = nowISO(),
   mode = 'inject',
-  provider = 'openai',
+  provider = 'openai_compatible',
   requestFormat = 'chat_completions',
   usage = { input_tokens: 24, output_tokens: 18, total_tokens: 42 }
 }) {
@@ -297,15 +353,37 @@ function usageForConversation(conversationId) {
   };
 }
 
+function providerSetSummaries() {
+  return Object.fromEntries(
+    Object.entries(state.provider_sets).map(([scope, providers]) => [
+      scope,
+      providers.map((provider) => ({
+        provider: provider.provider,
+        base_url: provider.base_url,
+        has_api_key: provider.has_api_key,
+        source: provider.source,
+        updated_at: provider.updated_at
+      }))
+    ])
+  );
+}
+
+function runtimeDefaultFieldForScope(scope) {
+  switch (scope) {
+    case 'gateway':
+      return 'default_provider';
+    case 'internal':
+      return 'internal_default_provider';
+    default:
+      return null;
+  }
+}
+
 function buildConfigPayload() {
+  const providerSets = providerSetSummaries();
   return {
-    providers: state.providers.map((provider) => ({
-      provider: provider.provider,
-      base_url: provider.base_url,
-      has_api_key: provider.has_api_key,
-      source: provider.source,
-      updated_at: provider.updated_at
-    })),
+    providers: providerSets.gateway || [],
+    provider_sets: providerSets,
     runtime_defaults: clone(state.runtime_defaults),
     runtime: clone(state.runtime),
     runtime_live: clone(state.runtime_live),
@@ -315,24 +393,65 @@ function buildConfigPayload() {
 }
 
 function buildProviderDiagnostics() {
-  return state.providers.map((provider) => ({
-    provider: provider.provider,
-    base_url: provider.base_url,
-    host: provider.host,
-    scheme: provider.scheme,
-    has_api_key: provider.has_api_key,
-    source: provider.source,
-    updated_at: provider.updated_at,
-    is_desired_default: state.runtime.default_provider === provider.provider,
-    is_live_default: state.runtime_live.default_provider === provider.provider,
-    desired_timeout_seconds: state.runtime.provider_timeout_seconds,
-    live_timeout_seconds: state.runtime_live.provider_timeout_seconds,
-    restart_required: state.runtime.provider_timeout_seconds !== state.runtime_live.provider_timeout_seconds,
-    status: provider.has_api_key ? 'ready' : provider.provider === state.runtime.default_provider ? 'degraded' : 'warning',
-    issues: provider.has_api_key
-      ? []
-      : [provider.provider === state.runtime.default_provider ? 'Default provider is missing an API key.' : 'API key missing in fixture runtime']
-  }));
+  return Object.entries(state.provider_sets).flatMap(([scope, providers]) =>
+    providers.map((provider) => {
+      const defaultField = runtimeDefaultFieldForScope(scope);
+      const isDesiredDefault = Boolean(defaultField && state.runtime[defaultField] === provider.provider);
+      const isLiveDefault = Boolean(defaultField && state.runtime_live[defaultField] === provider.provider);
+      const issues = [];
+      if (!provider.base_url) {
+        issues.push('Base URL missing in fixture runtime');
+      }
+      if (!provider.has_api_key) {
+        issues.push(isDesiredDefault ? 'Default provider is missing an API key.' : 'API key missing in fixture runtime');
+      }
+      return {
+        scope,
+        provider: provider.provider,
+        base_url: provider.base_url,
+        host: provider.host,
+        scheme: provider.scheme,
+        has_api_key: provider.has_api_key,
+        source: provider.source,
+        updated_at: provider.updated_at,
+        is_desired_default: isDesiredDefault,
+        is_live_default: isLiveDefault,
+        desired_timeout_seconds: state.runtime.provider_timeout_seconds,
+        live_timeout_seconds: state.runtime_live.provider_timeout_seconds,
+        restart_required: state.runtime.provider_timeout_seconds !== state.runtime_live.provider_timeout_seconds,
+        status: issues.length === 0 ? 'ready' : isDesiredDefault ? 'degraded' : 'warning',
+        issues
+      };
+    })
+  );
+}
+
+function applyProviderOverride(scope, providerName, providerPatch) {
+  const providers = state.provider_sets[scope];
+  if (!Array.isArray(providers) || !providerPatch || typeof providerPatch !== 'object') {
+    return;
+  }
+  const target = providers.find((item) => item.provider === providerName);
+  if (!target) {
+    return;
+  }
+  if (providerPatch.base_url) {
+    target.base_url = String(providerPatch.base_url);
+    try {
+      const parsed = new URL(target.base_url);
+      target.host = parsed.host;
+      target.scheme = parsed.protocol.replace(/:$/, '');
+    } catch {
+      target.host = '';
+      target.scheme = '';
+    }
+    target.source = 'override';
+  }
+  if (providerPatch.api_key) {
+    target.has_api_key = true;
+    target.source = 'override';
+  }
+  target.updated_at = nowISO();
 }
 
 function createPreview(conversationId, userText) {
@@ -423,6 +542,78 @@ function createConversationMemory(conversationId, userText, userId = 'admin') {
     conversation_id: conversationId,
     documents,
     key_memories: keyMemories
+  };
+}
+
+function buildConversationSnapshot(conversationId, userId = 'admin') {
+  const conversation = state.conversations[conversationId];
+  if (!conversation) {
+    return null;
+  }
+  return {
+    snapshot_id: `snapshot-${conversationId}`,
+    user_id: userId,
+    conversation_id: conversationId,
+    snapshot_version: 1,
+    source_hash: `hash-${conversationId}`,
+    request_format: conversation.request_format,
+    provider: conversation.provider,
+    mode: conversation.mode,
+    finalize_status: conversation.finalize_status,
+    message_count: conversation.messages.length,
+    metadata: {
+      fixture: true
+    },
+    created_at: conversation.created_at,
+    updated_at: conversation.updated_at
+  };
+}
+
+function buildUserSources(userId) {
+  const conversations = conversationList(userId);
+  const latestSnapshot = conversations.length > 0 ? buildConversationSnapshot(conversations[0].conversation_id, userId) : null;
+  const embeddingModel = String(state.model_settings.embedding_model || '');
+  const activeGeneration = {
+    generation_id: `generation-${userId}-active`,
+    user_id: userId,
+    status: 'completed',
+    scope: 'user',
+    is_active: true,
+    structure_version: 1,
+    embedding_version: 1,
+    embedding_model: embeddingModel,
+    activate_on_success: true,
+    source_count: conversations.length,
+    processed_count: conversations.length,
+    embedding_count: conversations.length,
+    failure_count: 0,
+    metadata: {
+      fixture: true
+    },
+    created_at: latestSnapshot?.created_at || nowISO(),
+    updated_at: latestSnapshot?.updated_at || nowISO(),
+    activated_at: latestSnapshot?.updated_at || nowISO()
+  };
+  return {
+    user_id: userId,
+    source_stats: {
+      snapshot_count: conversations.length,
+      latest_snapshot_at: latestSnapshot?.updated_at,
+      latest_snapshot_user_id: latestSnapshot?.user_id
+    },
+    active_generation: activeGeneration,
+    generations: [activeGeneration]
+  };
+}
+
+function buildConversationSources(conversationId, userId = 'admin') {
+  const latestSnapshot = buildConversationSnapshot(conversationId, userId);
+  return {
+    user_id: userId,
+    conversation_id: conversationId,
+    has_snapshot: Boolean(latestSnapshot),
+    latest_snapshot: latestSnapshot || undefined,
+    snapshots: latestSnapshot ? [latestSnapshot] : []
   };
 }
 
@@ -957,10 +1148,15 @@ function createState() {
     runtime: clone(runtimeDefaults),
     runtime_live: clone(runtimeDefaults),
     runtime_meta: clone(runtimeMeta),
-    providers: providerDefaults.map((provider) => ({
-      ...provider,
-      updated_at: now
-    })),
+    provider_sets: Object.fromEntries(
+      Object.entries(providerSetDefaults).map(([scope, providers]) => [
+        scope,
+        providers.map((provider) => ({
+          ...provider,
+          updated_at: now
+        }))
+      ])
+    ),
     model_settings: clone(modelDefaults),
     users: [
       {
@@ -1157,9 +1353,9 @@ const server = http.createServer(async (req, res) => {
     json(req, res, {
       object: 'list',
       data: [
-        { id: state.model_settings.chat_model, object: 'model', provider: 'openai' },
+        { id: state.model_settings.chat_model, object: 'model', provider: 'openai_compatible' },
         { id: state.model_settings.analysis_model, object: 'model', provider: 'anthropic' },
-        { id: state.model_settings.embedding_model, object: 'model', provider: 'openai' }
+        { id: state.model_settings.embedding_model, object: 'model', provider: 'openai_compatible' }
       ]
     });
     return;
@@ -1237,7 +1433,7 @@ const server = http.createServer(async (req, res) => {
       recent_audit_events: state.audits.length,
       config: { default_provider: state.runtime.default_provider },
       models: [
-        { provider: 'openai', model: state.model_settings.chat_model },
+        { provider: 'openai_compatible', model: state.model_settings.chat_model },
         { provider: 'anthropic', model: state.model_settings.analysis_model }
       ]
     });
@@ -1284,6 +1480,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  const userSourcesMatch = url.pathname.match(/^\/api\/admin\/users\/([^/]+)\/sources$/);
+  if (req.method === 'GET' && userSourcesMatch) {
+    const userId = decodeURIComponent(userSourcesMatch[1]);
+    const user = state.users.find((item) => item.user_id === userId);
+    if (!user) {
+      json(req, res, { error: { message: 'user not found' } }, 404);
+      return;
+    }
+    json(req, res, buildUserSources(userId));
+    return;
+  }
+
   const userKeysMatch = url.pathname.match(/^\/api\/admin\/users\/([^/]+)\/api-keys$/);
   if (req.method === 'POST' && userKeysMatch) {
     const userId = decodeURIComponent(userKeysMatch[1]);
@@ -1320,7 +1528,10 @@ const server = http.createServer(async (req, res) => {
       ...body
     };
     addAudit('user_settings_update', 'user', userId, { settings: body });
-    json(req, res, clone(state.user_settings[userId]));
+    json(req, res, {
+      settings: clone(state.user_settings[userId]),
+      memory_rebuild_required: String(state.user_settings[userId]?.embedding_model || '') !== String(state.model_settings.embedding_model || '')
+    });
     return;
   }
 
@@ -1347,6 +1558,18 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && conversationMemoryMatch) {
     const conversationId = decodeURIComponent(conversationMemoryMatch[1]);
     json(req, res, buildConversationMemory(conversationId));
+    return;
+  }
+
+  const conversationSourcesMatch = url.pathname.match(/^\/api\/admin\/conversations\/([^/]+)\/sources$/);
+  if (req.method === 'GET' && conversationSourcesMatch) {
+    const conversationId = decodeURIComponent(conversationSourcesMatch[1]);
+    const conversation = state.conversations[conversationId];
+    if (!conversation) {
+      json(req, res, { error: { message: 'conversation not found' } }, 404);
+      return;
+    }
+    json(req, res, buildConversationSources(conversationId, conversation.user_id));
     return;
   }
 
@@ -1527,21 +1750,23 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    if (body.providers && typeof body.providers === 'object') {
-      for (const [providerName, providerPatch] of Object.entries(body.providers)) {
-        const target = state.providers.find((item) => item.provider === providerName);
-        if (!target || !providerPatch || typeof providerPatch !== 'object') {
+    if (body.provider_sets && typeof body.provider_sets === 'object') {
+      for (const [scope, providers] of Object.entries(body.provider_sets)) {
+        const scopeProviders = providers && typeof providers === 'object' && providers.providers && typeof providers.providers === 'object'
+          ? providers.providers
+          : providers;
+        if (!scopeProviders || typeof scopeProviders !== 'object') {
           continue;
         }
-        if (providerPatch.base_url) {
-          target.base_url = String(providerPatch.base_url);
-          target.source = 'override';
+        for (const [providerName, providerPatch] of Object.entries(scopeProviders)) {
+          applyProviderOverride(scope, providerName, providerPatch);
         }
-        if (providerPatch.api_key) {
-          target.has_api_key = true;
-          target.source = 'override';
-        }
-        target.updated_at = nowISO();
+      }
+    }
+
+    if (body.providers && typeof body.providers === 'object') {
+      for (const [providerName, providerPatch] of Object.entries(body.providers)) {
+        applyProviderOverride('gateway', providerName, providerPatch);
       }
     }
 
@@ -1561,7 +1786,17 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/admin/providers/diagnostics') {
-    json(req, res, { items: buildProviderDiagnostics() });
+    json(req, res, {
+      items: buildProviderDiagnostics(),
+      runtime: {
+        desired_gateway_default_provider: state.runtime.default_provider,
+        live_gateway_default_provider: state.runtime_live.default_provider,
+        desired_internal_default_provider: state.runtime.internal_default_provider,
+        live_internal_default_provider: state.runtime_live.internal_default_provider,
+        desired_timeout_seconds: state.runtime.provider_timeout_seconds,
+        live_timeout_seconds: state.runtime_live.provider_timeout_seconds
+      }
+    });
     return;
   }
 

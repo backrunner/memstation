@@ -108,9 +108,8 @@ func splitModelReference(value string) (domain.Provider, string) {
 		if len(parts) != 2 {
 			continue
 		}
-		switch domain.Provider(strings.ToLower(strings.TrimSpace(parts[0]))) {
-		case domain.ProviderOpenAI, domain.ProviderAnthropic, domain.ProviderGemini:
-			return domain.Provider(strings.ToLower(strings.TrimSpace(parts[0]))), strings.TrimSpace(parts[1])
+		if providerName, ok := domain.ParseProvider(strings.TrimSpace(parts[0])); ok {
+			return providerName, strings.TrimSpace(parts[1])
 		}
 	}
 	return "", value

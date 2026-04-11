@@ -145,18 +145,21 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	models := modelcap.NewRegistry(cfg.DefaultProvider, cfg.ChatModel, cfg.SummaryModel, cfg.AnalysisModel, cfg.EmbeddingModel)
 	settings := settingsservice.NewService(db, encryptor, cfg.ChatModel, cfg.SummaryModel, cfg.AnalysisModel, cfg.EmbeddingModel, cfg.MaxInjectionTokens)
 	settings.SetCache(jsonCache)
-	providerCfg := providerconfigservice.NewService(db, encryptor, map[domain.Provider]provider.RuntimeConfig{
-		domain.ProviderOpenAI: {
-			APIKey:  cfg.OpenAIAPIKey,
-			BaseURL: cfg.OpenAIBaseURL,
+	providerCfg := providerconfigservice.NewService(db, encryptor, providerconfigservice.Defaults{
+		providerconfigservice.ScopeGateway: {
+			domain.ProviderOpenAICompatible: {APIKey: cfg.OpenAIAPIKey, BaseURL: cfg.OpenAIBaseURL},
+			domain.ProviderOpenAIResponses:  {APIKey: cfg.OpenAIAPIKey, BaseURL: cfg.OpenAIBaseURL},
+			domain.ProviderAnthropic:        {APIKey: cfg.AnthropicAPIKey, BaseURL: cfg.AnthropicBaseURL},
+			domain.ProviderGemini:           {APIKey: cfg.GeminiAPIKey, BaseURL: cfg.GeminiBaseURL},
 		},
-		domain.ProviderAnthropic: {
-			APIKey:  cfg.AnthropicAPIKey,
-			BaseURL: cfg.AnthropicBaseURL,
+		providerconfigservice.ScopeInternal: {
+			domain.ProviderOpenAICompatible: {APIKey: cfg.OpenAIAPIKey, BaseURL: cfg.OpenAIBaseURL},
+			domain.ProviderOpenAIResponses:  {APIKey: cfg.OpenAIAPIKey, BaseURL: cfg.OpenAIBaseURL},
+			domain.ProviderAnthropic:        {APIKey: cfg.AnthropicAPIKey, BaseURL: cfg.AnthropicBaseURL},
+			domain.ProviderGemini:           {APIKey: cfg.GeminiAPIKey, BaseURL: cfg.GeminiBaseURL},
 		},
-		domain.ProviderGemini: {
-			APIKey:  cfg.GeminiAPIKey,
-			BaseURL: cfg.GeminiBaseURL,
+		providerconfigservice.ScopeEmbedding: {
+			domain.ProviderOpenAICompatible: {APIKey: cfg.EmbeddingAPIKey, BaseURL: cfg.EmbeddingBaseURL},
 		},
 	})
 	audit := auditsvc.NewService(db)
@@ -176,7 +179,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		outboxRepo = sqlstore.NewInMemoryOutboxRepository()
 	}
 	vectorStore := vector.NewPGVectorStore(db)
-	vectorStore.SetEmbedder(embeddingservice.NewService(providerCfg, settings, cfg.ProviderTimeout))
+	vectorStore.SetEmbedder(embeddingservice.NewService(providerCfg.Resolver(providerconfigservice.ScopeEmbedding), settings, cfg.ProviderTimeout))
 	generations := memorygenservice.NewService(db, cfg.EmbeddingModel)
 	health.Add("vectorstore", observability.CheckFunc(vectorStore.Health))
 	health.Add("outbox", observability.CheckFunc(func(ctx context.Context) error {
@@ -187,17 +190,25 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	memoryEngine := memoryservice.NewEngine(memoryRepo, vectorStore)
 	memoryEngine.SetGenerationService(generations)
 	conversations := conversationservice.NewService(conversationRepo, outboxRepo, cfg.MessageThreshold, cfg.TokenThreshold)
-	providerRegistry := provider.NewRegistry(
+	gatewayProviderRegistry := provider.NewRegistry(
 		cfg.DefaultProvider,
-		openaiprovider.NewAdapter(providerCfg, cfg.ProviderTimeout),
-		anthropicprovider.NewAdapter(providerCfg, cfg.ProviderTimeout),
-		geminiprovider.NewAdapter(providerCfg, cfg.ProviderTimeout),
+		openaiprovider.NewCompatibleAdapter(providerCfg.Resolver(providerconfigservice.ScopeGateway), cfg.ProviderTimeout),
+		openaiprovider.NewResponsesAdapter(providerCfg.Resolver(providerconfigservice.ScopeGateway), cfg.ProviderTimeout),
+		anthropicprovider.NewAdapter(providerCfg.Resolver(providerconfigservice.ScopeGateway), cfg.ProviderTimeout),
+		geminiprovider.NewAdapter(providerCfg.Resolver(providerconfigservice.ScopeGateway), cfg.ProviderTimeout),
 	)
-	gateway := gatewayservice.NewService(providerRegistry, memoryEngine, conversations, settings, cfg.DefaultProvider)
+	internalProviderRegistry := provider.NewRegistry(
+		cfg.InternalDefaultProvider,
+		openaiprovider.NewCompatibleAdapter(providerCfg.Resolver(providerconfigservice.ScopeInternal), cfg.ProviderTimeout),
+		openaiprovider.NewResponsesAdapter(providerCfg.Resolver(providerconfigservice.ScopeInternal), cfg.ProviderTimeout),
+		anthropicprovider.NewAdapter(providerCfg.Resolver(providerconfigservice.ScopeInternal), cfg.ProviderTimeout),
+		geminiprovider.NewAdapter(providerCfg.Resolver(providerconfigservice.ScopeInternal), cfg.ProviderTimeout),
+	)
+	gateway := gatewayservice.NewService(gatewayProviderRegistry, memoryEngine, conversations, settings, cfg.DefaultProvider)
 	memories := memoryservice.NewService(memoryEngine, memoryRepo)
 	memories.SetKeyMemoryCache(jsonCache)
 	memories.SetVectorStore(vectorStore)
-	memories.SetScorer(memoryservice.NewScorer(providerRegistry, settings))
+	memories.SetScorer(memoryservice.NewScorer(internalProviderRegistry, settings))
 	memories.SetGenerationService(generations)
 	gateway.SetToolRuntime(gatewayservice.NewToolRuntime(memories, audit, keySet(cfg.KeyMemoryWriteKeys), 3))
 	admin := adminservice.NewService(conversationRepo, memoryRepo, settings, audit, models)
@@ -242,6 +253,9 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		SetDefaultProvider: func(provider domain.Provider) {
 			gateway.SetDefaultProvider(provider)
 		},
+		SetInternalDefaultProvider: func(provider domain.Provider) {
+			internalProviderRegistry.SetDefaultProvider(provider)
+		},
 		SetThresholds: func(messageThreshold, tokenThreshold int) {
 			conversations.UpdateThresholds(messageThreshold, tokenThreshold)
 		},
@@ -261,7 +275,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		Vectors:              vectorStore,
 		Publisher:            publisher,
 		Analysis:             analysis,
-		Scorer:               memoryservice.NewScorer(providerRegistry, settings),
+		Scorer:               memoryservice.NewScorer(internalProviderRegistry, settings),
 		EmbeddingModel:       cfg.EmbeddingModel,
 		AllowedKeyMemoryKeys: keySet(cfg.KeyMemoryWriteKeys),
 		RecordAudit:          audit.Record,

@@ -520,23 +520,34 @@ func newTestRouter() http.Handler {
 		Source:       "seed",
 	})
 	cfg := bootstrap.Config{
-		Version:                "0.1.0",
-		SessionCookieSecure:    false,
-		DefaultProvider:        domain.ProviderOpenAI,
-		VectorStoreBackend:     "pgvector",
-		OpenAIBaseURL:          "https://api.openai.com/v1",
-		AnthropicBaseURL:       "https://api.anthropic.com/v1",
-		GeminiBaseURL:          "https://generativelanguage.googleapis.com/v1beta",
-		ConversationTimeout:    15 * time.Minute,
-		ProviderTimeout:        60 * time.Second,
-		MessageThreshold:       32,
-		TokenThreshold:         64000,
-		MaxContextTokens:       8192,
-		MaxInjectionTokens:     2048,
-		RateLimitRPS:           20,
-		RateLimitBurst:         40,
-		CacheTTL:               120 * time.Second,
-		SessionCookieCrossSite: false,
+		Version:                 "0.1.0",
+		SessionCookieSecure:     false,
+		DefaultProvider:         domain.ProviderOpenAICompatible,
+		InternalDefaultProvider: domain.ProviderOpenAICompatible,
+		VectorStoreBackend:      "pgvector",
+		OpenAIBaseURL:           "https://api.openai.com/v1",
+		AnthropicBaseURL:        "https://api.anthropic.com/v1",
+		GeminiBaseURL:           "https://generativelanguage.googleapis.com/v1beta",
+		EmbeddingBaseURL:        "https://api.openai.com/v1",
+		ConversationTimeout:     15 * time.Minute,
+		ProviderTimeout:         60 * time.Second,
+		MessageThreshold:        32,
+		TokenThreshold:          64000,
+		MaxContextTokens:        8192,
+		MaxInjectionTokens:      2048,
+		RateLimitRPS:            20,
+		RateLimitBurst:          40,
+		CacheTTL:                120 * time.Second,
+		SessionCookieCrossSite:  false,
+		Multimodal: bootstrap.MultimodalConfig{
+			Enabled:                   true,
+			StorageBackend:            "local",
+			StorageLocalRoot:          "./data/blobs",
+			AudioTranscriptionEnabled: true,
+			VideoFrameSamplingEnabled: true,
+			MaxAssetBytes:             104857600,
+			AllowedMIMETypes:          []string{"image/png", "application/pdf", "audio/mpeg"},
+		},
 	}
 	systemConfig := systemconfigservice.NewService(nil, systemconfigservice.DefaultsFromConfig(cfg))
 	if _, err := systemConfig.Bootstrap(context.Background()); err != nil {
@@ -546,18 +557,48 @@ func newTestRouter() http.Handler {
 	if err != nil {
 		panic(err)
 	}
-	providerConfig := providerconfigservice.NewService(nil, encryptor, map[domain.Provider]provider.RuntimeConfig{
-		domain.ProviderOpenAI: {
-			APIKey:  cfg.OpenAIAPIKey,
-			BaseURL: cfg.OpenAIBaseURL,
+	providerConfig := providerconfigservice.NewService(nil, encryptor, providerconfigservice.Defaults{
+		providerconfigservice.ScopeGateway: {
+			domain.ProviderOpenAICompatible: {
+				APIKey:  cfg.OpenAIAPIKey,
+				BaseURL: cfg.OpenAIBaseURL,
+			},
+			domain.ProviderOpenAIResponses: {
+				APIKey:  cfg.OpenAIAPIKey,
+				BaseURL: cfg.OpenAIBaseURL,
+			},
+			domain.ProviderAnthropic: {
+				APIKey:  cfg.AnthropicAPIKey,
+				BaseURL: cfg.AnthropicBaseURL,
+			},
+			domain.ProviderGemini: {
+				APIKey:  cfg.GeminiAPIKey,
+				BaseURL: cfg.GeminiBaseURL,
+			},
 		},
-		domain.ProviderAnthropic: {
-			APIKey:  cfg.AnthropicAPIKey,
-			BaseURL: cfg.AnthropicBaseURL,
+		providerconfigservice.ScopeInternal: {
+			domain.ProviderOpenAICompatible: {
+				APIKey:  cfg.OpenAIAPIKey,
+				BaseURL: cfg.OpenAIBaseURL,
+			},
+			domain.ProviderOpenAIResponses: {
+				APIKey:  cfg.OpenAIAPIKey,
+				BaseURL: cfg.OpenAIBaseURL,
+			},
+			domain.ProviderAnthropic: {
+				APIKey:  cfg.AnthropicAPIKey,
+				BaseURL: cfg.AnthropicBaseURL,
+			},
+			domain.ProviderGemini: {
+				APIKey:  cfg.GeminiAPIKey,
+				BaseURL: cfg.GeminiBaseURL,
+			},
 		},
-		domain.ProviderGemini: {
-			APIKey:  cfg.GeminiAPIKey,
-			BaseURL: cfg.GeminiBaseURL,
+		providerconfigservice.ScopeEmbedding: {
+			domain.ProviderOpenAICompatible: {
+				APIKey:  cfg.EmbeddingAPIKey,
+				BaseURL: cfg.EmbeddingBaseURL,
+			},
 		},
 	})
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
@@ -575,7 +616,8 @@ func newTestRouter() http.Handler {
 	gateway := gatewayservice.NewService(
 		provider.NewRegistry(
 			cfg.DefaultProvider,
-			mockprovider.New(cfg.DefaultProvider),
+			mockprovider.New(domain.ProviderOpenAICompatible),
+			mockprovider.New(domain.ProviderOpenAIResponses),
 		),
 		engine,
 		conversationservice.NewService(conversations, sql.NewInMemoryOutboxRepository(), cfg.MessageThreshold, cfg.TokenThreshold),
@@ -586,6 +628,7 @@ func newTestRouter() http.Handler {
 		SetDefaultProvider: func(providerName domain.Provider) {
 			gateway.SetDefaultProvider(providerName)
 		},
+		SetInternalDefaultProvider: func(providerName domain.Provider) {},
 		SetThresholds: func(messageThreshold, tokenThreshold int) {},
 		SetConversationTimeout: func(timeout time.Duration) {
 			scheduler.UpdateTimeoutWindow(timeout)
@@ -631,13 +674,14 @@ func newProxyRouter() http.Handler {
 	session := security.NewAdminSessionManager(e2eTestAdminToken, time.Hour)
 	gateway := gatewayservice.NewService(
 		provider.NewRegistry(
-			domain.ProviderOpenAI,
-			mockprovider.New(domain.ProviderOpenAI),
+			domain.ProviderOpenAICompatible,
+			mockprovider.New(domain.ProviderOpenAICompatible),
+			mockprovider.New(domain.ProviderOpenAIResponses),
 		),
 		engine,
 		conversationservice.NewService(conversations, outbox, 100, 100000),
 		settings,
-		domain.ProviderOpenAI,
+		domain.ProviderOpenAICompatible,
 	)
 
 	return httptransport.NewRouter(httptransport.Dependencies{

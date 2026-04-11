@@ -31,11 +31,6 @@
   let summaryModel = '';
   let analysisModel = '';
   let embeddingModel = '';
-  let embeddingBaseUrl = '';
-  let embeddingApiKey = '';
-  let embeddingApiKeyConfigured = false;
-  let useCustomEmbeddingEndpoint = false;
-  let useCustomEmbeddingApiKey = false;
   let toolWriteEnabled = false;
   let retainSourceMaterials = false;
   let maxInjectionTokens = 0;
@@ -57,11 +52,6 @@
     summaryModel = String(detail?.settings?.summary_model ?? '');
     analysisModel = String(detail?.settings?.analysis_model ?? '');
     embeddingModel = String(detail?.settings?.embedding_model ?? '');
-    embeddingBaseUrl = String(detail?.settings?.embedding_base_url ?? '');
-    embeddingApiKey = '';
-    embeddingApiKeyConfigured = Boolean(detail?.settings?.embedding_api_key_configured);
-    useCustomEmbeddingEndpoint = embeddingBaseUrl.trim().length > 0;
-    useCustomEmbeddingApiKey = embeddingApiKeyConfigured;
     toolWriteEnabled = Boolean(detail?.settings?.tool_write_enabled);
     retainSourceMaterials = Boolean(detail?.settings?.retain_source_materials);
     maxInjectionTokens = Number(detail?.settings?.max_injection_tokens ?? 0);
@@ -102,15 +92,10 @@
         summary_model: summaryModel,
         analysis_model: analysisModel,
         embedding_model: embeddingModel,
-        embedding_base_url: useCustomEmbeddingEndpoint ? embeddingBaseUrl.trim() : '',
-        clear_embedding_api_key: !useCustomEmbeddingApiKey,
         retain_source_materials: retainSourceMaterials,
         tool_write_enabled: toolWriteEnabled,
         max_injection_tokens: maxInjectionTokens
       };
-      if (useCustomEmbeddingApiKey && embeddingApiKey.trim().length > 0) {
-        payload.embedding_api_key = embeddingApiKey.trim();
-      }
       const response = await updateUserSettings($selectedTarget, $page.params.id, payload);
       detail = detail ? { ...detail, settings: response.settings } : detail;
       sources = await fetchUserSources($selectedTarget, $page.params.id);
@@ -296,33 +281,8 @@
           <label class="field">
             <span class="field-label">Embedding model</span>
             <input class="input" bind:value={embeddingModel} />
+            <div class="field-hint">Embeddings use the deployment-level embedding provider set configured under Settings / Providers.</div>
           </label>
-          <div class="field" style="grid-column: 1 / -1;">
-            <span class="field-label">Embedding endpoint</span>
-            <div class="inline-group" style="margin-bottom: 10px;">
-              <button class={useCustomEmbeddingEndpoint ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (useCustomEmbeddingEndpoint = true)}>Custom endpoint</button>
-              <button class={!useCustomEmbeddingEndpoint ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (useCustomEmbeddingEndpoint = false)}>Use provider default</button>
-            </div>
-            {#if useCustomEmbeddingEndpoint}
-              <input class="input" bind:value={embeddingBaseUrl} placeholder="https://api.example.com/v1" />
-              <div class="field-hint">Must expose an OpenAI-compatible `POST /embeddings` endpoint.</div>
-            {:else}
-              <div class="field-hint">This user follows the global OpenAI provider endpoint configured in system settings.</div>
-            {/if}
-          </div>
-          <div class="field" style="grid-column: 1 / -1;">
-            <span class="field-label">Embedding API key</span>
-            <div class="inline-group" style="margin-bottom: 10px;">
-              <button class={useCustomEmbeddingApiKey ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (useCustomEmbeddingApiKey = true)}>Custom key</button>
-              <button class={!useCustomEmbeddingApiKey ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (useCustomEmbeddingApiKey = false)}>Use provider default</button>
-            </div>
-            {#if useCustomEmbeddingApiKey}
-              <input class="input" bind:value={embeddingApiKey} type="password" autocomplete="off" placeholder={embeddingApiKeyConfigured ? 'Leave blank to keep the current secret' : 'sk-...'} />
-              <div class="field-hint">{embeddingApiKeyConfigured ? 'A custom secret is already stored. Leave this blank to keep it, or enter a new one to rotate it.' : 'Stored encrypted on the target. Leave empty until you want to set a custom secret.'}</div>
-            {:else}
-              <div class="field-hint">This user will inherit the global OpenAI provider credential for embeddings.</div>
-            {/if}
-          </div>
           <div class="field">
             <span class="field-label">Tool writes enabled</span>
             <div class="inline-group">

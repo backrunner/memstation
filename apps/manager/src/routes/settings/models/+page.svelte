@@ -153,10 +153,10 @@
         <div class="page-header">
           <div>
             <div class="sidebar-label">Provider state</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Current provider credential summary</h2>
+            <h2 class="page-title" style="font-size: 1.35rem;">Current provider set summary</h2>
           </div>
         </div>
-        <JsonView value={payload.providers ?? []} emptyLabel="No provider summary returned." />
+        <JsonView value={payload.provider_sets ?? payload.providers ?? []} emptyLabel="No provider summary returned." />
       </section>
     </div>
   {/if}

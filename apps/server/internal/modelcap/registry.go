@@ -2,6 +2,7 @@ package modelcap
 
 import (
 	"sort"
+	"strings"
 
 	"memstation/apps/server/internal/domain"
 )
@@ -16,9 +17,16 @@ func NewRegistry(defaultProvider domain.Provider, chatModel, summaryModel, analy
 		if modelID == "" {
 			return
 		}
+		providerName, resolvedModelID := splitModelReference(modelID)
+		if providerName == "" {
+			providerName = defaultProvider
+		}
+		if resolvedModelID == "" {
+			resolvedModelID = modelID
+		}
 		capabilities = append(capabilities, domain.ModelCapability{
-			ID:             modelID,
-			Provider:       defaultProvider,
+			ID:             resolvedModelID,
+			Provider:       providerName,
 			Role:           role,
 			SupportsTools:  supportsTools,
 			SupportsStream: supportsStream,
@@ -36,4 +44,21 @@ func (r *Registry) List() []domain.ModelCapability {
 	out := make([]domain.ModelCapability, len(r.capabilities))
 	copy(out, r.capabilities)
 	return out
+}
+
+func splitModelReference(value string) (domain.Provider, string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", ""
+	}
+	for _, separator := range []string{":", "/"} {
+		parts := strings.SplitN(value, separator, 2)
+		if len(parts) != 2 {
+			continue
+		}
+		if providerName, ok := domain.ParseProvider(parts[0]); ok {
+			return providerName, strings.TrimSpace(parts[1])
+		}
+	}
+	return "", value
 }

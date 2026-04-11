@@ -15,28 +15,52 @@ import (
 )
 
 type Adapter struct {
-	client   *http.Client
-	resolver provider.ConfigResolver
+	client       *http.Client
+	resolver     provider.ConfigResolver
+	name         domain.Provider
+	useResponses bool
 }
 
 func NewAdapter(resolver provider.ConfigResolver, timeout time.Duration) *Adapter {
+	return NewCompatibleAdapter(resolver, timeout)
+}
+
+func NewCompatibleAdapter(resolver provider.ConfigResolver, timeout time.Duration) *Adapter {
 	if timeout <= 0 {
 		timeout = 60 * time.Second
 	}
 	return &Adapter{
 		client:   &http.Client{Timeout: timeout},
 		resolver: resolver,
+		name:     domain.ProviderOpenAICompatible,
 	}
 }
 
-func (a *Adapter) Name() domain.Provider { return domain.ProviderOpenAI }
+func NewResponsesAdapter(resolver provider.ConfigResolver, timeout time.Duration) *Adapter {
+	if timeout <= 0 {
+		timeout = 60 * time.Second
+	}
+	return &Adapter{
+		client:       &http.Client{Timeout: timeout},
+		resolver:     resolver,
+		name:         domain.ProviderOpenAIResponses,
+		useResponses: true,
+	}
+}
+
+func (a *Adapter) Name() domain.Provider {
+	if a == nil || a.name == "" {
+		return domain.ProviderOpenAICompatible
+	}
+	return a.name
+}
 
 func (a *Adapter) Complete(ctx context.Context, req domain.UnifiedRequest) (*domain.UnifiedResponse, error) {
 	config, err := a.resolveConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if req.Protocol == domain.ProtocolOpenAIResponses {
+	if a.useResponses {
 		return a.completeResponses(ctx, req, config)
 	}
 	return a.completeChat(ctx, req, config)
@@ -47,19 +71,19 @@ func (a *Adapter) Stream(ctx context.Context, req domain.UnifiedRequest, emit fu
 	if err != nil {
 		return nil, err
 	}
-	if req.Protocol == domain.ProtocolOpenAIResponses {
+	if a.useResponses {
 		return a.streamResponses(ctx, req, config, emit)
 	}
 	return a.streamChat(ctx, req, config, emit)
 }
 
 func (a *Adapter) resolveConfig(ctx context.Context) (provider.RuntimeConfig, error) {
-	config, err := a.resolver.Resolve(ctx, domain.ProviderOpenAI)
+	config, err := a.resolver.Resolve(ctx, a.Name())
 	if err != nil {
 		return provider.RuntimeConfig{}, err
 	}
 	if strings.TrimSpace(config.APIKey) == "" {
-		return provider.RuntimeConfig{}, fmt.Errorf("openai api key is not configured")
+		return provider.RuntimeConfig{}, fmt.Errorf("%s api key is not configured", a.Name())
 	}
 	return config, nil
 }
@@ -73,7 +97,7 @@ func (a *Adapter) completeChat(ctx context.Context, req domain.UnifiedRequest, c
 	if len(req.Tools) > 0 {
 		payload["tools"] = buildTools(req.Tools)
 	}
-	raw, _, err := provider.DoJSONRequest(ctx, a.client, domain.ProviderOpenAI, http.MethodPost, strings.TrimRight(config.BaseURL, "/")+"/chat/completions", map[string]string{
+	raw, _, err := provider.DoJSONRequest(ctx, a.client, a.Name(), http.MethodPost, strings.TrimRight(config.BaseURL, "/")+"/chat/completions", map[string]string{
 		"Authorization": "Bearer " + config.APIKey,
 	}, payload)
 	if err != nil {
@@ -110,8 +134,13 @@ func (a *Adapter) completeChat(ctx context.Context, req domain.UnifiedRequest, c
 	text := ""
 	role := domain.RoleAssistant
 	toolCalls := []domain.ToolCall{}
+	blocks := []domain.ContentBlock{}
 	if len(response.Choices) > 0 {
-		text = contentToText(response.Choices[0].Message.Content)
+		blocks = contentToBlocks(response.Choices[0].Message.Content)
+		text = blocksText(blocks)
+		if text == "" {
+			text = contentToText(response.Choices[0].Message.Content)
+		}
 		if response.Choices[0].Message.Role != "" {
 			role = domain.MessageRole(response.Choices[0].Message.Role)
 		}
@@ -124,11 +153,14 @@ func (a *Adapter) completeChat(ctx context.Context, req domain.UnifiedRequest, c
 	if response.ID == "" {
 		response.ID = uuid.NewString()
 	}
-	unified := newUnifiedResponse(req.Protocol, response.ID, domain.ProviderOpenAI, firstNonEmpty(response.Model, req.Model), role, text, createdAt, domain.UsageRecord{
+	unified := newUnifiedResponse(req.Protocol, response.ID, a.Name(), firstNonEmpty(response.Model, req.Model), role, text, createdAt, domain.UsageRecord{
 		InputTokens:  response.Usage.PromptTokens,
 		OutputTokens: response.Usage.CompletionTokens,
 		TotalTokens:  response.Usage.TotalTokens,
 	})
+	if len(blocks) > 0 {
+		unified.Message.Blocks = blocks
+	}
 	unified.Message.ToolCalls = toolCalls
 	return unified, nil
 }
@@ -142,7 +174,7 @@ func (a *Adapter) completeResponses(ctx context.Context, req domain.UnifiedReque
 	if len(req.Tools) > 0 {
 		payload["tools"] = buildResponsesTools(req.Tools)
 	}
-	raw, _, err := provider.DoJSONRequest(ctx, a.client, domain.ProviderOpenAI, http.MethodPost, strings.TrimRight(config.BaseURL, "/")+"/responses", map[string]string{
+	raw, _, err := provider.DoJSONRequest(ctx, a.client, a.Name(), http.MethodPost, strings.TrimRight(config.BaseURL, "/")+"/responses", map[string]string{
 		"Authorization": "Bearer " + config.APIKey,
 	}, payload)
 	if err != nil {
@@ -153,16 +185,13 @@ func (a *Adapter) completeResponses(ctx context.Context, req domain.UnifiedReque
 		ID     string `json:"id"`
 		Model  string `json:"model"`
 		Output []struct {
-			ID        string `json:"id"`
-			Type      string `json:"type"`
-			Role      string `json:"role"`
-			Name      string `json:"name"`
-			CallID    string `json:"call_id"`
-			Arguments string `json:"arguments"`
-			Content   []struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			} `json:"content"`
+			ID        string           `json:"id"`
+			Type      string           `json:"type"`
+			Role      string           `json:"role"`
+			Name      string           `json:"name"`
+			CallID    string           `json:"call_id"`
+			Arguments string           `json:"arguments"`
+			Content   []map[string]any `json:"content"`
 		} `json:"output"`
 		Usage struct {
 			InputTokens  int `json:"input_tokens"`
@@ -176,12 +205,15 @@ func (a *Adapter) completeResponses(ctx context.Context, req domain.UnifiedReque
 	if response.ID == "" {
 		response.ID = uuid.NewString()
 	}
-	text, toolCalls := responseOutput(response.Output)
-	unified := newUnifiedResponse(req.Protocol, response.ID, domain.ProviderOpenAI, firstNonEmpty(response.Model, req.Model), domain.RoleAssistant, text, time.Now().UTC(), domain.UsageRecord{
+	blocks, text, toolCalls := responseOutput(response.Output)
+	unified := newUnifiedResponse(req.Protocol, response.ID, a.Name(), firstNonEmpty(response.Model, req.Model), domain.RoleAssistant, text, time.Now().UTC(), domain.UsageRecord{
 		InputTokens:  response.Usage.InputTokens,
 		OutputTokens: response.Usage.OutputTokens,
 		TotalTokens:  response.Usage.TotalTokens,
 	})
+	if len(blocks) > 0 {
+		unified.Message.Blocks = blocks
+	}
 	unified.Message.ToolCalls = toolCalls
 	return unified, nil
 }
@@ -198,7 +230,7 @@ func (a *Adapter) streamChat(ctx context.Context, req domain.UnifiedRequest, con
 	if len(req.Tools) > 0 {
 		payload["tools"] = buildTools(req.Tools)
 	}
-	response, err := provider.DoStreamRequest(ctx, a.client, domain.ProviderOpenAI, http.MethodPost, strings.TrimRight(config.BaseURL, "/")+"/chat/completions", map[string]string{
+	response, err := provider.DoStreamRequest(ctx, a.client, a.Name(), http.MethodPost, strings.TrimRight(config.BaseURL, "/")+"/chat/completions", map[string]string{
 		"Authorization": "Bearer " + config.APIKey,
 	}, payload)
 	if err != nil {
@@ -224,7 +256,7 @@ func (a *Adapter) streamChat(ctx context.Context, req domain.UnifiedRequest, con
 		return emitStreamEvent(emit, domain.StreamEvent{
 			Type:       domain.StreamEventResponseStart,
 			ResponseID: responseID,
-			Provider:   domain.ProviderOpenAI,
+			Provider:   a.Name(),
 			Model:      model,
 			Role:       role,
 			CreatedAt:  createdAt,
@@ -277,7 +309,7 @@ func (a *Adapter) streamChat(ctx context.Context, req domain.UnifiedRequest, con
 				if err := emitStreamEvent(emit, domain.StreamEvent{
 					Type:       domain.StreamEventTextDelta,
 					ResponseID: responseID,
-					Provider:   domain.ProviderOpenAI,
+					Provider:   a.Name(),
 					Model:      model,
 					Role:       role,
 					Delta:      delta,
@@ -296,7 +328,7 @@ func (a *Adapter) streamChat(ctx context.Context, req domain.UnifiedRequest, con
 			if err := emitStreamEvent(emit, domain.StreamEvent{
 				Type:       domain.StreamEventUsage,
 				ResponseID: responseID,
-				Provider:   domain.ProviderOpenAI,
+				Provider:   a.Name(),
 				Model:      model,
 				Role:       role,
 				Usage:      usage,
@@ -315,7 +347,7 @@ func (a *Adapter) streamChat(ctx context.Context, req domain.UnifiedRequest, con
 			return nil, err
 		}
 	}
-	return newUnifiedResponse(req.Protocol, responseID, domain.ProviderOpenAI, model, role, textBuilder.String(), createdAt, usage), nil
+	return newUnifiedResponse(req.Protocol, responseID, a.Name(), model, role, textBuilder.String(), createdAt, usage), nil
 }
 
 func (a *Adapter) streamResponses(ctx context.Context, req domain.UnifiedRequest, config provider.RuntimeConfig, emit func(domain.StreamEvent) error) (*domain.UnifiedResponse, error) {
@@ -327,7 +359,7 @@ func (a *Adapter) streamResponses(ctx context.Context, req domain.UnifiedRequest
 	if len(req.Tools) > 0 {
 		payload["tools"] = buildResponsesTools(req.Tools)
 	}
-	response, err := provider.DoStreamRequest(ctx, a.client, domain.ProviderOpenAI, http.MethodPost, strings.TrimRight(config.BaseURL, "/")+"/responses", map[string]string{
+	response, err := provider.DoStreamRequest(ctx, a.client, a.Name(), http.MethodPost, strings.TrimRight(config.BaseURL, "/")+"/responses", map[string]string{
 		"Authorization": "Bearer " + config.APIKey,
 	}, payload)
 	if err != nil {
@@ -353,7 +385,7 @@ func (a *Adapter) streamResponses(ctx context.Context, req domain.UnifiedRequest
 		return emitStreamEvent(emit, domain.StreamEvent{
 			Type:       domain.StreamEventResponseStart,
 			ResponseID: responseID,
-			Provider:   domain.ProviderOpenAI,
+			Provider:   a.Name(),
 			Model:      model,
 			Role:       role,
 			CreatedAt:  createdAt,
@@ -399,7 +431,7 @@ func (a *Adapter) streamResponses(ctx context.Context, req domain.UnifiedRequest
 				return emitStreamEvent(emit, domain.StreamEvent{
 					Type:       domain.StreamEventTextDelta,
 					ResponseID: responseID,
-					Provider:   domain.ProviderOpenAI,
+					Provider:   a.Name(),
 					Model:      model,
 					Role:       role,
 					Delta:      chunk.Delta,
@@ -419,7 +451,7 @@ func (a *Adapter) streamResponses(ctx context.Context, req domain.UnifiedRequest
 				return emitStreamEvent(emit, domain.StreamEvent{
 					Type:       domain.StreamEventUsage,
 					ResponseID: responseID,
-					Provider:   domain.ProviderOpenAI,
+					Provider:   a.Name(),
 					Model:      model,
 					Role:       role,
 					Usage:      usage,
@@ -437,7 +469,7 @@ func (a *Adapter) streamResponses(ctx context.Context, req domain.UnifiedRequest
 			return nil, err
 		}
 	}
-	return newUnifiedResponse(req.Protocol, responseID, domain.ProviderOpenAI, model, role, textBuilder.String(), createdAt, usage), nil
+	return newUnifiedResponse(req.Protocol, responseID, a.Name(), model, role, textBuilder.String(), createdAt, usage), nil
 }
 
 func buildMessages(messages []domain.UnifiedMessage) []map[string]any {
@@ -457,16 +489,20 @@ func buildMessages(messages []domain.UnifiedMessage) []map[string]any {
 				"role":       message.Role,
 				"tool_calls": buildChatToolCalls(message.ToolCalls),
 			}
-			if text := provider.MessageText(message); text != "" {
-				item["content"] = text
+			if content := buildOpenAIChatContent(message); content != nil {
+				item["content"] = content
 			} else {
 				item["content"] = nil
 			}
 			out = append(out, item)
 		default:
+			content := buildOpenAIChatContent(message)
+			if content == nil {
+				content = provider.MessageText(message)
+			}
 			out = append(out, map[string]any{
 				"role":    message.Role,
-				"content": provider.MessageText(message),
+				"content": content,
 			})
 		}
 	}
@@ -499,16 +535,23 @@ func buildResponsesInput(messages []domain.UnifiedMessage) []map[string]any {
 				continue
 			}
 		}
-		text := provider.MessageText(message)
-		if text == "" {
+		content := buildOpenAIResponsesContent(message)
+		if len(content) == 0 {
+			text := provider.MessageText(message)
+			if text == "" {
+				continue
+			}
+			content = []map[string]any{{
+				"type": "input_text",
+				"text": text,
+			}}
+		}
+		if len(content) == 0 {
 			continue
 		}
 		out = append(out, map[string]any{
-			"role": message.Role,
-			"content": []map[string]any{{
-				"type": "input_text",
-				"text": text,
-			}},
+			"role":    message.Role,
+			"content": content,
 		})
 	}
 	if len(out) == 0 {
@@ -552,19 +595,17 @@ func buildResponsesTools(tools []domain.ToolDefinition) []map[string]any {
 }
 
 func responseOutput(output []struct {
-	ID        string `json:"id"`
-	Type      string `json:"type"`
-	Role      string `json:"role"`
-	Name      string `json:"name"`
-	CallID    string `json:"call_id"`
-	Arguments string `json:"arguments"`
-	Content   []struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
-	} `json:"content"`
+	ID        string           `json:"id"`
+	Type      string           `json:"type"`
+	Role      string           `json:"role"`
+	Name      string           `json:"name"`
+	CallID    string           `json:"call_id"`
+	Arguments string           `json:"arguments"`
+	Content   []map[string]any `json:"content"`
 },
-) (string, []domain.ToolCall) {
+) ([]domain.ContentBlock, string, []domain.ToolCall) {
 	parts := make([]string, 0)
+	blocks := make([]domain.ContentBlock, 0)
 	toolCalls := make([]domain.ToolCall, 0)
 	for _, item := range output {
 		if item.Type == "function_call" {
@@ -575,13 +616,15 @@ func responseOutput(output []struct {
 			})
 			continue
 		}
-		for _, block := range item.Content {
-			if block.Text != "" {
-				parts = append(parts, block.Text)
+		for _, rawBlock := range item.Content {
+			block := blockFromMap(rawBlock)
+			blocks = append(blocks, block)
+			if text := strings.TrimSpace(block.TextProxy()); text != "" {
+				parts = append(parts, text)
 			}
 		}
 	}
-	return strings.Join(parts, "\n"), toolCalls
+	return blocks, strings.Join(parts, "\n"), toolCalls
 }
 
 func contentToText(content any) string {
@@ -605,7 +648,351 @@ func contentToText(content any) string {
 		}
 		return strings.Join(parts, "\n")
 	default:
+		if blocks := contentToBlocks(content); len(blocks) > 0 {
+			if text := blocksText(blocks); text != "" {
+				return text
+			}
+		}
 		return fmt.Sprintf("%v", typed)
+	}
+}
+
+func contentToBlocks(content any) []domain.ContentBlock {
+	switch typed := content.(type) {
+	case nil:
+		return nil
+	case string:
+		if strings.TrimSpace(typed) == "" {
+			return nil
+		}
+		return []domain.ContentBlock{{
+			Type: domain.ContentBlockText,
+			Text: typed,
+		}}
+	case []any:
+		return blocksFromAnySlice(typed)
+	case []map[string]any:
+		items := make([]any, 0, len(typed))
+		for _, item := range typed {
+			items = append(items, item)
+		}
+		return blocksFromAnySlice(items)
+	case map[string]any:
+		return []domain.ContentBlock{blockFromMap(typed)}
+	default:
+		return nil
+	}
+}
+
+func blocksFromAnySlice(items []any) []domain.ContentBlock {
+	blocks := make([]domain.ContentBlock, 0, len(items))
+	for _, item := range items {
+		switch typed := item.(type) {
+		case string:
+			if strings.TrimSpace(typed) == "" {
+				continue
+			}
+			blocks = append(blocks, domain.ContentBlock{Type: domain.ContentBlockText, Text: typed})
+		case map[string]any:
+			blocks = append(blocks, blockFromMap(typed))
+		}
+	}
+	return blocks
+}
+
+func blockFromMap(item map[string]any) domain.ContentBlock {
+	blockType := strings.TrimSpace(strings.ToLower(stringValue(item, "type")))
+	switch blockType {
+	case "", "text", "input_text", "output_text":
+		return domain.ContentBlock{
+			Type:     domain.ContentBlockText,
+			Text:     firstNonEmpty(stringValue(item, "text"), stringValue(item, "output_text")),
+			Raw:      rawJSONText(item),
+			Metadata: metadataWithout(item, "type", "text", "output_text"),
+		}
+	case "input_image", "image", "image_url":
+		sourceURL, fileID, mimeType, metadata := imageSourceFields(item)
+		return domain.ContentBlock{
+			Type:           domain.ContentBlockImage,
+			BlobID:         stringValue(item, "blob_id"),
+			SourceURL:      sourceURL,
+			ProviderFileID: fileID,
+			MIMEType:       mimeType,
+			Filename:       firstNonEmpty(stringValue(item, "filename"), stringValue(metadata, "filename")),
+			Text:           firstNonEmpty(stringValue(item, "text"), stringValue(metadata, "caption"), stringValue(metadata, "ocr_text")),
+			Raw:            rawJSONText(item),
+			Metadata:       metadata,
+		}
+	case "input_audio", "audio":
+		sourceURL, fileID, mimeType, metadata := mediaSourceFields(item, "audio")
+		return domain.ContentBlock{
+			Type:           domain.ContentBlockAudio,
+			BlobID:         stringValue(item, "blob_id"),
+			SourceURL:      sourceURL,
+			ProviderFileID: fileID,
+			MIMEType:       mimeType,
+			Filename:       firstNonEmpty(stringValue(item, "filename"), stringValue(metadata, "filename")),
+			Text:           firstNonEmpty(stringValue(item, "text"), stringValue(metadata, "transcript"), stringValue(metadata, "summary")),
+			Raw:            rawJSONText(item),
+			StartMS:        int64Value(item["start_ms"]),
+			EndMS:          int64Value(item["end_ms"]),
+			DurationMS:     int64Value(item["duration_ms"]),
+			Metadata:       metadata,
+		}
+	case "input_video", "video":
+		sourceURL, fileID, mimeType, metadata := mediaSourceFields(item, "video")
+		return domain.ContentBlock{
+			Type:           domain.ContentBlockVideo,
+			BlobID:         stringValue(item, "blob_id"),
+			SourceURL:      sourceURL,
+			ProviderFileID: fileID,
+			MIMEType:       mimeType,
+			Filename:       firstNonEmpty(stringValue(item, "filename"), stringValue(metadata, "filename")),
+			Text:           firstNonEmpty(stringValue(item, "text"), stringValue(metadata, "transcript"), stringValue(metadata, "summary"), stringValue(metadata, "keyframe_summary")),
+			Raw:            rawJSONText(item),
+			StartMS:        int64Value(item["start_ms"]),
+			EndMS:          int64Value(item["end_ms"]),
+			DurationMS:     int64Value(item["duration_ms"]),
+			Metadata:       metadata,
+		}
+	case "file", "input_file", "document":
+		sourceURL, fileID, mimeType, metadata := mediaSourceFields(item, "file")
+		return domain.ContentBlock{
+			Type:           domain.ContentBlockFile,
+			BlobID:         stringValue(item, "blob_id"),
+			SourceURL:      sourceURL,
+			ProviderFileID: fileID,
+			MIMEType:       mimeType,
+			Filename:       firstNonEmpty(stringValue(item, "filename"), stringValue(metadata, "filename")),
+			Text:           firstNonEmpty(stringValue(item, "text"), stringValue(metadata, "document_text"), stringValue(metadata, "parsed_text")),
+			Raw:            rawJSONText(item),
+			PageIndex:      intValue(item["page_index"]),
+			StartMS:        int64Value(item["start_ms"]),
+			EndMS:          int64Value(item["end_ms"]),
+			Metadata:       metadata,
+		}
+	default:
+		return domain.ContentBlock{
+			Type:     domain.ContentBlockUnknown,
+			Text:     stringValue(item, "text"),
+			Raw:      rawJSONText(item),
+			Metadata: metadataWithout(item, "type", "text"),
+		}
+	}
+}
+
+func blocksText(blocks []domain.ContentBlock) string {
+	parts := make([]string, 0, len(blocks))
+	for _, block := range blocks {
+		if text := strings.TrimSpace(block.TextProxy()); text != "" {
+			parts = append(parts, text)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+func imageSourceFields(item map[string]any) (string, string, string, map[string]any) {
+	metadata := metadataWithout(item, "type", "text", "image_url", "file_id", "mime_type")
+	if raw := item["image_url"]; raw != nil {
+		switch typed := raw.(type) {
+		case string:
+			return typed, stringValue(item, "file_id"), stringValue(item, "mime_type"), metadata
+		case map[string]any:
+			metadata = mergeMetadataMaps(metadata, metadataWithout(typed))
+			return firstNonEmpty(stringValue(typed, "url"), stringValue(typed, "image_url")), firstNonEmpty(stringValue(item, "file_id"), stringValue(typed, "file_id")), firstNonEmpty(stringValue(item, "mime_type"), stringValue(typed, "mime_type")), metadata
+		}
+	}
+	return stringValue(item, "source_url"), stringValue(item, "file_id"), stringValue(item, "mime_type"), metadata
+}
+
+func mediaSourceFields(item map[string]any, key string) (string, string, string, map[string]any) {
+	metadata := metadataWithout(item, "type", "text", key, "mime_type", "file_id", "source_url")
+	if raw := item[key]; raw != nil {
+		switch typed := raw.(type) {
+		case string:
+			return typed, stringValue(item, "file_id"), stringValue(item, "mime_type"), metadata
+		case map[string]any:
+			metadata = mergeMetadataMaps(metadata, metadataWithout(typed))
+			return firstNonEmpty(stringValue(typed, "url"), stringValue(typed, "source_url"), stringValue(item, "source_url")), firstNonEmpty(stringValue(typed, "file_id"), stringValue(item, "file_id")), firstNonEmpty(stringValue(typed, "mime_type"), stringValue(item, "mime_type")), metadata
+		}
+	}
+	return stringValue(item, "source_url"), stringValue(item, "file_id"), stringValue(item, "mime_type"), metadata
+}
+
+func metadataWithout(item map[string]any, keys ...string) map[string]any {
+	if len(item) == 0 {
+		return nil
+	}
+	excluded := map[string]struct{}{}
+	for _, key := range keys {
+		excluded[key] = struct{}{}
+	}
+	metadata := map[string]any{}
+	for key, value := range item {
+		if _, ok := excluded[key]; ok {
+			continue
+		}
+		metadata[key] = value
+	}
+	if len(metadata) == 0 {
+		return nil
+	}
+	return metadata
+}
+
+func mergeMetadataMaps(values ...map[string]any) map[string]any {
+	merged := map[string]any{}
+	for _, value := range values {
+		for key, item := range value {
+			merged[key] = item
+		}
+	}
+	if len(merged) == 0 {
+		return nil
+	}
+	return merged
+}
+
+func rawJSONText(value any) string {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf("%v", value)
+	}
+	return string(raw)
+}
+
+func buildOpenAIChatContent(message domain.UnifiedMessage) any {
+	blocks := canonicalBlocks(message)
+	if len(blocks) == 0 {
+		return nil
+	}
+	if len(blocks) == 1 && blocks[0].Type == domain.ContentBlockText {
+		return blocks[0].TextProxy()
+	}
+	items := make([]map[string]any, 0, len(blocks))
+	for _, block := range blocks {
+		if item := openAIContentBlock(block, false); len(item) > 0 {
+			items = append(items, item)
+		}
+	}
+	if len(items) == 0 {
+		return provider.MessageText(message)
+	}
+	return items
+}
+
+func buildOpenAIResponsesContent(message domain.UnifiedMessage) []map[string]any {
+	blocks := canonicalBlocks(message)
+	if len(blocks) == 0 {
+		return nil
+	}
+	items := make([]map[string]any, 0, len(blocks))
+	for _, block := range blocks {
+		if item := openAIContentBlock(block, false); len(item) > 0 {
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
+func canonicalBlocks(message domain.UnifiedMessage) []domain.ContentBlock {
+	if len(message.Blocks) > 0 {
+		return message.Blocks
+	}
+	if strings.TrimSpace(message.Text) == "" {
+		return nil
+	}
+	return []domain.ContentBlock{{Type: domain.ContentBlockText, Text: message.Text}}
+}
+
+func openAIContentBlock(block domain.ContentBlock, output bool) map[string]any {
+	switch block.Type {
+	case domain.ContentBlockText:
+		itemType := "input_text"
+		if output {
+			itemType = "output_text"
+		}
+		return map[string]any{"type": itemType, "text": block.TextProxy()}
+	case domain.ContentBlockImage:
+		item := map[string]any{"type": "input_image"}
+		if block.SourceURL != "" {
+			item["image_url"] = block.SourceURL
+		}
+		if block.ProviderFileID != "" {
+			item["file_id"] = block.ProviderFileID
+		}
+		if block.BlobID != "" {
+			item["blob_id"] = block.BlobID
+		}
+		if block.MIMEType != "" {
+			item["mime_type"] = block.MIMEType
+		}
+		return item
+	case domain.ContentBlockAudio:
+		item := map[string]any{"type": "input_audio"}
+		audio := map[string]any{}
+		if block.SourceURL != "" {
+			audio["url"] = block.SourceURL
+		}
+		if block.ProviderFileID != "" {
+			audio["file_id"] = block.ProviderFileID
+		}
+		if block.MIMEType != "" {
+			audio["mime_type"] = block.MIMEType
+		}
+		if len(audio) > 0 {
+			item["audio"] = audio
+		}
+		if block.BlobID != "" {
+			item["blob_id"] = block.BlobID
+		}
+		return item
+	case domain.ContentBlockVideo:
+		item := map[string]any{"type": "input_video"}
+		video := map[string]any{}
+		if block.SourceURL != "" {
+			video["url"] = block.SourceURL
+		}
+		if block.ProviderFileID != "" {
+			video["file_id"] = block.ProviderFileID
+		}
+		if block.MIMEType != "" {
+			video["mime_type"] = block.MIMEType
+		}
+		if len(video) > 0 {
+			item["video"] = video
+		}
+		if block.BlobID != "" {
+			item["blob_id"] = block.BlobID
+		}
+		return item
+	case domain.ContentBlockFile:
+		item := map[string]any{"type": "file"}
+		if block.SourceURL != "" {
+			item["source_url"] = block.SourceURL
+		}
+		if block.ProviderFileID != "" {
+			item["file_id"] = block.ProviderFileID
+		}
+		if block.BlobID != "" {
+			item["blob_id"] = block.BlobID
+		}
+		if block.Filename != "" {
+			item["filename"] = block.Filename
+		}
+		if block.MIMEType != "" {
+			item["mime_type"] = block.MIMEType
+		}
+		return item
+	default:
+		if text := block.TextProxy(); text != "" {
+			itemType := "input_text"
+			if output {
+				itemType = "output_text"
+			}
+			return map[string]any{"type": itemType, "text": text}
+		}
+		return nil
 	}
 }
 
@@ -698,14 +1085,19 @@ func newUnifiedResponse(protocol domain.Protocol, responseID string, providerNam
 		Protocol:   protocol,
 		Provider:   providerName,
 		Model:      model,
-		Message: domain.UnifiedMessage{
-			Role: role,
-			Text: text,
-			Blocks: []domain.ContentBlock{{
-				Type: domain.ContentBlockText,
+		Message: func() domain.UnifiedMessage {
+			message := domain.UnifiedMessage{
+				Role: role,
 				Text: text,
-			}},
-		},
+			}
+			if strings.TrimSpace(text) != "" {
+				message.Blocks = []domain.ContentBlock{{
+					Type: domain.ContentBlockText,
+					Text: text,
+				}}
+			}
+			return message
+		}(),
 		Usage:     usage,
 		CreatedAt: createdAt,
 		Raw: map[string]any{
@@ -728,6 +1120,36 @@ func stringValue(item map[string]any, key string) string {
 	}
 	text, _ := value.(string)
 	return text
+}
+
+func intValue(value any) int {
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int32:
+		return int(typed)
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	default:
+		return 0
+	}
+}
+
+func int64Value(value any) int64 {
+	switch typed := value.(type) {
+	case int:
+		return int64(typed)
+	case int32:
+		return int64(typed)
+	case int64:
+		return typed
+	case float64:
+		return int64(typed)
+	default:
+		return 0
+	}
 }
 
 func firstNonEmpty(values ...string) string {

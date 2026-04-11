@@ -92,8 +92,8 @@ test('dashboard and major workspaces load live target data', async ({ page }) =>
   await expectRouteHealthy(page, '/statistics/tokens', /Token and workload analysis/i);
   await expect(page.getByText('Filtered Tokens').first()).toBeVisible();
 
-  await expectRouteHealthy(page, '/settings/providers', /Manage upstream provider endpoints/i);
-  await expect(page.getByText('openai').first()).toBeVisible();
+  await expectRouteHealthy(page, '/settings/providers', /Manage gateway, internal, and embedding provider sets/i);
+  await expect(page.getByText('openai_compatible').first()).toBeVisible();
 
   await expectRouteHealthy(page, '/playground/protocols', /Inspect raw protocol compatibility/i);
   await page.getByPlaceholder('ms-...').fill(gatewayAPIKey);
@@ -268,16 +268,18 @@ test('model and provider settings persist through direct writes to the selected 
   await expect(page.getByLabel('Max injection tokens')).toHaveValue('4096');
 
   await page.goto('/settings/providers');
-  await expect(page.getByRole('heading', { name: /Manage upstream provider endpoints/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Manage gateway, internal, and embedding provider sets/i })).toBeVisible();
 
-  const anthropicCard = page.locator('section.card').filter({ hasText: 'anthropic' }).first();
+  const gatewayProviderSection = page.locator('section.card').filter({ hasText: 'Gateway proxy providers' }).first();
+  const anthropicCard = gatewayProviderSection
+    .locator('section.card')
+    .filter({ has: page.getByRole('heading', { name: 'anthropic' }) })
+    .first();
   await anthropicCard.getByLabel('Base URL').fill('https://api.anthropic.com/v2/fixture');
   await anthropicCard.getByLabel('Rotate API key').fill('sk-playwright-anthropic');
-  await page.getByRole('button', { name: 'Save provider overrides' }).click();
+  await page.getByRole('button', { name: 'Save provider set overrides' }).click();
 
-  await expect(page.getByText('Provider overrides saved. Sensitive API keys are not echoed back by the target.')).toBeVisible();
-  await expect(anthropicCard.getByText('Key configured')).toBeVisible();
-  await expect(anthropicCard.getByText('ready')).toBeVisible();
+  await expect(page.getByText('Provider set overrides saved. Sensitive API keys are not echoed back by the target.')).toBeVisible();
   await expect(anthropicCard.getByLabel('Base URL')).toHaveValue('https://api.anthropic.com/v2/fixture');
 });
 

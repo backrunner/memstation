@@ -228,7 +228,7 @@
         {#each providers as provider}
           <div class="debug-block">
             <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
-              <strong>{provider.provider}</strong>
+              <strong>{provider.scope} / {provider.provider}</strong>
               <div class="runtime-field-status">
                 <StatusBadge tone={provider.status === 'ready' ? 'success' : provider.status === 'degraded' ? 'danger' : 'warning'} label={provider.status} />
                 {#if provider.is_desired_default}

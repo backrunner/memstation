@@ -35,7 +35,7 @@ func NewService(providers *provider.Registry, memoryEngine *memory.Engine, conve
 		memoryEngine:    memoryEngine,
 		conversations:   conversations,
 		settings:        settings,
-		defaultProvider: defaultProvider,
+		defaultProvider: domain.NormalizeProvider(string(defaultProvider)),
 	}
 }
 
@@ -44,6 +44,7 @@ func (s *Service) SetToolRuntime(runtime *ToolRuntime) {
 }
 
 func (s *Service) SetDefaultProvider(providerName domain.Provider) {
+	providerName = domain.NormalizeProvider(string(providerName))
 	if providerName == "" {
 		return
 	}
@@ -301,6 +302,7 @@ func (s *Service) resolveRequest(ctx context.Context, req domain.UnifiedRequest)
 
 	modelProvider, requestModel := parseModelReference(req.Model)
 	settingProvider, settingModel := parseModelReference(stringValue(snapshot["chat_model"]))
+	defaultProvider := s.currentDefaultProvider()
 
 	switch {
 	case req.Provider != "":
@@ -309,7 +311,7 @@ func (s *Service) resolveRequest(ctx context.Context, req domain.UnifiedRequest)
 	case settingProvider != "":
 		req.Provider = settingProvider
 	default:
-		req.Provider = s.currentDefaultProvider()
+		req.Provider = protocolDefaultProvider(req.Protocol, defaultProvider)
 	}
 
 	if strings.TrimSpace(requestModel) != "" {
@@ -397,9 +399,8 @@ func parseModelReference(value string) (domain.Provider, string) {
 		if len(parts) != 2 {
 			continue
 		}
-		switch domain.Provider(strings.ToLower(parts[0])) {
-		case domain.ProviderOpenAI, domain.ProviderAnthropic, domain.ProviderGemini:
-			return domain.Provider(strings.ToLower(parts[0])), strings.TrimSpace(parts[1])
+		if providerName, ok := domain.ParseProvider(parts[0]); ok {
+			return providerName, strings.TrimSpace(parts[1])
 		}
 	}
 	return "", value
@@ -432,4 +433,20 @@ func intValue(value any) int {
 
 func boolPtr(value bool) *bool {
 	return &value
+}
+
+func protocolDefaultProvider(protocol domain.Protocol, fallback domain.Provider) domain.Provider {
+	switch fallback {
+	case domain.ProviderOpenAICompatible, domain.ProviderOpenAIResponses:
+		switch protocol {
+		case domain.ProtocolOpenAIResponses:
+			return domain.ProviderOpenAIResponses
+		case domain.ProtocolOpenAIChat:
+			return domain.ProviderOpenAICompatible
+		default:
+			return fallback
+		}
+	default:
+		return fallback
+	}
 }

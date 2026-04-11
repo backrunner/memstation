@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/ports"
 )
 
 type Registry struct {
+	mu              sync.RWMutex
 	adapters        map[domain.Provider]ports.ProviderAdapter
 	defaultProvider domain.Provider
 }
@@ -39,7 +41,7 @@ func (r StaticConfigResolver) Resolve(_ context.Context, provider domain.Provide
 func NewRegistry(defaultProvider domain.Provider, adapters ...ports.ProviderAdapter) *Registry {
 	registry := &Registry{
 		adapters:        map[domain.Provider]ports.ProviderAdapter{},
-		defaultProvider: defaultProvider,
+		defaultProvider: normalizedProvider(defaultProvider),
 	}
 	for _, adapter := range adapters {
 		registry.adapters[adapter.Name()] = adapter
@@ -48,7 +50,10 @@ func NewRegistry(defaultProvider domain.Provider, adapters ...ports.ProviderAdap
 }
 
 func (r *Registry) Resolve(explicit domain.Provider) (ports.ProviderAdapter, error) {
-	provider := explicit
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	provider := normalizedProvider(explicit)
 	if provider == "" {
 		provider = r.defaultProvider
 	}
@@ -57,6 +62,20 @@ func (r *Registry) Resolve(explicit domain.Provider) (ports.ProviderAdapter, err
 		return nil, fmt.Errorf("provider adapter unavailable: %s", provider)
 	}
 	return adapter, nil
+}
+
+func (r *Registry) SetDefaultProvider(provider domain.Provider) {
+	normalized := normalizedProvider(provider)
+	if normalized == "" {
+		return
+	}
+	r.mu.Lock()
+	r.defaultProvider = normalized
+	r.mu.Unlock()
+}
+
+func normalizedProvider(value domain.Provider) domain.Provider {
+	return domain.NormalizeProvider(string(value))
 }
 
 func FlattenMessages(messages []domain.UnifiedMessage) string {
@@ -152,15 +171,8 @@ func messageText(message domain.UnifiedMessage) string {
 	}
 	parts := make([]string, 0, len(message.Blocks))
 	for _, block := range message.Blocks {
-		switch block.Type {
-		case domain.ContentBlockText:
-			if block.Text != "" {
-				parts = append(parts, block.Text)
-			}
-		default:
-			if block.Raw != "" {
-				parts = append(parts, block.Raw)
-			}
+		if text := strings.TrimSpace(block.TextProxy()); text != "" {
+			parts = append(parts, text)
 		}
 	}
 	if len(parts) > 0 {
