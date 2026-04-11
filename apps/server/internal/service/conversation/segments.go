@@ -23,9 +23,16 @@ type SegmentOptions struct {
 }
 
 type dialogueMessage struct {
-	Sequence int
-	Role     domain.MessageRole
-	Text     string
+	Sequence      int
+	Role          domain.MessageRole
+	Text          string
+	PartIDs       []string
+	ArtifactIDs   []string
+	Modalities    []string
+	HasSourceBlob bool
+	PageIndexes   []int
+	StartMS       int64
+	EndMS         int64
 }
 
 func DefaultSegmentOptions() SegmentOptions {
@@ -37,6 +44,10 @@ func DefaultSegmentOptions() SegmentOptions {
 }
 
 func BuildSegments(userID, conversationID string, messages []domain.UnifiedMessage, now time.Time, options SegmentOptions) []domain.ConversationSegment {
+	return BuildSegmentsFromTimeline(userID, conversationID, messages, nil, nil, now, options)
+}
+
+func BuildSegmentsFromTimeline(userID, conversationID string, messages []domain.UnifiedMessage, parts []domain.MessagePart, artifacts []domain.MessagePartArtifact, now time.Time, options SegmentOptions) []domain.ConversationSegment {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
@@ -50,7 +61,7 @@ func BuildSegments(userID, conversationID string, messages []domain.UnifiedMessa
 		options.MaxCharacters = defaultSegmentMaxCharacters
 	}
 
-	dialogue := collectDialogueMessages(messages)
+	dialogue := collectDialogueMessages(messages, parts, artifacts)
 	if len(dialogue) == 0 {
 		return nil
 	}
@@ -95,6 +106,15 @@ func BuildSegments(userID, conversationID string, messages []domain.UnifiedMessa
 				"excluded_roles":       []string{string(domain.RoleSystem), string(domain.RoleTool)},
 				"sequence_span":        items[len(items)-1].Sequence - items[0].Sequence + 1,
 				"dialogue_message_ids": nil,
+				"source_part_ids":      collectSegmentPartIDs(items),
+				"source_artifact_ids":  collectSegmentArtifactIDs(items),
+				"modalities":           collectSegmentModalities(items),
+				"evidence_count":       len(collectSegmentArtifactIDs(items)),
+				"source_part_count":    len(collectSegmentPartIDs(items)),
+				"has_source_blob":      segmentHasSourceBlob(items),
+				"page_indexes":         collectSegmentPageIndexes(items),
+				"start_ms":             segmentStartMS(items),
+				"end_ms":               segmentEndMS(items),
 			},
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -124,7 +144,19 @@ func SummarizeSegments(segments []domain.ConversationSegment) string {
 }
 
 func SummarizeMessages(messages []domain.UnifiedMessage) string {
-	parts := make([]string, 0, len(messages))
+	return SummarizeMessagesWithTimeline(messages, nil, nil)
+}
+
+func SummarizeMessagesWithTimeline(messages []domain.UnifiedMessage, parts []domain.MessagePart, artifacts []domain.MessagePartArtifact) string {
+	timeline := collectDialogueMessages(messages, parts, artifacts)
+	if len(timeline) > 0 {
+		lines := make([]string, 0, len(timeline))
+		for _, item := range timeline {
+			lines = append(lines, fmt.Sprintf("%s: %s", item.Role, item.Text))
+		}
+		return truncateSummary(strings.Join(lines, " | "), 400)
+	}
+	summaryParts := make([]string, 0, len(messages))
 	for _, message := range messages {
 		if message.Role != domain.RoleUser && message.Role != domain.RoleAssistant && message.Role != domain.RoleTool {
 			continue
@@ -133,18 +165,24 @@ func SummarizeMessages(messages []domain.UnifiedMessage) string {
 		if len(contentParts) == 0 {
 			continue
 		}
-		parts = append(parts, fmt.Sprintf("%s: %s", message.Role, strings.Join(contentParts, " | ")))
+		summaryParts = append(summaryParts, fmt.Sprintf("%s: %s", message.Role, strings.Join(contentParts, " | ")))
 	}
-	if len(parts) > 0 {
-		return truncateSummary(strings.Join(parts, " | "), 400)
+	if len(summaryParts) > 0 {
+		return truncateSummary(strings.Join(summaryParts, " | "), 400)
 	}
 	return summarizeMessageEnvelope(messages)
 }
 
-func collectDialogueMessages(messages []domain.UnifiedMessage) []dialogueMessage {
+func collectDialogueMessages(messages []domain.UnifiedMessage, parts []domain.MessagePart, artifacts []domain.MessagePartArtifact) []dialogueMessage {
+	if len(parts) > 0 {
+		dialogue := collectDialogueFromParts(parts, artifacts)
+		if len(dialogue) > 0 {
+			return dialogue
+		}
+	}
 	dialogue := make([]dialogueMessage, 0, len(messages))
 	for idx, message := range messages {
-		if message.Role != domain.RoleUser && message.Role != domain.RoleAssistant {
+		if !timelineRole(message.Role) {
 			continue
 		}
 		text := strings.TrimSpace(message.Text)
@@ -161,6 +199,55 @@ func collectDialogueMessages(messages []domain.UnifiedMessage) []dialogueMessage
 		})
 	}
 	return dialogue
+}
+
+func collectDialogueFromParts(parts []domain.MessagePart, artifacts []domain.MessagePartArtifact) []dialogueMessage {
+	if len(parts) == 0 {
+		return nil
+	}
+	artifactIndex := make(map[string][]domain.MessagePartArtifact, len(parts))
+	for _, artifact := range artifacts {
+		artifactIndex[artifact.PartID] = append(artifactIndex[artifact.PartID], artifact)
+	}
+	dialogue := make([]dialogueMessage, 0, len(parts))
+	for _, part := range parts {
+		if !timelineRole(part.Role) {
+			continue
+		}
+		textParts := make([]string, 0, 1+len(artifactIndex[part.PartID]))
+		artifactIDs := make([]string, 0, len(artifactIndex[part.PartID]))
+		for _, artifact := range artifactIndex[part.PartID] {
+			if text := strings.TrimSpace(artifact.TextContent); text != "" {
+				textParts = append(textParts, text)
+				artifactIDs = append(artifactIDs, artifact.ArtifactID)
+			}
+		}
+		if len(textParts) == 0 {
+			if text := strings.TrimSpace(firstNonEmptyString(part.TextContent, part.RawPayload)); text != "" {
+				textParts = append(textParts, text)
+			}
+		}
+		if len(textParts) == 0 {
+			continue
+		}
+		dialogue = append(dialogue, dialogueMessage{
+			Sequence:      part.SequenceNum,
+			Role:          part.Role,
+			Text:          truncateSummary(strings.Join(textParts, " | "), 400),
+			PartIDs:       []string{part.PartID},
+			ArtifactIDs:   artifactIDs,
+			Modalities:    compactStrings(partModality(part)),
+			HasSourceBlob: strings.TrimSpace(part.BlobID) != "",
+			PageIndexes:   compactInts(part.PageIndex),
+			StartMS:       part.StartMS,
+			EndMS:         maxInt64(part.EndMS, part.StartMS+part.DurationMS),
+		})
+	}
+	return dialogue
+}
+
+func timelineRole(role domain.MessageRole) bool {
+	return role == domain.RoleUser || role == domain.RoleAssistant || role == domain.RoleTool
 }
 
 func segmentEnd(messages []dialogueMessage, start int, options SegmentOptions) int {
@@ -187,6 +274,98 @@ func renderSegmentContent(messages []dialogueMessage) string {
 		lines = append(lines, fmt.Sprintf("%s: %s", message.Role, message.Text))
 	}
 	return strings.Join(lines, " | ")
+}
+
+func collectSegmentPartIDs(items []dialogueMessage) []string {
+	out := make([]string, 0)
+	seen := map[string]struct{}{}
+	for _, item := range items {
+		for _, id := range item.PartIDs {
+			if _, ok := seen[id]; ok || strings.TrimSpace(id) == "" {
+				continue
+			}
+			seen[id] = struct{}{}
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+func collectSegmentArtifactIDs(items []dialogueMessage) []string {
+	out := make([]string, 0)
+	seen := map[string]struct{}{}
+	for _, item := range items {
+		for _, id := range item.ArtifactIDs {
+			if _, ok := seen[id]; ok || strings.TrimSpace(id) == "" {
+				continue
+			}
+			seen[id] = struct{}{}
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+func collectSegmentModalities(items []dialogueMessage) []string {
+	out := make([]string, 0)
+	seen := map[string]struct{}{}
+	for _, item := range items {
+		for _, modality := range item.Modalities {
+			if modality == "" {
+				continue
+			}
+			if _, ok := seen[modality]; ok {
+				continue
+			}
+			seen[modality] = struct{}{}
+			out = append(out, modality)
+		}
+	}
+	return out
+}
+
+func collectSegmentPageIndexes(items []dialogueMessage) []int {
+	out := make([]int, 0)
+	seen := map[int]struct{}{}
+	for _, item := range items {
+		for _, pageIndex := range item.PageIndexes {
+			if _, ok := seen[pageIndex]; ok {
+				continue
+			}
+			seen[pageIndex] = struct{}{}
+			out = append(out, pageIndex)
+		}
+	}
+	return out
+}
+
+func segmentHasSourceBlob(items []dialogueMessage) bool {
+	for _, item := range items {
+		if item.HasSourceBlob {
+			return true
+		}
+	}
+	return false
+}
+
+func segmentStartMS(items []dialogueMessage) int64 {
+	var value int64
+	for idx, item := range items {
+		if idx == 0 || (item.StartMS > 0 && item.StartMS < value) {
+			value = item.StartMS
+		}
+	}
+	return value
+}
+
+func segmentEndMS(items []dialogueMessage) int64 {
+	var value int64
+	for _, item := range items {
+		if item.EndMS > value {
+			value = item.EndMS
+		}
+	}
+	return value
 }
 
 func summarizedMessageParts(message domain.UnifiedMessage) []string {
@@ -309,6 +488,13 @@ func max(left, right int) int {
 	return right
 }
 
+func maxInt64(left, right int64) int64 {
+	if left > right {
+		return left
+	}
+	return right
+}
+
 func firstNonEmptyString(values ...string) string {
 	for _, value := range values {
 		value = strings.TrimSpace(value)
@@ -317,6 +503,34 @@ func firstNonEmptyString(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func compactInts(values ...int) []int {
+	out := make([]int, 0, len(values))
+	for _, value := range values {
+		out = append(out, value)
+	}
+	return out
+}
+
+func compactStrings(values ...string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+func partModality(part domain.MessagePart) string {
+	switch part.PartType {
+	case domain.ContentBlockImage, domain.ContentBlockAudio, domain.ContentBlockVideo, domain.ContentBlockFile:
+		return string(part.PartType)
+	default:
+		return "text"
+	}
 }
 
 func pluralizeCount(count int, label string) string {

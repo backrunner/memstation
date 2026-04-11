@@ -37,11 +37,13 @@ import (
 	gatewayservice "memstation/apps/server/internal/service/gateway"
 	memoryservice "memstation/apps/server/internal/service/memory"
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
+	multimodalservice "memstation/apps/server/internal/service/multimodal"
 	providerconfigservice "memstation/apps/server/internal/service/providerconfig"
 	settingsservice "memstation/apps/server/internal/service/settings"
 	systemconfigservice "memstation/apps/server/internal/service/systemconfig"
 	usageservice "memstation/apps/server/internal/service/usage"
 	userservice "memstation/apps/server/internal/service/user"
+	blobstore "memstation/apps/server/internal/store/blob"
 	sqlstore "memstation/apps/server/internal/store/sql"
 	"memstation/apps/server/internal/store/vector"
 	grpctransport "memstation/apps/server/internal/transport/grpc"
@@ -66,6 +68,7 @@ type Container struct {
 	ProviderCfg   *providerconfigservice.Service
 	Audit         *auditsvc.Service
 	Conversations *conversationservice.Service
+	Multimodal    *multimodalservice.Service
 	Memory        *memoryservice.Service
 	Generations   *memorygenservice.Service
 	Admin         *adminservice.Service
@@ -167,16 +170,23 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	apiKeys := apikeyservice.NewService(db)
 
 	var conversationRepo ports.ConversationRepository
+	var mediaRepo ports.MediaRepository
 	var memoryRepo ports.MemoryRepository
 	var outboxRepo ports.OutboxRepository
 	if db != nil {
 		conversationRepo = sqlstore.NewPostgresConversationRepository(db)
+		mediaRepo = sqlstore.NewPostgresMediaRepository(db)
 		memoryRepo = sqlstore.NewPostgresMemoryRepository(db)
 		outboxRepo = sqlstore.NewPostgresOutboxRepository(db)
 	} else {
 		conversationRepo = sqlstore.NewInMemoryConversationRepository()
+		mediaRepo = sqlstore.NewInMemoryMediaRepository()
 		memoryRepo = sqlstore.NewInMemoryMemoryRepository()
 		outboxRepo = sqlstore.NewInMemoryOutboxRepository()
+	}
+	blobStore, err := blobstore.NewStore(cfg.Multimodal)
+	if err != nil {
+		return nil, err
 	}
 	vectorStore := vector.NewPGVectorStore(db)
 	vectorStore.SetEmbedder(embeddingservice.NewService(providerCfg.Resolver(providerconfigservice.ScopeEmbedding), settings, cfg.ProviderTimeout))
@@ -190,6 +200,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	memoryEngine := memoryservice.NewEngine(memoryRepo, vectorStore)
 	memoryEngine.SetGenerationService(generations)
 	conversations := conversationservice.NewService(conversationRepo, outboxRepo, cfg.MessageThreshold, cfg.TokenThreshold)
+	multimodal := multimodalservice.NewService(mediaRepo, blobStore, cfg.Multimodal)
 	gatewayProviderRegistry := provider.NewRegistry(
 		cfg.DefaultProvider,
 		openaiprovider.NewCompatibleAdapter(providerCfg.Resolver(providerconfigservice.ScopeGateway), cfg.ProviderTimeout),
@@ -211,7 +222,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	memories.SetScorer(memoryservice.NewScorer(internalProviderRegistry, settings))
 	memories.SetGenerationService(generations)
 	gateway.SetToolRuntime(gatewayservice.NewToolRuntime(memories, audit, keySet(cfg.KeyMemoryWriteKeys), 3))
-	admin := adminservice.NewService(conversationRepo, memoryRepo, settings, audit, models)
+	admin := adminservice.NewService(conversationRepo, mediaRepo, memoryRepo, settings, audit, models)
 	admin.SetGenerationService(generations)
 	usage := usageservice.NewService(db, conversationRepo)
 	admin.AttachUserRuntime(users, apiKeys, usage)
@@ -270,11 +281,13 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	})
 	workerMux := worker.NewServeMux(logger, worker.Services{
 		Conversations:        conversationRepo,
+		MediaStore:           mediaRepo,
 		Memories:             memoryRepo,
 		Generations:          generations,
 		Vectors:              vectorStore,
 		Publisher:            publisher,
 		Analysis:             analysis,
+		Multimodal:           multimodal,
 		Scorer:               memoryservice.NewScorer(internalProviderRegistry, settings),
 		EmbeddingModel:       cfg.EmbeddingModel,
 		AllowedKeyMemoryKeys: keySet(cfg.KeyMemoryWriteKeys),
@@ -303,6 +316,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		Models:         models,
 		GraphQL:        graphQLResolver,
 		Gateway:        gateway,
+		Multimodal:     multimodal,
 		Memory:         memories,
 		Generations:    generations,
 		Admin:          admin,
@@ -347,6 +361,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		ProviderCfg:   providerCfg,
 		Audit:         audit,
 		Conversations: conversations,
+		Multimodal:    multimodal,
 		Memory:        memories,
 		Generations:   generations,
 		Admin:         admin,

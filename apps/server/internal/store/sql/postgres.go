@@ -113,7 +113,7 @@ func (r *PostgresConversationRepository) PersistExchange(ctx context.Context, co
 			marshalJSON(message.Blocks),
 			message.Text,
 			marshalJSON(message.ToolCalls),
-			marshalJSON(firstToolResult(message.ToolResults)),
+			marshalJSON(domain.StoredToolResultPayload(message.ToolResults)),
 			marshalJSON(message.Metadata),
 			sequenceNum,
 			zeroTime(conversation.CreatedAt),
@@ -419,14 +419,8 @@ func (r *PostgresConversationRepository) loadMessages(ctx context.Context, userI
 		item := domain.UnifiedMessage{Role: domain.MessageRole(role), Text: text}
 		_ = json.Unmarshal(blocksBytes, &item.Blocks)
 		_ = json.Unmarshal(toolCallsBytes, &item.ToolCalls)
-		var toolResult map[string]any
-		_ = json.Unmarshal(toolResultBytes, &toolResult)
-		if len(toolResult) > 0 {
-			item.ToolResults = []domain.ToolResult{{
-				ToolCallID: stringValue(toolResult, "tool_call_id"),
-				Name:       stringValue(toolResult, "name"),
-				Output:     toolResult,
-			}}
+		if toolResult, ok := domain.DecodeStoredToolResult(toolResultBytes); ok {
+			item.ToolResults = []domain.ToolResult{toolResult}
 		}
 		_ = json.Unmarshal(providerPayloadBytes, &item.Metadata)
 		out = append(out, item)
@@ -460,14 +454,8 @@ func (r *PostgresConversationRepository) loadMessagesTx(ctx context.Context, tx 
 		item := domain.UnifiedMessage{Role: domain.MessageRole(role), Text: text}
 		_ = json.Unmarshal(blocksBytes, &item.Blocks)
 		_ = json.Unmarshal(toolCallsBytes, &item.ToolCalls)
-		var toolResult map[string]any
-		_ = json.Unmarshal(toolResultBytes, &toolResult)
-		if len(toolResult) > 0 {
-			item.ToolResults = []domain.ToolResult{{
-				ToolCallID: stringValue(toolResult, "tool_call_id"),
-				Name:       stringValue(toolResult, "name"),
-				Output:     toolResult,
-			}}
+		if toolResult, ok := domain.DecodeStoredToolResult(toolResultBytes); ok {
+			item.ToolResults = []domain.ToolResult{toolResult}
 		}
 		_ = json.Unmarshal(providerPayloadBytes, &item.Metadata)
 		out = append(out, item)
@@ -808,6 +796,12 @@ func (r *PostgresMemoryRepository) DeleteDocument(ctx context.Context, userID, i
     `, userID, nodeID); err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, `
+        DELETE FROM memory_evidences
+        WHERE user_id = $1 AND node_id = $2
+    `, userID, nodeID); err != nil {
+		return err
+	}
 
 	switch kind {
 	case domain.MemoryTypeSummary:
@@ -897,6 +891,9 @@ func (r *PostgresMemoryRepository) DeleteSegmentsByConversationInGeneration(ctx 
 			return nil, err
 		}
 		return nil, nil
+	}
+	if err := deleteMemoryEvidencesByNodeIDsTx(ctx, tx, userID, nodeIDs); err != nil {
+		return nil, err
 	}
 	if err := deleteRelationsByNodeIDsTx(ctx, tx, userID, nodeIDs); err != nil {
 		return nil, err
@@ -1035,12 +1032,12 @@ func (r *PostgresMemoryRepository) listConversationByType(ctx context.Context, u
                            WHERE k.summary_id = s.id AND k.user_id = s.user_id
                        ), '[]'::json)
                    )
-	            FROM memory_summaries s
-	            LEFT JOIN memory_nodes n ON n.id = s.node_id
-	            WHERE s.user_id = $1 AND s.conversation_id = $2` + generationFilterClause("s.generation_id", 4, userID, generationID, false) + `
-	            ORDER BY s.updated_at DESC
-	            LIMIT $3
-	        `
+            FROM memory_summaries s
+            LEFT JOIN memory_nodes n ON n.id = s.node_id
+            WHERE s.user_id = $1 AND s.conversation_id = $2` + generationFilterClause("s.generation_id", 4, userID, generationID, false) + `
+            ORDER BY s.updated_at DESC
+            LIMIT $3
+        `
 	case domain.MemoryTypeSegment:
 		query = `
 	            SELECT cs.id, n.id AS node_id, cs.generation_id, cs.conversation_id, cs.content, COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, cs.updated_at), COALESCE(n.time_tier, ''), cs.created_at, cs.updated_at,
@@ -1053,35 +1050,35 @@ func (r *PostgresMemoryRepository) listConversationByType(ctx context.Context, u
 	                       'overlap_message_count', cs.overlap_message_count,
 	                       'content_hash', cs.content_hash
 	                   ) || COALESCE(cs.metadata, '{}'::jsonb)
-	            FROM conversation_segments cs
-	            JOIN memory_nodes n
-	              ON n.user_id = cs.user_id
-	             AND n.entity_id = cs.id
-	             AND n.node_type = 'segment'
-	            WHERE cs.user_id = $1 AND cs.conversation_id = $2` + generationFilterClause("cs.generation_id", 4, userID, generationID, false) + `
-	            ORDER BY cs.updated_at DESC, cs.segment_index DESC
-	            LIMIT $3
-	        `
+            FROM conversation_segments cs
+            JOIN memory_nodes n
+              ON n.user_id = cs.user_id
+             AND n.entity_id = cs.id
+             AND n.node_type = 'segment'
+            WHERE cs.user_id = $1 AND cs.conversation_id = $2` + generationFilterClause("cs.generation_id", 4, userID, generationID, false) + `
+            ORDER BY cs.updated_at DESC, cs.segment_index DESC
+            LIMIT $3
+        `
 	case domain.MemoryTypeImpression:
 		query = `
 	            SELECT i.id, i.node_id, i.generation_id, i.conversation_id, i.description, COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, i.updated_at), COALESCE(n.time_tier, ''), i.created_at, i.updated_at,
 	                   json_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity)
-	            FROM impressions i
-	            LEFT JOIN memory_nodes n ON n.id = i.node_id
-	            WHERE i.user_id = $1 AND i.conversation_id = $2` + generationFilterClause("i.generation_id", 4, userID, generationID, false) + `
-	            ORDER BY i.updated_at DESC
-	            LIMIT $3
-	        `
+            FROM impressions i
+            LEFT JOIN memory_nodes n ON n.id = i.node_id
+            WHERE i.user_id = $1 AND i.conversation_id = $2` + generationFilterClause("i.generation_id", 4, userID, generationID, false) + `
+            ORDER BY i.updated_at DESC
+            LIMIT $3
+        `
 	case domain.MemoryTypeFact:
 		query = `
 	            SELECT f.id, f.node_id, f.generation_id, f.conversation_id, f.content, COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, f.updated_at), COALESCE(n.time_tier, ''), f.created_at, f.updated_at,
 	                   json_build_object('category', f.category, 'confidence', f.confidence, 'valid_from', f.valid_from, 'valid_to', f.valid_to, 'superseded_by_id', f.superseded_by_id)
-	            FROM facts f
-	            LEFT JOIN memory_nodes n ON n.id = f.node_id
-	            WHERE f.user_id = $1 AND f.conversation_id = $2` + generationFilterClause("f.generation_id", 4, userID, generationID, false) + `
-	            ORDER BY f.updated_at DESC
-	            LIMIT $3
-	        `
+            FROM facts f
+            LEFT JOIN memory_nodes n ON n.id = f.node_id
+            WHERE f.user_id = $1 AND f.conversation_id = $2` + generationFilterClause("f.generation_id", 4, userID, generationID, false) + `
+            ORDER BY f.updated_at DESC
+            LIMIT $3
+        `
 	default:
 		return nil, nil
 	}
@@ -1505,6 +1502,84 @@ func (r *PostgresMemoryRepository) ListRelations(ctx context.Context, userID, ge
 	return collected, nil
 }
 
+func (r *PostgresMemoryRepository) ReplaceEvidences(ctx context.Context, userID, nodeID string, evidences []domain.MemoryEvidence) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer rollback(tx)
+
+	if _, err = tx.ExecContext(ctx, `
+        DELETE FROM memory_evidences
+        WHERE user_id = $1 AND node_id = $2
+    `, userID, nodeID); err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	for _, evidence := range evidences {
+		if evidence.ID == "" {
+			evidence.ID = uuid.NewString()
+		}
+		if evidence.UserID == "" {
+			evidence.UserID = userID
+		}
+		if evidence.NodeID == "" {
+			evidence.NodeID = nodeID
+		}
+		if evidence.Weight == 0 {
+			evidence.Weight = 1
+		}
+		if evidence.CreatedAt.IsZero() {
+			evidence.CreatedAt = now
+		}
+		if _, err = tx.ExecContext(ctx, `
+            INSERT INTO memory_evidences (
+                id, generation_id, user_id, node_id, conversation_id, sequence_num, part_id, artifact_id,
+                page_index, start_ms, end_ms, evidence_kind, excerpt_text, weight, metadata, created_at
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+        `, evidence.ID, evidence.GenerationID, evidence.UserID, evidence.NodeID, evidence.ConversationID, evidence.SequenceNum, nullString(evidence.PartID), nullString(evidence.ArtifactID), evidence.PageIndex, evidence.StartMS, evidence.EndMS, evidence.EvidenceKind, nullString(evidence.ExcerptText), evidence.Weight, marshalJSON(evidence.Metadata), evidence.CreatedAt); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *PostgresMemoryRepository) ListEvidences(ctx context.Context, userID, nodeID string) ([]domain.MemoryEvidence, error) {
+	rows, err := r.db.QueryContext(ctx, `
+        SELECT id, generation_id, conversation_id, sequence_num, part_id, artifact_id, page_index,
+               start_ms, end_ms, evidence_kind, excerpt_text, weight, metadata, created_at
+        FROM memory_evidences
+        WHERE user_id = $1 AND node_id = $2
+        ORDER BY sequence_num ASC, start_ms ASC, created_at ASC
+    `, userID, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]domain.MemoryEvidence, 0)
+	for rows.Next() {
+		var item domain.MemoryEvidence
+		var generationID sqlpkg.NullString
+		var partID sqlpkg.NullString
+		var artifactID sqlpkg.NullString
+		var excerptText sqlpkg.NullString
+		var metadataBytes []byte
+		item.UserID = userID
+		item.NodeID = nodeID
+		if err := rows.Scan(&item.ID, &generationID, &item.ConversationID, &item.SequenceNum, &partID, &artifactID, &item.PageIndex, &item.StartMS, &item.EndMS, &item.EvidenceKind, &excerptText, &item.Weight, &metadataBytes, &item.CreatedAt); err != nil {
+			return nil, err
+		}
+		item.GenerationID = generationID.String
+		item.PartID = partID.String
+		item.ArtifactID = artifactID.String
+		item.ExcerptText = excerptText.String
+		_ = json.Unmarshal(metadataBytes, &item.Metadata)
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 func (r *PostgresMemoryRepository) listByType(ctx context.Context, userID, generationID string, kind domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
 	if limit <= 0 {
 		limit = 100
@@ -1717,6 +1792,22 @@ func deleteRelationsByNodeIDsTx(ctx context.Context, tx *sqlpkg.Tx, userID strin
 	return err
 }
 
+func deleteMemoryEvidencesByNodeIDsTx(ctx context.Context, tx *sqlpkg.Tx, userID string, nodeIDs []string) error {
+	if tx == nil || userID == "" || len(nodeIDs) == 0 {
+		return nil
+	}
+	args := []any{userID}
+	for _, nodeID := range nodeIDs {
+		args = append(args, nodeID)
+	}
+	query := fmt.Sprintf(`
+        DELETE FROM memory_evidences
+        WHERE user_id = $1 AND node_id IN (%s)
+    `, placeholders(2, len(nodeIDs)))
+	_, err := tx.ExecContext(ctx, query, args...)
+	return err
+}
+
 func deleteMemoryNodesByIDsTx(ctx context.Context, tx *sqlpkg.Tx, userID string, nodeIDs []string) error {
 	if tx == nil || userID == "" || len(nodeIDs) == 0 {
 		return nil
@@ -1841,24 +1932,18 @@ func marshalJSON(value any) []byte {
 	return raw
 }
 
+func nullString(value string) any {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	return value
+}
+
 func zeroTime(value time.Time) time.Time {
 	if value.IsZero() {
 		return time.Now().UTC()
 	}
 	return value
-}
-
-func firstToolResult(items []domain.ToolResult) map[string]any {
-	if len(items) == 0 {
-		return map[string]any{}
-	}
-	if items[0].Output != nil {
-		return items[0].Output
-	}
-	return map[string]any{
-		"tool_call_id": items[0].ToolCallID,
-		"name":         items[0].Name,
-	}
 }
 
 type conversationMessagePlan struct {

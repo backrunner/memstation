@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"memstation/apps/server/internal/domain"
@@ -36,6 +37,22 @@ type ConversationRepository interface {
 	UpdateConversationState(ctx context.Context, input domain.ConversationStateUpdate) error
 }
 
+type MediaRepository interface {
+	PutBlob(ctx context.Context, blob domain.BlobObject) error
+	GetBlob(ctx context.Context, userID, blobID string) (domain.BlobObject, error)
+	DeleteBlob(ctx context.Context, userID, blobID string, deletedAt time.Time) error
+	ReplaceMessageParts(ctx context.Context, userID, conversationID string, parts []domain.MessagePart) error
+	ListMessageParts(ctx context.Context, userID, conversationID string) ([]domain.MessagePart, error)
+	ReplacePartArtifacts(ctx context.Context, userID, conversationID string, artifacts []domain.MessagePartArtifact) error
+	ListPartArtifacts(ctx context.Context, userID, conversationID string) ([]domain.MessagePartArtifact, error)
+}
+
+type BlobStore interface {
+	Put(ctx context.Context, blob domain.BlobObject, body io.Reader) (domain.BlobObject, error)
+	Open(ctx context.Context, blob domain.BlobObject) (io.ReadCloser, error)
+	Delete(ctx context.Context, blob domain.BlobObject) error
+}
+
 type MemoryRepository interface {
 	Search(ctx context.Context, input domain.SearchInput) (domain.SearchResult, error)
 	StoreDocument(ctx context.Context, doc domain.MemoryDocument) error
@@ -60,6 +77,8 @@ type MemoryRepository interface {
 	LinkDocuments(ctx context.Context, relation domain.MemoryRelation) error
 	DeleteRelationsByTarget(ctx context.Context, userID, targetNodeID, relationType string) error
 	ListRelations(ctx context.Context, userID, generationID string, nodeIDs []string, depth int) ([]domain.MemoryRelation, error)
+	ReplaceEvidences(ctx context.Context, userID, nodeID string, evidences []domain.MemoryEvidence) error
+	ListEvidences(ctx context.Context, userID, nodeID string) ([]domain.MemoryEvidence, error)
 }
 
 type OutboxRepository interface {

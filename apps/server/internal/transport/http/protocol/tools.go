@@ -76,23 +76,23 @@ func normalizeOpenAIToolCalls(items []OpenAIChatToolCall) []domain.ToolCall {
 	return out
 }
 
-func parseArguments(raw json.RawMessage) map[string]any {
+func parseArguments(raw json.RawMessage) any {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil
 	}
-	var asMap map[string]any
-	if err := json.Unmarshal(raw, &asMap); err == nil {
-		return asMap
+	var value any
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return value
 	}
 	var asString string
 	if err := json.Unmarshal(raw, &asString); err == nil {
-		var nested map[string]any
+		var nested any
 		if json.Unmarshal([]byte(asString), &nested) == nil {
 			return nested
 		}
-		return map[string]any{"raw": asString}
+		return asString
 	}
-	return map[string]any{"raw": string(raw)}
+	return string(raw)
 }
 
 func formatOpenAIToolCalls(items []domain.ToolCall) []map[string]any {
@@ -110,8 +110,8 @@ func formatOpenAIToolCalls(items []domain.ToolCall) []map[string]any {
 	return out
 }
 
-func marshalArguments(arguments map[string]any) string {
-	if len(arguments) == 0 {
+func marshalArguments(arguments any) string {
+	if arguments == nil {
 		return "{}"
 	}
 	raw, err := json.Marshal(arguments)
@@ -121,10 +121,63 @@ func marshalArguments(arguments map[string]any) string {
 	return string(raw)
 }
 
-func toolResultOutputMap(text string) map[string]any {
-	return map[string]any{
-		"content": text,
+func toolResultOutputMap(value any) map[string]any {
+	switch typed := value.(type) {
+	case nil:
+		return map[string]any{"content": ""}
+	case map[string]any:
+		return typed
+	case []any:
+		return map[string]any{"content": typed}
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		if trimmed != "" && (strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")) {
+			var parsed any
+			if json.Unmarshal([]byte(trimmed), &parsed) == nil {
+				return toolResultOutputMap(parsed)
+			}
+		}
+		return map[string]any{"content": typed}
+	default:
+		return map[string]any{"content": typed}
 	}
+}
+
+func toolResultText(value any) string {
+	switch typed := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return typed
+	case []any:
+		return contentText(typed)
+	case map[string]any:
+		if content, ok := typed["content"]; ok {
+			return toolResultText(content)
+		}
+		raw, err := json.Marshal(typed)
+		if err != nil {
+			return fmt.Sprintf("%v", typed)
+		}
+		return string(raw)
+	default:
+		return fmt.Sprintf("%v", typed)
+	}
+}
+
+func rawJSONValue(raw json.RawMessage) any {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var value any
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return value
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return text
+	}
+	return string(raw)
 }
 
 func formatResponsesToolCalls(items []domain.ToolCall) []map[string]any {

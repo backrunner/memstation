@@ -449,7 +449,7 @@ func (s *Service) CaptureSourceSnapshot(ctx context.Context, conversation domain
 			marshalJSON(message.Blocks),
 			message.Text,
 			marshalJSON(message.ToolCalls),
-			marshalJSON(firstToolResult(message.ToolResults)),
+			marshalJSON(domain.StoredToolResultPayload(message.ToolResults)),
 			marshalJSON(message.Metadata),
 			now,
 		)
@@ -1214,14 +1214,8 @@ func (s *Service) loadSnapshotMessages(ctx context.Context, snapshotID string) (
 		message := domain.UnifiedMessage{Role: domain.MessageRole(role), Text: text}
 		_ = json.Unmarshal(blocksBytes, &message.Blocks)
 		_ = json.Unmarshal(toolCallsBytes, &message.ToolCalls)
-		var toolResult map[string]any
-		_ = json.Unmarshal(toolResultBytes, &toolResult)
-		if len(toolResult) > 0 {
-			message.ToolResults = []domain.ToolResult{{
-				ToolCallID: stringValue(toolResult, "tool_call_id"),
-				Name:       stringValue(toolResult, "name"),
-				Output:     toolResult,
-			}}
+		if toolResult, ok := domain.DecodeStoredToolResult(toolResultBytes); ok {
+			message.ToolResults = []domain.ToolResult{toolResult}
 		}
 		_ = json.Unmarshal(metadataBytes, &message.Metadata)
 		items = append(items, message)
@@ -1423,19 +1417,6 @@ func canActivateGeneration(generation domain.MemoryGeneration) bool {
 		return false
 	}
 	return generation.SourceCount > 0 && generation.ProcessedCount >= generation.SourceCount
-}
-
-func firstToolResult(items []domain.ToolResult) map[string]any {
-	if len(items) == 0 {
-		return map[string]any{}
-	}
-	if items[0].Output != nil {
-		return items[0].Output
-	}
-	return map[string]any{
-		"tool_call_id": items[0].ToolCallID,
-		"name":         items[0].Name,
-	}
 }
 
 func stringValue(metadata map[string]any, key string) string {

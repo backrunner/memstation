@@ -889,7 +889,7 @@ type ToolCall struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Arguments     *structpb.Struct       `protobuf:"bytes,3,opt,name=arguments,proto3" json:"arguments,omitempty"`
+	Arguments     *structpb.Value        `protobuf:"bytes,3,opt,name=arguments,proto3" json:"arguments,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -938,7 +938,7 @@ func (x *ToolCall) GetName() string {
 	return ""
 }
 
-func (x *ToolCall) GetArguments() *structpb.Struct {
+func (x *ToolCall) GetArguments() *structpb.Value {
 	if x != nil {
 		return x.Arguments
 	}
@@ -949,7 +949,7 @@ type ToolResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ToolCallId    string                 `protobuf:"bytes,1,opt,name=tool_call_id,json=toolCallId,proto3" json:"tool_call_id,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Output        *structpb.Struct       `protobuf:"bytes,3,opt,name=output,proto3" json:"output,omitempty"`
+	Output        *structpb.Value        `protobuf:"bytes,3,opt,name=output,proto3" json:"output,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -998,7 +998,7 @@ func (x *ToolResult) GetName() string {
 	return ""
 }
 
-func (x *ToolResult) GetOutput() *structpb.Struct {
+func (x *ToolResult) GetOutput() *structpb.Value {
 	if x != nil {
 		return x.Output
 	}
@@ -2887,17 +2887,17 @@ const file_proto_memstation_v1_api_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12:\n" +
 	"\finput_schema\x18\x03 \x01(\v2\x17.google.protobuf.StructR\vinputSchema\x12\x1b\n" +
-	"\tread_only\x18\x04 \x01(\bR\breadOnly\"e\n" +
+	"\tread_only\x18\x04 \x01(\bR\breadOnly\"d\n" +
 	"\bToolCall\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x125\n" +
-	"\targuments\x18\x03 \x01(\v2\x17.google.protobuf.StructR\targuments\"s\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x124\n" +
+	"\targuments\x18\x03 \x01(\v2\x16.google.protobuf.ValueR\targuments\"r\n" +
 	"\n" +
 	"ToolResult\x12 \n" +
 	"\ftool_call_id\x18\x01 \x01(\tR\n" +
 	"toolCallId\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12/\n" +
-	"\x06output\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x06output\"x\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12.\n" +
+	"\x06output\x18\x03 \x01(\v2\x16.google.protobuf.ValueR\x06output\"x\n" +
 	"\vUsageRecord\x12!\n" +
 	"\finput_tokens\x18\x01 \x01(\x05R\vinputTokens\x12#\n" +
 	"\routput_tokens\x18\x02 \x01(\x05R\foutputTokens\x12!\n" +
@@ -3138,7 +3138,8 @@ var file_proto_memstation_v1_api_proto_goTypes = []any{
 	(*wrapperspb.BoolValue)(nil),         // 35: google.protobuf.BoolValue
 	(*structpb.Struct)(nil),              // 36: google.protobuf.Struct
 	(*timestamppb.Timestamp)(nil),        // 37: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),                // 38: google.protobuf.Empty
+	(*structpb.Value)(nil),               // 38: google.protobuf.Value
+	(*emptypb.Empty)(nil),                // 39: google.protobuf.Empty
 }
 var file_proto_memstation_v1_api_proto_depIdxs = []int32{
 	1,  // 0: memstation.v1.HealthStatusResponse.components:type_name -> memstation.v1.HealthComponent
@@ -3163,8 +3164,8 @@ var file_proto_memstation_v1_api_proto_depIdxs = []int32{
 	36, // 19: memstation.v1.UnifiedMessage.metadata:type_name -> google.protobuf.Struct
 	36, // 20: memstation.v1.ContentBlock.metadata:type_name -> google.protobuf.Struct
 	36, // 21: memstation.v1.ToolDefinition.input_schema:type_name -> google.protobuf.Struct
-	36, // 22: memstation.v1.ToolCall.arguments:type_name -> google.protobuf.Struct
-	36, // 23: memstation.v1.ToolResult.output:type_name -> google.protobuf.Struct
+	38, // 22: memstation.v1.ToolCall.arguments:type_name -> google.protobuf.Value
+	38, // 23: memstation.v1.ToolResult.output:type_name -> google.protobuf.Value
 	37, // 24: memstation.v1.SearchRequest.date_from:type_name -> google.protobuf.Timestamp
 	37, // 25: memstation.v1.SearchRequest.date_to:type_name -> google.protobuf.Timestamp
 	17, // 26: memstation.v1.SearchResponse.memories:type_name -> memstation.v1.MemoryDocument
@@ -3200,8 +3201,8 @@ var file_proto_memstation_v1_api_proto_depIdxs = []int32{
 	37, // 56: memstation.v1.ConversationSegment.updated_at:type_name -> google.protobuf.Timestamp
 	17, // 57: memstation.v1.ConversationMemoryResponse.documents:type_name -> memstation.v1.MemoryDocument
 	21, // 58: memstation.v1.ConversationMemoryResponse.key_memories:type_name -> memstation.v1.KeyMemory
-	38, // 59: memstation.v1.HealthService.GetStatus:input_type -> google.protobuf.Empty
-	38, // 60: memstation.v1.GatewayService.ListModels:input_type -> google.protobuf.Empty
+	39, // 59: memstation.v1.HealthService.GetStatus:input_type -> google.protobuf.Empty
+	39, // 60: memstation.v1.GatewayService.ListModels:input_type -> google.protobuf.Empty
 	4,  // 61: memstation.v1.GatewayService.Complete:input_type -> memstation.v1.CompleteRequest
 	14, // 62: memstation.v1.MemoryService.Search:input_type -> memstation.v1.SearchRequest
 	19, // 63: memstation.v1.MemoryService.ListKeyMemories:input_type -> memstation.v1.ListKeyMemoriesRequest

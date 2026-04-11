@@ -58,11 +58,29 @@ func toProtoStruct(value map[string]any) *structpb.Struct {
 	return out
 }
 
+func toProtoValue(value any) *structpb.Value {
+	if value == nil {
+		return nil
+	}
+	out, err := structpb.NewValue(value)
+	if err != nil {
+		return nil
+	}
+	return out
+}
+
 func fromProtoStruct(value *structpb.Struct) map[string]any {
 	if value == nil {
 		return nil
 	}
 	return value.AsMap()
+}
+
+func fromProtoValue(value *structpb.Value) any {
+	if value == nil {
+		return nil
+	}
+	return value.AsInterface()
 }
 
 func toProtoTimestamp(value time.Time) *timestamppb.Timestamp {
@@ -217,7 +235,7 @@ func toProtoToolCalls(items []domain.ToolCall) []*pb.ToolCall {
 		out = append(out, &pb.ToolCall{
 			Id:        item.ID,
 			Name:      item.Name,
-			Arguments: toProtoStruct(item.Arguments),
+			Arguments: toProtoValue(item.Arguments),
 		})
 	}
 	return out
@@ -229,7 +247,7 @@ func toProtoToolResults(items []domain.ToolResult) []*pb.ToolResult {
 		out = append(out, &pb.ToolResult{
 			ToolCallId: item.ToolCallID,
 			Name:       item.Name,
-			Output:     toProtoStruct(item.Output),
+			Output:     toProtoValue(item.Output),
 		})
 	}
 	return out
@@ -308,7 +326,7 @@ func fromProtoToolCalls(items []*pb.ToolCall) []domain.ToolCall {
 		out = append(out, domain.ToolCall{
 			ID:        item.GetId(),
 			Name:      item.GetName(),
-			Arguments: fromProtoStruct(item.GetArguments()),
+			Arguments: fromProtoValue(item.GetArguments()),
 		})
 	}
 	return out
@@ -320,7 +338,7 @@ func fromProtoToolResults(items []*pb.ToolResult) []domain.ToolResult {
 		out = append(out, domain.ToolResult{
 			ToolCallID: item.GetToolCallId(),
 			Name:       item.GetName(),
-			Output:     fromProtoStruct(item.GetOutput()),
+			Output:     fromProtoValue(item.GetOutput()),
 		})
 	}
 	return out

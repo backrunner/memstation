@@ -32,8 +32,9 @@ func TestAdminConversationDetailHandlerRespectsGenerationQuery(t *testing.T) {
 
 	ctx := context.Background()
 	conversations := sqlstore.NewInMemoryConversationRepository()
+	media := sqlstore.NewInMemoryMediaRepository()
 	memories := sqlstore.NewInMemoryMemoryRepository()
-	service := adminservice.NewService(conversations, memories, nil, nil, nil)
+	service := adminservice.NewService(conversations, media, memories, nil, nil, nil)
 	userID := "user-1"
 	conversationID := "conv-1"
 	currentGenerationID := memorygenservice.CurrentGenerationID(userID)

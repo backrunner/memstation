@@ -160,10 +160,11 @@ func newClient(t *testing.T) *grpc.ClientConn {
 func newTestServer() (*grpc.Server, *bufconn.Listener) {
 	memoryRepo := sql.NewInMemoryMemoryRepository()
 	conversations := sql.NewInMemoryConversationRepository()
+	mediaRepo := sql.NewInMemoryMediaRepository()
 	outbox := sql.NewInMemoryOutboxRepository()
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 	audit := auditsvc.NewService(nil)
-	admin := adminservice.NewService(conversations, memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAI, "gpt-4.1-mini", "", "", ""))
+	admin := adminservice.NewService(conversations, mediaRepo, memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAI, "gpt-4.1-mini", "", "", ""))
 	users := userservice.NewService(nil)
 	apiKeys := apikeyservice.NewService(nil)
 	usage := usageservice.NewService(nil, conversations)

@@ -142,7 +142,8 @@ func TestGeminiAdapterCompleteParsesToolCalls(t *testing.T) {
 	if response.Message.ToolCalls[0].Name != "get_weather" {
 		t.Fatalf("unexpected tool call: %+v", response.Message.ToolCalls[0])
 	}
-	if response.Message.ToolCalls[0].Arguments["city"] != "London" {
+	arguments, ok := response.Message.ToolCalls[0].Arguments.(map[string]any)
+	if !ok || arguments["city"] != "London" {
 		t.Fatalf("unexpected tool arguments: %+v", response.Message.ToolCalls[0].Arguments)
 	}
 }

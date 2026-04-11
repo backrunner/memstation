@@ -514,10 +514,14 @@ func buildResponsesInput(messages []domain.UnifiedMessage) []map[string]any {
 	for _, message := range messages {
 		if message.Role == domain.RoleTool && len(message.ToolResults) > 0 {
 			for _, result := range message.ToolResults {
+				output := result.Output
+				if output == nil {
+					output = toolResultContent(result)
+				}
 				out = append(out, map[string]any{
 					"type":    "function_call_output",
 					"call_id": result.ToolCallID,
-					"output":  toolResultContent(result),
+					"output":  output,
 				})
 			}
 			continue
@@ -1035,8 +1039,10 @@ func buildChatToolCalls(items []domain.ToolCall) []map[string]any {
 }
 
 func toolResultContent(result domain.ToolResult) string {
-	if value, ok := result.Output["content"].(string); ok && strings.TrimSpace(value) != "" {
-		return value
+	if output, ok := result.Output.(map[string]any); ok {
+		if value, ok := output["content"].(string); ok && strings.TrimSpace(value) != "" {
+			return value
+		}
 	}
 	raw, err := json.Marshal(result.Output)
 	if err != nil {
@@ -1045,8 +1051,8 @@ func toolResultContent(result domain.ToolResult) string {
 	return string(raw)
 }
 
-func marshalArguments(arguments map[string]any) string {
-	if len(arguments) == 0 {
+func marshalArguments(arguments any) string {
+	if arguments == nil {
 		return "{}"
 	}
 	raw, err := json.Marshal(arguments)
@@ -1056,16 +1062,14 @@ func marshalArguments(arguments map[string]any) string {
 	return string(raw)
 }
 
-func parseArguments(raw string) map[string]any {
+func parseArguments(raw string) any {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil
 	}
-	var arguments map[string]any
+	var arguments any
 	if err := json.Unmarshal([]byte(raw), &arguments); err != nil {
-		return map[string]any{
-			"raw": raw,
-		}
+		return raw
 	}
 	return arguments
 }

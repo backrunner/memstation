@@ -424,7 +424,11 @@ func TestGatewayDisablesMemoryPersistenceAndToolWritesPerRequest(t *testing.T) {
 					if message.Role != domain.RoleTool || len(message.ToolResults) == 0 {
 						continue
 					}
-					if got := message.ToolResults[0].Output["error"]; got == "memory persistence is disabled for this request" {
+					output, ok := message.ToolResults[0].Output.(map[string]any)
+					if !ok {
+						continue
+					}
+					if got := output["error"]; got == "memory persistence is disabled for this request" {
 						foundFailure = true
 					}
 				}
@@ -465,6 +469,7 @@ func TestGatewayDisablesMemoryPersistenceAndToolWritesPerRequest(t *testing.T) {
 		InjectTools:      true,
 		ToolWriteEnabled: true,
 		MemoryPersist:    boolRef(false),
+		SourceRetain:     boolRef(false),
 		EndConversation:  true,
 		Messages:         []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "Remember this conversation."}},
 		ReceivedAt:       now(),

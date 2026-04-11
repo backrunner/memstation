@@ -126,13 +126,13 @@ message ToolDefinition {
 message ToolCall {
   string id = 1;
   string name = 2;
-  google.protobuf.Struct arguments = 3;
+  google.protobuf.Value arguments = 3;
 }
 
 message ToolResult {
   string tool_call_id = 1;
   string name = 2;
-  google.protobuf.Struct output = 3;
+  google.protobuf.Value output = 3;
 }
 
 message UsageRecord {

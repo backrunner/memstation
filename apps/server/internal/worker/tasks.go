@@ -2,6 +2,7 @@ package worker
 
 const (
 	TypeConversationFinalize      = "conversation.finalize"
+	TypeMediaExtract              = "media.extract"
 	TypeSummaryGenerate           = "summary.generate"
 	TypeEmbeddingGenerate         = "embedding.generate"
 	TypeAnalysisExtract           = "analysis.extract"
@@ -21,6 +22,15 @@ type SummaryPayload struct {
 	ConversationID   string `json:"conversation_id"`
 	UserID           string `json:"user_id"`
 	SummaryVersion   int    `json:"summary_version"`
+	FinalizeReason   string `json:"finalize_reason"`
+	GenerationID     string `json:"generation_id"`
+	EmbeddingVersion int    `json:"embedding_version"`
+	EmbeddingModel   string `json:"embedding_model"`
+}
+
+type MediaExtractPayload struct {
+	ConversationID   string `json:"conversation_id"`
+	UserID           string `json:"user_id"`
 	FinalizeReason   string `json:"finalize_reason"`
 	GenerationID     string `json:"generation_id"`
 	EmbeddingVersion int    `json:"embedding_version"`

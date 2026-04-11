@@ -232,12 +232,14 @@ type InMemoryMemoryRepository struct {
 	documents   map[string]domain.MemoryDocument
 	keyMemories map[string]domain.KeyMemory
 	relations   []domain.MemoryRelation
+	evidences   map[string][]domain.MemoryEvidence
 }
 
 func NewInMemoryMemoryRepository() *InMemoryMemoryRepository {
 	return &InMemoryMemoryRepository{
 		documents:   map[string]domain.MemoryDocument{},
 		keyMemories: map[string]domain.KeyMemory{},
+		evidences:   map[string][]domain.MemoryEvidence{},
 	}
 }
 
@@ -354,6 +356,7 @@ func (r *InMemoryMemoryRepository) DeleteDocument(_ context.Context, userID, id 
 		filtered = append(filtered, relation)
 	}
 	r.relations = filtered
+	delete(r.evidences, key(userID, doc.NodeID))
 	return nil
 }
 
@@ -804,6 +807,52 @@ func (r *InMemoryMemoryRepository) ListRelations(_ context.Context, userID, gene
 		frontier = nextFrontier
 	}
 	return collected, nil
+}
+
+func (r *InMemoryMemoryRepository) ReplaceEvidences(_ context.Context, userID, nodeID string, evidences []domain.MemoryEvidence) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(nodeID) == "" {
+		return nil
+	}
+	next := make([]domain.MemoryEvidence, 0, len(evidences))
+	for _, evidence := range evidences {
+		if evidence.ID == "" {
+			evidence.ID = uuid.NewString()
+		}
+		if evidence.UserID == "" {
+			evidence.UserID = userID
+		}
+		if evidence.NodeID == "" {
+			evidence.NodeID = nodeID
+		}
+		if evidence.Weight == 0 {
+			evidence.Weight = 1
+		}
+		if evidence.CreatedAt.IsZero() {
+			evidence.CreatedAt = time.Now().UTC()
+		}
+		evidence.Metadata = cloneMetadata(evidence.Metadata)
+		next = append(next, evidence)
+	}
+	r.evidences[key(userID, nodeID)] = next
+	return nil
+}
+
+func (r *InMemoryMemoryRepository) ListEvidences(_ context.Context, userID, nodeID string) ([]domain.MemoryEvidence, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	items := append([]domain.MemoryEvidence(nil), r.evidences[key(userID, nodeID)]...)
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].SequenceNum == items[j].SequenceNum {
+			if items[i].StartMS == items[j].StartMS {
+				return items[i].CreatedAt.Before(items[j].CreatedAt)
+			}
+			return items[i].StartMS < items[j].StartMS
+		}
+		return items[i].SequenceNum < items[j].SequenceNum
+	})
+	return items, nil
 }
 
 func (r *InMemoryMemoryRepository) syncFactSupersedesLocked(doc domain.MemoryDocument) {

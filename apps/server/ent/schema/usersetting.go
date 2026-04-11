@@ -15,6 +15,7 @@ func (UserSetting) Fields() []ent.Field {
 		field.String("embedding_model").Optional(),
 		field.String("embedding_base_url").Optional(),
 		field.String("embedding_api_key_encrypted").Optional(),
+		field.Bool("retain_source_materials").Default(true),
 		field.Bool("tool_write_enabled").Default(false),
 		field.Int("max_injection_tokens").Default(2048),
 	}

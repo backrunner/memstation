@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"strings"
 	"testing"
 	"time"
@@ -22,11 +25,13 @@ import (
 	conversationservice "memstation/apps/server/internal/service/conversation"
 	gatewayservice "memstation/apps/server/internal/service/gateway"
 	memoryservice "memstation/apps/server/internal/service/memory"
+	multimodalservice "memstation/apps/server/internal/service/multimodal"
 	providerconfigservice "memstation/apps/server/internal/service/providerconfig"
 	settingsservice "memstation/apps/server/internal/service/settings"
 	systemconfigservice "memstation/apps/server/internal/service/systemconfig"
 	usageservice "memstation/apps/server/internal/service/usage"
 	userservice "memstation/apps/server/internal/service/user"
+	blobstore "memstation/apps/server/internal/store/blob"
 	"memstation/apps/server/internal/store/sql"
 	"memstation/apps/server/internal/store/vector"
 	httptransport "memstation/apps/server/internal/transport/http"
@@ -168,14 +173,86 @@ func TestGatewayReturnsConversationHeadersAndSupportsMemoryPreview(t *testing.T)
 	}
 }
 
+func TestProxyFileUploadDownloadDeleteLifecycle(t *testing.T) {
+	t.Parallel()
+
+	router := newMultimodalProxyRouter(t, t.TempDir())
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	header := make(textproto.MIMEHeader)
+	header.Set("Content-Disposition", `form-data; name="file"; filename="note.txt"`)
+	header.Set("Content-Type", "text/plain")
+	part, err := writer.CreatePart(header)
+	if err != nil {
+		t.Fatalf("create form file: %v", err)
+	}
+	if _, err := io.WriteString(part, "hello multimodal upload"); err != nil {
+		t.Fatalf("write form file: %v", err)
+	}
+	if err := writer.WriteField("metadata", `{"kind":"note"}`); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+
+	uploadRequest := httptest.NewRequest(http.MethodPost, "/v1/files", &body)
+	uploadRequest.Header.Set("Content-Type", writer.FormDataContentType())
+	uploadRequest.Header.Set("Authorization", "Bearer ms-local-dev")
+	uploadRecorder := httptest.NewRecorder()
+	router.ServeHTTP(uploadRecorder, uploadRequest)
+	if uploadRecorder.Code != http.StatusCreated {
+		t.Fatalf("expected upload 201, got %d body=%s", uploadRecorder.Code, uploadRecorder.Body.String())
+	}
+
+	var uploadPayload map[string]any
+	if err := json.Unmarshal(uploadRecorder.Body.Bytes(), &uploadPayload); err != nil {
+		t.Fatalf("unmarshal upload payload: %v body=%s", err, uploadRecorder.Body.String())
+	}
+	blobID, _ := uploadPayload["blob_id"].(string)
+	sourceURL, _ := uploadPayload["source_url"].(string)
+	if blobID == "" || sourceURL == "" {
+		t.Fatalf("expected blob metadata, got %+v", uploadPayload)
+	}
+
+	getRequest := httptest.NewRequest(http.MethodGet, sourceURL, nil)
+	getRequest.Header.Set("Authorization", "Bearer ms-local-dev")
+	getRecorder := httptest.NewRecorder()
+	router.ServeHTTP(getRecorder, getRequest)
+	if getRecorder.Code != http.StatusOK {
+		t.Fatalf("expected get 200, got %d body=%s", getRecorder.Code, getRecorder.Body.String())
+	}
+	if getRecorder.Body.String() != "hello multimodal upload" {
+		t.Fatalf("unexpected blob body: %q", getRecorder.Body.String())
+	}
+
+	deleteRequest := httptest.NewRequest(http.MethodDelete, "/v1/files/"+blobID, nil)
+	deleteRequest.Header.Set("Authorization", "Bearer ms-local-dev")
+	deleteRecorder := httptest.NewRecorder()
+	router.ServeHTTP(deleteRecorder, deleteRequest)
+	if deleteRecorder.Code != http.StatusNoContent {
+		t.Fatalf("expected delete 204, got %d body=%s", deleteRecorder.Code, deleteRecorder.Body.String())
+	}
+
+	missingRequest := httptest.NewRequest(http.MethodGet, sourceURL, nil)
+	missingRequest.Header.Set("Authorization", "Bearer ms-local-dev")
+	missingRecorder := httptest.NewRecorder()
+	router.ServeHTTP(missingRecorder, missingRequest)
+	if missingRecorder.Code != http.StatusNotFound {
+		t.Fatalf("expected deleted blob to return 404, got %d body=%s", missingRecorder.Code, missingRecorder.Body.String())
+	}
+}
+
 func TestCORSPreflightAllowsConfiguredManagerOrigin(t *testing.T) {
 	t.Parallel()
 
 	memoryRepo := sql.NewInMemoryMemoryRepository()
 	conversations := sql.NewInMemoryConversationRepository()
+	mediaRepo := sql.NewInMemoryMediaRepository()
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 	audit := auditsvc.NewService(nil)
-	admin := adminservice.NewService(conversations, memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""))
+	admin := adminservice.NewService(conversations, mediaRepo, memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""))
 	engine := memoryservice.NewEngine(memoryRepo, vector.NewPGVectorStore(nil))
 	memorySvc := memoryservice.NewService(engine, memoryRepo)
 	session := security.NewAdminSessionManager(e2eTestAdminToken, time.Hour)
@@ -265,7 +342,7 @@ func TestAdminConfigRuntimeUpdates(t *testing.T) {
 	router := newTestRouter()
 	cookies := loginCookies(t, router)
 
-	updateRequest := httptest.NewRequest(http.MethodPut, "/api/admin/config", bytes.NewBufferString(`{"runtime":{"default_provider":"anthropic","message_threshold":12,"provider_timeout_seconds":45}}`))
+	updateRequest := httptest.NewRequest(http.MethodPut, "/api/admin/config", bytes.NewBufferString(`{"runtime":{"default_provider":"anthropic","message_threshold":12,"provider_timeout_seconds":45,"multimodal_enabled":false,"multimodal_storage_backend":"s3","multimodal_storage_bucket":"memstation-assets","multimodal_extract_image_model":"vision-v2","multimodal_audio_transcription_enabled":false,"multimodal_max_asset_bytes":2048,"multimodal_allowed_mime_types":["image/png","audio/mpeg"]}}`))
 	updateRequest.Header.Set("Content-Type", "application/json")
 	for _, cookie := range cookies {
 		updateRequest.AddCookie(cookie)
@@ -275,6 +352,12 @@ func TestAdminConfigRuntimeUpdates(t *testing.T) {
 	if updateRecorder.Code != http.StatusOK {
 		t.Fatalf("expected config update 200, got %d body=%s", updateRecorder.Code, updateRecorder.Body.String())
 	}
+	var updatePayload map[string]any
+	if err := json.Unmarshal(updateRecorder.Body.Bytes(), &updatePayload); err != nil {
+		t.Fatalf("unmarshal update payload: %v body=%s", err, updateRecorder.Body.String())
+	}
+	runtimePayload := updatePayload["runtime"].(map[string]any)
+	runtimeLive := updatePayload["runtime_live"].(map[string]any)
 	if !strings.Contains(updateRecorder.Body.String(), `"default_provider":"anthropic"`) {
 		t.Fatalf("expected default provider override, got %s", updateRecorder.Body.String())
 	}
@@ -283,6 +366,18 @@ func TestAdminConfigRuntimeUpdates(t *testing.T) {
 	}
 	if !strings.Contains(updateRecorder.Body.String(), `"provider_timeout_seconds":60`) {
 		t.Fatalf("expected live runtime to keep restart-only provider timeout, got %s", updateRecorder.Body.String())
+	}
+	if runtimePayload["multimodal_storage_backend"] != "s3" {
+		t.Fatalf("expected multimodal storage backend override, got %#v", runtimePayload["multimodal_storage_backend"])
+	}
+	if runtimePayload["multimodal_extract_image_model"] != "vision-v2" {
+		t.Fatalf("expected image extractor override, got %#v", runtimePayload["multimodal_extract_image_model"])
+	}
+	if runtimeLive["multimodal_storage_backend"] != "local" {
+		t.Fatalf("expected live multimodal storage backend to remain default until restart, got %#v", runtimeLive["multimodal_storage_backend"])
+	}
+	if runtimeLive["multimodal_audio_transcription_enabled"] != true {
+		t.Fatalf("expected live multimodal transcription flag to remain default until restart, got %#v", runtimeLive["multimodal_audio_transcription_enabled"])
 	}
 
 	getRequest := httptest.NewRequest(http.MethodGet, "/api/admin/config", nil)
@@ -317,14 +412,21 @@ func TestAdminProviderDiagnostics(t *testing.T) {
 	if initialRecorder.Code != http.StatusOK {
 		t.Fatalf("expected provider diagnostics 200, got %d body=%s", initialRecorder.Code, initialRecorder.Body.String())
 	}
-	if !strings.Contains(initialRecorder.Body.String(), `"provider":"openai"`) {
-		t.Fatalf("expected openai diagnostics, got %s", initialRecorder.Body.String())
+	var initialPayload struct {
+		Items []providerconfigservice.Diagnostic `json:"items"`
 	}
-	if !strings.Contains(initialRecorder.Body.String(), `"status":"degraded"`) {
-		t.Fatalf("expected degraded default provider before credentials, got %s", initialRecorder.Body.String())
+	if err := json.Unmarshal(initialRecorder.Body.Bytes(), &initialPayload); err != nil {
+		t.Fatalf("unmarshal diagnostics: %v body=%s", err, initialRecorder.Body.String())
+	}
+	gatewayOpenAI := findProviderDiagnostic(initialPayload.Items, providerconfigservice.ScopeGateway, domain.ProviderOpenAICompatible)
+	if gatewayOpenAI == nil {
+		t.Fatalf("expected gateway openai_compatible diagnostics, got %+v", initialPayload.Items)
+	}
+	if gatewayOpenAI.Status != "degraded" {
+		t.Fatalf("expected degraded gateway default provider before credentials, got %+v", gatewayOpenAI)
 	}
 
-	updateRequest := httptest.NewRequest(http.MethodPut, "/api/admin/config", bytes.NewBufferString(`{"providers":{"openai":{"api_key":"sk-openai-test"}}}`))
+	updateRequest := httptest.NewRequest(http.MethodPut, "/api/admin/config", bytes.NewBufferString(`{"provider_sets":{"gateway":{"openai_compatible":{"api_key":"sk-openai-test"}}}}`))
 	updateRequest.Header.Set("Content-Type", "application/json")
 	for _, cookie := range cookies {
 		updateRequest.AddCookie(cookie)
@@ -344,11 +446,21 @@ func TestAdminProviderDiagnostics(t *testing.T) {
 	if readyRecorder.Code != http.StatusOK {
 		t.Fatalf("expected provider diagnostics 200 after update, got %d body=%s", readyRecorder.Code, readyRecorder.Body.String())
 	}
-	if !strings.Contains(readyRecorder.Body.String(), `"has_api_key":true`) {
-		t.Fatalf("expected configured api key in diagnostics, got %s", readyRecorder.Body.String())
+	var readyPayload struct {
+		Items []providerconfigservice.Diagnostic `json:"items"`
 	}
-	if !strings.Contains(readyRecorder.Body.String(), `"status":"ready"`) {
-		t.Fatalf("expected ready diagnostics after credential update, got %s", readyRecorder.Body.String())
+	if err := json.Unmarshal(readyRecorder.Body.Bytes(), &readyPayload); err != nil {
+		t.Fatalf("unmarshal diagnostics after update: %v body=%s", err, readyRecorder.Body.String())
+	}
+	gatewayOpenAI = findProviderDiagnostic(readyPayload.Items, providerconfigservice.ScopeGateway, domain.ProviderOpenAICompatible)
+	if gatewayOpenAI == nil {
+		t.Fatalf("expected gateway openai_compatible diagnostics after update, got %+v", readyPayload.Items)
+	}
+	if !gatewayOpenAI.HasAPIKey {
+		t.Fatalf("expected configured api key in diagnostics, got %+v", gatewayOpenAI)
+	}
+	if gatewayOpenAI.Status != "ready" {
+		t.Fatalf("expected ready diagnostics after credential update, got %+v", gatewayOpenAI)
 	}
 }
 
@@ -603,7 +715,7 @@ func newTestRouter() http.Handler {
 	})
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 	audit := auditsvc.NewService(nil)
-	admin := adminservice.NewService(conversations, memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""))
+	admin := adminservice.NewService(conversations, sql.NewInMemoryMediaRepository(), memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""))
 	users := userservice.NewService(nil)
 	apiKeys := apikeyservice.NewService(nil)
 	usage := usageservice.NewService(nil, conversations)
@@ -629,7 +741,7 @@ func newTestRouter() http.Handler {
 			gateway.SetDefaultProvider(providerName)
 		},
 		SetInternalDefaultProvider: func(providerName domain.Provider) {},
-		SetThresholds: func(messageThreshold, tokenThreshold int) {},
+		SetThresholds:              func(messageThreshold, tokenThreshold int) {},
 		SetConversationTimeout: func(timeout time.Duration) {
 			scheduler.UpdateTimeoutWindow(timeout)
 		},
@@ -664,7 +776,7 @@ func newProxyRouter() http.Handler {
 	outbox := sql.NewInMemoryOutboxRepository()
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 	audit := auditsvc.NewService(nil)
-	admin := adminservice.NewService(conversations, memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""))
+	admin := adminservice.NewService(conversations, sql.NewInMemoryMediaRepository(), memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""))
 	users := userservice.NewService(nil)
 	apiKeys := apikeyservice.NewService(nil)
 	usage := usageservice.NewService(nil, conversations)
@@ -685,7 +797,19 @@ func newProxyRouter() http.Handler {
 	)
 
 	return httptransport.NewRouter(httptransport.Dependencies{
-		Config:   bootstrap.Config{Version: "0.1.0", SessionCookieSecure: false},
+		Config: bootstrap.Config{
+			Version:             "0.1.0",
+			SessionCookieSecure: false,
+			Multimodal: bootstrap.MultimodalConfig{
+				Enabled:                   true,
+				StorageBackend:            "local",
+				StorageLocalRoot:          "./data/blobs",
+				AudioTranscriptionEnabled: true,
+				VideoFrameSamplingEnabled: true,
+				MaxAssetBytes:             104857600,
+				AllowedMIMETypes:          []string{"text/plain", "image/png", "application/pdf", "audio/mpeg"},
+			},
+		},
 		Health:   observability.NewRegistry(),
 		Auth:     security.Authenticator{AdminToken: e2eTestAdminToken, DevAPIKey: "ms-local-dev", SessionManager: session},
 		Session:  session,
@@ -699,6 +823,60 @@ func newProxyRouter() http.Handler {
 		APIKeys:  apiKeys,
 		Settings: settings,
 	})
+}
+
+func newMultimodalProxyRouter(t *testing.T, root string) http.Handler {
+	t.Helper()
+
+	mediaRepo := sql.NewInMemoryMediaRepository()
+	blobStore, err := blobstore.NewStore(bootstrap.MultimodalConfig{
+		Enabled:                   true,
+		StorageBackend:            "local",
+		StorageLocalRoot:          root,
+		AudioTranscriptionEnabled: true,
+		VideoFrameSamplingEnabled: true,
+		MaxAssetBytes:             1 << 20,
+		AllowedMIMETypes:          []string{"text/plain"},
+	})
+	if err != nil {
+		t.Fatalf("create blob store: %v", err)
+	}
+
+	return httptransport.NewRouter(httptransport.Dependencies{
+		Config: bootstrap.Config{
+			Version:             "0.1.0",
+			SessionCookieSecure: false,
+			Multimodal: bootstrap.MultimodalConfig{
+				Enabled:                   true,
+				StorageBackend:            "local",
+				StorageLocalRoot:          root,
+				AudioTranscriptionEnabled: true,
+				VideoFrameSamplingEnabled: true,
+				MaxAssetBytes:             1 << 20,
+				AllowedMIMETypes:          []string{"text/plain"},
+			},
+		},
+		Health: observability.NewRegistry(),
+		Auth:   security.Authenticator{AdminToken: e2eTestAdminToken, DevAPIKey: "ms-local-dev"},
+		Multimodal: multimodalservice.NewService(mediaRepo, blobStore, bootstrap.MultimodalConfig{
+			Enabled:                   true,
+			StorageBackend:            "local",
+			StorageLocalRoot:          root,
+			AudioTranscriptionEnabled: true,
+			VideoFrameSamplingEnabled: true,
+			MaxAssetBytes:             1 << 20,
+			AllowedMIMETypes:          []string{"text/plain"},
+		}),
+	})
+}
+
+func findProviderDiagnostic(items []providerconfigservice.Diagnostic, scope providerconfigservice.Scope, providerName domain.Provider) *providerconfigservice.Diagnostic {
+	for i := range items {
+		if items[i].Scope == scope && items[i].Provider == providerName {
+			return &items[i]
+		}
+	}
+	return nil
 }
 
 func loginCookies(t *testing.T, router http.Handler) []*http.Cookie {

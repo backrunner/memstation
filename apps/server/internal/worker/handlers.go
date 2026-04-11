@@ -17,15 +17,18 @@ import (
 	conversationservice "memstation/apps/server/internal/service/conversation"
 	memoryservice "memstation/apps/server/internal/service/memory"
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
+	multimodalservice "memstation/apps/server/internal/service/multimodal"
 )
 
 type Services struct {
 	Conversations        ports.ConversationRepository
+	MediaStore           ports.MediaRepository
 	Memories             ports.MemoryRepository
 	Generations          *memorygenservice.Service
 	Vectors              ports.VectorStore
 	Publisher            ports.TaskPublisher
 	Analysis             *analysisservice.Service
+	Multimodal           *multimodalservice.Service
 	Scorer               *memoryservice.Scorer
 	EmbeddingModel       string
 	AllowedKeyMemoryKeys map[string]struct{}
@@ -36,6 +39,7 @@ type Services struct {
 func NewServeMux(logger *slog.Logger, services Services) *asynq.ServeMux {
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(TypeConversationFinalize, handleConversationFinalize(logger, services))
+	mux.HandleFunc(TypeMediaExtract, handleMediaExtract(logger, services))
 	mux.HandleFunc(TypeSummaryGenerate, handleSummaryGenerate(logger, services))
 	mux.HandleFunc(TypeEmbeddingGenerate, handleEmbeddingGenerate(logger, services))
 	mux.HandleFunc(TypeAnalysisExtract, handleAnalysisExtract(logger, services))
@@ -97,13 +101,34 @@ func handleConversationFinalize(logger *slog.Logger, services Services) func(con
 		}
 		if !conversationMemoryPersistEnabled(conversation) {
 			skipped := domain.ProcessingStatusSkipped
-			return services.Conversations.UpdateConversationState(ctx, domain.ConversationStateUpdate{
+			if err := services.Conversations.UpdateConversationState(ctx, domain.ConversationStateUpdate{
 				ConversationID: conversationID,
 				UserID:         userID,
 				FinalizeStatus: &finalizeStatus,
 				SummaryStatus:  &skipped,
 				AnalysisStatus: &skipped,
 				Metadata:       mergeMetadata(stateMetadata, map[string]any{"memory_persist_enabled": false}),
+			}); err != nil {
+				return err
+			}
+			if !conversationSourceRetainEnabled(conversation) || services.Multimodal == nil {
+				return nil
+			}
+			nextType := TypeSummaryGenerate
+			uniqueKey := TypeSummaryGenerate + ":" + conversationID
+			if services.Multimodal != nil {
+				nextType = TypeMediaExtract
+				uniqueKey = TypeMediaExtract + ":" + conversationID
+			}
+			return services.Publisher.Publish(ctx, domain.TaskMessage{
+				Type:      nextType,
+				Queue:     QueueDefault,
+				UniqueKey: uniqueKey,
+				Payload: map[string]any{
+					"conversation_id": conversationID,
+					"user_id":         userID,
+					"finalize_reason": finalizeReason,
+				},
 			})
 		}
 		generation, err := resolveProcessingGeneration(ctx, services, userID, "")
@@ -130,18 +155,94 @@ func handleConversationFinalize(logger *slog.Logger, services Services) func(con
 		if conversation.SummaryStatus == domain.ProcessingStatusCompleted || conversation.SummaryStatus == domain.ProcessingStatusRunning || conversation.SummaryStatus == domain.ProcessingStatusQueued {
 			return nil
 		}
+		nextType := TypeSummaryGenerate
+		uniqueKey := TypeSummaryGenerate + ":" + conversationID
+		if services.Multimodal != nil {
+			nextType = TypeMediaExtract
+			uniqueKey = TypeMediaExtract + ":" + conversationID
+		}
 		return services.Publisher.Publish(ctx, domain.TaskMessage{
-			Type:      TypeSummaryGenerate,
+			Type:      nextType,
 			Queue:     QueueDefault,
-			UniqueKey: TypeSummaryGenerate + ":" + conversationID,
+			UniqueKey: uniqueKey,
 			Payload: map[string]any{
 				"conversation_id":   conversationID,
 				"user_id":           userID,
-				"summary_version":   1,
 				"finalize_reason":   finalizeReason,
 				"generation_id":     generation.GenerationID,
 				"embedding_version": generation.EmbeddingVersion,
 				"embedding_model":   generation.EmbeddingModel,
+			},
+		})
+	}
+}
+
+func handleMediaExtract(logger *slog.Logger, services Services) func(context.Context, *asynq.Task) error {
+	return func(ctx context.Context, task *asynq.Task) error {
+		var payload MediaExtractPayload
+		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+			return err
+		}
+		conversation, err := services.Conversations.GetConversation(ctx, payload.UserID, payload.ConversationID)
+		if err != nil {
+			return err
+		}
+		if services.Multimodal == nil {
+			if conversationMemoryPersistEnabled(conversation) {
+				return services.Publisher.Publish(ctx, domain.TaskMessage{
+					Type:      TypeSummaryGenerate,
+					Queue:     QueueDefault,
+					UniqueKey: TypeSummaryGenerate + ":" + payload.ConversationID,
+					Payload: map[string]any{
+						"conversation_id":   payload.ConversationID,
+						"user_id":           payload.UserID,
+						"summary_version":   1,
+						"finalize_reason":   payload.FinalizeReason,
+						"generation_id":     payload.GenerationID,
+						"embedding_version": payload.EmbeddingVersion,
+						"embedding_model":   payload.EmbeddingModel,
+					},
+				})
+			}
+			return nil
+		}
+
+		parts, err := services.Multimodal.MaterializeConversation(ctx, conversation)
+		if err != nil {
+			return err
+		}
+		artifacts, err := services.Multimodal.ExtractConversation(ctx, conversation, parts)
+		if err != nil {
+			return err
+		}
+		logger.InfoContext(ctx, "media extracted", "conversation_id", payload.ConversationID, "part_count", len(parts), "artifact_count", len(artifacts))
+		if err := services.Conversations.UpdateConversationState(ctx, domain.ConversationStateUpdate{
+			ConversationID: payload.ConversationID,
+			UserID:         payload.UserID,
+			Metadata: map[string]any{
+				"part_count":          len(parts),
+				"artifact_count":      len(artifacts),
+				"timeline_materialized": true,
+				"timeline_modalities": modalitiesFromParts(parts),
+			},
+		}); err != nil {
+			return err
+		}
+		if !conversationMemoryPersistEnabled(conversation) {
+			return nil
+		}
+		return services.Publisher.Publish(ctx, domain.TaskMessage{
+			Type:      TypeSummaryGenerate,
+			Queue:     QueueDefault,
+			UniqueKey: TypeSummaryGenerate + ":" + payload.ConversationID,
+			Payload: map[string]any{
+				"conversation_id":   payload.ConversationID,
+				"user_id":           payload.UserID,
+				"summary_version":   1,
+				"finalize_reason":   payload.FinalizeReason,
+				"generation_id":     payload.GenerationID,
+				"embedding_version": payload.EmbeddingVersion,
+				"embedding_model":   payload.EmbeddingModel,
 			},
 		})
 	}
@@ -181,7 +282,14 @@ func handleSummaryGenerate(logger *slog.Logger, services Services) func(context.
 				return err
 			}
 		}
-		segments := applyGenerationToSegments(payload.UserID, payload.GenerationID, conversationservice.BuildSegments(payload.UserID, payload.ConversationID, conversation.Messages, conversation.UpdatedAt, conversationservice.DefaultSegmentOptions()))
+		parts, artifacts, err := ensureConversationTimeline(ctx, services, conversation)
+		if err != nil {
+			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, true)
+			return err
+		}
+		conversation.Parts = parts
+		conversation.Artifacts = artifacts
+		segments := applyGenerationToSegments(payload.UserID, payload.GenerationID, conversationservice.BuildSegmentsFromTimeline(payload.UserID, payload.ConversationID, conversation.Messages, parts, artifacts, conversation.UpdatedAt, conversationservice.DefaultSegmentOptions()))
 		if err := services.Conversations.ReplaceSegments(ctx, payload.UserID, payload.ConversationID, segments); err != nil {
 			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, true)
 			return err
@@ -191,10 +299,11 @@ func handleSummaryGenerate(logger *slog.Logger, services Services) func(context.
 			return err
 		}
 		conversation.Segments = segments
-		summaryText := buildSummary(conversation.Messages)
+		summaryText := buildSummary(conversation.Messages, parts, artifacts)
 		if summaryText == "" {
 			summaryText = conversationservice.SummarizeSegments(segments)
 		}
+		summaryEvidences := buildNodeEvidences(payload.UserID, payload.GenerationID, "", payload.ConversationID, parts, artifacts, nil, nil)
 		doc := domain.MemoryDocument{
 			ID:             summaryDocumentID(payload.ConversationID, payload.SummaryVersion),
 			NodeID:         summaryNodeID(payload.ConversationID, payload.SummaryVersion),
@@ -212,6 +321,10 @@ func handleSummaryGenerate(logger *slog.Logger, services Services) func(context.
 				"segment_count":            len(segments),
 				"segment_strategy":         "dialogue_window_v1",
 				"segment_overlap_messages": conversationservice.DefaultSegmentOptions().Overlap,
+				"modalities":               modalitiesFromParts(parts),
+				"evidence_count":           len(summaryEvidences),
+				"source_part_count":        len(parts),
+				"has_source_blob":          hasSourceBlob(parts),
 			},
 		}
 		doc = applyGenerationToDocument(payload.UserID, payload.GenerationID, doc)
@@ -221,7 +334,11 @@ func handleSummaryGenerate(logger *slog.Logger, services Services) func(context.
 			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, true)
 			return err
 		}
-		segmentDocs, err := storeSegmentDocuments(ctx, services, segments, doc, conversation.UpdatedAt)
+		if err := storeDocumentEvidences(ctx, services, payload.UserID, payload.GenerationID, doc.NodeID, payload.ConversationID, summaryEvidences); err != nil {
+			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, true)
+			return err
+		}
+		segmentDocs, err := storeSegmentDocuments(ctx, services, segments, doc, conversation.UpdatedAt, parts, artifacts)
 		if err != nil {
 			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, true)
 			return err
@@ -385,9 +502,23 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
 			return err
 		}
+		if evidences, err := services.Memories.ListEvidences(ctx, payload.UserID, summaryDoc.NodeID); err == nil && len(evidences) > 0 {
+			factEvidences := cloneNodeEvidences(payload.UserID, payload.GenerationID, result.Fact.NodeID, evidences)
+			if err := services.Memories.ReplaceEvidences(ctx, payload.UserID, result.Fact.NodeID, factEvidences); err != nil {
+				markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
+				return err
+			}
+		}
 		if err := services.Memories.StoreDocument(ctx, result.Impression); err != nil {
 			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
 			return err
+		}
+		if evidences, err := services.Memories.ListEvidences(ctx, payload.UserID, summaryDoc.NodeID); err == nil && len(evidences) > 0 {
+			impressionEvidences := cloneNodeEvidences(payload.UserID, payload.GenerationID, result.Impression.NodeID, evidences)
+			if err := services.Memories.ReplaceEvidences(ctx, payload.UserID, result.Impression.NodeID, impressionEvidences); err != nil {
+				markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
+				return err
+			}
 		}
 		for _, relation := range result.Relations {
 			if err := services.Memories.LinkDocuments(ctx, relation); err != nil {
@@ -453,6 +584,11 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 		}
 		for _, followup := range followups {
 			if err := services.Publisher.Publish(ctx, followup); err != nil {
+				return err
+			}
+		}
+		if !conversationSourceRetainEnabled(conversation) && services.Multimodal != nil {
+			if err := services.Multimodal.CleanupConversationBlobs(ctx, payload.UserID, payload.ConversationID); err != nil {
 				return err
 			}
 		}
@@ -555,8 +691,21 @@ func syncConversationKeyMemoryRelations(ctx context.Context, repo ports.MemoryRe
 	return nil
 }
 
-func buildSummary(messages []domain.UnifiedMessage) string {
-	return conversationservice.BuildMemoryPromptInput(messages)
+func buildSummary(messages []domain.UnifiedMessage, parts []domain.MessagePart, artifacts []domain.MessagePartArtifact) string {
+	promptSummary := strings.TrimSpace(conversationservice.BuildMemoryPromptInput(messages))
+	timelineSummary := strings.TrimSpace(conversationservice.SummarizeMessagesWithTimeline(messages, parts, artifacts))
+	switch {
+	case timelineSummary != "" && promptSummary != "" && timelineSummary != promptSummary:
+		if strings.Contains(strings.ToLower(promptSummary), "tool ") || strings.Contains(strings.ToLower(promptSummary), "tool_") {
+			return truncate(timelineSummary+" | "+promptSummary, 700)
+		}
+		return timelineSummary
+	case timelineSummary != "":
+		return timelineSummary
+	case promptSummary != "":
+		return promptSummary
+	}
+	return ""
 }
 
 func embeddingContentForDocument(doc domain.MemoryDocument) string {

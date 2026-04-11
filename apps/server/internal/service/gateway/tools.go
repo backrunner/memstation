@@ -110,13 +110,14 @@ func (r *ToolRuntime) Execute(ctx context.Context, req domain.UnifiedRequest, as
 }
 
 func (r *ToolRuntime) executeCall(ctx context.Context, req domain.UnifiedRequest, call domain.ToolCall) (map[string]any, error) {
+	arguments := objectValue(call.Arguments)
 	switch call.Name {
 	case "recall_memory":
-		return r.recallMemory(ctx, req, call.Arguments)
+		return r.recallMemory(ctx, req, arguments)
 	case "get_key_memory":
-		return r.getKeyMemory(ctx, req, call.Arguments)
+		return r.getKeyMemory(ctx, req, arguments)
 	case "write_key_memory":
-		return r.writeKeyMemory(ctx, req, call.Arguments)
+		return r.writeKeyMemory(ctx, req, arguments)
 	default:
 		return nil, fmt.Errorf("unsupported tool: %s", call.Name)
 	}
@@ -299,12 +300,17 @@ func lastUserText(messages []domain.UnifiedMessage) string {
 	return ""
 }
 
-func stringifyToolOutput(value map[string]any) string {
+func stringifyToolOutput(value any) string {
 	raw, err := json.Marshal(value)
 	if err != nil {
 		return `{"ok":false,"error":"tool output serialization failed"}`
 	}
 	return string(raw)
+}
+
+func objectValue(value any) map[string]any {
+	object, _ := value.(map[string]any)
+	return object
 }
 
 func stringArg(arguments map[string]any, key string) string {

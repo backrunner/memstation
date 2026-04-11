@@ -97,15 +97,15 @@ type ToolDefinition struct {
 }
 
 type ToolCall struct {
-	ID        string         `json:"id"`
-	Name      string         `json:"name"`
-	Arguments map[string]any `json:"arguments,omitempty"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Arguments any    `json:"arguments,omitempty"`
 }
 
 type ToolResult struct {
-	ToolCallID string         `json:"tool_call_id"`
-	Name       string         `json:"name"`
-	Output     map[string]any `json:"output,omitempty"`
+	ToolCallID string `json:"tool_call_id"`
+	Name       string `json:"name"`
+	Output     any    `json:"output,omitempty"`
 }
 
 type UsageRecord struct {

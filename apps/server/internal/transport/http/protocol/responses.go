@@ -32,13 +32,10 @@ func FormatResponses(resp domain.UnifiedResponse) map[string]any {
 	}
 	if resp.Message.Text != "" || len(output) == 0 {
 		output = append(output, map[string]any{
-			"id":   resp.ResponseID + "_msg",
-			"type": "message",
-			"role": "assistant",
-			"content": []map[string]any{{
-				"type": "output_text",
-				"text": resp.Message.Text,
-			}},
+			"id":      resp.ResponseID + "_msg",
+			"type":    "message",
+			"role":    "assistant",
+			"content": responsesMessageContent(resp.Message, true),
 		})
 	}
 	return map[string]any{
@@ -107,17 +104,18 @@ func normalizeResponsesInput(raw json.RawMessage) []domain.UnifiedMessage {
 		case "function_call_output":
 			out = append(out, domain.UnifiedMessage{
 				Role: domain.RoleTool,
-				Text: anyString(item["output"]),
+				Text: toolResultText(item["output"]),
 				ToolResults: []domain.ToolResult{{
 					ToolCallID: anyString(item["call_id"]),
-					Output:     toolResultOutputMap(anyString(item["output"])),
+					Output:     item["output"],
 				}},
 			})
 		case "message":
+			blocks := blocksFromArray(anySlice(item["content"]))
 			out = append(out, domain.UnifiedMessage{
 				Role:   domain.MessageRole(anyString(item["role"])),
-				Text:   contentText(item["content"]),
-				Blocks: []domain.ContentBlock{{Type: domain.ContentBlockText, Text: contentText(item["content"])}},
+				Text:   textFromCanonicalBlocks(blocks),
+				Blocks: blocks,
 			})
 		}
 	}
@@ -140,6 +138,11 @@ func contentText(value any) string {
 		}
 	}
 	return strings.Join(parts, "\n")
+}
+
+func anySlice(value any) []any {
+	typed, _ := value.([]any)
+	return typed
 }
 
 func rawJSON(value any) json.RawMessage {

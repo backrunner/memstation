@@ -11,10 +11,13 @@ import (
 
 	"github.com/hibiken/asynq"
 
+	"memstation/apps/server/internal/bootstrap"
 	"memstation/apps/server/internal/domain"
 	analysisservice "memstation/apps/server/internal/service/analysis"
 	conversationservice "memstation/apps/server/internal/service/conversation"
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
+	multimodalservice "memstation/apps/server/internal/service/multimodal"
+	blobstore "memstation/apps/server/internal/store/blob"
 	"memstation/apps/server/internal/store/sql"
 	"memstation/apps/server/internal/store/vector"
 )
@@ -1312,7 +1315,7 @@ func TestEmbeddingHandlersAndHelpers(t *testing.T) {
 		{Role: domain.RoleSystem, Text: "ignore"},
 		{Role: domain.RoleUser, Text: "Need a release checklist."},
 		{Role: domain.RoleAssistant, Text: "Let's capture the owner."},
-	}); got == "" {
+	}, nil, nil); got == "" {
 		t.Fatal("expected non-empty summary helper output")
 	}
 	if got := summarizeTopic("Release checklist ownership release checklist"); got == "" {
@@ -1426,6 +1429,407 @@ func TestMarkConversationFailedAndRecordAuditHelpers(t *testing.T) {
 	}, domain.AuditEvent{Action: "test"})
 	if len(recorded) != 1 || recorded[0].Action != "test" {
 		t.Fatalf("expected recorded audit event, got %+v", recorded)
+	}
+}
+
+func TestMultimodalTimelineFeedsSummaryAndEvidence(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conversations := sql.NewInMemoryConversationRepository()
+	media := sql.NewInMemoryMediaRepository()
+	memories := sql.NewInMemoryMemoryRepository()
+	publisher := &recordingPublisher{}
+	multimodal := multimodalservice.NewService(media, nil, bootstrap.MultimodalConfig{
+		Enabled:                   true,
+		ImageModel:                "vision-test",
+		AudioModel:                "asr-test",
+		AudioTranscriptionEnabled: true,
+	})
+
+	if err := conversations.PersistExchange(ctx, domain.ConversationRecord{
+		ConversationID: "conv-mm",
+		UserID:         "user-1",
+		RequestFormat:  string(domain.ProtocolOpenAIChat),
+		Provider:       domain.ProviderOpenAI,
+		Mode:           domain.ModeTransparent,
+		FinalizeStatus: domain.FinalizeStatusEnded,
+		SummaryStatus:  domain.ProcessingStatusQueued,
+		AnalysisStatus: domain.ProcessingStatusPending,
+		Messages: []domain.UnifiedMessage{
+			{
+				Role: domain.RoleUser,
+				Blocks: []domain.ContentBlock{
+					{Type: domain.ContentBlockText, Text: "Please review these notes."},
+					{
+						Type:      domain.ContentBlockImage,
+						SourceURL: "https://example.com/whiteboard.png",
+						MIMEType:  "image/png",
+						Filename:  "whiteboard.png",
+						Metadata: map[string]any{
+							"caption":  "whiteboard says launch Friday",
+							"ocr_text": "launch Friday; rollback owner pending",
+						},
+					},
+					{
+						Type:      domain.ContentBlockAudio,
+						SourceURL: "https://example.com/meeting.m4a",
+						MIMEType:  "audio/mp4",
+						StartMS:   1500,
+						EndMS:     4200,
+						Metadata: map[string]any{
+							"transcript": "Chen owns rollback approval and Alice signs off the launch.",
+						},
+					},
+				},
+			},
+			{
+				Role: domain.RoleAssistant,
+				Blocks: []domain.ContentBlock{
+					{Type: domain.ContentBlockText, Text: "Captured the timeline and owners."},
+				},
+			},
+		},
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("persist conversation: %v", err)
+	}
+
+	mediaHandler := handleMediaExtract(nilLogger(), Services{
+		Conversations: conversations,
+		MediaStore:    media,
+		Multimodal:    multimodal,
+		Publisher:     publisher,
+	})
+	if err := mediaHandler(ctx, newTask(t, TypeMediaExtract, MediaExtractPayload{
+		UserID:         "user-1",
+		ConversationID: "conv-mm",
+		FinalizeReason: "explicit",
+	})); err != nil {
+		t.Fatalf("handle media extract: %v", err)
+	}
+
+	parts, err := media.ListMessageParts(ctx, "user-1", "conv-mm")
+	if err != nil {
+		t.Fatalf("list parts: %v", err)
+	}
+	if len(parts) != 4 {
+		t.Fatalf("expected 4 timeline parts, got %d", len(parts))
+	}
+	if parts[0].PartType != domain.ContentBlockText || parts[1].PartType != domain.ContentBlockImage || parts[2].PartType != domain.ContentBlockAudio {
+		t.Fatalf("unexpected part ordering: %+v", parts)
+	}
+	artifacts, err := media.ListPartArtifacts(ctx, "user-1", "conv-mm")
+	if err != nil {
+		t.Fatalf("list artifacts: %v", err)
+	}
+	if len(artifacts) < 3 {
+		t.Fatalf("expected multimodal artifacts, got %+v", artifacts)
+	}
+
+	summaryHandler := handleSummaryGenerate(nilLogger(), Services{
+		Conversations:  conversations,
+		MediaStore:     media,
+		Memories:       memories,
+		Vectors:        vector.NewPGVectorStore(nil),
+		Publisher:      publisher,
+		Multimodal:     multimodal,
+		EmbeddingModel: "test-embedding",
+	})
+	if err := summaryHandler(ctx, newTask(t, TypeSummaryGenerate, SummaryPayload{
+		UserID:         "user-1",
+		ConversationID: "conv-mm",
+		SummaryVersion: 1,
+		FinalizeReason: "explicit",
+	})); err != nil {
+		t.Fatalf("handle summary: %v", err)
+	}
+
+	docs, err := memories.ListDocuments(ctx, "user-1", []domain.MemoryType{domain.MemoryTypeSummary}, 10)
+	if err != nil {
+		t.Fatalf("list summary docs: %v", err)
+	}
+	if len(docs) != 1 {
+		t.Fatalf("expected 1 summary doc, got %d", len(docs))
+	}
+	if !strings.Contains(docs[0].Content, "Chen owns rollback approval") {
+		t.Fatalf("expected summary to include audio transcript proxy, got %q", docs[0].Content)
+	}
+	if !strings.Contains(docs[0].Content, "launch Friday") {
+		t.Fatalf("expected summary to include image caption/OCR proxy, got %q", docs[0].Content)
+	}
+	evidences, err := memories.ListEvidences(ctx, "user-1", docs[0].NodeID)
+	if err != nil {
+		t.Fatalf("list summary evidences: %v", err)
+	}
+	if len(evidences) == 0 {
+		t.Fatalf("expected summary evidences to be stored")
+	}
+}
+
+func TestToolPayloadMultimodalContentEntersTimeline(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conversations := sql.NewInMemoryConversationRepository()
+	media := sql.NewInMemoryMediaRepository()
+	memories := sql.NewInMemoryMemoryRepository()
+	publisher := &recordingPublisher{}
+	multimodal := multimodalservice.NewService(media, nil, bootstrap.MultimodalConfig{
+		Enabled:                   true,
+		ImageModel:                "vision-test",
+		FileModel:                 "doc-test",
+		AudioTranscriptionEnabled: true,
+	})
+
+	if err := conversations.PersistExchange(ctx, domain.ConversationRecord{
+		ConversationID: "conv-tool-mm",
+		UserID:         "user-1",
+		RequestFormat:  string(domain.ProtocolOpenAIResponses),
+		Provider:       domain.ProviderOpenAI,
+		Mode:           domain.ModeTransparent,
+		FinalizeStatus: domain.FinalizeStatusEnded,
+		SummaryStatus:  domain.ProcessingStatusQueued,
+		AnalysisStatus: domain.ProcessingStatusPending,
+		Messages: []domain.UnifiedMessage{
+			{
+				Role: domain.RoleAssistant,
+				Text: "Calling a tool to inspect the uploaded media.",
+				ToolCalls: []domain.ToolCall{{
+					ID:   "call-1",
+					Name: "inspect_assets",
+					Arguments: map[string]any{
+						"attachments": []any{
+							map[string]any{
+								"type":      "input_image",
+								"image_url": "https://example.com/diagram.png",
+								"mime_type": "image/png",
+								"text":      "diagram says launch Friday",
+							},
+						},
+					},
+				}},
+			},
+			{
+				Role: domain.RoleTool,
+				ToolResults: []domain.ToolResult{{
+					ToolCallID: "call-1",
+					Name:       "inspect_assets",
+					Output: map[string]any{
+						"content": []any{
+							map[string]any{
+								"type":       "file",
+								"source_url": "https://example.com/report.pdf",
+								"mime_type":  "application/pdf",
+								"filename":   "report.pdf",
+								"text":       "report confirms Chen owns rollback",
+								"page_index": 2,
+							},
+						},
+					},
+				}},
+			},
+		},
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("persist conversation: %v", err)
+	}
+
+	services := Services{
+		Conversations:  conversations,
+		MediaStore:     media,
+		Memories:       memories,
+		Vectors:        vector.NewPGVectorStore(nil),
+		Publisher:      publisher,
+		Multimodal:     multimodal,
+		EmbeddingModel: "test-embedding",
+	}
+
+	if err := handleMediaExtract(nilLogger(), services)(ctx, newTask(t, TypeMediaExtract, MediaExtractPayload{
+		UserID:         "user-1",
+		ConversationID: "conv-tool-mm",
+		FinalizeReason: "explicit",
+	})); err != nil {
+		t.Fatalf("handle media extract: %v", err)
+	}
+
+	parts, err := media.ListMessageParts(ctx, "user-1", "conv-tool-mm")
+	if err != nil {
+		t.Fatalf("list parts: %v", err)
+	}
+	foundNestedImage := false
+	foundNestedFile := false
+	for _, part := range parts {
+		if part.PartType == domain.ContentBlockImage && part.Metadata["tool_payload_kind"] == "tool_input" {
+			foundNestedImage = true
+		}
+		if part.PartType == domain.ContentBlockFile && part.Metadata["tool_payload_kind"] == "tool_output" {
+			foundNestedFile = true
+		}
+	}
+	if !foundNestedImage || !foundNestedFile {
+		t.Fatalf("expected tool payload media to be materialized into timeline parts, got %+v", parts)
+	}
+
+	if err := handleSummaryGenerate(nilLogger(), services)(ctx, newTask(t, TypeSummaryGenerate, SummaryPayload{
+		UserID:         "user-1",
+		ConversationID: "conv-tool-mm",
+		SummaryVersion: 1,
+		FinalizeReason: "explicit",
+	})); err != nil {
+		t.Fatalf("handle summary: %v", err)
+	}
+
+	docs, err := memories.ListDocuments(ctx, "user-1", []domain.MemoryType{domain.MemoryTypeSummary}, 10)
+	if err != nil {
+		t.Fatalf("list summary docs: %v", err)
+	}
+	if len(docs) != 1 {
+		t.Fatalf("expected 1 summary doc, got %d", len(docs))
+	}
+	if !strings.Contains(docs[0].Content, "launch Friday") || !strings.Contains(docs[0].Content, "Chen owns rollback") {
+		t.Fatalf("expected summary to include tool payload media text proxies, got %q", docs[0].Content)
+	}
+}
+
+func TestAnalysisCleanupRemovesBlobButKeepsArtifactsAndEvidences(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conversations := sql.NewInMemoryConversationRepository()
+	media := sql.NewInMemoryMediaRepository()
+	memories := sql.NewInMemoryMemoryRepository()
+	publisher := &recordingPublisher{}
+
+	root := t.TempDir()
+	blobStore, err := blobstore.NewStore(bootstrap.MultimodalConfig{
+		Enabled:                   true,
+		StorageBackend:            "local",
+		StorageLocalRoot:          root,
+		AudioTranscriptionEnabled: true,
+		VideoFrameSamplingEnabled: true,
+		MaxAssetBytes:             1 << 20,
+		AllowedMIMETypes:          []string{"text/plain"},
+	})
+	if err != nil {
+		t.Fatalf("new blob store: %v", err)
+	}
+	multimodal := multimodalservice.NewService(media, blobStore, bootstrap.MultimodalConfig{
+		Enabled:                   true,
+		StorageBackend:            "local",
+		StorageLocalRoot:          root,
+		FileModel:                 "file-extractor",
+		AudioTranscriptionEnabled: true,
+		VideoFrameSamplingEnabled: true,
+		MaxAssetBytes:             1 << 20,
+		AllowedMIMETypes:          []string{"text/plain"},
+	})
+
+	blob, err := multimodal.SaveUpload(ctx, "user-1", "note.txt", "text/plain", strings.NewReader("Rollback owner is Chen. Launch happens on Friday."), map[string]any{"kind": "note"})
+	if err != nil {
+		t.Fatalf("save upload: %v", err)
+	}
+
+	if err := conversations.PersistExchange(ctx, domain.ConversationRecord{
+		ConversationID: "conv-retain-false",
+		UserID:         "user-1",
+		RequestFormat:  string(domain.ProtocolOpenAIChat),
+		Provider:       domain.ProviderOpenAI,
+		Mode:           domain.ModeTransparent,
+		FinalizeStatus: domain.FinalizeStatusEnded,
+		SummaryStatus:  domain.ProcessingStatusQueued,
+		AnalysisStatus: domain.ProcessingStatusPending,
+		Metadata: map[string]any{
+			"source_retain_enabled": false,
+		},
+		Messages: []domain.UnifiedMessage{{
+			Role: domain.RoleUser,
+			Blocks: []domain.ContentBlock{{
+				Type:     domain.ContentBlockFile,
+				BlobID:   blob.BlobID,
+				MIMEType: "text/plain",
+				Filename: "note.txt",
+			}},
+		}},
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("persist conversation: %v", err)
+	}
+
+	services := Services{
+		Conversations:  conversations,
+		MediaStore:     media,
+		Memories:       memories,
+		Vectors:        vector.NewPGVectorStore(nil),
+		Publisher:      publisher,
+		Analysis:       analysisservice.NewService(),
+		Multimodal:     multimodal,
+		EmbeddingModel: "test-embedding",
+	}
+
+	if err := handleMediaExtract(nilLogger(), services)(ctx, newTask(t, TypeMediaExtract, MediaExtractPayload{
+		UserID:         "user-1",
+		ConversationID: "conv-retain-false",
+		FinalizeReason: "explicit",
+	})); err != nil {
+		t.Fatalf("handle media extract: %v", err)
+	}
+	if err := handleSummaryGenerate(nilLogger(), services)(ctx, newTask(t, TypeSummaryGenerate, SummaryPayload{
+		UserID:         "user-1",
+		ConversationID: "conv-retain-false",
+		SummaryVersion: 1,
+		FinalizeReason: "explicit",
+	})); err != nil {
+		t.Fatalf("handle summary: %v", err)
+	}
+	if err := handleAnalysisExtract(nilLogger(), services)(ctx, newTask(t, TypeAnalysisExtract, AnalysisPayload{
+		UserID:         "user-1",
+		ConversationID: "conv-retain-false",
+	})); err != nil {
+		t.Fatalf("handle analysis: %v", err)
+	}
+
+	if _, _, err := multimodal.OpenBlob(ctx, "user-1", blob.BlobID); err == nil {
+		t.Fatalf("expected raw blob to be deleted after analysis when source retention is disabled")
+	}
+	storedBlob, err := media.GetBlob(ctx, "user-1", blob.BlobID)
+	if err != nil {
+		t.Fatalf("get blob metadata: %v", err)
+	}
+	if storedBlob.DeletedAt == nil {
+		t.Fatalf("expected blob metadata to record deletion time")
+	}
+
+	parts, err := media.ListMessageParts(ctx, "user-1", "conv-retain-false")
+	if err != nil {
+		t.Fatalf("list message parts: %v", err)
+	}
+	artifacts, err := media.ListPartArtifacts(ctx, "user-1", "conv-retain-false")
+	if err != nil {
+		t.Fatalf("list artifacts: %v", err)
+	}
+	if len(parts) == 0 || len(artifacts) == 0 {
+		t.Fatalf("expected parts and artifacts to remain queryable, got parts=%d artifacts=%d", len(parts), len(artifacts))
+	}
+
+	docs, err := memories.ListDocumentsByConversation(ctx, "user-1", "conv-retain-false")
+	if err != nil {
+		t.Fatalf("list documents by conversation: %v", err)
+	}
+	if len(docs) < 3 {
+		t.Fatalf("expected summary, fact, and impression docs, got %+v", docs)
+	}
+	for _, doc := range docs {
+		evidences, err := memories.ListEvidences(ctx, "user-1", doc.NodeID)
+		if err != nil {
+			t.Fatalf("list evidences for %s: %v", doc.NodeID, err)
+		}
+		if len(evidences) == 0 {
+			t.Fatalf("expected evidences for node %s", doc.NodeID)
+		}
 	}
 }
 

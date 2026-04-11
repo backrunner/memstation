@@ -46,9 +46,7 @@ func NormalizeChatCompletion(r OpenAIChatCompletionsRequest, headers HeaderOptio
 			unified.ToolResults = []domain.ToolResult{{
 				ToolCallID: message.ToolCallID,
 				Name:       toolNames[message.ToolCallID],
-				Output: map[string]any{
-					"content": unified.Text,
-				},
+				Output:     rawJSONValue(message.Content),
 			}}
 		}
 		messages = append(messages, unified)
@@ -59,7 +57,7 @@ func NormalizeChatCompletion(r OpenAIChatCompletionsRequest, headers HeaderOptio
 func FormatChatCompletion(resp domain.UnifiedResponse) map[string]any {
 	message := map[string]any{
 		"role":    resp.Message.Role,
-		"content": resp.Message.Text,
+		"content": chatCompletionContent(resp.Message),
 	}
 	finishReason := any("stop")
 	if len(resp.Message.ToolCalls) > 0 {

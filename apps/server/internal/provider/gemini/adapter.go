@@ -299,9 +299,7 @@ func buildContents(messages []domain.UnifiedMessage) []map[string]any {
 			})
 		case message.Role == domain.RoleAssistant && len(message.ToolCalls) > 0:
 			parts := make([]map[string]any, 0, len(message.ToolCalls)+1)
-			if text := provider.MessageText(message); text != "" {
-				parts = append(parts, map[string]any{"text": text})
-			}
+			parts = append(parts, geminiContentParts(message)...)
 			for _, call := range message.ToolCalls {
 				parts = append(parts, map[string]any{
 					"functionCall": map[string]any{
@@ -316,8 +314,8 @@ func buildContents(messages []domain.UnifiedMessage) []map[string]any {
 				"parts": parts,
 			})
 		default:
-			text := provider.MessageText(message)
-			if text == "" {
+			parts := geminiContentParts(message)
+			if len(parts) == 0 {
 				continue
 			}
 			role := "user"
@@ -326,9 +324,7 @@ func buildContents(messages []domain.UnifiedMessage) []map[string]any {
 			}
 			out = append(out, map[string]any{
 				"role": role,
-				"parts": []map[string]any{{
-					"text": text,
-				}},
+				"parts": parts,
 			})
 		}
 	}
@@ -339,6 +335,40 @@ func buildContents(messages []domain.UnifiedMessage) []map[string]any {
 				"text": "Continue.",
 			}},
 		}}
+	}
+	return out
+}
+
+func geminiContentParts(message domain.UnifiedMessage) []map[string]any {
+	blocks := message.Blocks
+	if len(blocks) == 0 && strings.TrimSpace(message.Text) != "" {
+		blocks = []domain.ContentBlock{{Type: domain.ContentBlockText, Text: message.Text}}
+	}
+	out := make([]map[string]any, 0, len(blocks))
+	for _, block := range blocks {
+		switch block.Type {
+		case domain.ContentBlockText:
+			if text := block.TextProxy(); text != "" {
+				out = append(out, map[string]any{"text": text})
+			}
+		case domain.ContentBlockImage, domain.ContentBlockAudio, domain.ContentBlockVideo, domain.ContentBlockFile:
+			if block.SourceURL != "" {
+				out = append(out, map[string]any{
+					"fileData": map[string]any{
+						"mimeType": block.MIMEType,
+						"fileUri":  block.SourceURL,
+					},
+				})
+				continue
+			}
+			if text := block.TextProxy(); text != "" {
+				out = append(out, map[string]any{"text": text})
+			}
+		default:
+			if text := block.TextProxy(); text != "" {
+				out = append(out, map[string]any{"text": text})
+			}
+		}
 	}
 	return out
 }

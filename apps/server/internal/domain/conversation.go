@@ -34,6 +34,8 @@ type ConversationRecord struct {
 	SummaryStatus  ProcessingStatus      `json:"summary_status"`
 	AnalysisStatus ProcessingStatus      `json:"analysis_status"`
 	Messages       []UnifiedMessage      `json:"messages"`
+	Parts          []MessagePart         `json:"parts,omitempty"`
+	Artifacts      []MessagePartArtifact `json:"artifacts,omitempty"`
 	Segments       []ConversationSegment `json:"segments,omitempty"`
 	Response       *UnifiedResponse      `json:"response,omitempty"`
 	Usage          UsageRecord           `json:"usage"`

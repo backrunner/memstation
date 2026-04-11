@@ -286,17 +286,24 @@ func newContractRouter(t *testing.T) http.Handler {
 
 	memoryRepo := sql.NewInMemoryMemoryRepository()
 	conversations := sql.NewInMemoryConversationRepository()
+	mediaRepo := sql.NewInMemoryMediaRepository()
 	outbox := sql.NewInMemoryOutboxRepository()
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 	audit := auditsvc.NewService(nil)
 	engine := memoryservice.NewEngine(memoryRepo, vector.NewPGVectorStore(nil))
-	admin := adminservice.NewService(conversations, memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""))
+	admin := adminservice.NewService(conversations, mediaRepo, memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""))
 	session := security.NewAdminSessionManager(contractTestAdminToken, time.Hour)
 	gateway := gatewayservice.NewService(
 		provider.NewRegistry(
-			domain.ProviderOpenAI,
-			openaiprovider.NewAdapter(provider.StaticConfigResolver{
-				domain.ProviderOpenAI: {
+			domain.ProviderOpenAICompatible,
+			openaiprovider.NewCompatibleAdapter(provider.StaticConfigResolver{
+				domain.ProviderOpenAICompatible: {
+					APIKey:  "sk-openai",
+					BaseURL: openaiUpstream.URL,
+				},
+			}, 5*time.Second),
+			openaiprovider.NewResponsesAdapter(provider.StaticConfigResolver{
+				domain.ProviderOpenAIResponses: {
 					APIKey:  "sk-openai",
 					BaseURL: openaiUpstream.URL,
 				},
@@ -311,7 +318,7 @@ func newContractRouter(t *testing.T) http.Handler {
 		engine,
 		conversationservice.NewService(conversations, outbox, 100, 100000),
 		settings,
-		domain.ProviderOpenAI,
+		domain.ProviderOpenAICompatible,
 	)
 
 	return httptransport.NewRouter(httptransport.Dependencies{

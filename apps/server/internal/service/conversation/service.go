@@ -112,19 +112,6 @@ func (s *Service) FinalizeIfNeeded(ctx context.Context, req domain.UnifiedReques
 			return nil
 		}
 	}
-	ending := domain.FinalizeStatusEnding
-	if err := s.repo.UpdateConversationState(ctx, domain.ConversationStateUpdate{
-		ConversationID: req.ConversationID,
-		UserID:         req.UserID,
-		FinalizeStatus: &ending,
-		Metadata: map[string]any{
-			"finalize_reason": reason,
-			"finalize_target": string(targetStatus),
-		},
-		UpdatedAt: time.Now().UTC(),
-	}); err != nil {
-		return err
-	}
 	if !req.PersistMemoryEnabled() && !req.SourceRetainEnabled(false) {
 		skipped := domain.ProcessingStatusSkipped
 		return s.repo.UpdateConversationState(ctx, domain.ConversationStateUpdate{
@@ -141,6 +128,19 @@ func (s *Service) FinalizeIfNeeded(ctx context.Context, req domain.UnifiedReques
 			},
 			UpdatedAt: time.Now().UTC(),
 		})
+	}
+	ending := domain.FinalizeStatusEnding
+	if err := s.repo.UpdateConversationState(ctx, domain.ConversationStateUpdate{
+		ConversationID: req.ConversationID,
+		UserID:         req.UserID,
+		FinalizeStatus: &ending,
+		Metadata: map[string]any{
+			"finalize_reason": reason,
+			"finalize_target": string(targetStatus),
+		},
+		UpdatedAt: time.Now().UTC(),
+	}); err != nil {
+		return err
 	}
 	return s.outbox.Enqueue(ctx, domain.OutboxEvent{
 		ID:            "conversation.finalize:" + req.ConversationID,

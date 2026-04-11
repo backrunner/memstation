@@ -57,17 +57,11 @@ func (a *Adapter) Complete(ctx context.Context, req domain.UnifiedRequest) (*dom
 	}
 
 	var response struct {
-		ID      string `json:"id"`
-		Model   string `json:"model"`
-		Role    string `json:"role"`
-		Content []struct {
-			Type  string         `json:"type"`
-			Text  string         `json:"text"`
-			ID    string         `json:"id"`
-			Name  string         `json:"name"`
-			Input map[string]any `json:"input"`
-		} `json:"content"`
-		Usage struct {
+		ID      string           `json:"id"`
+		Model   string           `json:"model"`
+		Role    string           `json:"role"`
+		Content []map[string]any `json:"content"`
+		Usage   struct {
 			InputTokens  int `json:"input_tokens"`
 			OutputTokens int `json:"output_tokens"`
 		} `json:"usage"`
@@ -79,20 +73,32 @@ func (a *Adapter) Complete(ctx context.Context, req domain.UnifiedRequest) (*dom
 		response.ID = uuid.NewString()
 	}
 
+	blocks := make([]domain.ContentBlock, 0, len(response.Content))
 	parts := make([]string, 0, len(response.Content))
 	toolCalls := make([]domain.ToolCall, 0)
 	for _, item := range response.Content {
-		switch item.Type {
+		switch strings.TrimSpace(stringValue(item, "type")) {
 		case "text":
-			if item.Text != "" {
-				parts = append(parts, item.Text)
+			block := anthropicResponseBlock(item)
+			blocks = append(blocks, block)
+			if text := strings.TrimSpace(block.TextProxy()); text != "" {
+				parts = append(parts, text)
 			}
 		case "tool_use":
 			toolCalls = append(toolCalls, domain.ToolCall{
-				ID:        item.ID,
-				Name:      item.Name,
-				Arguments: item.Input,
+				ID:        stringValue(item, "id"),
+				Name:      stringValue(item, "name"),
+				Arguments: item["input"],
 			})
+		default:
+			block := anthropicResponseBlock(item)
+			if block.Type == "" {
+				continue
+			}
+			blocks = append(blocks, block)
+			if text := strings.TrimSpace(block.TextProxy()); text != "" {
+				parts = append(parts, text)
+			}
 		}
 	}
 	text := strings.Join(parts, "\n")
@@ -106,10 +112,7 @@ func (a *Adapter) Complete(ctx context.Context, req domain.UnifiedRequest) (*dom
 			Role:      firstRole(response.Role),
 			Text:      text,
 			ToolCalls: toolCalls,
-			Blocks: []domain.ContentBlock{{
-				Type: domain.ContentBlockText,
-				Text: text,
-			}},
+			Blocks:    blocks,
 		},
 		Usage: domain.UsageRecord{
 			InputTokens:  response.Usage.InputTokens,
@@ -121,6 +124,81 @@ func (a *Adapter) Complete(ctx context.Context, req domain.UnifiedRequest) (*dom
 			"provider": "anthropic",
 		},
 	}, nil
+}
+
+func anthropicResponseBlock(item map[string]any) domain.ContentBlock {
+	switch strings.TrimSpace(stringValue(item, "type")) {
+	case "text":
+		return domain.ContentBlock{
+			Type:     domain.ContentBlockText,
+			Text:     stringValue(item, "text"),
+			Raw:      rawJSONText(item),
+			Metadata: metadataWithout(item, "type", "text"),
+		}
+	case "image":
+		sourceURL := stringValue(item, "source_url")
+		if source, ok := item["source"].(map[string]any); ok {
+			sourceURL = firstNonEmpty(sourceURL, stringValue(source, "url"))
+		}
+		return domain.ContentBlock{
+			Type:           domain.ContentBlockImage,
+			SourceURL:      sourceURL,
+			ProviderFileID: stringValue(item, "file_id"),
+			MIMEType:       firstNonEmpty(stringValue(item, "mime_type"), stringValue(item, "media_type")),
+			Filename:       stringValue(item, "filename"),
+			Text:           firstNonEmpty(stringValue(item, "text"), stringValue(metadataWithout(item), "caption"), stringValue(metadataWithout(item), "ocr_text")),
+			Raw:            rawJSONText(item),
+			Metadata:       metadataWithout(item, "type", "source_url", "file_id", "mime_type", "media_type", "filename", "text"),
+		}
+	case "document", "file":
+		return domain.ContentBlock{
+			Type:           domain.ContentBlockFile,
+			SourceURL:      stringValue(item, "source_url"),
+			ProviderFileID: stringValue(item, "file_id"),
+			MIMEType:       firstNonEmpty(stringValue(item, "mime_type"), stringValue(item, "media_type")),
+			Filename:       stringValue(item, "filename"),
+			Text:           firstNonEmpty(stringValue(item, "text"), stringValue(metadataWithout(item), "document_text"), stringValue(metadataWithout(item), "parsed_text")),
+			Raw:            rawJSONText(item),
+			PageIndex:      intValue(item["page_index"]),
+			Metadata:       metadataWithout(item, "type", "source_url", "file_id", "mime_type", "media_type", "filename", "text", "page_index"),
+		}
+	case "audio":
+		return domain.ContentBlock{
+			Type:           domain.ContentBlockAudio,
+			SourceURL:      stringValue(item, "source_url"),
+			ProviderFileID: stringValue(item, "file_id"),
+			MIMEType:       firstNonEmpty(stringValue(item, "mime_type"), stringValue(item, "media_type")),
+			Filename:       stringValue(item, "filename"),
+			Text:           firstNonEmpty(stringValue(item, "text"), stringValue(metadataWithout(item), "transcript"), stringValue(metadataWithout(item), "summary")),
+			Raw:            rawJSONText(item),
+			StartMS:        int64Value(item["start_ms"]),
+			EndMS:          int64Value(item["end_ms"]),
+			Metadata:       metadataWithout(item, "type", "source_url", "file_id", "mime_type", "media_type", "filename", "text", "start_ms", "end_ms"),
+		}
+	case "video":
+		return domain.ContentBlock{
+			Type:           domain.ContentBlockVideo,
+			SourceURL:      stringValue(item, "source_url"),
+			ProviderFileID: stringValue(item, "file_id"),
+			MIMEType:       firstNonEmpty(stringValue(item, "mime_type"), stringValue(item, "media_type")),
+			Filename:       stringValue(item, "filename"),
+			Text:           firstNonEmpty(stringValue(item, "text"), stringValue(metadataWithout(item), "transcript"), stringValue(metadataWithout(item), "summary"), stringValue(metadataWithout(item), "keyframe_summary")),
+			Raw:            rawJSONText(item),
+			StartMS:        int64Value(item["start_ms"]),
+			EndMS:          int64Value(item["end_ms"]),
+			Metadata:       metadataWithout(item, "type", "source_url", "file_id", "mime_type", "media_type", "filename", "text", "start_ms", "end_ms"),
+		}
+	default:
+		if strings.TrimSpace(stringValue(item, "text")) == "" && strings.TrimSpace(rawJSONText(item)) == "" {
+			return domain.ContentBlock{}
+		}
+		return domain.ContentBlock{
+			Type:     domain.ContentBlockUnknown,
+			Text:     stringValue(item, "text"),
+			Raw:      rawJSONText(item),
+			Metadata: metadataWithout(item, "type", "text"),
+		}
+	}
 }
 
 func (a *Adapter) Stream(ctx context.Context, req domain.UnifiedRequest, emit func(domain.StreamEvent) error) (*domain.UnifiedResponse, error) {
@@ -329,10 +407,14 @@ func buildMessages(messages []domain.UnifiedMessage) []map[string]any {
 		if message.Role == domain.RoleTool && len(message.ToolResults) > 0 {
 			content := make([]map[string]any, 0, len(message.ToolResults))
 			for _, result := range message.ToolResults {
+				output := result.Output
+				if output == nil {
+					output = toolResultContent(result)
+				}
 				content = append(content, map[string]any{
 					"type":        "tool_result",
 					"tool_use_id": result.ToolCallID,
-					"content":     toolResultContent(result),
+					"content":     output,
 				})
 			}
 			out = append(out, map[string]any{
@@ -342,13 +424,7 @@ func buildMessages(messages []domain.UnifiedMessage) []map[string]any {
 			continue
 		}
 
-		content := make([]map[string]any, 0, len(message.ToolCalls)+1)
-		if text := provider.MessageText(message); text != "" {
-			content = append(content, map[string]any{
-				"type": "text",
-				"text": text,
-			})
-		}
+		content := anthropicBlocks(message)
 		for _, call := range message.ToolCalls {
 			content = append(content, map[string]any{
 				"type":  "tool_use",
@@ -371,6 +447,76 @@ func buildMessages(messages []domain.UnifiedMessage) []map[string]any {
 	return out
 }
 
+func anthropicBlocks(message domain.UnifiedMessage) []map[string]any {
+	blocks := message.Blocks
+	if len(blocks) == 0 && strings.TrimSpace(message.Text) != "" {
+		blocks = []domain.ContentBlock{{Type: domain.ContentBlockText, Text: message.Text}}
+	}
+	out := make([]map[string]any, 0, len(blocks))
+	for _, block := range blocks {
+		switch block.Type {
+		case domain.ContentBlockText:
+			out = append(out, map[string]any{"type": "text", "text": block.TextProxy()})
+		case domain.ContentBlockImage:
+			item := map[string]any{"type": "image"}
+			if block.SourceURL != "" {
+				item["source_url"] = block.SourceURL
+			}
+			if block.ProviderFileID != "" {
+				item["file_id"] = block.ProviderFileID
+			}
+			if block.MIMEType != "" {
+				item["mime_type"] = block.MIMEType
+			}
+			out = append(out, item)
+		case domain.ContentBlockFile:
+			item := map[string]any{"type": "document"}
+			if block.SourceURL != "" {
+				item["source_url"] = block.SourceURL
+			}
+			if block.ProviderFileID != "" {
+				item["file_id"] = block.ProviderFileID
+			}
+			if block.MIMEType != "" {
+				item["mime_type"] = block.MIMEType
+			}
+			if block.Filename != "" {
+				item["filename"] = block.Filename
+			}
+			out = append(out, item)
+		case domain.ContentBlockAudio:
+			item := map[string]any{"type": "audio"}
+			if block.SourceURL != "" {
+				item["source_url"] = block.SourceURL
+			}
+			if block.ProviderFileID != "" {
+				item["file_id"] = block.ProviderFileID
+			}
+			if block.MIMEType != "" {
+				item["mime_type"] = block.MIMEType
+			}
+			out = append(out, item)
+		case domain.ContentBlockVideo:
+			item := map[string]any{"type": "video"}
+			if block.SourceURL != "" {
+				item["source_url"] = block.SourceURL
+			}
+			if block.ProviderFileID != "" {
+				item["file_id"] = block.ProviderFileID
+			}
+			if block.MIMEType != "" {
+				item["mime_type"] = block.MIMEType
+			}
+			out = append(out, item)
+		default:
+			if text := block.TextProxy(); text != "" {
+				out = append(out, map[string]any{"type": "text", "text": text})
+			}
+		}
+	}
+	return out
+}
+
 func buildTools(tools []domain.ToolDefinition) []map[string]any {
 	out := make([]map[string]any, 0, len(tools))
 	for _, tool := range tools {
@@ -384,8 +530,10 @@ func buildTools(tools []domain.ToolDefinition) []map[string]any {
 }
 
 func toolResultContent(result domain.ToolResult) string {
-	if value, ok := result.Output["content"].(string); ok && strings.TrimSpace(value) != "" {
-		return value
+	if output, ok := result.Output.(map[string]any); ok {
+		if value, ok := output["content"].(string); ok && strings.TrimSpace(value) != "" {
+			return value
+		}
 	}
 	raw, err := json.Marshal(result.Output)
 	if err != nil {
@@ -415,4 +563,72 @@ func firstRole(value string) domain.MessageRole {
 		return domain.RoleAssistant
 	}
 	return domain.MessageRole(value)
+}
+
+func rawJSONText(value any) string {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf("%v", value)
+	}
+	return string(raw)
+}
+
+func metadataWithout(item map[string]any, keys ...string) map[string]any {
+	if len(item) == 0 {
+		return nil
+	}
+	excluded := map[string]struct{}{}
+	for _, key := range keys {
+		excluded[key] = struct{}{}
+	}
+	metadata := map[string]any{}
+	for key, value := range item {
+		if _, ok := excluded[key]; ok {
+			continue
+		}
+		metadata[key] = value
+	}
+	if len(metadata) == 0 {
+		return nil
+	}
+	return metadata
+}
+
+func stringValue(item map[string]any, key string) string {
+	value, ok := item[key]
+	if !ok {
+		return ""
+	}
+	text, _ := value.(string)
+	return text
+}
+
+func intValue(value any) int {
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int32:
+		return int(typed)
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	default:
+		return 0
+	}
+}
+
+func int64Value(value any) int64 {
+	switch typed := value.(type) {
+	case int:
+		return int64(typed)
+	case int32:
+		return int64(typed)
+	case int64:
+		return typed
+	case float64:
+		return int64(typed)
+	default:
+		return 0
+	}
 }

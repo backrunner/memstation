@@ -113,7 +113,7 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 		return 0, err
 	}
 
-	summaryText := buildSummary(snapshot.Messages)
+	summaryText := buildSummary(snapshot.Messages, nil, nil)
 	if summaryText == "" {
 		summaryText = conversationservice.SummarizeSegments(segments)
 	}
@@ -143,7 +143,7 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 	if err := services.Memories.StoreDocument(ctx, summaryDoc); err != nil {
 		return 0, err
 	}
-	segmentDocs, err := storeSegmentDocuments(ctx, services, segments, summaryDoc, conversation.UpdatedAt)
+	segmentDocs, err := storeSegmentDocuments(ctx, services, segments, summaryDoc, conversation.UpdatedAt, nil, nil)
 	if err != nil {
 		return 0, err
 	}

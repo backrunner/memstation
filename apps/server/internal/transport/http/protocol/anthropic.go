@@ -41,13 +41,7 @@ func NormalizeAnthropic(r AnthropicMessagesRequest, headers HeaderOptions) domai
 }
 
 func FormatAnthropic(resp domain.UnifiedResponse) map[string]any {
-	content := make([]map[string]any, 0, 1+len(resp.Message.ToolCalls))
-	if resp.Message.Text != "" || len(resp.Message.ToolCalls) == 0 {
-		content = append(content, map[string]any{
-			"type": "text",
-			"text": resp.Message.Text,
-		})
-	}
+	content := anthropicMessageContent(resp.Message)
 	for _, call := range resp.Message.ToolCalls {
 		content = append(content, map[string]any{
 			"type":  "tool_use",
@@ -127,21 +121,14 @@ func anthropicContent(raw json.RawMessage) (string, []domain.ToolCall, []domain.
 			toolCalls = append(toolCalls, domain.ToolCall{
 				ID:        anyString(item["id"]),
 				Name:      anyString(item["name"]),
-				Arguments: mapValue(item["input"]),
+				Arguments: item["input"],
 			})
 		case "tool_result":
 			toolResults = append(toolResults, domain.ToolResult{
 				ToolCallID: anyString(item["tool_use_id"]),
-				Output: map[string]any{
-					"content": anyString(item["content"]),
-				},
+				Output:     item["content"],
 			})
 		}
 	}
 	return strings.Join(parts, "\n"), toolCalls, toolResults
-}
-
-func mapValue(value any) map[string]any {
-	typed, _ := value.(map[string]any)
-	return typed
 }

@@ -174,19 +174,24 @@ func compactToolCall(call domain.ToolCall, options memoryPromptOptions) string {
 	if name == "" {
 		return ""
 	}
-	args := compactFieldMap(call.Arguments, []string{
-		"query",
-		"key",
-		"value",
-		"category",
-		"limit",
-		"top_k",
-		"top_n",
-		"date_from",
-		"date_to",
-		"time_tiers",
-		"types",
-	}, options)
+	args := ""
+	if object, ok := call.Arguments.(map[string]any); ok {
+		args = compactFieldMap(object, []string{
+			"query",
+			"key",
+			"value",
+			"category",
+			"limit",
+			"top_k",
+			"top_n",
+			"date_from",
+			"date_to",
+			"time_tiers",
+			"types",
+		}, options)
+	} else {
+		args = compactAnyValue(call.Arguments, options, 0)
+	}
 	if args == "" {
 		return name + "()"
 	}
@@ -247,8 +252,12 @@ func compactStoredBlocks(text string, blocks []domain.ContentBlock) []domain.Con
 	return out
 }
 
-func compactToolOutput(output map[string]any, options memoryPromptOptions) string {
-	if len(output) == 0 {
+func compactToolOutput(output any, options memoryPromptOptions) string {
+	object, ok := output.(map[string]any)
+	if !ok {
+		return compactAnyValue(output, options, 0)
+	}
+	if len(object) == 0 {
 		return ""
 	}
 	parts := make([]string, 0, options.FieldLimit+1)
@@ -265,26 +274,26 @@ func compactToolOutput(output map[string]any, options memoryPromptOptions) strin
 		parts = append(parts, value)
 	}
 
-	if ok, exists := boolValue(output["ok"]); exists {
+	if ok, exists := boolValue(object["ok"]); exists {
 		appendUnique(fmt.Sprintf("ok=%t", ok))
 	}
-	if status := compactAnyValue(output["status"], options, 0); status != "" {
+	if status := compactAnyValue(object["status"], options, 0); status != "" {
 		appendUnique("status=" + status)
 	}
-	if total, exists := intValue(output["total"]); exists {
+	if total, exists := intValue(object["total"]); exists {
 		appendUnique(fmt.Sprintf("total=%d", total))
 	}
-	if errText := compactAnyValue(output["error"], options, 0); errText != "" {
+	if errText := compactAnyValue(object["error"], options, 0); errText != "" {
 		appendUnique("error=" + errText)
 	}
-	if content := compactPrimaryContent(output, options); content != "" {
+	if content := compactPrimaryContent(object, options); content != "" {
 		appendUnique(content)
 	}
-	if items := compactItems(output["items"], options); items != "" {
+	if items := compactItems(object["items"], options); items != "" {
 		appendUnique("items=" + items)
 	}
 	if len(parts) == 0 {
-		appendUnique(compactFieldMap(output, []string{
+		appendUnique(compactFieldMap(object, []string{
 			"content",
 			"text",
 			"summary",
@@ -297,7 +306,7 @@ func compactToolOutput(output map[string]any, options memoryPromptOptions) strin
 		}, options))
 	}
 	if len(parts) == 0 {
-		appendUnique(compactAnyValue(output, options, 0))
+		appendUnique(compactAnyValue(object, options, 0))
 	}
 	return truncateSummary(strings.Join(parts, ", "), options.TextLimit)
 }

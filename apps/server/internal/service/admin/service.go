@@ -22,6 +22,7 @@ import (
 
 type Service struct {
 	conversations ports.ConversationRepository
+	media         ports.MediaRepository
 	memories      ports.MemoryRepository
 	settings      *settingssvc.Service
 	audit         *auditsvc.Service
@@ -87,8 +88,8 @@ type UserDetail struct {
 	Stats         map[string]any         `json:"stats"`
 }
 
-func NewService(conversations ports.ConversationRepository, memories ports.MemoryRepository, settings *settingssvc.Service, audit *auditsvc.Service, models *modelcap.Registry) *Service {
-	return &Service{conversations: conversations, memories: memories, settings: settings, audit: audit, models: models}
+func NewService(conversations ports.ConversationRepository, media ports.MediaRepository, memories ports.MemoryRepository, settings *settingssvc.Service, audit *auditsvc.Service, models *modelcap.Registry) *Service {
+	return &Service{conversations: conversations, media: media, memories: memories, settings: settings, audit: audit, models: models}
 }
 
 func (s *Service) AttachUserRuntime(users *userservice.Service, apiKeys *apikeyservice.Service, usage *usageservice.Service) {
@@ -174,7 +175,19 @@ func (s *Service) ListConversations(ctx context.Context, userID string, limit in
 }
 
 func (s *Service) ConversationDetail(ctx context.Context, userID, conversationID, generationID string) (domain.ConversationRecord, error) {
-	return s.conversations.GetConversationInGeneration(ctx, userID, conversationID, generationID)
+	record, err := s.conversations.GetConversationInGeneration(ctx, userID, conversationID, generationID)
+	if err != nil {
+		return domain.ConversationRecord{}, err
+	}
+	if s.media != nil {
+		if parts, partsErr := s.media.ListMessageParts(ctx, userID, conversationID); partsErr == nil {
+			record.Parts = parts
+		}
+		if artifacts, artifactsErr := s.media.ListPartArtifacts(ctx, userID, conversationID); artifactsErr == nil {
+			record.Artifacts = artifacts
+		}
+	}
+	return record, nil
 }
 
 func (s *Service) ConversationMemory(ctx context.Context, userID, conversationID string) (ConversationMemory, error) {

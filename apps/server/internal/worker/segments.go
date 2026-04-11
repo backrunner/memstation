@@ -37,7 +37,7 @@ func segmentDocument(segment domain.ConversationSegment) domain.MemoryDocument {
 	}
 }
 
-func storeSegmentDocuments(ctx context.Context, services Services, segments []domain.ConversationSegment, summaryDoc domain.MemoryDocument, referenceTime time.Time) ([]domain.MemoryDocument, error) {
+func storeSegmentDocuments(ctx context.Context, services Services, segments []domain.ConversationSegment, summaryDoc domain.MemoryDocument, referenceTime time.Time, parts []domain.MessagePart, artifacts []domain.MessagePartArtifact) ([]domain.MemoryDocument, error) {
 	if services.Memories == nil || len(segments) == 0 {
 		return nil, nil
 	}
@@ -47,6 +47,10 @@ func storeSegmentDocuments(ctx context.Context, services Services, segments []do
 		doc := segmentDocument(segment)
 		applyDocumentScore(ctx, services.Scorer, &doc, referenceTime)
 		if err := services.Memories.StoreDocument(ctx, doc); err != nil {
+			return nil, err
+		}
+		evidences := buildNodeEvidences(doc.UserID, doc.GenerationID, doc.NodeID, doc.ConversationID, parts, artifacts, stringSliceValue(doc.Metadata, "source_part_ids"), stringSliceValue(doc.Metadata, "source_artifact_ids"))
+		if err := storeDocumentEvidences(ctx, services, doc.UserID, doc.GenerationID, doc.NodeID, doc.ConversationID, evidences); err != nil {
 			return nil, err
 		}
 		stored = append(stored, doc)

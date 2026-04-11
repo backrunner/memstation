@@ -23,23 +23,24 @@ type RelatedMemory struct {
 }
 
 type MemoryDocument struct {
-	ID             string          `json:"id"`
-	NodeID         string          `json:"node_id"`
-	GenerationID   string          `json:"generation_id,omitempty"`
-	UserID         string          `json:"user_id"`
-	ConversationID string          `json:"conversation_id,omitempty"`
-	Type           MemoryType      `json:"type"`
-	Content        string          `json:"content"`
-	Score          float64         `json:"score"`
-	EffectiveScore float64         `json:"effective_score"`
-	Importance     float64         `json:"importance"`
-	DecayFactor    float64         `json:"decay_factor"`
-	ActivityAt     time.Time       `json:"activity_at"`
-	TimeTier       TimeTier        `json:"time_tier,omitempty"`
-	Metadata       map[string]any  `json:"metadata,omitempty"`
-	Related        []RelatedMemory `json:"related,omitempty"`
-	CreatedAt      time.Time       `json:"created_at"`
-	UpdatedAt      time.Time       `json:"updated_at"`
+	ID             string           `json:"id"`
+	NodeID         string           `json:"node_id"`
+	GenerationID   string           `json:"generation_id,omitempty"`
+	UserID         string           `json:"user_id"`
+	ConversationID string           `json:"conversation_id,omitempty"`
+	Type           MemoryType       `json:"type"`
+	Content        string           `json:"content"`
+	Score          float64          `json:"score"`
+	EffectiveScore float64          `json:"effective_score"`
+	Importance     float64          `json:"importance"`
+	DecayFactor    float64          `json:"decay_factor"`
+	ActivityAt     time.Time        `json:"activity_at"`
+	TimeTier       TimeTier         `json:"time_tier,omitempty"`
+	Metadata       map[string]any   `json:"metadata,omitempty"`
+	Related        []RelatedMemory  `json:"related,omitempty"`
+	Evidences      []MemoryEvidence `json:"evidences,omitempty"`
+	CreatedAt      time.Time        `json:"created_at"`
+	UpdatedAt      time.Time        `json:"updated_at"`
 }
 
 type SearchResult struct {

@@ -30,6 +30,7 @@ import (
 	gatewayservice "memstation/apps/server/internal/service/gateway"
 	memoryservice "memstation/apps/server/internal/service/memory"
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
+	multimodalservice "memstation/apps/server/internal/service/multimodal"
 	providerconfigservice "memstation/apps/server/internal/service/providerconfig"
 	settingsservice "memstation/apps/server/internal/service/settings"
 	systemconfigservice "memstation/apps/server/internal/service/systemconfig"
@@ -50,6 +51,7 @@ type Dependencies struct {
 	Models         *modelcap.Registry
 	GraphQL        *resolver.Resolver
 	Gateway        *gatewayservice.Service
+	Multimodal     *multimodalservice.Service
 	Memory         *memoryservice.Service
 	Generations    *memorygenservice.Service
 	Admin          *admin.Service
@@ -89,6 +91,9 @@ func NewRouter(deps Dependencies) http.Handler {
 		r.Post("/v1/chat/completions", chatHandler(deps.Gateway))
 		r.Post("/v1/responses", responsesHandler(deps.Gateway))
 		r.Post("/v1/messages", anthropicHandler(deps.Gateway))
+		r.Post("/v1/files", uploadFileHandler(deps.Multimodal))
+		r.Get("/v1/files/{id}", getFileHandler(deps.Multimodal, false))
+		r.Delete("/v1/files/{id}", deleteFileHandler(deps.Multimodal))
 		r.Post("/api/v1/memory/search", memorySearchHandler(deps.Memory))
 		r.Get("/api/v1/memory/keys", keyMemoryListHandler(deps.Memory))
 		r.Put("/api/v1/memory/keys/{key}", keyMemoryUpsertHandler(deps.Memory, deps.Audit))
@@ -108,6 +113,7 @@ func NewRouter(deps Dependencies) http.Handler {
 		r.Delete("/api/admin/users/{id}/api-keys/{keyID}", adminUserAPIKeyRevokeHandler(deps.APIKeys, deps.Audit))
 		r.Get("/api/admin/conversations", adminConversationsHandler(deps.Admin))
 		r.Get("/api/admin/conversations/{id}", adminConversationDetailHandler(deps.Admin))
+		r.Get("/api/admin/files/{id}", getFileHandler(deps.Multimodal, true))
 		r.Get("/api/admin/conversations/{id}/memory", adminConversationMemoryHandler(deps.Admin, deps.Memory, deps.Generations))
 		r.Get("/api/admin/conversations/{id}/sources", adminConversationSourcesHandler(deps.Generations))
 		r.Get("/api/admin/memory/documents", adminMemoryDocumentsHandler(deps.Memory))
@@ -426,6 +432,102 @@ func anthropicHandler(service *gatewayservice.Service) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, protocol.FormatAnthropic(*response))
+	}
+}
+
+func uploadFileHandler(service *multimodalservice.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if service == nil {
+			writeError(w, http.StatusServiceUnavailable, "multimodal_unavailable", "multimodal storage is not configured")
+			return
+		}
+		if err := r.ParseMultipartForm(32 << 20); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", "multipart form field \"file\" is required")
+			return
+		}
+		defer file.Close()
+
+		metadata := map[string]any{}
+		if raw := strings.TrimSpace(r.FormValue("metadata")); raw != "" {
+			if err := json.Unmarshal([]byte(raw), &metadata); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_request", "metadata must be valid JSON")
+				return
+			}
+		}
+		blob, err := service.SaveUpload(
+			r.Context(),
+			security.UserIDFromContext(r.Context()),
+			header.Filename,
+			firstNonEmptyString(header.Header.Get("Content-Type"), r.FormValue("mime_type")),
+			file,
+			metadata,
+		)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "upload_failed", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]any{
+			"blob_id":           blob.BlobID,
+			"user_id":           blob.UserID,
+			"mime_type":         blob.MIMEType,
+			"size_bytes":        blob.SizeBytes,
+			"sha256":            blob.SHA256,
+			"original_filename": blob.OriginalFilename,
+			"source_kind":       blob.SourceKind,
+			"source_url":        "/v1/files/" + blob.BlobID,
+			"metadata":          blob.Metadata,
+			"created_at":        blob.CreatedAt,
+		})
+	}
+}
+
+func getFileHandler(service *multimodalservice.Service, adminView bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if service == nil {
+			writeError(w, http.StatusServiceUnavailable, "multimodal_unavailable", "multimodal storage is not configured")
+			return
+		}
+		userID := security.UserIDFromContext(r.Context())
+		if adminView {
+			userID = queryUserID(r)
+		}
+		blob, reader, err := service.OpenBlob(r.Context(), userID, chi.URLParam(r, "id"))
+		if err != nil {
+			writeError(w, http.StatusNotFound, "blob_not_found", err.Error())
+			return
+		}
+		defer reader.Close()
+		if blob.MIMEType != "" {
+			w.Header().Set("Content-Type", blob.MIMEType)
+		} else {
+			w.Header().Set("Content-Type", "application/octet-stream")
+		}
+		if blob.OriginalFilename != "" {
+			w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", blob.OriginalFilename))
+		}
+		if _, err := io.Copy(w, reader); err != nil {
+			writeError(w, http.StatusInternalServerError, "blob_read_failed", err.Error())
+		}
+	}
+}
+
+func deleteFileHandler(service *multimodalservice.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if service == nil {
+			writeError(w, http.StatusServiceUnavailable, "multimodal_unavailable", "multimodal storage is not configured")
+			return
+		}
+		userID := security.UserIDFromContext(r.Context())
+		if err := service.DeleteBlob(r.Context(), userID, chi.URLParam(r, "id")); err != nil {
+			writeError(w, http.StatusNotFound, "blob_not_found", err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
@@ -1974,6 +2076,15 @@ func setGatewayResponseHeaders(w http.ResponseWriter, req domain.UnifiedRequest)
 	w.Header().Set("X-MemStation-Request-ID", req.RequestID)
 	w.Header().Set("X-MemStation-Memory-Persist", strconv.FormatBool(req.PersistMemoryEnabled()))
 	w.Header().Set("X-MemStation-Source-Retain", strconv.FormatBool(req.SourceRetainEnabled(false)))
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func corsMiddleware(cfg bootstrap.Config) func(http.Handler) http.Handler {

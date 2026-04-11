@@ -74,7 +74,14 @@ func (s *Service) ListDocumentsInGeneration(ctx context.Context, userID, generat
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.ListDocumentsInGeneration(ctx, userID, resolvedGenerationID, kinds, limit)
+	items, err := s.repo.ListDocumentsInGeneration(ctx, userID, resolvedGenerationID, kinds, limit)
+	if err != nil {
+		return nil, err
+	}
+	for idx := range items {
+		s.hydrateRelatedDocuments(ctx, &items[idx])
+	}
+	return items, nil
 }
 
 func (s *Service) ListDocumentsByConversationInGeneration(ctx context.Context, userID, generationID, conversationID string) ([]domain.MemoryDocument, error) {
@@ -82,7 +89,14 @@ func (s *Service) ListDocumentsByConversationInGeneration(ctx context.Context, u
 	if err != nil {
 		return nil, err
 	}
-	return s.repo.ListDocumentsByConversationInGeneration(ctx, userID, resolvedGenerationID, conversationID)
+	items, err := s.repo.ListDocumentsByConversationInGeneration(ctx, userID, resolvedGenerationID, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	for idx := range items {
+		s.hydrateRelatedDocuments(ctx, &items[idx])
+	}
+	return items, nil
 }
 
 func (s *Service) UpdateDocument(ctx context.Context, userID, id string, kind domain.MemoryType, content string) (domain.MemoryDocument, error) {
@@ -564,6 +578,9 @@ func firstNonEmptyString(values ...string) string {
 func (s *Service) hydrateRelatedDocuments(ctx context.Context, item *domain.MemoryDocument) {
 	if s.repo == nil || item == nil || item.NodeID == "" || item.UserID == "" {
 		return
+	}
+	if evidences, err := s.repo.ListEvidences(ctx, item.UserID, item.NodeID); err == nil && len(evidences) > 0 {
+		item.Evidences = evidences
 	}
 	relations, err := s.repo.ListRelations(ctx, item.UserID, item.GenerationID, []string{item.NodeID}, 1)
 	if err != nil || len(relations) == 0 {
