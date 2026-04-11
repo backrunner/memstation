@@ -21,7 +21,7 @@ v1.0 的最终目标：
 1. 作为统一 AI 网关，对外兼容主流协议，对上游兼容多厂商模型。
 2. 完整记录并结构化管理用户对话、记忆、事实、印象、Key Memory 和 Token 使用。
 3. 在代理链路中实现可配置的记忆检索、注入和工具调用增强。
-4. 提供可运营的管理面板、GraphQL API、运维接口、可观测性和部署体系。
+4. 提供可运营的管理面板、GraphQL API、gRPC API、运维接口、可观测性和部署体系。
 5. 以个人场景可落地为前提，同时保留未来多用户、分布式、集群化和商业化扩展能力。
 
 项目前景：
@@ -46,7 +46,7 @@ v1.0 的最终目标：
 | 高级记忆 | Impression、Fact、Key Memory、关联边、版本替代关系、人工修正 |
 | 注入能力 | System Prompt 注入、Context 注入、只读记忆工具注入、写入类工具受严格开关和校验保护 |
 | 管理面板 | Dashboard、对话、记忆、用户、配置、健康与统计页面；服务端会话登录 |
-| 管理接口 | GraphQL Query/Mutation、Memory REST API、Admin REST API、健康检查、指标导出 |
+| 管理接口 | GraphQL Query/Mutation、Memory REST API、Admin REST API、gRPC Gateway/Memory/Admin API、健康检查、指标导出 |
 | 安全 | API Key 哈希存储、上游密钥加密存储、审计日志、速率限制、PII 日志脱敏 |
 | 运维 | OpenTelemetry、OTLP 导出、结构化日志、版本化迁移、Docker/Compose、K8s 基线 |
 
@@ -73,7 +73,7 @@ memstation/
 └── AGENTS.md
 ```
 
-- `apps/server` 是唯一的业务核心，承担 gateway、api、worker、scheduler、migrate
+- `apps/server` 是唯一的业务核心，承担 gateway、api、grpc、worker、scheduler、migrate
 - `apps/manager` 独立部署，通过管理接口和 GraphQL 访问 `apps/server`
 - Go 服务以单二进制交付，但必须支持不同角色独立启动
 
@@ -81,7 +81,7 @@ memstation/
 
 `memstation` CLI 至少包含以下命令：
 
-- `serve`: HTTP 网关 + REST + GraphQL
+- `serve`: HTTP 网关 + REST + GraphQL + gRPC
 - `worker`: 异步任务消费
 - `scheduler`: 定时任务和 outbox relay
 - `migrate`: Atlas 迁移执行
@@ -99,6 +99,7 @@ internal/app/                  # 应用装配
 internal/bootstrap/            # config, logger, telemetry, db, redis
 internal/transport/http/       # REST handlers, adapters, middleware
 internal/transport/graphql/    # GraphQL wiring
+internal/transport/grpc/       # gRPC wiring, interceptors, handlers
 internal/service/              # 业务编排
 internal/store/sql/            # Ent repositories
 internal/store/vector/         # VectorStore 实现
@@ -195,6 +196,8 @@ v1.0 必须支持：
 - `POST /v1/responses`
 - `POST /v1/messages`
 - `GET /v1/models`
+
+同时必须提供一套独立 gRPC transport，直接复用统一业务链路，至少覆盖 Gateway、Memory、Admin 和健康检查的正式 RPC。
 
 要求：
 
@@ -307,6 +310,7 @@ ReAct Agent 可以保留，但必须受控：
 
 - 用户侧通过 MemStation API Key 访问代理接口
 - 管理面板通过服务端会话访问管理接口
+- gRPC proxy RPC 通过 metadata `authorization: Bearer <MemStation API Key>` 鉴权，gRPC admin RPC 通过 metadata `x-admin-token` 鉴权
 - `MEMSTATION_ADMIN_TOKEN` 只用于服务间 bootstrap / 管理登录校验
 - **严禁把 admin token 存入浏览器 `localStorage`**
 
@@ -386,6 +390,8 @@ v1.0 默认目标：
 |------|------|------|
 | Go runtime | `go` | `1.26.1` |
 | HTTP Router | `github.com/go-chi/chi/v5` | `v5.2.5` |
+| gRPC | `google.golang.org/grpc` | `v1.79.2` |
+| Protobuf | `google.golang.org/protobuf` | `v1.36.11` |
 | ORM | `entgo.io/ent` | `v0.14.5` |
 | Ent contrib | `entgo.io/contrib` | `v0.7.0` |
 | GraphQL | `github.com/99designs/gqlgen` | `v0.17.88` |
@@ -541,7 +547,7 @@ Benchmark 基线固定采用 **LOCOMO-first 方法论 + 混合数据集落地**�
 
 v1.0 完整 CI 至少执行下列门禁；当前仓库如未全部补齐，也必须以后续实现将其补齐，不得降级：
 
-1. `bash ./scripts/go-format.sh --check`
+1. `bash ./scripts/go/format.sh --check`
 2. `go test ./...`
 3. `golangci-lint run ./...`
 4. `go generate ./...` 后执行 `git diff --exit-code`，不允许使用 `|| true`
@@ -570,8 +576,8 @@ nightly 回归不是可选项，v1.0 必须预留并最终落地：
 - 所有外部调用都必须带超时、重试策略和 metrics
 - 所有跨包 DTO 必须显式定义，禁止在 handler 中直接传 Ent entity 到前端
 - 所有 provider adapter 必须有 contract tests
-- Go 代码格式必须统一通过 `goimports + gofumpt`，并以 `scripts/go-format.sh` 为唯一仓库级入口
-- Go lint 必须统一通过 `golangci-lint`，并以 `scripts/go-lint.sh` 为唯一仓库级入口
+- Go 代码格式必须统一通过 `goimports + gofumpt`，并以 `scripts/go/format.sh` 为唯一仓库级入口
+- Go lint 必须统一通过 `golangci-lint`，并以 `scripts/go/lint.sh` 为唯一仓库级入口
 
 ### 12.7 提交规范
 
@@ -609,7 +615,7 @@ v1.x 后续路线：
 
 ---
 
-## 14. 当前实现状态（as of 2026-04-08）
+## 14. 当前实现状态（as of 2026-04-11）
 
 本节用于重启时快速恢复上下文；如后续实现进度发生变化，必须同步更新本节，而不能只改代码不改状态。
 
@@ -621,12 +627,14 @@ v1.x 后续路线：
 - `apps/server/tests/eval` 已落地 repo-native golden dataset、LOCOMO adapter、artifact writer、perf smoke 与 benchmark runner
 - worker backlog recovery drill、artifact writer、CI smoke 与 nightly recovery 回归已落地
 - backup/export/restore drill、Compose 恢复校验文档、CI dry-run 与 nightly 实际演练入口已落地
-- fresh dev baseline migration 已折叠为单一 init migration，本地可通过 `./scripts/dev-reset-stack.sh` 一键重置 Compose 栈、重放 migration 与 seed
+- fresh dev baseline migration 已折叠为单一 init migration，本地可通过 `./scripts/dev/reset-compose-stack.sh` 一键重置 Compose 栈、重放 migration 与 seed
+- `pnpm dev` 已切换为 devcontainer-first 联调入口：先启动 `workspace` devcontainer，再在容器内并发运行后端 watch 热重启与 manager 调试服务
 - LOCOMO benchmark 默认会从 Snap Research 官方公开地址下载 `locomo10.json`，仍允许通过环境变量覆盖数据源
 - CI 已补齐 `golangci-lint`、严格 generated diff 校验、Atlas migration lint/dry-run、benchmark smoke、manager Playwright、coverage gate
 - K8s baseline 已补齐 server / worker / scheduler deployment，以及 ConfigMap / Secret 示例清单
 - 根目录 `README.md` 已补齐，覆盖当前架构、接口、运行方式、测试入口和部署基线
-- Go 代码质量门禁已统一为 `scripts/go-format.sh` + `scripts/go-lint.sh`，并接入 `apps/server` 本地脚本与 CI 的 format check / golangci-lint
+- `serve` 已并行暴露 HTTP/GraphQL 与独立 gRPC 端口，`apps/server/proto/memstation/v1/api.proto` 已落地 Gateway、Memory、Admin、Health 的正式 proto 定义与生成代码
+- Go 代码质量门禁已统一为 `scripts/go/format.sh` + `scripts/go/lint.sh`，并接入 `apps/server` 本地脚本与 CI 的 format check / golangci-lint
 - 记忆切片 rewrite 的 stale segment 清理链路已补强，能够按 `conversation_id + keep set` 删除残留 segment graph node、relation 与 vector，避免重试或侧表已覆盖后的脏数据残留
 - 当前已确认通过的本地门禁包括：`pnpm lint`、`pnpm --filter @memstation/server format:check`、`pnpm --filter @memstation/server lint`、`go test ./...`
 
@@ -648,12 +656,12 @@ v1.x 后续路线：
 4. 如果新增 manager 核心模块，同步补 Vitest、Playwright 和 coverage gate
 5. 如果后续引入集群化或多节点恢复方案，把现有单实例 drill 扩展为跨节点恢复演练，而不是另起一套脚本
 
-### 14.4 当前开发计划（as of 2026-04-08）
+### 14.4 当前开发计划（as of 2026-04-11）
 
 当前开发计划不再以“补齐 v1 基础功能”为主，而是固定按以下顺序推进：
 
 1. 工程纪律优先：
-   所有 Go 改动默认先跑 `scripts/go-format.sh --check`、`scripts/go-lint.sh`、`go test ./...`，所有提交信息统一遵循 `type: message`
+   所有 Go 改动默认先跑 `scripts/go/format.sh --check`、`scripts/go/lint.sh`、`go test ./...`，所有提交信息统一遵循 `type: message`
 2. 质量门禁持续收紧：
    持续观察 CI / nightly 结果，逐步提高 coverage、perf smoke、recovery、backup/restore 的阈值，而不是长期保守放行
 3. 评测先行：

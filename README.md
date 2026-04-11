@@ -7,6 +7,7 @@ MemStation 是一个面向个人自托管优先的 `AI Gateway + Memory System +
 - Go 单体服务负责 Gateway、Memory、Admin、Worker、Scheduler、Migration、Seed
 - SvelteKit Manager 作为独立管理面板，可直连任意指定的 MemStation 后端
 - 对外兼容 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages
+- 同时提供独立 gRPC transport，直接复用 Gateway / Memory / Admin service
 - 对上游支持 OpenAI、Anthropic、Gemini
 - 记忆链路支持 Summary、Keyword、Embedding、Impression、Fact、Key Memory、图关系、时间衰减、时间分层
 - Benchmark、契约测试、E2E、恢复演练、备份恢复脚本和单机部署基线均已落地
@@ -36,6 +37,8 @@ memstation/
 - `POST /v1/responses`
 - `POST /v1/messages`
 - `GET /v1/models`
+- gRPC `GatewayService.ListModels`
+- gRPC `GatewayService.Complete`
 - SSE 流式透传与非流式代理
 - API Key 鉴权、速率限制、Usage 统计、Provider 路由
 
@@ -52,11 +55,17 @@ memstation/
   - `GET /api/v1/memory/keys`
   - `PUT /api/v1/memory/keys/:key`
   - `DELETE /api/v1/memory/keys/:key`
+- Memory gRPC：
+  - `MemoryService.Search`
+  - `MemoryService.ListKeyMemories`
+  - `MemoryService.UpsertKeyMemory`
+  - `MemoryService.DeleteKeyMemory`
 
 ### Admin Plane
 
 - GraphQL Query/Mutation
 - Admin REST：overview、users、conversations、memory、config、providers、queues、tasks、cache、audit
+- Admin / Health gRPC：`HealthService.GetStatus`、`AdminService.Overview`、`AdminService.ListConversations`、`AdminService.GetConversation`、`AdminService.GetConversationMemory`
 - 服务端 session 登录，浏览器不存储 admin token
 - 管理面板已覆盖：
   - Dashboard
@@ -88,7 +97,49 @@ memstation/
 
 ## 快速开始
 
-### 方式一：推荐，本地一键重置并启动整套开发栈
+### 方式一：推荐，devcontainer 一键启动前后端联调
+
+前置条件：
+
+- Docker
+- pnpm `10.32.1`
+- 可选：本机已安装 `devcontainer` CLI；如果未安装，脚本会自动通过 `pnpm dlx @devcontainers/cli@0.85.0` 拉起
+
+执行：
+
+```bash
+pnpm dev
+```
+
+这个命令会：
+
+- 启动 `workspace` devcontainer，并只带起 `postgres` 与 `redis`
+- 自动注入 devcontainer 开发默认配置，包括 `DATABASE_URL`、`REDIS_URL`、`MEMSTATION_ADMIN_TOKEN`、`MEMSTATION_MASTER_KEY`
+- 在 devcontainer 内执行 `memstation migrate`
+- 启动后端 watch 脚本，源码变更后自动重启 `serve`
+- 同时启动 manager 的 Vite 调试服务
+
+这条链路的目标就是 0 配置开发：
+
+- 不需要手动准备数据库连接串
+- 不需要手动准备 Redis 连接串
+- 不需要手动准备本地 admin token / master key
+- 启动后只需要去 Manager 里补 Provider 密钥和模型配置
+
+默认地址：
+
+- Gateway / Admin API: `http://127.0.0.1:8080`
+- gRPC: `127.0.0.1:9090`
+- Manager Debug: `http://127.0.0.1:5173`
+- PostgreSQL: `127.0.0.1:5432`
+- Redis: `127.0.0.1:6379`
+
+更多说明见：
+
+- `deploy/compose/DEVELOPMENT.md`
+- `deploy/compose/BACKUP_RESTORE.md`
+
+### 方式二：重置 Compose 栈并启动整套服务
 
 前置条件：
 
@@ -110,16 +161,12 @@ pnpm dev:reset
 默认地址：
 
 - Gateway / Admin API: `http://127.0.0.1:8080`
+- gRPC: `127.0.0.1:9090`
 - Manager: `http://127.0.0.1:4173`
 - PostgreSQL: `127.0.0.1:5432`
 - Redis: `127.0.0.1:6379`
 
-更多说明见：
-
-- `deploy/compose/DEVELOPMENT.md`
-- `deploy/compose/BACKUP_RESTORE.md`
-
-### 方式二：手动运行
+### 方式三：手动运行
 
 前置条件：
 
@@ -171,6 +218,9 @@ pnpm dev
 
 ```bash
 pnpm dev
+pnpm dev:container
+pnpm dev:workspace
+pnpm dev:server
 pnpm dev:reset
 pnpm build
 pnpm lint
@@ -192,7 +242,7 @@ pnpm generate
 
 ```bash
 cd apps/server
-go run ./cmd/memstation serve
+pnpm dev
 go run ./cmd/memstation worker
 go run ./cmd/memstation scheduler
 go run ./cmd/memstation migrate
@@ -213,6 +263,25 @@ go run ./cmd/memstation seed
 - `POST /v1/messages`
 - `GET /v1/models`
 
+### gRPC
+
+- 监听端口：`MEMSTATION_GRPC_PORT`，默认 `9090`
+- proto 定义：`apps/server/proto/memstation/v1/api.proto`
+- proxy 类 RPC 使用 `authorization: Bearer <memstation-api-key>` metadata
+- admin 类 RPC 使用 `x-admin-token: <MEMSTATION_ADMIN_TOKEN>` metadata
+- 当前已提供：
+  - `HealthService.GetStatus`
+  - `GatewayService.ListModels`
+  - `GatewayService.Complete`
+  - `MemoryService.Search`
+  - `MemoryService.ListKeyMemories`
+  - `MemoryService.UpsertKeyMemory`
+  - `MemoryService.DeleteKeyMemory`
+  - `AdminService.Overview`
+  - `AdminService.ListConversations`
+  - `AdminService.GetConversation`
+  - `AdminService.GetConversationMemory`
+
 ### Memory / Admin
 
 - `POST /api/v1/memory/search`
@@ -224,13 +293,13 @@ go run ./cmd/memstation seed
 - `POST /api/admin/logout`
 - `GET /api/admin/overview`
 
-更多接口可直接查看 `apps/server/internal/transport/http/router.go`。
+更多 HTTP 接口可直接查看 `apps/server/internal/transport/http/router.go`。
 
 ## 配置说明
 
 关键环境变量见 `apps/server/.env.example`，核心项包括：
 
-- 运行与安全：`MEMSTATION_PORT`, `MEMSTATION_ADMIN_TOKEN`, `MEMSTATION_MASTER_KEY`, `MEMSTATION_DEV_API_KEY`
+- 运行与安全：`MEMSTATION_PORT`, `MEMSTATION_GRPC_PORT`, `MEMSTATION_ADMIN_TOKEN`, `MEMSTATION_MASTER_KEY`, `MEMSTATION_DEV_API_KEY`
 - 基础设施：`DATABASE_URL`, `REDIS_URL`, `VECTOR_STORE_BACKEND`
 - 模型：`CHAT_MODEL`, `SUMMARY_MODEL`, `ANALYSIS_MODEL`, `EMBEDDING_MODEL`
 - Provider 凭据：`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`
@@ -265,9 +334,9 @@ Embedding 已接入真实 provider 调用，采用 OpenAI-compatible embedding �
 评测入口：
 
 - `apps/server/tests/eval`
-- `scripts/eval-memory.sh`
-- `scripts/eval-memory-locomo.sh`
-- `scripts/eval-memory-nightly.sh`
+- `scripts/eval/run-memory-smoke.sh`
+- `scripts/eval/run-memory-locomo.sh`
+- `scripts/eval/run-memory-nightly.sh`
 
 ## 部署
 
