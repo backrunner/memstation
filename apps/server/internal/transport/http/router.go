@@ -27,6 +27,7 @@ import (
 	"memstation/apps/server/internal/service/admin"
 	apikeyservice "memstation/apps/server/internal/service/apikey"
 	auditsvc "memstation/apps/server/internal/service/audit"
+	connectionconfigservice "memstation/apps/server/internal/service/connectionconfig"
 	gatewayservice "memstation/apps/server/internal/service/gateway"
 	memoryservice "memstation/apps/server/internal/service/memory"
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
@@ -42,28 +43,29 @@ import (
 )
 
 type Dependencies struct {
-	Config         bootstrap.Config
-	Logger         *slog.Logger
-	Health         *observability.Registry
-	Auth           security.Authenticator
-	RateLimiter    *security.RateLimiter
-	Session        *security.AdminSessionManager
-	Models         *modelcap.Registry
-	GraphQL        *resolver.Resolver
-	Gateway        *gatewayservice.Service
-	Multimodal     *multimodalservice.Service
-	Memory         *memoryservice.Service
-	Generations    *memorygenservice.Service
-	Admin          *admin.Service
-	Audit          *auditsvc.Service
-	Usage          *usageservice.Service
-	Users          *userservice.Service
-	APIKeys        *apikeyservice.Service
-	Settings       *settingsservice.Service
-	SystemConfig   *systemconfigservice.Service
-	ProviderConfig *providerconfigservice.Service
-	Publisher      ports.TaskPublisher
-	Inspector      *asynq.Inspector
+	Config           bootstrap.Config
+	Logger           *slog.Logger
+	Health           *observability.Registry
+	Auth             security.Authenticator
+	RateLimiter      *security.RateLimiter
+	Session          *security.AdminSessionManager
+	Models           *modelcap.Registry
+	GraphQL          *resolver.Resolver
+	Gateway          *gatewayservice.Service
+	Multimodal       *multimodalservice.Service
+	Memory           *memoryservice.Service
+	Generations      *memorygenservice.Service
+	Admin            *admin.Service
+	Audit            *auditsvc.Service
+	Usage            *usageservice.Service
+	Users            *userservice.Service
+	APIKeys          *apikeyservice.Service
+	Settings         *settingsservice.Service
+	ConnectionConfig *connectionconfigservice.Service
+	SystemConfig     *systemconfigservice.Service
+	ProviderConfig   *providerconfigservice.Service
+	Publisher        ports.TaskPublisher
+	Inspector        *asynq.Inspector
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -74,15 +76,15 @@ func NewRouter(deps Dependencies) http.Handler {
 	}
 	router.Use(chimiddleware.RequestID)
 	router.Use(chimiddleware.RealIP)
-	router.Use(corsMiddleware(deps.Config))
+	router.Use(corsMiddleware(deps.Config, deps.SystemConfig))
 	router.Use(observability.HTTPMiddleware())
 	router.Use(chimiddleware.Recoverer)
 	router.Use(requestLogger(logger))
 
 	router.Get("/health/live", liveHandler(deps.Config))
 	router.Get("/health/ready", readyHandler(deps.Config, deps.Health))
-	router.Post("/api/admin/login", adminLoginHandler(deps.Config, deps.Auth, deps.Session, deps.Audit))
-	router.Post("/api/admin/logout", adminLogoutHandler(deps.Config, deps.Auth, deps.Audit))
+	router.Post("/api/admin/login", adminLoginHandler(deps.Config, deps.SystemConfig, deps.Auth, deps.Session, deps.Audit))
+	router.Post("/api/admin/logout", adminLogoutHandler(deps.Config, deps.SystemConfig, deps.Auth, deps.Audit))
 	router.Get("/api/admin/session", adminSessionHandler(deps.Auth))
 
 	router.Group(func(r chi.Router) {
@@ -131,13 +133,13 @@ func NewRouter(deps Dependencies) http.Handler {
 		r.Delete("/api/admin/memory/keys/{id}", adminMemoryKeyDeleteHandler(deps.Memory, deps.Audit))
 		r.Post("/api/admin/playground/memory-preview", adminMemoryPreviewHandler(deps.Admin))
 		r.Get("/api/admin/stats/tokens", adminTokenStatsHandler(deps.Usage))
-		r.Get("/api/admin/config", adminConfigGetHandler(deps.Config, deps.Settings, deps.SystemConfig, deps.ProviderConfig))
-		r.Put("/api/admin/config", adminConfigPutHandler(deps.Config, deps.Settings, deps.SystemConfig, deps.ProviderConfig, deps.Publisher, deps.Audit))
+		r.Get("/api/admin/config", adminConfigGetHandler(deps.Config, deps.Settings, deps.ConnectionConfig, deps.SystemConfig, deps.ProviderConfig))
+		r.Put("/api/admin/config", adminConfigPutHandler(deps.Config, deps.Settings, deps.ConnectionConfig, deps.SystemConfig, deps.ProviderConfig, deps.Publisher, deps.Audit))
 		r.Get("/api/admin/providers/diagnostics", adminProviderDiagnosticsHandler(deps.Config, deps.SystemConfig, deps.ProviderConfig))
 		r.Get("/api/admin/queues", adminQueuesHandler(deps.Inspector))
 		r.Get("/api/admin/tasks", adminTasksHandler(deps.Inspector))
 		r.Get("/api/admin/tasks/detail", adminTaskDetailHandler(deps.Inspector))
-		r.Get("/api/admin/cache", adminCacheHandler(deps.Config, deps.Health))
+		r.Get("/api/admin/cache", adminCacheHandler(deps.Config, deps.SystemConfig, deps.Health))
 		r.Post("/api/admin/tasks/requeue", adminRequeueHandler(deps.Publisher, deps.Inspector, deps.Audit))
 		r.Get("/api/admin/audit", adminAuditHandler(deps.Audit))
 	})
@@ -184,7 +186,7 @@ func adminAuthMiddleware(auth security.Authenticator) func(http.Handler) http.Ha
 	}
 }
 
-func adminLoginHandler(cfg bootstrap.Config, auth security.Authenticator, session *security.AdminSessionManager, audit *auditsvc.Service) http.HandlerFunc {
+func adminLoginHandler(cfg bootstrap.Config, systemConfig *systemconfigservice.Service, auth security.Authenticator, session *security.AdminSessionManager, audit *auditsvc.Service) http.HandlerFunc {
 	type requestBody struct {
 		Token string `json:"token"`
 	}
@@ -213,7 +215,7 @@ func adminLoginHandler(cfg bootstrap.Config, auth security.Authenticator, sessio
 			Value:    session.Issue("admin"),
 			Path:     "/",
 			HttpOnly: true,
-			SameSite: sessionSameSite(cfg),
+			SameSite: sessionSameSite(cfg, systemConfig),
 			Secure:   cfg.SessionCookieSecure,
 			MaxAge:   session.MaxAge(),
 		})
@@ -231,7 +233,7 @@ func adminLoginHandler(cfg bootstrap.Config, auth security.Authenticator, sessio
 	}
 }
 
-func adminLogoutHandler(cfg bootstrap.Config, auth security.Authenticator, audit *auditsvc.Service) http.HandlerFunc {
+func adminLogoutHandler(cfg bootstrap.Config, systemConfig *systemconfigservice.Service, auth security.Authenticator, audit *auditsvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if audit != nil && auth.AuthenticateAdmin(r) {
 			audit.Record(r.Context(), domain.AuditEvent{
@@ -248,7 +250,7 @@ func adminLogoutHandler(cfg bootstrap.Config, auth security.Authenticator, audit
 			Value:    "",
 			Path:     "/",
 			HttpOnly: true,
-			SameSite: sessionSameSite(cfg),
+			SameSite: sessionSameSite(cfg, systemConfig),
 			Secure:   cfg.SessionCookieSecure,
 			MaxAge:   -1,
 		})
@@ -1475,7 +1477,7 @@ func adminTokenStatsHandler(service *usageservice.Service) http.HandlerFunc {
 	}
 }
 
-func adminConfigGetHandler(cfg bootstrap.Config, settings *settingsservice.Service, systemConfig *systemconfigservice.Service, providerConfig *providerconfigservice.Service) http.HandlerFunc {
+func adminConfigGetHandler(cfg bootstrap.Config, settings *settingsservice.Service, connectionConfig *connectionconfigservice.Service, systemConfig *systemconfigservice.Service, providerConfig *providerconfigservice.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := queryUserID(r)
 		snapshot := map[string]any{}
@@ -1496,6 +1498,9 @@ func adminConfigGetHandler(cfg bootstrap.Config, settings *settingsservice.Servi
 			snapshot["provider_sets"] = providersByScope
 			snapshot["providers"] = providersByScope[providerconfigservice.ScopeGateway]
 		}
+		if connectionConfig != nil {
+			snapshot["database"] = connectionConfig.Snapshot().Database
+		}
 		for key, value := range runtimeEnvelope(cfg, systemConfig) {
 			snapshot[key] = value
 		}
@@ -1503,7 +1508,7 @@ func adminConfigGetHandler(cfg bootstrap.Config, settings *settingsservice.Servi
 	}
 }
 
-func adminConfigPutHandler(cfg bootstrap.Config, settings *settingsservice.Service, systemConfig *systemconfigservice.Service, providerConfig *providerconfigservice.Service, publisher ports.TaskPublisher, audit *auditsvc.Service) http.HandlerFunc {
+func adminConfigPutHandler(cfg bootstrap.Config, settings *settingsservice.Service, connectionConfig *connectionconfigservice.Service, systemConfig *systemconfigservice.Service, providerConfig *providerconfigservice.Service, publisher ports.TaskPublisher, audit *auditsvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		payload := map[string]any{}
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -1576,6 +1581,21 @@ func adminConfigPutHandler(cfg bootstrap.Config, settings *settingsservice.Servi
 			}
 			snapshot["provider_sets"] = providersByScope
 			snapshot["providers"] = providersByScope[providerconfigservice.ScopeGateway]
+		}
+		if rawDatabase, ok := payload["database"]; ok && connectionConfig != nil {
+			update, err := parseDatabaseUpdatePayload(rawDatabase)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+				return
+			}
+			connectionSnapshot, err := connectionConfig.Update(r.Context(), update)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "config_failed", err.Error())
+				return
+			}
+			snapshot["database"] = connectionSnapshot.Database
+		} else if connectionConfig != nil {
+			snapshot["database"] = connectionConfig.Snapshot().Database
 		}
 		if rawRuntime, ok := payload["runtime"]; ok && systemConfig != nil {
 			runtimePayload, ok := rawRuntime.(map[string]any)
@@ -1678,6 +1698,26 @@ func runtimeEnvelope(cfg bootstrap.Config, systemConfig *systemconfigservice.Ser
 	}
 }
 
+func parseDatabaseUpdatePayload(payload any) (connectionconfigservice.UpdateInput, error) {
+	value, ok := payload.(map[string]any)
+	if !ok {
+		return connectionconfigservice.UpdateInput{}, errors.New("database must be an object")
+	}
+	update := connectionconfigservice.UpdateInput{}
+	if clearValue, exists := value["clear"]; exists {
+		clearFlag, ok := clearValue.(bool)
+		if !ok {
+			return connectionconfigservice.UpdateInput{}, errors.New("database.clear must be a boolean")
+		}
+		update.Clear = clearFlag
+	}
+	if rawURL, exists := value["url"]; exists {
+		urlValue := strings.TrimSpace(fmt.Sprintf("%v", rawURL))
+		update.URL = &urlValue
+	}
+	return update, nil
+}
+
 func adminQueuesHandler(inspector *asynq.Inspector) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		queueNames := defaultQueueNames()
@@ -1769,7 +1809,7 @@ func adminTaskDetailHandler(inspector *asynq.Inspector) http.HandlerFunc {
 	}
 }
 
-func adminCacheHandler(cfg bootstrap.Config, health *observability.Registry) http.HandlerFunc {
+func adminCacheHandler(cfg bootstrap.Config, systemConfig *systemconfigservice.Service, health *observability.Registry) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		healthStatus := "unknown"
 		components := map[string]any{}
@@ -1788,16 +1828,21 @@ func adminCacheHandler(cfg bootstrap.Config, health *observability.Registry) htt
 			}
 		}
 
+		ttlSeconds := int(cfg.CacheTTL.Seconds())
+		if systemConfig != nil {
+			ttlSeconds = systemConfig.LiveSnapshot().CacheTTLSeconds
+		}
+
 		writeJSON(w, http.StatusOK, map[string]any{
 			"l1": map[string]any{
 				"enabled":     true,
 				"scope":       "process",
-				"ttl_seconds": int(cfg.CacheTTL.Seconds()),
+				"ttl_seconds": ttlSeconds,
 			},
 			"l2": map[string]any{
 				"enabled":     cfg.RedisURL != "",
 				"backend":     ternaryString(cfg.RedisURL != "", "redis", "disabled"),
-				"ttl_seconds": int(cfg.CacheTTL.Seconds()),
+				"ttl_seconds": ttlSeconds,
 			},
 			"pubsub": map[string]any{
 				"enabled":  cfg.RedisURL != "",
@@ -2087,11 +2132,7 @@ func firstNonEmptyString(values ...string) string {
 	return ""
 }
 
-func corsMiddleware(cfg bootstrap.Config) func(http.Handler) http.Handler {
-	allowedOrigins := map[string]struct{}{}
-	for _, origin := range cfg.CORSAllowedOrigins {
-		allowedOrigins[strings.TrimSpace(origin)] = struct{}{}
-	}
+func corsMiddleware(cfg bootstrap.Config, systemConfig *systemconfigservice.Service) func(http.Handler) http.Handler {
 	allowedHeaders := strings.Join([]string{
 		"Accept",
 		"Authorization",
@@ -2115,6 +2156,10 @@ func corsMiddleware(cfg bootstrap.Config) func(http.Handler) http.Handler {
 	}, ", ")
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			allowedOrigins := map[string]struct{}{}
+			for _, origin := range currentCORSAllowedOrigins(cfg, systemConfig) {
+				allowedOrigins[strings.TrimSpace(origin)] = struct{}{}
+			}
 			origin := strings.TrimSpace(r.Header.Get("Origin"))
 			if origin != "" && originAllowed(allowedOrigins, origin) {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
@@ -2192,11 +2237,25 @@ func readAdminToken(r *http.Request) (string, error) {
 	return "", nil
 }
 
-func sessionSameSite(cfg bootstrap.Config) http.SameSite {
-	if cfg.SessionCookieCrossSite {
+func sessionSameSite(cfg bootstrap.Config, systemConfig *systemconfigservice.Service) http.SameSite {
+	if currentSessionCookieCrossSite(cfg, systemConfig) {
 		return http.SameSiteNoneMode
 	}
 	return http.SameSiteStrictMode
+}
+
+func currentCORSAllowedOrigins(cfg bootstrap.Config, systemConfig *systemconfigservice.Service) []string {
+	if systemConfig == nil {
+		return append([]string(nil), cfg.CORSAllowedOrigins...)
+	}
+	return append([]string(nil), systemConfig.LiveSnapshot().CORSAllowedOrigins...)
+}
+
+func currentSessionCookieCrossSite(cfg bootstrap.Config, systemConfig *systemconfigservice.Service) bool {
+	if systemConfig == nil {
+		return cfg.SessionCookieCrossSite
+	}
+	return systemConfig.LiveSnapshot().SessionCookieCrossSite
 }
 
 func queueForTaskType(taskType string) string {
@@ -2226,7 +2285,27 @@ func redactConfigPayload(payload map[string]any) map[string]any {
 			redacted[key] = "[redacted]"
 			continue
 		}
+		if strings.EqualFold(key, "database") {
+			redacted[key] = redactDatabaseSecrets(value)
+			continue
+		}
 		redacted[key] = redactProviderSecrets(value)
+	}
+	return redacted
+}
+
+func redactDatabaseSecrets(value any) any {
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return value
+	}
+	redacted := map[string]any{}
+	for key, nested := range typed {
+		if strings.EqualFold(key, "url") {
+			redacted[key] = "[redacted]"
+			continue
+		}
+		redacted[key] = redactProviderSecrets(nested)
 	}
 	return redacted
 }

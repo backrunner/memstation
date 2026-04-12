@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"memstation/apps/server/internal/runtimeconfig"
 )
 
 type Record struct {
@@ -19,13 +21,13 @@ type Record struct {
 }
 
 type Service struct {
-	db *sqlpkg.DB
+	db runtimeconfig.DBHandle
 
 	mu      sync.RWMutex
 	records map[string]Record
 }
 
-func NewService(db *sqlpkg.DB) *Service {
+func NewService(db runtimeconfig.DBHandle) *Service {
 	svc := &Service{db: db, records: map[string]Record{}}
 	svc.records["admin"] = Record{ID: "admin", Name: "Admin", IsAdmin: true, CreatedAt: time.Now().UTC()}
 	return svc
@@ -33,8 +35,8 @@ func NewService(db *sqlpkg.DB) *Service {
 
 func (s *Service) EnsureDefaultAdmin(ctx context.Context, name string) (Record, error) {
 	record := Record{ID: "admin", Name: name, IsAdmin: true, CreatedAt: time.Now().UTC()}
-	if s.db != nil {
-		_, err := s.db.ExecContext(ctx, `
+	if db := s.currentDB(); db != nil {
+		_, err := db.ExecContext(ctx, `
             INSERT INTO users (id, name, email, is_admin, created_at, updated_at)
             VALUES ($1,$2,$3,$4,$5,$5)
             ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, is_admin = EXCLUDED.is_admin, updated_at = EXCLUDED.updated_at
@@ -52,8 +54,8 @@ func (s *Service) EnsureDefaultAdmin(ctx context.Context, name string) (Record, 
 
 func (s *Service) Create(ctx context.Context, name string, isAdmin bool) (Record, error) {
 	record := Record{ID: uuid.NewString(), Name: name, IsAdmin: isAdmin, CreatedAt: time.Now().UTC()}
-	if s.db != nil {
-		_, err := s.db.ExecContext(ctx, `
+	if db := s.currentDB(); db != nil {
+		_, err := db.ExecContext(ctx, `
             INSERT INTO users (id, name, email, is_admin, created_at, updated_at)
             VALUES ($1,$2,$3,$4,$5,$5)
         `, record.ID, record.Name, record.Email, record.IsAdmin, record.CreatedAt)
@@ -69,9 +71,9 @@ func (s *Service) Create(ctx context.Context, name string, isAdmin bool) (Record
 }
 
 func (s *Service) Get(ctx context.Context, id string) (Record, error) {
-	if s.db != nil {
+	if db := s.currentDB(); db != nil {
 		var record Record
-		if err := s.db.QueryRowContext(ctx, `SELECT id, name, email, is_admin, created_at FROM users WHERE id = $1`, id).Scan(&record.ID, &record.Name, &record.Email, &record.IsAdmin, &record.CreatedAt); err != nil {
+		if err := db.QueryRowContext(ctx, `SELECT id, name, email, is_admin, created_at FROM users WHERE id = $1`, id).Scan(&record.ID, &record.Name, &record.Email, &record.IsAdmin, &record.CreatedAt); err != nil {
 			if errors.Is(err, sqlpkg.ErrNoRows) {
 				return Record{}, errors.New("user not found")
 			}
@@ -89,8 +91,8 @@ func (s *Service) Get(ctx context.Context, id string) (Record, error) {
 }
 
 func (s *Service) List(ctx context.Context) ([]Record, error) {
-	if s.db != nil {
-		rows, err := s.db.QueryContext(ctx, `SELECT id, name, email, is_admin, created_at FROM users ORDER BY created_at ASC`)
+	if db := s.currentDB(); db != nil {
+		rows, err := db.QueryContext(ctx, `SELECT id, name, email, is_admin, created_at FROM users ORDER BY created_at ASC`)
 		if err != nil {
 			return nil, err
 		}
@@ -112,4 +114,11 @@ func (s *Service) List(ctx context.Context) ([]Record, error) {
 		out = append(out, record)
 	}
 	return out, nil
+}
+
+func (s *Service) currentDB() *sqlpkg.DB {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	return s.db.Current()
 }

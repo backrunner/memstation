@@ -31,6 +31,8 @@ const (
 	ProviderOpenAIResponses  Provider = "openai_responses"
 	ProviderAnthropic        Provider = "anthropic"
 	ProviderGemini           Provider = "gemini"
+	ProviderCohere           Provider = "cohere"
+	ProviderJina             Provider = "jina"
 )
 
 const (
@@ -203,6 +205,10 @@ func NormalizeProvider(value string) Provider {
 		return ProviderAnthropic
 	case "gemini", "google", "google_genai":
 		return ProviderGemini
+	case "cohere":
+		return ProviderCohere
+	case "jina", "jina_ai":
+		return ProviderJina
 	default:
 		return Provider(normalized)
 	}
@@ -230,6 +236,13 @@ func LLMProviders() []Provider {
 func EmbeddingProviders() []Provider {
 	return []Provider{
 		ProviderOpenAICompatible,
+	}
+}
+
+func RerankProviders() []Provider {
+	return []Provider{
+		ProviderCohere,
+		ProviderJina,
 	}
 }
 

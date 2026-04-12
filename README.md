@@ -299,7 +299,7 @@ go run ./cmd/memstation seed
 
 关键环境变量见 `apps/server/.env.example`，核心项包括：
 
-- 运行与安全：`MEMSTATION_PORT`, `MEMSTATION_GRPC_PORT`, `MEMSTATION_ADMIN_TOKEN`, `MEMSTATION_MASTER_KEY`, `MEMSTATION_DEV_API_KEY`
+- 运行与安全：`MEMSTATION_PORT`, `MEMSTATION_GRPC_PORT`, `MEMSTATION_PUBLIC_BASE_URL`, `MEMSTATION_ADMIN_TOKEN`, `MEMSTATION_MASTER_KEY`, `MEMSTATION_DEV_API_KEY`
 - 基础设施：`DATABASE_URL`, `REDIS_URL`, `VECTOR_STORE_BACKEND`
 - 模型：`CHAT_MODEL`, `SUMMARY_MODEL`, `ANALYSIS_MODEL`, `EMBEDDING_MODEL`
 - Provider 凭据：`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`
@@ -314,6 +314,7 @@ Embedding 已接入真实 provider 调用，采用 OpenAI-compatible embedding �
 - Manager 是独立前端，不承载业务核心
 - 所有实际管理能力都由 MemStation server 暴露
 - Manager 可以保存多个 target，并在不同 MemStation 实例之间切换
+- Manager 支持直接粘贴 `memstation://host:port?key=...` / `memstations://...` 形式的连接 URI；`memstation serve` 启动时也会输出一条 target URI 模板，避免在日志里暴露原始 admin token
 - 这为后续集群化、多环境和远程运维预留了空间
 
 ## 测试与评测

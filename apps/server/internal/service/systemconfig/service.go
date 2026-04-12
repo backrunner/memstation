@@ -2,7 +2,6 @@ package systemconfig
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +11,7 @@ import (
 
 	"memstation/apps/server/internal/bootstrap"
 	"memstation/apps/server/internal/domain"
+	"memstation/apps/server/internal/runtimeconfig"
 )
 
 type Snapshot struct {
@@ -24,6 +24,11 @@ type Snapshot struct {
 	TokenThreshold                      int             `json:"token_threshold"`
 	MaxContextTokens                    int             `json:"max_context_tokens"`
 	MaxInjectionTokens                  int             `json:"max_injection_tokens"`
+	RerankModel                         string          `json:"rerank_model"`
+	RerankCandidateMultiplier           int             `json:"rerank_candidate_multiplier"`
+	RerankMinCandidates                 int             `json:"rerank_min_candidates"`
+	RerankMaxCandidates                 int             `json:"rerank_max_candidates"`
+	RerankBlendWeight                   float64         `json:"rerank_blend_weight"`
 	MemoryRelationMaxHops               int             `json:"memory_relation_max_hops"`
 	MemoryRelationHopDecayLambda        float64         `json:"memory_relation_hop_decay_lambda"`
 	MemoryRelationHopDecayExponent      float64         `json:"memory_relation_hop_decay_exponent"`
@@ -54,12 +59,20 @@ type FieldMeta struct {
 }
 
 type LiveApplier struct {
+	Validate                   func(Snapshot) error
 	SetDefaultProvider         func(domain.Provider)
 	SetInternalDefaultProvider func(domain.Provider)
+	SetVectorStoreBackend      func(string)
 	SetThresholds              func(messageThreshold, tokenThreshold int)
 	SetConversationTimeout     func(time.Duration)
+	SetProviderTimeout         func(time.Duration)
+	SetMaxContextTokens        func(int)
+	SetMaxInjectionTokens      func(int)
+	SetRerankConfig            func(model string, candidateMultiplier, minCandidates, maxCandidates int, blendWeight float64)
 	SetMemoryRelationRecall    func(maxHops int, decayLambda, decayExponent float64)
 	SetRateLimit               func(rps, burst int)
+	SetCacheTTL                func(time.Duration)
+	SetMultimodalConfig        func(bootstrap.MultimodalConfig)
 }
 
 type Overrides struct {
@@ -72,6 +85,11 @@ type Overrides struct {
 	TokenThreshold                      *int
 	MaxContextTokens                    *int
 	MaxInjectionTokens                  *int
+	RerankModel                         *string
+	RerankCandidateMultiplier           *int
+	RerankMinCandidates                 *int
+	RerankMaxCandidates                 *int
+	RerankBlendWeight                   *float64
 	MemoryRelationMaxHops               *int
 	MemoryRelationHopDecayLambda        *float64
 	MemoryRelationHopDecayExponent      *float64
@@ -95,7 +113,7 @@ type Overrides struct {
 }
 
 type Service struct {
-	db       *sql.DB
+	store    *runtimeconfig.FileStore
 	defaults Snapshot
 
 	mu        sync.RWMutex
@@ -115,6 +133,11 @@ func DefaultsFromConfig(cfg bootstrap.Config) Snapshot {
 		TokenThreshold:                      cfg.TokenThreshold,
 		MaxContextTokens:                    cfg.MaxContextTokens,
 		MaxInjectionTokens:                  cfg.MaxInjectionTokens,
+		RerankModel:                         cfg.RerankModel,
+		RerankCandidateMultiplier:           cfg.RerankCandidateMultiplier,
+		RerankMinCandidates:                 cfg.RerankMinCandidates,
+		RerankMaxCandidates:                 cfg.RerankMaxCandidates,
+		RerankBlendWeight:                   cfg.RerankBlendWeight,
 		MemoryRelationMaxHops:               cfg.MemoryRelationMaxHops,
 		MemoryRelationHopDecayLambda:        cfg.MemoryRelationHopDecayLambda,
 		MemoryRelationHopDecayExponent:      cfg.MemoryRelationHopDecayExponent,
@@ -138,9 +161,9 @@ func DefaultsFromConfig(cfg bootstrap.Config) Snapshot {
 	}
 }
 
-func NewService(db *sql.DB, defaults Snapshot) *Service {
+func NewService(store *runtimeconfig.FileStore, defaults Snapshot) *Service {
 	return &Service{
-		db:       db,
+		store:    store,
 		defaults: defaults,
 		live:     defaults,
 	}
@@ -152,6 +175,9 @@ func (s *Service) Bootstrap(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	desired := overrides.Apply(s.defaults)
+	if err := validateSnapshot(desired); err != nil {
+		return Snapshot{}, err
+	}
 
 	s.mu.Lock()
 	s.overrides = overrides
@@ -207,11 +233,19 @@ func (s *Service) Update(ctx context.Context, fields map[string]any) (map[string
 	if err != nil {
 		return nil, err
 	}
+	desired := nextOverrides.Apply(s.defaults)
+	if err := validateSnapshot(desired); err != nil {
+		return nil, err
+	}
+	if hooks.Validate != nil {
+		if err := hooks.Validate(desired); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.persistOverrides(ctx, nextOverrides); err != nil {
 		return nil, err
 	}
 
-	desired := nextOverrides.Apply(s.defaults)
 	live := currentLive
 
 	if hooks.SetDefaultProvider != nil {
@@ -222,6 +256,10 @@ func (s *Service) Update(ctx context.Context, fields map[string]any) (map[string
 		hooks.SetInternalDefaultProvider(desired.InternalDefaultProvider)
 		live.InternalDefaultProvider = desired.InternalDefaultProvider
 	}
+	if hooks.SetVectorStoreBackend != nil {
+		hooks.SetVectorStoreBackend(desired.VectorStoreBackend)
+		live.VectorStoreBackend = desired.VectorStoreBackend
+	}
 	if hooks.SetThresholds != nil {
 		hooks.SetThresholds(desired.MessageThreshold, desired.TokenThreshold)
 		live.MessageThreshold = desired.MessageThreshold
@@ -230,6 +268,32 @@ func (s *Service) Update(ctx context.Context, fields map[string]any) (map[string
 	if hooks.SetConversationTimeout != nil {
 		hooks.SetConversationTimeout(time.Duration(desired.ConversationTimeoutSeconds) * time.Second)
 		live.ConversationTimeoutSeconds = desired.ConversationTimeoutSeconds
+	}
+	if hooks.SetProviderTimeout != nil {
+		hooks.SetProviderTimeout(time.Duration(desired.ProviderTimeoutSeconds) * time.Second)
+		live.ProviderTimeoutSeconds = desired.ProviderTimeoutSeconds
+	}
+	if hooks.SetMaxContextTokens != nil {
+		hooks.SetMaxContextTokens(desired.MaxContextTokens)
+		live.MaxContextTokens = desired.MaxContextTokens
+	}
+	if hooks.SetMaxInjectionTokens != nil {
+		hooks.SetMaxInjectionTokens(desired.MaxInjectionTokens)
+		live.MaxInjectionTokens = desired.MaxInjectionTokens
+	}
+	if hooks.SetRerankConfig != nil {
+		hooks.SetRerankConfig(
+			desired.RerankModel,
+			desired.RerankCandidateMultiplier,
+			desired.RerankMinCandidates,
+			desired.RerankMaxCandidates,
+			desired.RerankBlendWeight,
+		)
+		live.RerankModel = desired.RerankModel
+		live.RerankCandidateMultiplier = desired.RerankCandidateMultiplier
+		live.RerankMinCandidates = desired.RerankMinCandidates
+		live.RerankMaxCandidates = desired.RerankMaxCandidates
+		live.RerankBlendWeight = desired.RerankBlendWeight
 	}
 	if hooks.SetMemoryRelationRecall != nil {
 		hooks.SetMemoryRelationRecall(desired.MemoryRelationMaxHops, desired.MemoryRelationHopDecayLambda, desired.MemoryRelationHopDecayExponent)
@@ -241,6 +305,27 @@ func (s *Service) Update(ctx context.Context, fields map[string]any) (map[string
 		hooks.SetRateLimit(desired.RateLimitRPS, desired.RateLimitBurst)
 		live.RateLimitRPS = desired.RateLimitRPS
 		live.RateLimitBurst = desired.RateLimitBurst
+	}
+	if hooks.SetCacheTTL != nil {
+		hooks.SetCacheTTL(time.Duration(desired.CacheTTLSeconds) * time.Second)
+		live.CacheTTLSeconds = desired.CacheTTLSeconds
+	}
+	live.CORSAllowedOrigins = append([]string(nil), desired.CORSAllowedOrigins...)
+	live.SessionCookieCrossSite = desired.SessionCookieCrossSite
+	if hooks.SetMultimodalConfig != nil {
+		hooks.SetMultimodalConfig(desired.MultimodalConfig())
+		live.MultimodalEnabled = desired.MultimodalEnabled
+		live.MultimodalStorageBackend = desired.MultimodalStorageBackend
+		live.MultimodalStorageLocalRoot = desired.MultimodalStorageLocalRoot
+		live.MultimodalStorageBucket = desired.MultimodalStorageBucket
+		live.MultimodalExtractImageModel = desired.MultimodalExtractImageModel
+		live.MultimodalExtractAudioModel = desired.MultimodalExtractAudioModel
+		live.MultimodalExtractVideoModel = desired.MultimodalExtractVideoModel
+		live.MultimodalExtractFileModel = desired.MultimodalExtractFileModel
+		live.MultimodalAudioTranscriptionEnabled = desired.MultimodalAudioTranscriptionEnabled
+		live.MultimodalVideoFrameSamplingEnabled = desired.MultimodalVideoFrameSamplingEnabled
+		live.MultimodalMaxAssetBytes = desired.MultimodalMaxAssetBytes
+		live.MultimodalAllowedMIMETypes = append([]string(nil), desired.MultimodalAllowedMIMETypes...)
 	}
 
 	s.mu.Lock()
@@ -262,6 +347,11 @@ func (s Snapshot) AsMap() map[string]any {
 		"token_threshold":                         s.TokenThreshold,
 		"max_context_tokens":                      s.MaxContextTokens,
 		"max_injection_tokens":                    s.MaxInjectionTokens,
+		"rerank_model":                            s.RerankModel,
+		"rerank_candidate_multiplier":             s.RerankCandidateMultiplier,
+		"rerank_min_candidates":                   s.RerankMinCandidates,
+		"rerank_max_candidates":                   s.RerankMaxCandidates,
+		"rerank_blend_weight":                     s.RerankBlendWeight,
 		"memory_relation_max_hops":                s.MemoryRelationMaxHops,
 		"memory_relation_hop_decay_lambda":        s.MemoryRelationHopDecayLambda,
 		"memory_relation_hop_decay_exponent":      s.MemoryRelationHopDecayExponent,
@@ -295,6 +385,11 @@ func (s Snapshot) ApplyConfig(cfg bootstrap.Config) bootstrap.Config {
 	cfg.TokenThreshold = s.TokenThreshold
 	cfg.MaxContextTokens = s.MaxContextTokens
 	cfg.MaxInjectionTokens = s.MaxInjectionTokens
+	cfg.RerankModel = s.RerankModel
+	cfg.RerankCandidateMultiplier = s.RerankCandidateMultiplier
+	cfg.RerankMinCandidates = s.RerankMinCandidates
+	cfg.RerankMaxCandidates = s.RerankMaxCandidates
+	cfg.RerankBlendWeight = s.RerankBlendWeight
 	cfg.MemoryRelationMaxHops = s.MemoryRelationMaxHops
 	cfg.MemoryRelationHopDecayLambda = s.MemoryRelationHopDecayLambda
 	cfg.MemoryRelationHopDecayExponent = s.MemoryRelationHopDecayExponent
@@ -318,6 +413,10 @@ func (s Snapshot) ApplyConfig(cfg bootstrap.Config) bootstrap.Config {
 		AllowedMIMETypes:          append([]string(nil), s.MultimodalAllowedMIMETypes...),
 	}
 	return cfg
+}
+
+func (s Snapshot) MultimodalConfig() bootstrap.MultimodalConfig {
+	return s.ApplyConfig(bootstrap.Config{}).Multimodal
 }
 
 func (o Overrides) Apply(defaults Snapshot) Snapshot {
@@ -348,6 +447,21 @@ func (o Overrides) Apply(defaults Snapshot) Snapshot {
 	}
 	if o.MaxInjectionTokens != nil {
 		snapshot.MaxInjectionTokens = *o.MaxInjectionTokens
+	}
+	if o.RerankModel != nil {
+		snapshot.RerankModel = *o.RerankModel
+	}
+	if o.RerankCandidateMultiplier != nil {
+		snapshot.RerankCandidateMultiplier = *o.RerankCandidateMultiplier
+	}
+	if o.RerankMinCandidates != nil {
+		snapshot.RerankMinCandidates = *o.RerankMinCandidates
+	}
+	if o.RerankMaxCandidates != nil {
+		snapshot.RerankMaxCandidates = *o.RerankMaxCandidates
+	}
+	if o.RerankBlendWeight != nil {
+		snapshot.RerankBlendWeight = *o.RerankBlendWeight
 	}
 	if o.MemoryRelationMaxHops != nil {
 		snapshot.MemoryRelationMaxHops = *o.MemoryRelationMaxHops
@@ -413,364 +527,47 @@ func (o Overrides) Apply(defaults Snapshot) Snapshot {
 }
 
 func (s *Service) loadOverrides(ctx context.Context) (Overrides, error) {
-	if s.db == nil {
+	if s.store == nil {
 		return Overrides{}, nil
 	}
-
-	row := s.db.QueryRowContext(ctx, `
-		SELECT
-			default_provider,
-			internal_default_provider,
-			vector_store_backend,
-			conversation_timeout_seconds,
-			provider_timeout_seconds,
-			message_threshold,
-			token_threshold,
-			max_context_tokens,
-			max_injection_tokens,
-			memory_relation_max_hops,
-			memory_relation_hop_decay_lambda,
-			memory_relation_hop_decay_exponent,
-			rate_limit_rps,
-			rate_limit_burst,
-			cache_ttl_seconds,
-			cors_allowed_origins,
-			session_cookie_cross_site,
-			multimodal_enabled,
-			multimodal_storage_backend,
-			multimodal_storage_local_root,
-			multimodal_storage_bucket,
-			multimodal_extract_image_model,
-			multimodal_extract_audio_model,
-			multimodal_extract_video_model,
-			multimodal_extract_file_model,
-			multimodal_audio_transcription_enabled,
-			multimodal_video_frame_sampling_enabled,
-			multimodal_max_asset_bytes,
-			multimodal_allowed_mime_types
-		FROM system_settings
-		WHERE id = $1
-	`, "global")
-
-	var (
-		defaultProvider                     sql.NullString
-		internalDefaultProvider             sql.NullString
-		vectorStoreBackend                  sql.NullString
-		conversationTimeoutSeconds          sql.NullInt64
-		providerTimeoutSeconds              sql.NullInt64
-		messageThreshold                    sql.NullInt64
-		tokenThreshold                      sql.NullInt64
-		maxContextTokens                    sql.NullInt64
-		maxInjectionTokens                  sql.NullInt64
-		memoryRelationMaxHops               sql.NullInt64
-		memoryRelationHopDecayLambda        sql.NullFloat64
-		memoryRelationHopDecayExponent      sql.NullFloat64
-		rateLimitRPS                        sql.NullInt64
-		rateLimitBurst                      sql.NullInt64
-		cacheTTLSeconds                     sql.NullInt64
-		corsAllowedOrigins                  sql.NullString
-		sessionCookieCrossSite              sql.NullBool
-		multimodalEnabled                   sql.NullBool
-		multimodalStorageBackend            sql.NullString
-		multimodalStorageLocalRoot          sql.NullString
-		multimodalStorageBucket             sql.NullString
-		multimodalExtractImageModel         sql.NullString
-		multimodalExtractAudioModel         sql.NullString
-		multimodalExtractVideoModel         sql.NullString
-		multimodalExtractFileModel          sql.NullString
-		multimodalAudioTranscriptionEnabled sql.NullBool
-		multimodalVideoFrameSamplingEnabled sql.NullBool
-		multimodalMaxAssetBytes             sql.NullInt64
-		multimodalAllowedMIMETypes          sql.NullString
-	)
-	if err := row.Scan(
-		&defaultProvider,
-		&internalDefaultProvider,
-		&vectorStoreBackend,
-		&conversationTimeoutSeconds,
-		&providerTimeoutSeconds,
-		&messageThreshold,
-		&tokenThreshold,
-		&maxContextTokens,
-		&maxInjectionTokens,
-		&memoryRelationMaxHops,
-		&memoryRelationHopDecayLambda,
-		&memoryRelationHopDecayExponent,
-		&rateLimitRPS,
-		&rateLimitBurst,
-		&cacheTTLSeconds,
-		&corsAllowedOrigins,
-		&sessionCookieCrossSite,
-		&multimodalEnabled,
-		&multimodalStorageBackend,
-		&multimodalStorageLocalRoot,
-		&multimodalStorageBucket,
-		&multimodalExtractImageModel,
-		&multimodalExtractAudioModel,
-		&multimodalExtractVideoModel,
-		&multimodalExtractFileModel,
-		&multimodalAudioTranscriptionEnabled,
-		&multimodalVideoFrameSamplingEnabled,
-		&multimodalMaxAssetBytes,
-		&multimodalAllowedMIMETypes,
-	); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return Overrides{}, nil
-		}
+	state, err := s.store.Load(ctx)
+	if err != nil {
 		return Overrides{}, err
 	}
-
-	overrides := Overrides{}
-	if defaultProvider.Valid {
-		value := domain.NormalizeProvider(defaultProvider.String)
-		overrides.DefaultProvider = &value
-	}
-	if internalDefaultProvider.Valid {
-		value := domain.NormalizeProvider(internalDefaultProvider.String)
-		overrides.InternalDefaultProvider = &value
-	}
-	if vectorStoreBackend.Valid {
-		value := vectorStoreBackend.String
-		overrides.VectorStoreBackend = &value
-	}
-	if conversationTimeoutSeconds.Valid {
-		value := int(conversationTimeoutSeconds.Int64)
-		overrides.ConversationTimeoutSeconds = &value
-	}
-	if providerTimeoutSeconds.Valid {
-		value := int(providerTimeoutSeconds.Int64)
-		overrides.ProviderTimeoutSeconds = &value
-	}
-	if messageThreshold.Valid {
-		value := int(messageThreshold.Int64)
-		overrides.MessageThreshold = &value
-	}
-	if tokenThreshold.Valid {
-		value := int(tokenThreshold.Int64)
-		overrides.TokenThreshold = &value
-	}
-	if maxContextTokens.Valid {
-		value := int(maxContextTokens.Int64)
-		overrides.MaxContextTokens = &value
-	}
-	if maxInjectionTokens.Valid {
-		value := int(maxInjectionTokens.Int64)
-		overrides.MaxInjectionTokens = &value
-	}
-	if memoryRelationMaxHops.Valid {
-		value := int(memoryRelationMaxHops.Int64)
-		overrides.MemoryRelationMaxHops = &value
-	}
-	if memoryRelationHopDecayLambda.Valid {
-		value := memoryRelationHopDecayLambda.Float64
-		overrides.MemoryRelationHopDecayLambda = &value
-	}
-	if memoryRelationHopDecayExponent.Valid {
-		value := memoryRelationHopDecayExponent.Float64
-		overrides.MemoryRelationHopDecayExponent = &value
-	}
-	if rateLimitRPS.Valid {
-		value := int(rateLimitRPS.Int64)
-		overrides.RateLimitRPS = &value
-	}
-	if rateLimitBurst.Valid {
-		value := int(rateLimitBurst.Int64)
-		overrides.RateLimitBurst = &value
-	}
-	if cacheTTLSeconds.Valid {
-		value := int(cacheTTLSeconds.Int64)
-		overrides.CacheTTLSeconds = &value
-	}
-	if corsAllowedOrigins.Valid {
-		values := []string{}
-		if err := json.Unmarshal([]byte(corsAllowedOrigins.String), &values); err != nil {
+	fields := map[string]any{}
+	for key, raw := range state.System {
+		if len(raw) == 0 {
+			fields[key] = nil
+			continue
+		}
+		var decoded any
+		if err := json.Unmarshal(raw, &decoded); err != nil {
 			return Overrides{}, err
 		}
-		overrides.CORSAllowedOrigins = &values
+		fields[key] = decoded
 	}
-	if sessionCookieCrossSite.Valid {
-		value := sessionCookieCrossSite.Bool
-		overrides.SessionCookieCrossSite = &value
-	}
-	if multimodalEnabled.Valid {
-		value := multimodalEnabled.Bool
-		overrides.MultimodalEnabled = &value
-	}
-	if multimodalStorageBackend.Valid {
-		value := multimodalStorageBackend.String
-		overrides.MultimodalStorageBackend = &value
-	}
-	if multimodalStorageLocalRoot.Valid {
-		value := multimodalStorageLocalRoot.String
-		overrides.MultimodalStorageLocalRoot = &value
-	}
-	if multimodalStorageBucket.Valid {
-		value := multimodalStorageBucket.String
-		overrides.MultimodalStorageBucket = &value
-	}
-	if multimodalExtractImageModel.Valid {
-		value := multimodalExtractImageModel.String
-		overrides.MultimodalExtractImageModel = &value
-	}
-	if multimodalExtractAudioModel.Valid {
-		value := multimodalExtractAudioModel.String
-		overrides.MultimodalExtractAudioModel = &value
-	}
-	if multimodalExtractVideoModel.Valid {
-		value := multimodalExtractVideoModel.String
-		overrides.MultimodalExtractVideoModel = &value
-	}
-	if multimodalExtractFileModel.Valid {
-		value := multimodalExtractFileModel.String
-		overrides.MultimodalExtractFileModel = &value
-	}
-	if multimodalAudioTranscriptionEnabled.Valid {
-		value := multimodalAudioTranscriptionEnabled.Bool
-		overrides.MultimodalAudioTranscriptionEnabled = &value
-	}
-	if multimodalVideoFrameSamplingEnabled.Valid {
-		value := multimodalVideoFrameSamplingEnabled.Bool
-		overrides.MultimodalVideoFrameSamplingEnabled = &value
-	}
-	if multimodalMaxAssetBytes.Valid {
-		value := multimodalMaxAssetBytes.Int64
-		overrides.MultimodalMaxAssetBytes = &value
-	}
-	if multimodalAllowedMIMETypes.Valid {
-		values := []string{}
-		if err := json.Unmarshal([]byte(multimodalAllowedMIMETypes.String), &values); err != nil {
-			return Overrides{}, err
-		}
-		overrides.MultimodalAllowedMIMETypes = &values
-	}
-	return overrides, nil
+	return applyFieldOverrides(Overrides{}, fields)
 }
 
 func (s *Service) persistOverrides(ctx context.Context, overrides Overrides) error {
-	if s.db == nil {
+	if s.store == nil {
 		return nil
 	}
-
-	var corsJSON any
-	if overrides.CORSAllowedOrigins != nil {
-		payload, err := json.Marshal(*overrides.CORSAllowedOrigins)
-		if err != nil {
-			return err
-		}
-		corsJSON = string(payload)
+	fields, err := overridesToPersistedMap(overrides)
+	if err != nil {
+		return err
 	}
-	var allowedMIMETypesJSON any
-	if overrides.MultimodalAllowedMIMETypes != nil {
-		payload, err := json.Marshal(*overrides.MultimodalAllowedMIMETypes)
-		if err != nil {
-			return err
+	_, err = s.store.Update(ctx, func(state *runtimeconfig.State) error {
+		state.System = map[string]json.RawMessage{}
+		for key, value := range fields {
+			raw, err := json.Marshal(value)
+			if err != nil {
+				return err
+			}
+			state.System[key] = raw
 		}
-		allowedMIMETypesJSON = string(payload)
-	}
-	now := time.Now().UTC()
-
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO system_settings (
-			id,
-			default_provider,
-			internal_default_provider,
-			vector_store_backend,
-			conversation_timeout_seconds,
-			provider_timeout_seconds,
-			message_threshold,
-			token_threshold,
-			max_context_tokens,
-			max_injection_tokens,
-			memory_relation_max_hops,
-			memory_relation_hop_decay_lambda,
-			memory_relation_hop_decay_exponent,
-			rate_limit_rps,
-			rate_limit_burst,
-			cache_ttl_seconds,
-			cors_allowed_origins,
-			session_cookie_cross_site,
-			multimodal_enabled,
-			multimodal_storage_backend,
-			multimodal_storage_local_root,
-			multimodal_storage_bucket,
-			multimodal_extract_image_model,
-			multimodal_extract_audio_model,
-			multimodal_extract_video_model,
-			multimodal_extract_file_model,
-			multimodal_audio_transcription_enabled,
-			multimodal_video_frame_sampling_enabled,
-			multimodal_max_asset_bytes,
-			multimodal_allowed_mime_types,
-			created_at,
-			updated_at
-		) VALUES (
-			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30::jsonb,$31,$31
-		)
-		ON CONFLICT (id) DO UPDATE SET
-			default_provider = EXCLUDED.default_provider,
-			internal_default_provider = EXCLUDED.internal_default_provider,
-			vector_store_backend = EXCLUDED.vector_store_backend,
-			conversation_timeout_seconds = EXCLUDED.conversation_timeout_seconds,
-			provider_timeout_seconds = EXCLUDED.provider_timeout_seconds,
-			message_threshold = EXCLUDED.message_threshold,
-			token_threshold = EXCLUDED.token_threshold,
-			max_context_tokens = EXCLUDED.max_context_tokens,
-			max_injection_tokens = EXCLUDED.max_injection_tokens,
-			memory_relation_max_hops = EXCLUDED.memory_relation_max_hops,
-			memory_relation_hop_decay_lambda = EXCLUDED.memory_relation_hop_decay_lambda,
-			memory_relation_hop_decay_exponent = EXCLUDED.memory_relation_hop_decay_exponent,
-			rate_limit_rps = EXCLUDED.rate_limit_rps,
-			rate_limit_burst = EXCLUDED.rate_limit_burst,
-			cache_ttl_seconds = EXCLUDED.cache_ttl_seconds,
-			cors_allowed_origins = EXCLUDED.cors_allowed_origins,
-			session_cookie_cross_site = EXCLUDED.session_cookie_cross_site,
-			multimodal_enabled = EXCLUDED.multimodal_enabled,
-			multimodal_storage_backend = EXCLUDED.multimodal_storage_backend,
-			multimodal_storage_local_root = EXCLUDED.multimodal_storage_local_root,
-			multimodal_storage_bucket = EXCLUDED.multimodal_storage_bucket,
-			multimodal_extract_image_model = EXCLUDED.multimodal_extract_image_model,
-			multimodal_extract_audio_model = EXCLUDED.multimodal_extract_audio_model,
-			multimodal_extract_video_model = EXCLUDED.multimodal_extract_video_model,
-			multimodal_extract_file_model = EXCLUDED.multimodal_extract_file_model,
-			multimodal_audio_transcription_enabled = EXCLUDED.multimodal_audio_transcription_enabled,
-			multimodal_video_frame_sampling_enabled = EXCLUDED.multimodal_video_frame_sampling_enabled,
-			multimodal_max_asset_bytes = EXCLUDED.multimodal_max_asset_bytes,
-			multimodal_allowed_mime_types = EXCLUDED.multimodal_allowed_mime_types,
-			updated_at = EXCLUDED.updated_at
-	`,
-		"global",
-		nullableProvider(overrides.DefaultProvider),
-		nullableProvider(overrides.InternalDefaultProvider),
-		nullableString(overrides.VectorStoreBackend),
-		nullableInt(overrides.ConversationTimeoutSeconds),
-		nullableInt(overrides.ProviderTimeoutSeconds),
-		nullableInt(overrides.MessageThreshold),
-		nullableInt(overrides.TokenThreshold),
-		nullableInt(overrides.MaxContextTokens),
-		nullableInt(overrides.MaxInjectionTokens),
-		nullableInt(overrides.MemoryRelationMaxHops),
-		nullableFloat64(overrides.MemoryRelationHopDecayLambda),
-		nullableFloat64(overrides.MemoryRelationHopDecayExponent),
-		nullableInt(overrides.RateLimitRPS),
-		nullableInt(overrides.RateLimitBurst),
-		nullableInt(overrides.CacheTTLSeconds),
-		corsJSON,
-		nullableBool(overrides.SessionCookieCrossSite),
-		nullableBool(overrides.MultimodalEnabled),
-		nullableString(overrides.MultimodalStorageBackend),
-		nullableString(overrides.MultimodalStorageLocalRoot),
-		nullableString(overrides.MultimodalStorageBucket),
-		nullableString(overrides.MultimodalExtractImageModel),
-		nullableString(overrides.MultimodalExtractAudioModel),
-		nullableString(overrides.MultimodalExtractVideoModel),
-		nullableString(overrides.MultimodalExtractFileModel),
-		nullableBool(overrides.MultimodalAudioTranscriptionEnabled),
-		nullableBool(overrides.MultimodalVideoFrameSamplingEnabled),
-		nullableInt64(overrides.MultimodalMaxAssetBytes),
-		allowedMIMETypesJSON,
-		now,
-		now,
-	)
+		return nil
+	})
 	return err
 }
 
@@ -789,7 +586,7 @@ func metadataForOverrides(overrides Overrides) map[string]FieldMeta {
 			Description: "Fallback upstream provider set used by internal model-driven tasks when the configured model reference does not pin one explicitly.",
 		},
 		"vector_store_backend": {
-			ApplyMode:   "restart",
+			ApplyMode:   "live",
 			Source:      sourceFor(overrides.VectorStoreBackend != nil),
 			Category:    "memory",
 			Description: "Primary vector backend implementation used by the memory retrieval layer.",
@@ -801,7 +598,7 @@ func metadataForOverrides(overrides Overrides) map[string]FieldMeta {
 			Description: "Idle window before the scheduler marks an active conversation as timed out.",
 		},
 		"provider_timeout_seconds": {
-			ApplyMode:   "restart",
+			ApplyMode:   "live",
 			Source:      sourceFor(overrides.ProviderTimeoutSeconds != nil),
 			Category:    "traffic",
 			Description: "Per-request upstream timeout for provider adapters and HTTP clients.",
@@ -819,16 +616,46 @@ func metadataForOverrides(overrides Overrides) map[string]FieldMeta {
 			Description: "Automatic finalize threshold based on accumulated request and response tokens.",
 		},
 		"max_context_tokens": {
-			ApplyMode:   "restart",
+			ApplyMode:   "live",
 			Source:      sourceFor(overrides.MaxContextTokens != nil),
 			Category:    "memory",
 			Description: "Upper budget available to request assembly before upstream truncation or rejection.",
 		},
 		"max_injection_tokens": {
-			ApplyMode:   "restart",
+			ApplyMode:   "live",
 			Source:      sourceFor(overrides.MaxInjectionTokens != nil),
 			Category:    "memory",
 			Description: "Injection budget used by memory context assembly and related defaults.",
+		},
+		"rerank_model": {
+			ApplyMode:   "live",
+			Source:      sourceFor(overrides.RerankModel != nil),
+			Category:    "memory",
+			Description: "Reranker model reference with provider prefix, for example cohere:rerank-v3.5 or jina:jina-reranker-v2-base-multilingual.",
+		},
+		"rerank_candidate_multiplier": {
+			ApplyMode:   "live",
+			Source:      sourceFor(overrides.RerankCandidateMultiplier != nil),
+			Category:    "memory",
+			Description: "Multiplier used to widen vector recall before reranking the candidate set.",
+		},
+		"rerank_min_candidates": {
+			ApplyMode:   "live",
+			Source:      sourceFor(overrides.RerankMinCandidates != nil),
+			Category:    "memory",
+			Description: "Minimum number of vector candidates promoted into the reranking stage.",
+		},
+		"rerank_max_candidates": {
+			ApplyMode:   "live",
+			Source:      sourceFor(overrides.RerankMaxCandidates != nil),
+			Category:    "memory",
+			Description: "Maximum number of vector candidates allowed into the reranking stage before score blending.",
+		},
+		"rerank_blend_weight": {
+			ApplyMode:   "live",
+			Source:      sourceFor(overrides.RerankBlendWeight != nil),
+			Category:    "memory",
+			Description: "Blend factor applied when combining semantic ranking with reranker scores. Set to 0 to disable score blending while keeping the model configured.",
 		},
 		"memory_relation_max_hops": {
 			ApplyMode:   "live",
@@ -861,91 +688,91 @@ func metadataForOverrides(overrides Overrides) map[string]FieldMeta {
 			Description: "Burst capacity allowed before proxy requests begin returning rate-limit responses.",
 		},
 		"cache_ttl_seconds": {
-			ApplyMode:   "restart",
+			ApplyMode:   "live",
 			Source:      sourceFor(overrides.CacheTTLSeconds != nil),
 			Category:    "memory",
 			Description: "Default TTL for Redis-backed and process-local JSON cache entries.",
 		},
 		"cors_allowed_origins": {
-			ApplyMode:   "restart",
+			ApplyMode:   "live",
 			Source:      sourceFor(overrides.CORSAllowedOrigins != nil),
 			Category:    "web",
 			Description: "Cross-origin origins allowed to use the admin session and direct target API requests.",
 		},
 		"session_cookie_cross_site": {
-			ApplyMode:   "restart",
+			ApplyMode:   "live",
 			Source:      sourceFor(overrides.SessionCookieCrossSite != nil),
 			Category:    "web",
 			Description: "Controls whether the admin session cookie is issued with cross-site semantics.",
 		},
 		"multimodal_enabled": {
-			ApplyMode:   "restart",
+			ApplyMode:   "live",
 			Source:      sourceFor(overrides.MultimodalEnabled != nil),
 			Category:    "multimodal",
 			Description: "Master switch for file/blob ingestion, timeline materialization, and multimodal extraction workers.",
 		},
 		"multimodal_storage_backend": {
-			ApplyMode:   "restart",
+			ApplyMode:   "live",
 			Source:      sourceFor(overrides.MultimodalStorageBackend != nil),
 			Category:    "multimodal",
 			Description: "Blob storage implementation used for retained source media.",
 		},
 		"multimodal_storage_local_root": {
-			ApplyMode:   "restart",
+			ApplyMode:   "live",
 			Source:      sourceFor(overrides.MultimodalStorageLocalRoot != nil),
 			Category:    "multimodal",
 			Description: "Filesystem root used by the local blob store backend in development and single-node deployments.",
 		},
 		"multimodal_storage_bucket": {
-			ApplyMode:   "restart",
+			ApplyMode:   "live",
 			Source:      sourceFor(overrides.MultimodalStorageBucket != nil),
 			Category:    "multimodal",
 			Description: "Bucket or container name used by remote blob storage backends.",
 		},
 		"multimodal_extract_image_model": {
-			ApplyMode:   "restart",
+			ApplyMode:   "live",
 			Source:      sourceFor(overrides.MultimodalExtractImageModel != nil),
 			Category:    "multimodal",
 			Description: "Configured image understanding model name used for captioning and OCR extraction.",
 		},
 		"multimodal_extract_audio_model": {
-			ApplyMode:   "restart",
+			ApplyMode:   "live",
 			Source:      sourceFor(overrides.MultimodalExtractAudioModel != nil),
 			Category:    "multimodal",
 			Description: "Configured audio model name used for transcription and optional audio summarization.",
 		},
 		"multimodal_extract_video_model": {
-			ApplyMode:   "restart",
+			ApplyMode:   "live",
 			Source:      sourceFor(overrides.MultimodalExtractVideoModel != nil),
 			Category:    "multimodal",
 			Description: "Configured video model name used for keyframe analysis and video-level summarization.",
 		},
 		"multimodal_extract_file_model": {
-			ApplyMode:   "restart",
+			ApplyMode:   "live",
 			Source:      sourceFor(overrides.MultimodalExtractFileModel != nil),
 			Category:    "multimodal",
 			Description: "Configured document extraction model used for scanned files and non-text-native document fallback.",
 		},
 		"multimodal_audio_transcription_enabled": {
-			ApplyMode:   "restart",
+			ApplyMode:   "live",
 			Source:      sourceFor(overrides.MultimodalAudioTranscriptionEnabled != nil),
 			Category:    "multimodal",
 			Description: "Enables transcript generation for supported audio inputs.",
 		},
 		"multimodal_video_frame_sampling_enabled": {
-			ApplyMode:   "restart",
+			ApplyMode:   "live",
 			Source:      sourceFor(overrides.MultimodalVideoFrameSamplingEnabled != nil),
 			Category:    "multimodal",
 			Description: "Enables frame sampling and visual summary extraction for video inputs.",
 		},
 		"multimodal_max_asset_bytes": {
-			ApplyMode:   "restart",
+			ApplyMode:   "live",
 			Source:      sourceFor(overrides.MultimodalMaxAssetBytes != nil),
 			Category:    "multimodal",
 			Description: "Maximum upload size accepted for retained multimodal assets before the proxy rejects the request.",
 		},
 		"multimodal_allowed_mime_types": {
-			ApplyMode:   "restart",
+			ApplyMode:   "live",
 			Source:      sourceFor(overrides.MultimodalAllowedMIMETypes != nil),
 			Category:    "multimodal",
 			Description: "Allow-list of MIME types accepted for hosted uploads and multimodal extraction.",
@@ -1023,6 +850,40 @@ func applyFieldOverrides(base Overrides, fields map[string]any) (Overrides, erro
 				return Overrides{}, err
 			}
 			next.MaxInjectionTokens = value
+		case "rerank_model":
+			if raw == nil {
+				next.RerankModel = nil
+				continue
+			}
+			value := strings.TrimSpace(stringValue(raw))
+			if err := validateRerankModelReference(value); err != nil {
+				return Overrides{}, err
+			}
+			next.RerankModel = &value
+		case "rerank_candidate_multiplier":
+			value, err := intOverride(raw)
+			if err != nil {
+				return Overrides{}, err
+			}
+			next.RerankCandidateMultiplier = value
+		case "rerank_min_candidates":
+			value, err := intOverride(raw)
+			if err != nil {
+				return Overrides{}, err
+			}
+			next.RerankMinCandidates = value
+		case "rerank_max_candidates":
+			value, err := intOverride(raw)
+			if err != nil {
+				return Overrides{}, err
+			}
+			next.RerankMaxCandidates = value
+		case "rerank_blend_weight":
+			value, err := float64Override(raw)
+			if err != nil {
+				return Overrides{}, err
+			}
+			next.RerankBlendWeight = value
 		case "memory_relation_max_hops":
 			value, err := intOverride(raw)
 			if err != nil {
@@ -1170,6 +1031,21 @@ func applyFieldOverrides(base Overrides, fields map[string]any) (Overrides, erro
 			next.MultimodalAllowedMIMETypes = value
 		}
 	}
+	if next.RerankCandidateMultiplier != nil && (*next.RerankCandidateMultiplier < 1 || *next.RerankCandidateMultiplier > 16) {
+		return Overrides{}, errors.New("rerank_candidate_multiplier must be between 1 and 16")
+	}
+	if next.RerankMinCandidates != nil && *next.RerankMinCandidates < 1 {
+		return Overrides{}, errors.New("rerank_min_candidates must be at least 1")
+	}
+	if next.RerankMaxCandidates != nil && *next.RerankMaxCandidates < 1 {
+		return Overrides{}, errors.New("rerank_max_candidates must be at least 1")
+	}
+	if next.RerankMinCandidates != nil && next.RerankMaxCandidates != nil && *next.RerankMaxCandidates < *next.RerankMinCandidates {
+		return Overrides{}, errors.New("rerank_max_candidates must be greater than or equal to rerank_min_candidates")
+	}
+	if next.RerankBlendWeight != nil && (*next.RerankBlendWeight < 0 || *next.RerankBlendWeight > 1) {
+		return Overrides{}, errors.New("rerank_blend_weight must be between 0 and 1")
+	}
 	return next, nil
 }
 
@@ -1312,6 +1188,190 @@ func stringValue(value any) string {
 	default:
 		return fmt.Sprintf("%v", value)
 	}
+}
+
+func validateRerankModelReference(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+
+	providerPart, modelPart, ok := strings.Cut(value, ":")
+	if !ok {
+		providerPart, modelPart, ok = strings.Cut(value, "/")
+	}
+	if !ok {
+		return errors.New("rerank_model must include a provider prefix like cohere:model or jina:model")
+	}
+
+	providerName := domain.NormalizeProvider(providerPart)
+	supported := false
+	for _, candidate := range domain.RerankProviders() {
+		if providerName == candidate {
+			supported = true
+			break
+		}
+	}
+	if !supported {
+		return fmt.Errorf("rerank_model provider %q is not supported", providerName)
+	}
+	if strings.TrimSpace(modelPart) == "" {
+		return errors.New("rerank_model model name is required")
+	}
+	return nil
+}
+
+func validateSnapshot(snapshot Snapshot) error {
+	if normalized := strings.TrimSpace(strings.ToLower(snapshot.VectorStoreBackend)); normalized != "" && normalized != "pgvector" {
+		return fmt.Errorf("vector_store_backend %q is not supported", snapshot.VectorStoreBackend)
+	}
+	if snapshot.ProviderTimeoutSeconds <= 0 {
+		return errors.New("provider_timeout_seconds must be greater than 0")
+	}
+	if snapshot.MaxContextTokens <= 0 {
+		return errors.New("max_context_tokens must be greater than 0")
+	}
+	if snapshot.MaxInjectionTokens <= 0 {
+		return errors.New("max_injection_tokens must be greater than 0")
+	}
+	if snapshot.MaxInjectionTokens > snapshot.MaxContextTokens {
+		return errors.New("max_injection_tokens must be less than or equal to max_context_tokens")
+	}
+	if snapshot.CacheTTLSeconds <= 0 {
+		return errors.New("cache_ttl_seconds must be greater than 0")
+	}
+	backend := strings.TrimSpace(strings.ToLower(snapshot.MultimodalStorageBackend))
+	switch backend {
+	case "", "local":
+		if strings.TrimSpace(snapshot.MultimodalStorageLocalRoot) == "" {
+			return errors.New("multimodal_storage_local_root cannot be empty when using the local storage backend")
+		}
+	default:
+		return fmt.Errorf("multimodal_storage_backend %q is not supported", snapshot.MultimodalStorageBackend)
+	}
+	if snapshot.RerankCandidateMultiplier < 1 || snapshot.RerankCandidateMultiplier > 16 {
+		return errors.New("rerank_candidate_multiplier must be between 1 and 16")
+	}
+	if snapshot.RerankMinCandidates < 1 {
+		return errors.New("rerank_min_candidates must be at least 1")
+	}
+	if snapshot.RerankMaxCandidates < 1 {
+		return errors.New("rerank_max_candidates must be at least 1")
+	}
+	if snapshot.RerankMaxCandidates < snapshot.RerankMinCandidates {
+		return errors.New("rerank_max_candidates must be greater than or equal to rerank_min_candidates")
+	}
+	if snapshot.RerankBlendWeight < 0 || snapshot.RerankBlendWeight > 1 {
+		return errors.New("rerank_blend_weight must be between 0 and 1")
+	}
+	return validateRerankModelReference(snapshot.RerankModel)
+}
+
+func overridesToPersistedMap(overrides Overrides) (map[string]any, error) {
+	out := map[string]any{}
+	if value := nullableProvider(overrides.DefaultProvider); value != nil {
+		out["default_provider"] = value
+	}
+	if value := nullableProvider(overrides.InternalDefaultProvider); value != nil {
+		out["internal_default_provider"] = value
+	}
+	if value := nullableString(overrides.VectorStoreBackend); value != nil {
+		out["vector_store_backend"] = value
+	}
+	if value := nullableInt(overrides.ConversationTimeoutSeconds); value != nil {
+		out["conversation_timeout_seconds"] = value
+	}
+	if value := nullableInt(overrides.ProviderTimeoutSeconds); value != nil {
+		out["provider_timeout_seconds"] = value
+	}
+	if value := nullableInt(overrides.MessageThreshold); value != nil {
+		out["message_threshold"] = value
+	}
+	if value := nullableInt(overrides.TokenThreshold); value != nil {
+		out["token_threshold"] = value
+	}
+	if value := nullableInt(overrides.MaxContextTokens); value != nil {
+		out["max_context_tokens"] = value
+	}
+	if value := nullableInt(overrides.MaxInjectionTokens); value != nil {
+		out["max_injection_tokens"] = value
+	}
+	if value := nullableString(overrides.RerankModel); value != nil {
+		out["rerank_model"] = value
+	}
+	if value := nullableInt(overrides.RerankCandidateMultiplier); value != nil {
+		out["rerank_candidate_multiplier"] = value
+	}
+	if value := nullableInt(overrides.RerankMinCandidates); value != nil {
+		out["rerank_min_candidates"] = value
+	}
+	if value := nullableInt(overrides.RerankMaxCandidates); value != nil {
+		out["rerank_max_candidates"] = value
+	}
+	if value := nullableFloat64(overrides.RerankBlendWeight); value != nil {
+		out["rerank_blend_weight"] = value
+	}
+	if value := nullableInt(overrides.MemoryRelationMaxHops); value != nil {
+		out["memory_relation_max_hops"] = value
+	}
+	if value := nullableFloat64(overrides.MemoryRelationHopDecayLambda); value != nil {
+		out["memory_relation_hop_decay_lambda"] = value
+	}
+	if value := nullableFloat64(overrides.MemoryRelationHopDecayExponent); value != nil {
+		out["memory_relation_hop_decay_exponent"] = value
+	}
+	if value := nullableInt(overrides.RateLimitRPS); value != nil {
+		out["rate_limit_rps"] = value
+	}
+	if value := nullableInt(overrides.RateLimitBurst); value != nil {
+		out["rate_limit_burst"] = value
+	}
+	if value := nullableInt(overrides.CacheTTLSeconds); value != nil {
+		out["cache_ttl_seconds"] = value
+	}
+	if overrides.CORSAllowedOrigins != nil {
+		out["cors_allowed_origins"] = append([]string(nil), (*overrides.CORSAllowedOrigins)...)
+	}
+	if value := nullableBool(overrides.SessionCookieCrossSite); value != nil {
+		out["session_cookie_cross_site"] = value
+	}
+	if value := nullableBool(overrides.MultimodalEnabled); value != nil {
+		out["multimodal_enabled"] = value
+	}
+	if value := nullableString(overrides.MultimodalStorageBackend); value != nil {
+		out["multimodal_storage_backend"] = value
+	}
+	if value := nullableString(overrides.MultimodalStorageLocalRoot); value != nil {
+		out["multimodal_storage_local_root"] = value
+	}
+	if value := nullableString(overrides.MultimodalStorageBucket); value != nil {
+		out["multimodal_storage_bucket"] = value
+	}
+	if value := nullableString(overrides.MultimodalExtractImageModel); value != nil {
+		out["multimodal_extract_image_model"] = value
+	}
+	if value := nullableString(overrides.MultimodalExtractAudioModel); value != nil {
+		out["multimodal_extract_audio_model"] = value
+	}
+	if value := nullableString(overrides.MultimodalExtractVideoModel); value != nil {
+		out["multimodal_extract_video_model"] = value
+	}
+	if value := nullableString(overrides.MultimodalExtractFileModel); value != nil {
+		out["multimodal_extract_file_model"] = value
+	}
+	if value := nullableBool(overrides.MultimodalAudioTranscriptionEnabled); value != nil {
+		out["multimodal_audio_transcription_enabled"] = value
+	}
+	if value := nullableBool(overrides.MultimodalVideoFrameSamplingEnabled); value != nil {
+		out["multimodal_video_frame_sampling_enabled"] = value
+	}
+	if value := nullableInt64(overrides.MultimodalMaxAssetBytes); value != nil {
+		out["multimodal_max_asset_bytes"] = value
+	}
+	if overrides.MultimodalAllowedMIMETypes != nil {
+		out["multimodal_allowed_mime_types"] = append([]string(nil), (*overrides.MultimodalAllowedMIMETypes)...)
+	}
+	return out, nil
 }
 
 func nullableInt64(value *int64) any {

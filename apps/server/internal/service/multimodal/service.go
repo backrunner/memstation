@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,6 +24,7 @@ import (
 
 type Service struct {
 	repo  ports.MediaRepository
+	mu    sync.RWMutex
 	blobs ports.BlobStore
 	cfg   bootstrap.MultimodalConfig
 }
@@ -32,11 +34,32 @@ func NewService(repo ports.MediaRepository, blobs ports.BlobStore, cfg bootstrap
 }
 
 func (s *Service) Enabled() bool {
-	return s != nil && s.cfg.Enabled
+	if s == nil {
+		return false
+	}
+	return s.runtimeConfig().Enabled
+}
+
+func (s *Service) UpdateRuntime(cfg bootstrap.MultimodalConfig, blobs ports.BlobStore) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.cfg = cfg
+	s.blobs = blobs
+	s.mu.Unlock()
+}
+
+func (s *Service) Snapshot() bootstrap.MultimodalConfig {
+	if s == nil {
+		return bootstrap.MultimodalConfig{}
+	}
+	return s.runtimeConfig()
 }
 
 func (s *Service) SaveUpload(ctx context.Context, userID, filename, mimeType string, body io.Reader, metadata map[string]any) (domain.BlobObject, error) {
-	if s == nil || s.repo == nil || s.blobs == nil {
+	cfg, blobs := s.runtime()
+	if s == nil || s.repo == nil || blobs == nil {
 		return domain.BlobObject{}, fmt.Errorf("multimodal storage is not configured")
 	}
 	filename = strings.TrimSpace(filename)
@@ -44,20 +67,20 @@ func (s *Service) SaveUpload(ctx context.Context, userID, filename, mimeType str
 		filename = "upload.bin"
 	}
 	mimeType = normalizeMIMEType(mimeType, filename)
-	if !s.mimeAllowed(mimeType) {
+	if !mimeAllowed(cfg, mimeType) {
 		return domain.BlobObject{}, fmt.Errorf("mime type %q is not allowed", mimeType)
 	}
 
 	limited := body
-	if s.cfg.MaxAssetBytes > 0 {
-		limited = io.LimitReader(body, s.cfg.MaxAssetBytes+1)
+	if cfg.MaxAssetBytes > 0 {
+		limited = io.LimitReader(body, cfg.MaxAssetBytes+1)
 	}
 	data, err := io.ReadAll(limited)
 	if err != nil {
 		return domain.BlobObject{}, err
 	}
-	if s.cfg.MaxAssetBytes > 0 && int64(len(data)) > s.cfg.MaxAssetBytes {
-		return domain.BlobObject{}, fmt.Errorf("asset exceeds max size of %d bytes", s.cfg.MaxAssetBytes)
+	if cfg.MaxAssetBytes > 0 && int64(len(data)) > cfg.MaxAssetBytes {
+		return domain.BlobObject{}, fmt.Errorf("asset exceeds max size of %d bytes", cfg.MaxAssetBytes)
 	}
 
 	sum := sha256.Sum256(data)
@@ -66,7 +89,7 @@ func (s *Service) SaveUpload(ctx context.Context, userID, filename, mimeType str
 		BlobID:           "blob:" + uuid.NewString(),
 		UserID:           userID,
 		SourceKind:       domain.BlobSourceKindUpload,
-		StorageBackend:   firstNonEmpty(strings.TrimSpace(s.cfg.StorageBackend), "local"),
+		StorageBackend:   firstNonEmpty(strings.TrimSpace(cfg.StorageBackend), "local"),
 		MIMEType:         mimeType,
 		SHA256:           hex.EncodeToString(sum[:]),
 		SizeBytes:        int64(len(data)),
@@ -75,12 +98,12 @@ func (s *Service) SaveUpload(ctx context.Context, userID, filename, mimeType str
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	}
-	stored, err := s.blobs.Put(ctx, blob, bytes.NewReader(data))
+	stored, err := blobs.Put(ctx, blob, bytes.NewReader(data))
 	if err != nil {
 		return domain.BlobObject{}, err
 	}
 	if err := s.repo.PutBlob(ctx, stored); err != nil {
-		_ = s.blobs.Delete(ctx, stored)
+		_ = blobs.Delete(ctx, stored)
 		return domain.BlobObject{}, err
 	}
 	return stored, nil
@@ -94,14 +117,15 @@ func (s *Service) GetBlob(ctx context.Context, userID, blobID string) (domain.Bl
 }
 
 func (s *Service) OpenBlob(ctx context.Context, userID, blobID string) (domain.BlobObject, io.ReadCloser, error) {
+	_, blobs := s.runtime()
 	blob, err := s.GetBlob(ctx, userID, blobID)
 	if err != nil {
 		return domain.BlobObject{}, nil, err
 	}
-	if s.blobs == nil {
+	if blobs == nil {
 		return domain.BlobObject{}, nil, fmt.Errorf("blob store is not configured")
 	}
-	reader, err := s.blobs.Open(ctx, blob)
+	reader, err := blobs.Open(ctx, blob)
 	if err != nil {
 		return domain.BlobObject{}, nil, err
 	}
@@ -109,6 +133,7 @@ func (s *Service) OpenBlob(ctx context.Context, userID, blobID string) (domain.B
 }
 
 func (s *Service) DeleteBlob(ctx context.Context, userID, blobID string) error {
+	_, blobs := s.runtime()
 	if s == nil || s.repo == nil {
 		return nil
 	}
@@ -116,8 +141,8 @@ func (s *Service) DeleteBlob(ctx context.Context, userID, blobID string) error {
 	if err != nil {
 		return err
 	}
-	if s.blobs != nil {
-		if err := s.blobs.Delete(ctx, blob); err != nil {
+	if blobs != nil {
+		if err := blobs.Delete(ctx, blob); err != nil {
 			return err
 		}
 	}
@@ -579,6 +604,7 @@ func (s *Service) extractPartArtifacts(ctx context.Context, userID, conversation
 }
 
 func (s *Service) partTextSource(ctx context.Context, userID string, part domain.MessagePart) (string, map[string]string, error) {
+	_, blobs := s.runtime()
 	textMeta := map[string]string{}
 	for _, key := range []string{"caption", "ocr_text", "transcript", "summary", "keyframe_summary", "document_text", "parsed_text"} {
 		if value, ok := part.Metadata[key].(string); ok && strings.TrimSpace(value) != "" {
@@ -591,14 +617,14 @@ func (s *Service) partTextSource(ctx context.Context, userID string, part domain
 	if strings.TrimSpace(part.RawPayload) != "" {
 		return strings.TrimSpace(part.RawPayload), textMeta, nil
 	}
-	if strings.TrimSpace(part.BlobID) == "" || s.blobs == nil || s.repo == nil {
+	if strings.TrimSpace(part.BlobID) == "" || blobs == nil || s.repo == nil {
 		return "", textMeta, nil
 	}
 	blob, err := s.repo.GetBlob(ctx, userID, part.BlobID)
 	if err != nil {
 		return "", textMeta, nil
 	}
-	reader, err := s.blobs.Open(ctx, blob)
+	reader, err := blobs.Open(ctx, blob)
 	if err != nil {
 		return "", textMeta, nil
 	}
@@ -621,11 +647,11 @@ func (s *Service) partTextSource(ctx context.Context, userID string, part domain
 	return text, textMeta, nil
 }
 
-func (s *Service) mimeAllowed(mimeType string) bool {
-	if len(s.cfg.AllowedMIMETypes) == 0 {
+func mimeAllowed(cfg bootstrap.MultimodalConfig, mimeType string) bool {
+	if len(cfg.AllowedMIMETypes) == 0 {
 		return true
 	}
-	for _, allowed := range s.cfg.AllowedMIMETypes {
+	for _, allowed := range cfg.AllowedMIMETypes {
 		if strings.EqualFold(strings.TrimSpace(allowed), mimeType) {
 			return true
 		}
@@ -634,18 +660,33 @@ func (s *Service) mimeAllowed(mimeType string) bool {
 }
 
 func (s *Service) modelNameForPart(partType domain.ContentBlockType) string {
+	cfg := s.runtimeConfig()
 	switch partType {
 	case domain.ContentBlockImage:
-		return strings.TrimSpace(s.cfg.ImageModel)
+		return strings.TrimSpace(cfg.ImageModel)
 	case domain.ContentBlockAudio:
-		return strings.TrimSpace(s.cfg.AudioModel)
+		return strings.TrimSpace(cfg.AudioModel)
 	case domain.ContentBlockVideo:
-		return strings.TrimSpace(s.cfg.VideoModel)
+		return strings.TrimSpace(cfg.VideoModel)
 	case domain.ContentBlockFile:
-		return strings.TrimSpace(s.cfg.FileModel)
+		return strings.TrimSpace(cfg.FileModel)
 	default:
 		return ""
 	}
+}
+
+func (s *Service) runtime() (bootstrap.MultimodalConfig, ports.BlobStore) {
+	if s == nil {
+		return bootstrap.MultimodalConfig{}, nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg, s.blobs
+}
+
+func (s *Service) runtimeConfig() bootstrap.MultimodalConfig {
+	cfg, _ := s.runtime()
+	return cfg
 }
 
 func extractorKindForPart(partType domain.ContentBlockType) string {

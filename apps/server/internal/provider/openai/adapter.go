@@ -12,6 +12,7 @@ import (
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/provider"
+	"memstation/apps/server/internal/runtimeconfig"
 )
 
 type Adapter struct {
@@ -19,6 +20,7 @@ type Adapter struct {
 	resolver     provider.ConfigResolver
 	name         domain.Provider
 	useResponses bool
+	timeout      *runtimeconfig.DurationValue
 }
 
 func NewAdapter(resolver provider.ConfigResolver, timeout time.Duration) *Adapter {
@@ -30,9 +32,10 @@ func NewCompatibleAdapter(resolver provider.ConfigResolver, timeout time.Duratio
 		timeout = 60 * time.Second
 	}
 	return &Adapter{
-		client:   &http.Client{Timeout: timeout},
+		client:   &http.Client{},
 		resolver: resolver,
 		name:     domain.ProviderOpenAICompatible,
+		timeout:  runtimeconfig.NewDurationValue(timeout),
 	}
 }
 
@@ -41,10 +44,11 @@ func NewResponsesAdapter(resolver provider.ConfigResolver, timeout time.Duration
 		timeout = 60 * time.Second
 	}
 	return &Adapter{
-		client:       &http.Client{Timeout: timeout},
+		client:       &http.Client{},
 		resolver:     resolver,
 		name:         domain.ProviderOpenAIResponses,
 		useResponses: true,
+		timeout:      runtimeconfig.NewDurationValue(timeout),
 	}
 }
 
@@ -56,6 +60,9 @@ func (a *Adapter) Name() domain.Provider {
 }
 
 func (a *Adapter) Complete(ctx context.Context, req domain.UnifiedRequest) (*domain.UnifiedResponse, error) {
+	ctx, cancel := a.withTimeout(ctx)
+	defer cancel()
+
 	config, err := a.resolveConfig(ctx)
 	if err != nil {
 		return nil, err
@@ -67,6 +74,9 @@ func (a *Adapter) Complete(ctx context.Context, req domain.UnifiedRequest) (*dom
 }
 
 func (a *Adapter) Stream(ctx context.Context, req domain.UnifiedRequest, emit func(domain.StreamEvent) error) (*domain.UnifiedResponse, error) {
+	ctx, cancel := a.withTimeout(ctx)
+	defer cancel()
+
 	config, err := a.resolveConfig(ctx)
 	if err != nil {
 		return nil, err
@@ -86,6 +96,30 @@ func (a *Adapter) resolveConfig(ctx context.Context) (provider.RuntimeConfig, er
 		return provider.RuntimeConfig{}, fmt.Errorf("%s api key is not configured", a.Name())
 	}
 	return config, nil
+}
+
+func (a *Adapter) SetTimeout(timeout time.Duration) {
+	if a == nil {
+		return
+	}
+	if timeout <= 0 {
+		timeout = 60 * time.Second
+	}
+	if a.timeout == nil {
+		a.timeout = runtimeconfig.NewDurationValue(timeout)
+		return
+	}
+	a.timeout.Store(timeout)
+}
+
+func (a *Adapter) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	timeout := 60 * time.Second
+	if a != nil && a.timeout != nil {
+		if loaded := a.timeout.Load(); loaded > 0 {
+			timeout = loaded
+		}
+	}
+	return context.WithTimeout(ctx, timeout)
 }
 
 func (a *Adapter) completeChat(ctx context.Context, req domain.UnifiedRequest, config provider.RuntimeConfig) (*domain.UnifiedResponse, error) {

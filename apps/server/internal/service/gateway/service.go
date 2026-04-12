@@ -20,22 +20,24 @@ import (
 )
 
 type Service struct {
-	providers       *provider.Registry
-	memoryEngine    *memory.Engine
-	conversations   *conversationservice.Service
-	settings        *settingsservice.Service
-	mu              sync.RWMutex
-	defaultProvider domain.Provider
-	toolRuntime     *ToolRuntime
+	providers        *provider.Registry
+	memoryEngine     *memory.Engine
+	conversations    *conversationservice.Service
+	settings         *settingsservice.Service
+	mu               sync.RWMutex
+	defaultProvider  domain.Provider
+	maxContextTokens int
+	toolRuntime      *ToolRuntime
 }
 
 func NewService(providers *provider.Registry, memoryEngine *memory.Engine, conversations *conversationservice.Service, settings *settingsservice.Service, defaultProvider domain.Provider) *Service {
 	return &Service{
-		providers:       providers,
-		memoryEngine:    memoryEngine,
-		conversations:   conversations,
-		settings:        settings,
-		defaultProvider: domain.NormalizeProvider(string(defaultProvider)),
+		providers:        providers,
+		memoryEngine:     memoryEngine,
+		conversations:    conversations,
+		settings:         settings,
+		defaultProvider:  domain.NormalizeProvider(string(defaultProvider)),
+		maxContextTokens: 0,
 	}
 }
 
@@ -50,6 +52,15 @@ func (s *Service) SetDefaultProvider(providerName domain.Provider) {
 	}
 	s.mu.Lock()
 	s.defaultProvider = providerName
+	s.mu.Unlock()
+}
+
+func (s *Service) SetMaxContextTokens(tokens int) {
+	if s == nil || tokens <= 0 {
+		return
+	}
+	s.mu.Lock()
+	s.maxContextTokens = tokens
 	s.mu.Unlock()
 }
 
@@ -331,6 +342,9 @@ func (s *Service) resolveRequest(ctx context.Context, req domain.UnifiedRequest)
 			req.MaxInjectionTokens = 2048
 		}
 	}
+	if limit := s.currentMaxContextTokens(); limit > 0 && req.MaxInjectionTokens > limit {
+		req.MaxInjectionTokens = limit
+	}
 	if req.SourceRetain == nil {
 		req.SourceRetain = boolPtr(boolValue(snapshot["retain_source_materials"]))
 	}
@@ -342,6 +356,12 @@ func (s *Service) currentDefaultProvider() domain.Provider {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.defaultProvider
+}
+
+func (s *Service) currentMaxContextTokens() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.maxContextTokens
 }
 
 func injectionMetadata(injection domain.InjectionResult) map[string]any {

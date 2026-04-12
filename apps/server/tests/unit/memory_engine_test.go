@@ -13,6 +13,16 @@ import (
 	"memstation/apps/server/internal/store/vector"
 )
 
+type scriptedReranker struct {
+	results   []domain.RerankResult
+	lastInput domain.RerankInput
+}
+
+func (s *scriptedReranker) Rerank(_ context.Context, input domain.RerankInput) ([]domain.RerankResult, error) {
+	s.lastInput = input
+	return append([]domain.RerankResult{}, s.results...), nil
+}
+
 func TestMemoryEngineVectorSearchExpandsRelations(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -193,6 +203,90 @@ func TestMemoryEngineKeywordSearchExpandsGraphWithoutVectors(t *testing.T) {
 	}
 	if !foundKeywordMetadata {
 		t.Fatal("expected summary result to include matched_keywords metadata")
+	}
+}
+
+func TestMemoryEngineRerankerCanPromoteLowerRankedCandidate(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := sql.NewInMemoryMemoryRepository()
+	vectors := vector.NewPGVectorStore(nil)
+	engine := memoryservice.NewEngine(repo, vectors)
+	reranker := &scriptedReranker{}
+	engine.SetReranker(reranker)
+
+	docA := domain.MemoryDocument{
+		ID:          "doc-a",
+		NodeID:      "node-a",
+		UserID:      "user-1",
+		Type:        domain.MemoryTypeFact,
+		Content:     "The release plan owner handles checklist reviews.",
+		Importance:  1,
+		DecayFactor: 1,
+		UpdatedAt:   time.Now().UTC().Add(-2 * time.Hour),
+	}
+	docB := domain.MemoryDocument{
+		ID:          "doc-b",
+		NodeID:      "node-b",
+		UserID:      "user-1",
+		Type:        domain.MemoryTypeFact,
+		Content:     "Alice is the rollback owner for production deploys.",
+		Importance:  1,
+		DecayFactor: 1,
+		UpdatedAt:   time.Now().UTC().Add(-1 * time.Hour),
+	}
+	for _, doc := range []domain.MemoryDocument{docA, docB} {
+		if err := repo.StoreDocument(ctx, doc); err != nil {
+			t.Fatalf("store document: %v", err)
+		}
+		if err := vectors.Upsert(ctx, domain.VectorUpsertRequest{
+			UserID:           doc.UserID,
+			NodeID:           doc.NodeID,
+			NodeType:         string(doc.Type),
+			EmbeddingVersion: 1,
+			EmbeddingModel:   "test-embedding",
+			ContentHash:      doc.Content,
+			Vector:           vector.EmbedText(doc.Content),
+		}); err != nil {
+			t.Fatalf("upsert vector: %v", err)
+		}
+	}
+
+	reranker.results = []domain.RerankResult{
+		{DocumentID: docB.NodeID, Score: 0.99},
+		{DocumentID: docA.NodeID, Score: 0.05},
+	}
+	engine.SetRerankConfig(memoryservice.RerankConfig{
+		Model:               "cohere:rerank-v3.5",
+		CandidateMultiplier: 4,
+		MinCandidates:       2,
+		MaxCandidates:       10,
+		BlendWeight:         1,
+	})
+
+	result, err := engine.Search(ctx, domain.SearchInput{
+		UserID: "user-1",
+		Query:  docA.Content,
+		TopN:   2,
+	})
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if len(result.Memories) != 2 {
+		t.Fatalf("expected 2 memories, got %d", len(result.Memories))
+	}
+	if got := result.Memories[0].NodeID; got != docB.NodeID {
+		t.Fatalf("expected reranker to promote doc-b, got %s", got)
+	}
+	if reranker.lastInput.Model != "cohere:rerank-v3.5" {
+		t.Fatalf("expected rerank model to flow through, got %s", reranker.lastInput.Model)
+	}
+	if len(reranker.lastInput.Documents) != 2 {
+		t.Fatalf("expected 2 rerank candidates, got %d", len(reranker.lastInput.Documents))
+	}
+	if reranker.lastInput.Documents[0].Text == "" {
+		t.Fatal("expected rerank candidate text to be populated")
 	}
 }
 

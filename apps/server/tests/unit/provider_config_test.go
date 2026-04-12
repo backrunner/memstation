@@ -86,3 +86,31 @@ func TestProviderConfigServiceScopesRemainIndependent(t *testing.T) {
 		t.Fatalf("expected internal scope base url to remain isolated, got %s", internalResolved.BaseURL)
 	}
 }
+
+func TestProviderConfigServiceSupportsRerankScope(t *testing.T) {
+	t.Parallel()
+
+	encryptor, err := security.NewAESGCMEncryptor("provider-config-rerank-test-master-key")
+	if err != nil {
+		t.Fatalf("new encryptor: %v", err)
+	}
+	service := providerconfigservice.NewService(nil, encryptor, providerconfigservice.Defaults{
+		providerconfigservice.ScopeRerank: {
+			domain.ProviderCohere: {
+				APIKey:  "cohere-default-key",
+				BaseURL: "https://api.cohere.com/v2",
+			},
+		},
+	})
+
+	resolved, err := service.Resolve(context.Background(), providerconfigservice.ScopeRerank, domain.ProviderCohere)
+	if err != nil {
+		t.Fatalf("resolve rerank scope: %v", err)
+	}
+	if resolved.APIKey != "cohere-default-key" {
+		t.Fatalf("expected rerank api key, got %s", resolved.APIKey)
+	}
+	if resolved.BaseURL != "https://api.cohere.com/v2" {
+		t.Fatalf("expected rerank base url, got %s", resolved.BaseURL)
+	}
+}

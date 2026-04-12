@@ -132,6 +132,25 @@ type VectorSearchResult struct {
 	NodeType string  `json:"node_type"`
 }
 
+type RerankInput struct {
+	UserID    string           `json:"user_id"`
+	Query     string           `json:"query"`
+	Model     string           `json:"model,omitempty"`
+	TopN      int              `json:"top_n"`
+	Documents []RerankDocument `json:"documents"`
+}
+
+type RerankDocument struct {
+	ID   string `json:"id"`
+	Text string `json:"text"`
+}
+
+type RerankResult struct {
+	DocumentID string  `json:"document_id"`
+	Index      int     `json:"index"`
+	Score      float64 `json:"score"`
+}
+
 type VectorUpsertRequest struct {
 	UserID           string    `json:"user_id"`
 	GenerationID     string    `json:"generation_id,omitempty"`

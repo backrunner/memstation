@@ -38,6 +38,19 @@ func (c *L1Cache) Set(_ context.Context, key string, value any) {
 	c.items[key] = item{value: value, expiresAt: time.Now().Add(c.ttl)}
 }
 
+func (c *L1Cache) UpdateTTL(ttl time.Duration) {
+	if c == nil {
+		return
+	}
+	if ttl <= 0 {
+		ttl = 2 * time.Minute
+	}
+	c.mu.Lock()
+	c.ttl = ttl
+	c.items = map[string]item{}
+	c.mu.Unlock()
+}
+
 func (c *L1Cache) Delete(_ context.Context, key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

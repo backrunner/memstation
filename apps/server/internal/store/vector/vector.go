@@ -13,24 +13,53 @@ import (
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/ports"
+	"memstation/apps/server/internal/runtimeconfig"
 )
 
 const embeddingDimensions = 3
 
 type PGVectorStore struct {
-	db *sql.DB
+	db runtimeconfig.DBHandle
 
 	embedder ports.EmbeddingClient
 	mu       sync.RWMutex
+	backend  string
 	items    map[string]domain.VectorUpsertRequest
 }
 
-func NewPGVectorStore(db *sql.DB) *PGVectorStore {
-	return &PGVectorStore{db: db, items: map[string]domain.VectorUpsertRequest{}}
+func NewPGVectorStore(db runtimeconfig.DBHandle) *PGVectorStore {
+	return &PGVectorStore{
+		db:      db,
+		backend: "pgvector",
+		items:   map[string]domain.VectorUpsertRequest{},
+	}
 }
 
 func (s *PGVectorStore) SetEmbedder(embedder ports.EmbeddingClient) {
 	s.embedder = embedder
+}
+
+func (s *PGVectorStore) SetBackend(backend string) error {
+	normalized := strings.ToLower(strings.TrimSpace(backend))
+	if normalized == "" {
+		normalized = "pgvector"
+	}
+	if normalized != "pgvector" {
+		return fmt.Errorf("unsupported vector store backend: %s", backend)
+	}
+	s.mu.Lock()
+	s.backend = normalized
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *PGVectorStore) Backend() string {
+	if s == nil {
+		return ""
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.backend
 }
 
 func (s *PGVectorStore) Search(ctx context.Context, input domain.VectorSearchInput) ([]domain.VectorSearchResult, error) {
@@ -45,7 +74,8 @@ func (s *PGVectorStore) Search(ctx context.Context, input domain.VectorSearchInp
 		return nil, err
 	}
 
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		return s.searchInMemory(input, queryVector, embeddingModel), nil
 	}
 
@@ -77,7 +107,7 @@ func (s *PGVectorStore) Search(ctx context.Context, input domain.VectorSearchInp
         LIMIT $%d
     `, vectorArgPosition, filterClause, vectorArgPosition, limitArgPosition)
 	args = append(args, vectorLiteral(queryVector), limit)
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +158,8 @@ func (s *PGVectorStore) Upsert(ctx context.Context, input domain.VectorUpsertReq
 		input.ContentHash = contentDigest(input.Content)
 	}
 
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		s.items[input.UserID+"::"+input.GenerationID+"::"+input.NodeID+"::"+fmt.Sprintf("%d", input.EmbeddingVersion)] = input
@@ -137,7 +168,7 @@ func (s *PGVectorStore) Upsert(ctx context.Context, input domain.VectorUpsertReq
 
 	now := time.Now().UTC()
 	embeddingID := fmt.Sprintf("%s:%s:%d", input.UserID, input.NodeID, input.EmbeddingVersion)
-	if _, err := s.db.ExecContext(ctx, `
+	if _, err := db.ExecContext(ctx, `
         INSERT INTO memory_embeddings (
             embedding_id, generation_id, user_id, node_id, node_type, embedding_version, embedding_model,
             content_hash, vector, created_at, updated_at
@@ -152,12 +183,13 @@ func (s *PGVectorStore) Upsert(ctx context.Context, input domain.VectorUpsertReq
     `, embeddingID, input.GenerationID, input.UserID, input.NodeID, input.NodeType, input.EmbeddingVersion, input.EmbeddingModel, input.ContentHash, vectorLiteral(input.Vector), now); err != nil {
 		return err
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE memory_nodes SET embedding_status = 'ready', updated_at = $1 WHERE id = $2 AND user_id = $3`, now, input.NodeID, input.UserID)
+	_, err := db.ExecContext(ctx, `UPDATE memory_nodes SET embedding_status = 'ready', updated_at = $1 WHERE id = $2 AND user_id = $3`, now, input.NodeID, input.UserID)
 	return err
 }
 
 func (s *PGVectorStore) DeleteByNode(ctx context.Context, userID, nodeID string) error {
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		for key := range s.items {
@@ -167,22 +199,24 @@ func (s *PGVectorStore) DeleteByNode(ctx context.Context, userID, nodeID string)
 		}
 		return nil
 	}
-	_, err := s.db.ExecContext(ctx, `DELETE FROM memory_embeddings WHERE user_id = $1 AND node_id = $2`, userID, nodeID)
+	_, err := db.ExecContext(ctx, `DELETE FROM memory_embeddings WHERE user_id = $1 AND node_id = $2`, userID, nodeID)
 	return err
 }
 
 func (s *PGVectorStore) Health(ctx context.Context) error {
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		return nil
 	}
-	return s.db.PingContext(ctx)
+	return db.PingContext(ctx)
 }
 
 func (s *PGVectorStore) ReindexVersion(ctx context.Context, version int) error {
-	if s.db == nil || version <= 0 {
+	db := s.currentDB()
+	if db == nil || version <= 0 {
 		return nil
 	}
-	_, err := s.db.ExecContext(ctx, `
+	_, err := db.ExecContext(ctx, `
         UPDATE memory_nodes
         SET embedding_status = CASE
             WHEN EXISTS (
@@ -193,8 +227,15 @@ func (s *PGVectorStore) ReindexVersion(ctx context.Context, version int) error {
             ELSE 'pending'
         END,
         updated_at = $2
-    `, version, time.Now().UTC())
+	`, version, time.Now().UTC())
 	return err
+}
+
+func (s *PGVectorStore) currentDB() *sql.DB {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	return s.db.Current()
 }
 
 func (s *PGVectorStore) embedQuery(ctx context.Context, input domain.VectorSearchInput) ([]float32, string, error) {

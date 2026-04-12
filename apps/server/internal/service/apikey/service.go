@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"memstation/apps/server/internal/runtimeconfig"
 	"memstation/apps/server/internal/security"
 )
 
@@ -24,14 +25,14 @@ type Record struct {
 }
 
 type Service struct {
-	db     *sqlpkg.DB
+	db     runtimeconfig.DBHandle
 	hasher security.APIKeyHasher
 
 	mu      sync.RWMutex
 	records map[string]Record
 }
 
-func NewService(db *sqlpkg.DB) *Service {
+func NewService(db runtimeconfig.DBHandle) *Service {
 	return &Service{db: db, records: map[string]Record{}}
 }
 
@@ -42,8 +43,8 @@ func (s *Service) Create(ctx context.Context, userID, name string) (Record, stri
 		return Record{}, "", err
 	}
 	record := Record{ID: uuid.NewString(), UserID: userID, Name: name, Prefix: prefix, Hash: hash, CreatedAt: time.Now().UTC()}
-	if s.db != nil {
-		_, err = s.db.ExecContext(ctx, `
+	if db := s.currentDB(); db != nil {
+		_, err = db.ExecContext(ctx, `
             INSERT INTO api_keys (id, user_id, name, prefix, hash, scopes, created_at, updated_at)
             VALUES ($1,$2,$3,$4,$5,'[]'::jsonb,$6,$6)
         `, record.ID, record.UserID, record.Name, record.Prefix, record.Hash, record.CreatedAt)
@@ -60,8 +61,8 @@ func (s *Service) Create(ctx context.Context, userID, name string) (Record, stri
 
 func (s *Service) Revoke(ctx context.Context, id string) error {
 	now := time.Now().UTC()
-	if s.db != nil {
-		_, err := s.db.ExecContext(ctx, `UPDATE api_keys SET revoked_at = $1, updated_at = $1 WHERE id = $2`, now, id)
+	if db := s.currentDB(); db != nil {
+		_, err := db.ExecContext(ctx, `UPDATE api_keys SET revoked_at = $1, updated_at = $1 WHERE id = $2`, now, id)
 		return err
 	}
 	s.mu.Lock()
@@ -76,9 +77,9 @@ func (s *Service) Revoke(ctx context.Context, id string) error {
 }
 
 func (s *Service) LookupUserByHash(ctx context.Context, prefix, hash string) (string, error) {
-	if s.db != nil {
+	if db := s.currentDB(); db != nil {
 		var userID string
-		err := s.db.QueryRowContext(ctx, `
+		err := db.QueryRowContext(ctx, `
             SELECT user_id
             FROM api_keys
             WHERE prefix = $1 AND hash = $2 AND revoked_at IS NULL
@@ -104,8 +105,8 @@ func (s *Service) LookupUserByHash(ctx context.Context, prefix, hash string) (st
 }
 
 func (s *Service) List(ctx context.Context) ([]Record, error) {
-	if s.db != nil {
-		rows, err := s.db.QueryContext(ctx, `SELECT id, user_id, name, prefix, hash, revoked_at, created_at FROM api_keys ORDER BY created_at DESC`)
+	if db := s.currentDB(); db != nil {
+		rows, err := db.QueryContext(ctx, `SELECT id, user_id, name, prefix, hash, revoked_at, created_at FROM api_keys ORDER BY created_at DESC`)
 		if err != nil {
 			return nil, err
 		}
@@ -131,6 +132,13 @@ func (s *Service) List(ctx context.Context) ([]Record, error) {
 		out = append(out, record)
 	}
 	return out, nil
+}
+
+func (s *Service) currentDB() *sqlpkg.DB {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	return s.db.Current()
 }
 
 func PrefixAndHash(raw string) (string, string, error) {

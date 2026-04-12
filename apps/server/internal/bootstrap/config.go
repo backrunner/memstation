@@ -20,8 +20,10 @@ type Config struct {
 	Version                        string
 	Port                           int
 	GRPCPort                       int
+	PublicBaseURL                  string
 	DefaultProvider                domain.Provider
 	InternalDefaultProvider        domain.Provider
+	RuntimeStatePath               string
 	DatabaseURL                    string
 	RedisURL                       string
 	VectorStoreBackend             string
@@ -44,11 +46,20 @@ type Config struct {
 	OpenAIAPIKey                   string
 	AnthropicAPIKey                string
 	GeminiAPIKey                   string
+	CohereAPIKey                   string
+	JinaAPIKey                     string
 	OpenAIBaseURL                  string
 	AnthropicBaseURL               string
 	GeminiBaseURL                  string
+	CohereBaseURL                  string
+	JinaBaseURL                    string
 	EmbeddingAPIKey                string
 	EmbeddingBaseURL               string
+	RerankModel                    string
+	RerankCandidateMultiplier      int
+	RerankMinCandidates            int
+	RerankMaxCandidates            int
+	RerankBlendWeight              float64
 	ProviderTimeout                time.Duration
 	KeyMemoryWriteKeys             []string
 	RateLimitRPS                   int
@@ -92,8 +103,10 @@ func LoadConfig() (Config, error) {
 	bind("version", "MEMSTATION_VERSION")
 	bind("port", "MEMSTATION_PORT")
 	bind("grpc_port", "MEMSTATION_GRPC_PORT")
+	bind("public_base_url", "MEMSTATION_PUBLIC_BASE_URL")
 	bind("default_provider", "MEMSTATION_DEFAULT_PROVIDER")
 	bind("internal_default_provider", "MEMSTATION_INTERNAL_DEFAULT_PROVIDER")
+	bind("runtime_state_path", "MEMSTATION_RUNTIME_STATE_PATH")
 	bind("database_url", "DATABASE_URL")
 	bind("redis_url", "REDIS_URL")
 	bind("vector_store_backend", "VECTOR_STORE_BACKEND")
@@ -116,11 +129,20 @@ func LoadConfig() (Config, error) {
 	bind("openai_api_key", "OPENAI_API_KEY")
 	bind("anthropic_api_key", "ANTHROPIC_API_KEY")
 	bind("gemini_api_key", "GEMINI_API_KEY")
+	bind("cohere_api_key", "COHERE_API_KEY")
+	bind("jina_api_key", "JINA_API_KEY")
 	bind("openai_base_url", "OPENAI_BASE_URL")
 	bind("anthropic_base_url", "ANTHROPIC_BASE_URL")
 	bind("gemini_base_url", "GEMINI_BASE_URL")
+	bind("cohere_base_url", "COHERE_BASE_URL")
+	bind("jina_base_url", "JINA_BASE_URL")
 	bind("embedding_api_key", "EMBEDDING_API_KEY")
 	bind("embedding_base_url", "EMBEDDING_BASE_URL")
+	bind("rerank_model", "MEMSTATION_RERANK_MODEL")
+	bind("rerank_candidate_multiplier", "MEMSTATION_RERANK_CANDIDATE_MULTIPLIER")
+	bind("rerank_min_candidates", "MEMSTATION_RERANK_MIN_CANDIDATES")
+	bind("rerank_max_candidates", "MEMSTATION_RERANK_MAX_CANDIDATES")
+	bind("rerank_blend_weight", "MEMSTATION_RERANK_BLEND_WEIGHT")
 	bind("provider_timeout_seconds", "MEMSTATION_PROVIDER_TIMEOUT_SECONDS")
 	bind("key_memory_write_keys", "MEMSTATION_KEY_MEMORY_WRITE_KEYS")
 	bind("rate_limit_rps", "MEMSTATION_RATE_LIMIT_RPS")
@@ -150,6 +172,7 @@ func LoadConfig() (Config, error) {
 	setDefault("grpc_port", 9090)
 	setDefault("default_provider", string(domain.ProviderOpenAICompatible))
 	setDefault("internal_default_provider", string(domain.ProviderOpenAICompatible))
+	setDefault("runtime_state_path", "./data/runtime-state.json")
 	setDefault("vector_store_backend", "pgvector")
 	setDefault("conversation_timeout_minutes", 15)
 	setDefault("max_context_tokens", 8192)
@@ -166,7 +189,13 @@ func LoadConfig() (Config, error) {
 	setDefault("openai_base_url", "https://api.openai.com/v1")
 	setDefault("anthropic_base_url", "https://api.anthropic.com/v1")
 	setDefault("gemini_base_url", "https://generativelanguage.googleapis.com/v1beta")
+	setDefault("cohere_base_url", "https://api.cohere.com/v2")
+	setDefault("jina_base_url", "https://api.jina.ai/v1")
 	setDefault("embedding_base_url", "https://api.openai.com/v1")
+	setDefault("rerank_candidate_multiplier", 6)
+	setDefault("rerank_min_candidates", 20)
+	setDefault("rerank_max_candidates", 50)
+	setDefault("rerank_blend_weight", 0.35)
 	setDefault("provider_timeout_seconds", 60)
 	setDefault("key_memory_write_keys", "recent_conversation")
 	setDefault("rate_limit_rps", 20)
@@ -200,8 +229,10 @@ func LoadConfig() (Config, error) {
 		Version:                        v.GetString("version"),
 		Port:                           v.GetInt("port"),
 		GRPCPort:                       v.GetInt("grpc_port"),
+		PublicBaseURL:                  strings.TrimSpace(v.GetString("public_base_url")),
 		DefaultProvider:                domain.NormalizeProvider(v.GetString("default_provider")),
 		InternalDefaultProvider:        domain.NormalizeProvider(firstNonEmpty(v.GetString("internal_default_provider"), v.GetString("default_provider"))),
+		RuntimeStatePath:               strings.TrimSpace(v.GetString("runtime_state_path")),
 		DatabaseURL:                    v.GetString("database_url"),
 		RedisURL:                       v.GetString("redis_url"),
 		VectorStoreBackend:             v.GetString("vector_store_backend"),
@@ -224,11 +255,20 @@ func LoadConfig() (Config, error) {
 		OpenAIAPIKey:                   v.GetString("openai_api_key"),
 		AnthropicAPIKey:                v.GetString("anthropic_api_key"),
 		GeminiAPIKey:                   v.GetString("gemini_api_key"),
+		CohereAPIKey:                   v.GetString("cohere_api_key"),
+		JinaAPIKey:                     v.GetString("jina_api_key"),
 		OpenAIBaseURL:                  v.GetString("openai_base_url"),
 		AnthropicBaseURL:               v.GetString("anthropic_base_url"),
 		GeminiBaseURL:                  v.GetString("gemini_base_url"),
+		CohereBaseURL:                  v.GetString("cohere_base_url"),
+		JinaBaseURL:                    v.GetString("jina_base_url"),
 		EmbeddingAPIKey:                firstNonEmpty(v.GetString("embedding_api_key"), v.GetString("openai_api_key")),
 		EmbeddingBaseURL:               firstNonEmpty(v.GetString("embedding_base_url"), v.GetString("openai_base_url")),
+		RerankModel:                    strings.TrimSpace(v.GetString("rerank_model")),
+		RerankCandidateMultiplier:      v.GetInt("rerank_candidate_multiplier"),
+		RerankMinCandidates:            v.GetInt("rerank_min_candidates"),
+		RerankMaxCandidates:            v.GetInt("rerank_max_candidates"),
+		RerankBlendWeight:              v.GetFloat64("rerank_blend_weight"),
 		ProviderTimeout:                time.Duration(v.GetInt("provider_timeout_seconds")) * time.Second,
 		KeyMemoryWriteKeys:             csvList(v.GetString("key_memory_write_keys")),
 		RateLimitRPS:                   v.GetInt("rate_limit_rps"),

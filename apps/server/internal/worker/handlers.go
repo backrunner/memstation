@@ -220,10 +220,10 @@ func handleMediaExtract(logger *slog.Logger, services Services) func(context.Con
 			ConversationID: payload.ConversationID,
 			UserID:         payload.UserID,
 			Metadata: map[string]any{
-				"part_count":          len(parts),
-				"artifact_count":      len(artifacts),
+				"part_count":            len(parts),
+				"artifact_count":        len(artifacts),
 				"timeline_materialized": true,
-				"timeline_modalities": modalitiesFromParts(parts),
+				"timeline_modalities":   modalitiesFromParts(parts),
 			},
 		}); err != nil {
 			return err

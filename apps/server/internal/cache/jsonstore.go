@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,6 +24,7 @@ type JSONStore struct {
 	l1     *L1Cache
 	redis  *redis.Client
 	pubsub *redis.PubSub
+	ttlMu  sync.RWMutex
 	ttl    time.Duration
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -95,10 +97,34 @@ func (c *JSONStore) Set(ctx context.Context, key string, value any) error {
 	if c.redis == nil {
 		return nil
 	}
-	if err := c.redis.Set(ctx, key, payload, c.ttl).Err(); err != nil {
+	if err := c.redis.Set(ctx, key, payload, c.TTL()).Err(); err != nil {
 		return err
 	}
 	return c.publish(ctx, invalidation{Source: c.id, Key: key})
+}
+
+func (c *JSONStore) TTL() time.Duration {
+	if c == nil {
+		return 0
+	}
+	c.ttlMu.RLock()
+	defer c.ttlMu.RUnlock()
+	return c.ttl
+}
+
+func (c *JSONStore) UpdateTTL(ttl time.Duration) {
+	if c == nil {
+		return
+	}
+	if ttl <= 0 {
+		ttl = 2 * time.Minute
+	}
+	c.ttlMu.Lock()
+	c.ttl = ttl
+	c.ttlMu.Unlock()
+	if c.l1 != nil {
+		c.l1.UpdateTTL(ttl)
+	}
 }
 
 func (c *JSONStore) Delete(ctx context.Context, key string) error {

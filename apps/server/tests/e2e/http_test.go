@@ -342,7 +342,7 @@ func TestAdminConfigRuntimeUpdates(t *testing.T) {
 	router := newTestRouter()
 	cookies := loginCookies(t, router)
 
-	updateRequest := httptest.NewRequest(http.MethodPut, "/api/admin/config", bytes.NewBufferString(`{"runtime":{"default_provider":"anthropic","message_threshold":12,"provider_timeout_seconds":45,"memory_relation_max_hops":3,"memory_relation_hop_decay_lambda":0.5,"memory_relation_hop_decay_exponent":1.6,"multimodal_enabled":false,"multimodal_storage_backend":"s3","multimodal_storage_bucket":"memstation-assets","multimodal_extract_image_model":"vision-v2","multimodal_audio_transcription_enabled":false,"multimodal_max_asset_bytes":2048,"multimodal_allowed_mime_types":["image/png","audio/mpeg"]}}`))
+	updateRequest := httptest.NewRequest(http.MethodPut, "/api/admin/config", bytes.NewBufferString(`{"runtime":{"default_provider":"anthropic","message_threshold":12,"provider_timeout_seconds":45,"rerank_model":"jina:jina-reranker-v2-base-multilingual","rerank_candidate_multiplier":8,"rerank_min_candidates":24,"rerank_max_candidates":80,"rerank_blend_weight":0.5,"memory_relation_max_hops":3,"memory_relation_hop_decay_lambda":0.5,"memory_relation_hop_decay_exponent":1.6,"multimodal_enabled":false,"multimodal_storage_backend":"local","multimodal_storage_local_root":"./data/runtime-test-blobs","multimodal_extract_image_model":"vision-v2","multimodal_audio_transcription_enabled":false,"multimodal_max_asset_bytes":2048,"multimodal_allowed_mime_types":["image/png","audio/mpeg"]}}`))
 	updateRequest.Header.Set("Content-Type", "application/json")
 	for _, cookie := range cookies {
 		updateRequest.AddCookie(cookie)
@@ -364,11 +364,29 @@ func TestAdminConfigRuntimeUpdates(t *testing.T) {
 	if !strings.Contains(updateRecorder.Body.String(), `"message_threshold":12`) {
 		t.Fatalf("expected live message threshold update, got %s", updateRecorder.Body.String())
 	}
-	if !strings.Contains(updateRecorder.Body.String(), `"provider_timeout_seconds":60`) {
-		t.Fatalf("expected live runtime to keep restart-only provider timeout, got %s", updateRecorder.Body.String())
+	if !strings.Contains(updateRecorder.Body.String(), `"provider_timeout_seconds":45`) {
+		t.Fatalf("expected live provider timeout update, got %s", updateRecorder.Body.String())
 	}
 	if runtimePayload["memory_relation_max_hops"] != float64(3) {
 		t.Fatalf("expected relation max hops override, got %#v", runtimePayload["memory_relation_max_hops"])
+	}
+	if runtimePayload["rerank_model"] != "jina:jina-reranker-v2-base-multilingual" {
+		t.Fatalf("expected rerank model override, got %#v", runtimePayload["rerank_model"])
+	}
+	if runtimeLive["rerank_model"] != "jina:jina-reranker-v2-base-multilingual" {
+		t.Fatalf("expected live rerank model update, got %#v", runtimeLive["rerank_model"])
+	}
+	if runtimeLive["rerank_candidate_multiplier"] != float64(8) {
+		t.Fatalf("expected live rerank candidate multiplier update, got %#v", runtimeLive["rerank_candidate_multiplier"])
+	}
+	if runtimeLive["rerank_min_candidates"] != float64(24) {
+		t.Fatalf("expected live rerank min candidates update, got %#v", runtimeLive["rerank_min_candidates"])
+	}
+	if runtimeLive["rerank_max_candidates"] != float64(80) {
+		t.Fatalf("expected live rerank max candidates update, got %#v", runtimeLive["rerank_max_candidates"])
+	}
+	if runtimeLive["rerank_blend_weight"] != 0.5 {
+		t.Fatalf("expected live rerank blend weight update, got %#v", runtimeLive["rerank_blend_weight"])
 	}
 	if runtimeLive["memory_relation_max_hops"] != float64(3) {
 		t.Fatalf("expected live relation max hops update, got %#v", runtimeLive["memory_relation_max_hops"])
@@ -379,17 +397,20 @@ func TestAdminConfigRuntimeUpdates(t *testing.T) {
 	if runtimeLive["memory_relation_hop_decay_exponent"] != 1.6 {
 		t.Fatalf("expected live relation decay exponent update, got %#v", runtimeLive["memory_relation_hop_decay_exponent"])
 	}
-	if runtimePayload["multimodal_storage_backend"] != "s3" {
+	if runtimePayload["multimodal_storage_backend"] != "local" {
 		t.Fatalf("expected multimodal storage backend override, got %#v", runtimePayload["multimodal_storage_backend"])
 	}
 	if runtimePayload["multimodal_extract_image_model"] != "vision-v2" {
 		t.Fatalf("expected image extractor override, got %#v", runtimePayload["multimodal_extract_image_model"])
 	}
 	if runtimeLive["multimodal_storage_backend"] != "local" {
-		t.Fatalf("expected live multimodal storage backend to remain default until restart, got %#v", runtimeLive["multimodal_storage_backend"])
+		t.Fatalf("expected live multimodal storage backend update, got %#v", runtimeLive["multimodal_storage_backend"])
 	}
-	if runtimeLive["multimodal_audio_transcription_enabled"] != true {
-		t.Fatalf("expected live multimodal transcription flag to remain default until restart, got %#v", runtimeLive["multimodal_audio_transcription_enabled"])
+	if runtimeLive["multimodal_audio_transcription_enabled"] != false {
+		t.Fatalf("expected live multimodal transcription flag update, got %#v", runtimeLive["multimodal_audio_transcription_enabled"])
+	}
+	if runtimeLive["multimodal_storage_local_root"] != "./data/runtime-test-blobs" {
+		t.Fatalf("expected live multimodal local root update, got %#v", runtimeLive["multimodal_storage_local_root"])
 	}
 
 	getRequest := httptest.NewRequest(http.MethodGet, "/api/admin/config", nil)
@@ -401,11 +422,14 @@ func TestAdminConfigRuntimeUpdates(t *testing.T) {
 	if getRecorder.Code != http.StatusOK {
 		t.Fatalf("expected config get 200, got %d body=%s", getRecorder.Code, getRecorder.Body.String())
 	}
-	if !strings.Contains(getRecorder.Body.String(), `"apply_mode":"restart"`) {
+	if !strings.Contains(getRecorder.Body.String(), `"apply_mode":"live"`) {
 		t.Fatalf("expected runtime metadata, got %s", getRecorder.Body.String())
 	}
 	if !strings.Contains(getRecorder.Body.String(), `"runtime_defaults"`) {
 		t.Fatalf("expected runtime defaults payload, got %s", getRecorder.Body.String())
+	}
+	if !strings.Contains(getRecorder.Body.String(), `"rerank_model"`) {
+		t.Fatalf("expected rerank runtime field in config payload, got %s", getRecorder.Body.String())
 	}
 }
 
@@ -473,6 +497,10 @@ func TestAdminProviderDiagnostics(t *testing.T) {
 	}
 	if gatewayOpenAI.Status != "ready" {
 		t.Fatalf("expected ready diagnostics after credential update, got %+v", gatewayOpenAI)
+	}
+	rerankJina := findProviderDiagnostic(readyPayload.Items, providerconfigservice.ScopeRerank, domain.ProviderJina)
+	if rerankJina == nil {
+		t.Fatalf("expected rerank jina diagnostics, got %+v", readyPayload.Items)
 	}
 }
 
@@ -653,12 +681,19 @@ func newTestRouter() http.Handler {
 		AnthropicBaseURL:               "https://api.anthropic.com/v1",
 		GeminiBaseURL:                  "https://generativelanguage.googleapis.com/v1beta",
 		EmbeddingBaseURL:               "https://api.openai.com/v1",
+		CohereBaseURL:                  "https://api.cohere.com/v2",
+		JinaBaseURL:                    "https://api.jina.ai/v1",
 		ConversationTimeout:            15 * time.Minute,
 		ProviderTimeout:                60 * time.Second,
 		MessageThreshold:               32,
 		TokenThreshold:                 64000,
 		MaxContextTokens:               8192,
 		MaxInjectionTokens:             2048,
+		RerankModel:                    "cohere:rerank-v3.5",
+		RerankCandidateMultiplier:      6,
+		RerankMinCandidates:            20,
+		RerankMaxCandidates:            50,
+		RerankBlendWeight:              0.35,
 		MemoryRelationMaxHops:          2,
 		MemoryRelationHopDecayLambda:   0.35,
 		MemoryRelationHopDecayExponent: 1.25,
@@ -727,6 +762,16 @@ func newTestRouter() http.Handler {
 				BaseURL: cfg.EmbeddingBaseURL,
 			},
 		},
+		providerconfigservice.ScopeRerank: {
+			domain.ProviderCohere: {
+				APIKey:  cfg.CohereAPIKey,
+				BaseURL: cfg.CohereBaseURL,
+			},
+			domain.ProviderJina: {
+				APIKey:  cfg.JinaAPIKey,
+				BaseURL: cfg.JinaBaseURL,
+			},
+		},
 	})
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 	audit := auditsvc.NewService(nil)
@@ -736,6 +781,13 @@ func newTestRouter() http.Handler {
 	usage := usageservice.NewService(nil, conversations)
 	admin.AttachUserRuntime(users, apiKeys, usage)
 	engine := memoryservice.NewEngine(memoryRepo, vector.NewPGVectorStore(nil))
+	engine.SetRerankConfig(memoryservice.RerankConfig{
+		Model:               cfg.RerankModel,
+		CandidateMultiplier: cfg.RerankCandidateMultiplier,
+		MinCandidates:       cfg.RerankMinCandidates,
+		MaxCandidates:       cfg.RerankMaxCandidates,
+		BlendWeight:         cfg.RerankBlendWeight,
+	})
 	engine.SetRelationRecallConfig(memoryservice.RelationRecallConfig{
 		MaxHops:          cfg.MemoryRelationMaxHops,
 		HopDecayLambda:   cfg.MemoryRelationHopDecayLambda,
@@ -761,9 +813,22 @@ func newTestRouter() http.Handler {
 			gateway.SetDefaultProvider(providerName)
 		},
 		SetInternalDefaultProvider: func(providerName domain.Provider) {},
+		SetVectorStoreBackend:      func(string) {},
 		SetThresholds:              func(messageThreshold, tokenThreshold int) {},
 		SetConversationTimeout: func(timeout time.Duration) {
 			scheduler.UpdateTimeoutWindow(timeout)
+		},
+		SetProviderTimeout:    func(time.Duration) {},
+		SetMaxContextTokens:   func(int) {},
+		SetMaxInjectionTokens: func(int) {},
+		SetRerankConfig: func(model string, candidateMultiplier, minCandidates, maxCandidates int, blendWeight float64) {
+			engine.SetRerankConfig(memoryservice.RerankConfig{
+				Model:               model,
+				CandidateMultiplier: candidateMultiplier,
+				MinCandidates:       minCandidates,
+				MaxCandidates:       maxCandidates,
+				BlendWeight:         blendWeight,
+			})
 		},
 		SetMemoryRelationRecall: func(maxHops int, decayLambda, decayExponent float64) {
 			engine.SetRelationRecallConfig(memoryservice.RelationRecallConfig{
@@ -775,6 +840,8 @@ func newTestRouter() http.Handler {
 		SetRateLimit: func(rps, burst int) {
 			rateLimiter.Update(float64(rps), burst)
 		},
+		SetCacheTTL:         func(time.Duration) {},
+		SetMultimodalConfig: func(bootstrap.MultimodalConfig) {},
 	})
 
 	return httptransport.NewRouter(httptransport.Dependencies{

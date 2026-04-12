@@ -18,6 +18,10 @@ type EmbeddingClient interface {
 	Embed(ctx context.Context, input domain.EmbeddingInput) (domain.EmbeddingResult, error)
 }
 
+type Reranker interface {
+	Rerank(ctx context.Context, input domain.RerankInput) ([]domain.RerankResult, error)
+}
+
 type VectorStore interface {
 	Search(ctx context.Context, input domain.VectorSearchInput) ([]domain.VectorSearchResult, error)
 	Upsert(ctx context.Context, input domain.VectorUpsertRequest) error

@@ -2,7 +2,6 @@ package providerconfig
 
 import (
 	"context"
-	sqlpkg "database/sql"
 	"errors"
 	"fmt"
 	"net/url"
@@ -13,6 +12,7 @@ import (
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/ports"
 	"memstation/apps/server/internal/provider"
+	"memstation/apps/server/internal/runtimeconfig"
 )
 
 type Scope string
@@ -21,6 +21,7 @@ const (
 	ScopeGateway   Scope = "gateway"
 	ScopeInternal  Scope = "internal"
 	ScopeEmbedding Scope = "embedding"
+	ScopeRerank    Scope = "rerank"
 )
 
 type Summary struct {
@@ -69,7 +70,7 @@ type scopeProviderKey struct {
 }
 
 type Service struct {
-	db        *sqlpkg.DB
+	store     *runtimeconfig.FileStore
 	encryptor ports.Encryptor
 
 	mu       sync.RWMutex
@@ -82,7 +83,7 @@ type scopeResolver struct {
 	scope   Scope
 }
 
-func NewService(db *sqlpkg.DB, encryptor ports.Encryptor, defaults Defaults) *Service {
+func NewService(store *runtimeconfig.FileStore, encryptor ports.Encryptor, defaults Defaults) *Service {
 	copiedDefaults := Defaults{}
 	for _, scope := range supportedScopes() {
 		normalized := make(map[domain.Provider]provider.RuntimeConfig, len(defaults[scope]))
@@ -94,11 +95,41 @@ func NewService(db *sqlpkg.DB, encryptor ports.Encryptor, defaults Defaults) *Se
 		copiedDefaults[scope] = normalized
 	}
 	return &Service{
-		db:        db,
+		store:     store,
 		encryptor: encryptor,
 		defaults:  copiedDefaults,
 		records:   map[scopeProviderKey]record{},
 	}
+}
+
+func (s *Service) Bootstrap(ctx context.Context) error {
+	if s == nil || s.store == nil {
+		return nil
+	}
+	state, err := s.store.Load(ctx)
+	if err != nil {
+		return err
+	}
+	records := map[scopeProviderKey]record{}
+	for _, item := range state.Providers {
+		scope, err := normalizeScope(Scope(item.Scope))
+		if err != nil {
+			continue
+		}
+		providerName, ok := normalizeProviderForScope(scope, domain.Provider(item.Provider))
+		if !ok {
+			continue
+		}
+		records[scopeProviderKey{Scope: scope, Provider: providerName}] = record{
+			EncryptedAPIKey: strings.TrimSpace(item.EncryptedAPIKey),
+			BaseURL:         strings.TrimSpace(item.BaseURL),
+			UpdatedAt:       item.UpdatedAt.UTC(),
+		}
+	}
+	s.mu.Lock()
+	s.records = records
+	s.mu.Unlock()
+	return nil
 }
 
 func (s *Service) Resolver(scope Scope) provider.ConfigResolver {
@@ -123,39 +154,11 @@ func (s *Service) Resolve(ctx context.Context, scope Scope, providerName domain.
 	}
 
 	defaults := s.defaultConfig(normalizedScope, normalizedProvider)
-	if s.db == nil {
-		s.mu.RLock()
-		record, ok := s.records[scopeProviderKey{Scope: normalizedScope, Provider: normalizedProvider}]
-		s.mu.RUnlock()
-		if !ok {
-			return defaults, nil
-		}
-		return s.mergeWithRecord(ctx, defaults, record)
-	}
-
-	row := s.db.QueryRowContext(ctx, `
-        SELECT encrypted_api_key, base_url, updated_at
-        FROM provider_credentials
-        WHERE scope = $1 AND provider = $2
-    `, string(normalizedScope), string(normalizedProvider))
-	var encryptedAPIKey sqlpkg.NullString
-	var baseURL sqlpkg.NullString
-	var updatedAt sqlpkg.NullTime
-	if err := row.Scan(&encryptedAPIKey, &baseURL, &updatedAt); err != nil {
-		if errors.Is(err, sqlpkg.ErrNoRows) {
-			return defaults, nil
-		}
-		return provider.RuntimeConfig{}, err
-	}
-	record := record{}
-	if encryptedAPIKey.Valid {
-		record.EncryptedAPIKey = encryptedAPIKey.String
-	}
-	if baseURL.Valid {
-		record.BaseURL = baseURL.String
-	}
-	if updatedAt.Valid {
-		record.UpdatedAt = updatedAt.Time
+	s.mu.RLock()
+	record, ok := s.records[scopeProviderKey{Scope: normalizedScope, Provider: normalizedProvider}]
+	s.mu.RUnlock()
+	if !ok {
+		return defaults, nil
 	}
 	return s.mergeWithRecord(ctx, defaults, record)
 }
@@ -216,40 +219,26 @@ func (s *Service) Update(ctx context.Context, scope Scope, providerName domain.P
 
 	encryptedAPIKey := ""
 	if next.APIKey != "" {
-		if s.db != nil && s.encryptor == nil {
+		if s.encryptor == nil {
 			return Summary{}, errors.New("provider config encryptor is not configured")
 		}
-		if s.encryptor != nil {
-			ciphertext, err := s.encryptor.Encrypt(ctx, []byte(next.APIKey))
-			if err != nil {
-				return Summary{}, err
-			}
-			encryptedAPIKey = ciphertext
+		ciphertext, err := s.encryptor.Encrypt(ctx, []byte(next.APIKey))
+		if err != nil {
+			return Summary{}, err
 		}
+		encryptedAPIKey = ciphertext
 	}
 
 	now := time.Now().UTC()
 	key := scopeProviderKey{Scope: normalizedScope, Provider: normalizedProvider}
-	if s.db == nil {
-		s.mu.Lock()
-		s.records[key] = record{
-			EncryptedAPIKey: encryptedAPIKey,
-			BaseURL:         next.BaseURL,
-			UpdatedAt:       now,
-		}
-		s.mu.Unlock()
-		return s.summaryForProvider(ctx, normalizedScope, normalizedProvider)
+	s.mu.Lock()
+	s.records[key] = record{
+		EncryptedAPIKey: encryptedAPIKey,
+		BaseURL:         next.BaseURL,
+		UpdatedAt:       now,
 	}
-
-	_, err = s.db.ExecContext(ctx, `
-        INSERT INTO provider_credentials (scope, provider, encrypted_api_key, base_url, created_at, updated_at)
-        VALUES ($1,$2,$3,$4,$5,$5)
-        ON CONFLICT (scope, provider) DO UPDATE SET
-            encrypted_api_key = EXCLUDED.encrypted_api_key,
-            base_url = EXCLUDED.base_url,
-            updated_at = EXCLUDED.updated_at
-    `, string(normalizedScope), string(normalizedProvider), nullString(encryptedAPIKey), nullString(next.BaseURL), now)
-	if err != nil {
+	s.mu.Unlock()
+	if err := s.persistRecords(ctx); err != nil {
 		return Summary{}, err
 	}
 	return s.summaryForProvider(ctx, normalizedScope, normalizedProvider)
@@ -273,22 +262,13 @@ func (s *Service) summaryForProvider(ctx context.Context, scope Scope, providerN
 		summary.Source = "override"
 	}
 
-	if s.db == nil {
-		s.mu.RLock()
-		record, ok := s.records[scopeProviderKey{Scope: scope, Provider: providerName}]
-		s.mu.RUnlock()
-		if ok && !record.UpdatedAt.IsZero() {
-			summary.Source = "override"
-			summary.UpdatedAt = &record.UpdatedAt
-		}
-		return summary, nil
-	}
-
-	row := s.db.QueryRowContext(ctx, `SELECT updated_at FROM provider_credentials WHERE scope = $1 AND provider = $2`, string(scope), string(providerName))
-	var updatedAt sqlpkg.NullTime
-	if err := row.Scan(&updatedAt); err == nil && updatedAt.Valid {
+	s.mu.RLock()
+	record, ok := s.records[scopeProviderKey{Scope: scope, Provider: providerName}]
+	s.mu.RUnlock()
+	if ok && !record.UpdatedAt.IsZero() {
 		summary.Source = "override"
-		summary.UpdatedAt = &updatedAt.Time
+		updatedAt := record.UpdatedAt
+		summary.UpdatedAt = &updatedAt
 	}
 	return summary, nil
 }
@@ -308,8 +288,8 @@ func (s *Service) diagnosticForProvider(ctx context.Context, scope Scope, provid
 		HasAPIKey:             summary.HasAPIKey,
 		Source:                summary.Source,
 		UpdatedAt:             summary.UpdatedAt,
-		IsDesiredDefault:      scope != ScopeEmbedding && providerName == desiredDefault,
-		IsLiveDefault:         scope != ScopeEmbedding && providerName == liveDefault,
+		IsDesiredDefault:      scope != ScopeEmbedding && scope != ScopeRerank && providerName == desiredDefault,
+		IsLiveDefault:         scope != ScopeEmbedding && scope != ScopeRerank && providerName == liveDefault,
 		DesiredTimeoutSeconds: desiredTimeoutSeconds,
 		LiveTimeoutSeconds:    liveTimeoutSeconds,
 		RestartRequired:       desiredTimeoutSeconds != liveTimeoutSeconds,
@@ -381,6 +361,34 @@ func (s *Service) defaultConfig(scope Scope, providerName domain.Provider) provi
 		return scopedDefaults[providerName]
 	}
 	return provider.RuntimeConfig{}
+}
+
+func (s *Service) persistRecords(ctx context.Context) error {
+	if s == nil || s.store == nil {
+		return nil
+	}
+	s.mu.RLock()
+	records := make(map[scopeProviderKey]record, len(s.records))
+	for key, value := range s.records {
+		records[key] = value
+	}
+	s.mu.RUnlock()
+
+	_, err := s.store.Update(ctx, func(state *runtimeconfig.State) error {
+		state.Providers = map[string]runtimeconfig.ProviderRecordState{}
+		for key, value := range records {
+			stateKey := string(key.Scope) + ":" + string(key.Provider)
+			state.Providers[stateKey] = runtimeconfig.ProviderRecordState{
+				Scope:           string(key.Scope),
+				Provider:        string(key.Provider),
+				BaseURL:         value.BaseURL,
+				EncryptedAPIKey: value.EncryptedAPIKey,
+				UpdatedAt:       value.UpdatedAt.UTC(),
+			}
+		}
+		return nil
+	})
+	return err
 }
 
 func ParseScopedUpdatePayload(payload any) (map[Scope]map[domain.Provider]UpdateInput, error) {
@@ -462,13 +470,15 @@ func ParseUpdatePayload(payload any) (map[domain.Provider]UpdateInput, error) {
 }
 
 func supportedScopes() []Scope {
-	return []Scope{ScopeGateway, ScopeInternal, ScopeEmbedding}
+	return []Scope{ScopeGateway, ScopeInternal, ScopeEmbedding, ScopeRerank}
 }
 
 func supportedProvidersForScope(scope Scope) []domain.Provider {
 	switch scope {
 	case ScopeEmbedding:
 		return domain.EmbeddingProviders()
+	case ScopeRerank:
+		return domain.RerankProviders()
 	default:
 		return domain.LLMProviders()
 	}
@@ -482,6 +492,8 @@ func normalizeScope(scope Scope) (Scope, error) {
 		return ScopeInternal, nil
 	case ScopeEmbedding:
 		return ScopeEmbedding, nil
+	case ScopeRerank:
+		return ScopeRerank, nil
 	default:
 		return "", fmt.Errorf("unknown provider scope: %s", scope)
 	}
@@ -495,13 +507,6 @@ func normalizeProviderForScope(scope Scope, providerName domain.Provider) (domai
 		}
 	}
 	return "", false
-}
-
-func nullString(value string) any {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	return value
 }
 
 func stringValue(value any) string {

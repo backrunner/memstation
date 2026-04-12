@@ -12,10 +12,11 @@ import (
 	"github.com/google/uuid"
 
 	"memstation/apps/server/internal/domain"
+	"memstation/apps/server/internal/runtimeconfig"
 )
 
 type Service struct {
-	db *sqlpkg.DB
+	db runtimeconfig.DBHandle
 
 	mu     sync.RWMutex
 	events []domain.AuditEvent
@@ -29,7 +30,7 @@ type ListOptions struct {
 	TargetID   string
 }
 
-func NewService(db *sqlpkg.DB) *Service { return &Service{db: db} }
+func NewService(db runtimeconfig.DBHandle) *Service { return &Service{db: db} }
 
 func (s *Service) Record(ctx context.Context, event domain.AuditEvent) {
 	if event.ID == "" {
@@ -39,8 +40,8 @@ func (s *Service) Record(ctx context.Context, event domain.AuditEvent) {
 		event.CreatedAt = time.Now().UTC()
 	}
 
-	if s.db != nil {
-		_, err := s.db.ExecContext(ctx, `
+	if db := s.currentDB(); db != nil {
+		_, err := db.ExecContext(ctx, `
             INSERT INTO audit_events (id, actor_type, actor_id, action, target_type, target_id, payload, created_at, updated_at)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)
         `,
@@ -68,7 +69,7 @@ func (s *Service) List(ctx context.Context, limit int) []domain.AuditEvent {
 }
 
 func (s *Service) ListFiltered(ctx context.Context, options ListOptions) []domain.AuditEvent {
-	if s.db != nil {
+	if db := s.currentDB(); db != nil {
 		limit := options.Limit
 		if limit <= 0 {
 			limit = 100
@@ -101,7 +102,7 @@ func (s *Service) ListFiltered(ctx context.Context, options ListOptions) []domai
 		args = append(args, limit)
 		query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d", len(args))
 
-		rows, err := s.db.QueryContext(ctx, query, args...)
+		rows, err := db.QueryContext(ctx, query, args...)
 		if err == nil {
 			defer rows.Close()
 			out := make([]domain.AuditEvent, 0, limit)
@@ -138,6 +139,13 @@ func (s *Service) ListFiltered(ctx context.Context, options ListOptions) []domai
 		}
 	}
 	return out
+}
+
+func (s *Service) currentDB() *sqlpkg.DB {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	return s.db.Current()
 }
 
 func matchesFilter(event domain.AuditEvent, options ListOptions) bool {

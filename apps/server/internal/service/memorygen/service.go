@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"memstation/apps/server/internal/domain"
+	"memstation/apps/server/internal/runtimeconfig"
 	conversationservice "memstation/apps/server/internal/service/conversation"
 )
 
@@ -37,7 +38,7 @@ type UserSourceStats struct {
 }
 
 type Service struct {
-	db                    *sqlpkg.DB
+	db                    runtimeconfig.DBHandle
 	defaultEmbeddingModel string
 
 	mu                   sync.RWMutex
@@ -49,7 +50,7 @@ type Service struct {
 	sourcesByGeneration  map[string][]string
 }
 
-func NewService(db *sqlpkg.DB, defaultEmbeddingModel string) *Service {
+func NewService(db runtimeconfig.DBHandle, defaultEmbeddingModel string) *Service {
 	return &Service{
 		db:                    db,
 		defaultEmbeddingModel: strings.TrimSpace(defaultEmbeddingModel),
@@ -62,6 +63,13 @@ func NewService(db *sqlpkg.DB, defaultEmbeddingModel string) *Service {
 	}
 }
 
+func (s *Service) currentDB() *sqlpkg.DB {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	return s.db.Current()
+}
+
 func CurrentGenerationID(userID string) string {
 	return "gen:current:" + strings.TrimSpace(userID)
 }
@@ -70,7 +78,8 @@ func (s *Service) EnsureActiveGeneration(ctx context.Context, userID string) (do
 	if strings.TrimSpace(userID) == "" {
 		return domain.MemoryGeneration{}, errors.New("user id is required")
 	}
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		if generationID := s.activeGenerations[userID]; generationID != "" {
@@ -103,7 +112,7 @@ func (s *Service) EnsureActiveGeneration(ctx context.Context, userID string) (do
 	}
 
 	now := time.Now().UTC()
-	_, err := s.db.ExecContext(ctx, `
+	_, err := db.ExecContext(ctx, `
         INSERT INTO memory_generations (
             generation_id, user_id, status, scope, conversation_id, is_active, structure_version,
             embedding_version, embedding_model, activate_on_success, source_count, processed_count,
@@ -142,7 +151,8 @@ func (s *Service) GetActiveGeneration(ctx context.Context, userID string) (domai
 }
 
 func (s *Service) GetInProgressGeneration(ctx context.Context, userID string) (domain.MemoryGeneration, bool, error) {
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 		var items []domain.MemoryGeneration
@@ -163,7 +173,7 @@ func (s *Service) GetInProgressGeneration(ctx context.Context, userID string) (d
 		}
 		return items[0], true, nil
 	}
-	row := s.db.QueryRowContext(ctx, `
+	row := db.QueryRowContext(ctx, `
         SELECT generation_id, user_id, status, scope, conversation_id, is_active, structure_version,
                embedding_version, embedding_model, activate_on_success, source_count, processed_count,
                embedding_count, failure_count, last_error, metadata, created_at, updated_at, activated_at
@@ -186,7 +196,8 @@ func (s *Service) GetGeneration(ctx context.Context, userID, generationID string
 	if strings.TrimSpace(generationID) == "" {
 		return s.EnsureActiveGeneration(ctx, userID)
 	}
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 		generation, ok := s.generations[generationID]
@@ -195,7 +206,7 @@ func (s *Service) GetGeneration(ctx context.Context, userID, generationID string
 		}
 		return generation, nil
 	}
-	row := s.db.QueryRowContext(ctx, `
+	row := db.QueryRowContext(ctx, `
         SELECT generation_id, user_id, status, scope, conversation_id, is_active, structure_version,
                embedding_version, embedding_model, activate_on_success, source_count, processed_count,
                embedding_count, failure_count, last_error, metadata, created_at, updated_at, activated_at
@@ -216,7 +227,8 @@ func (s *Service) ListGenerations(ctx context.Context, userID string, limit int)
 	if limit <= 0 {
 		limit = 20
 	}
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 		items := make([]domain.MemoryGeneration, 0)
@@ -231,7 +243,7 @@ func (s *Service) ListGenerations(ctx context.Context, userID string, limit int)
 		}
 		return items, nil
 	}
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := db.QueryContext(ctx, `
         SELECT generation_id, user_id, status, scope, conversation_id, is_active, structure_version,
                embedding_version, embedding_model, activate_on_success, source_count, processed_count,
                embedding_count, failure_count, last_error, metadata, created_at, updated_at, activated_at
@@ -259,7 +271,8 @@ func (s *Service) ListGenerationSources(ctx context.Context, userID, generationI
 	if strings.TrimSpace(generationID) == "" {
 		return nil, nil
 	}
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 		items := make([]domain.MemoryGenerationSource, 0)
@@ -272,7 +285,7 @@ func (s *Service) ListGenerationSources(ctx context.Context, userID, generationI
 		sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.After(items[j].CreatedAt) })
 		return items, nil
 	}
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := db.QueryContext(ctx, `
         SELECT id, generation_id, user_id, snapshot_id, conversation_id, source_hash, status, last_error, created_at, updated_at, processed_at
         FROM memory_generation_sources
         WHERE generation_id = $1 AND user_id = $2
@@ -297,7 +310,8 @@ func (s *Service) IsCurrentGenerationSource(ctx context.Context, userID, generat
 	if strings.TrimSpace(userID) == "" || strings.TrimSpace(generationID) == "" || strings.TrimSpace(snapshotID) == "" {
 		return false, nil
 	}
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 		var target domain.MemoryGenerationSource
@@ -329,7 +343,7 @@ func (s *Service) IsCurrentGenerationSource(ctx context.Context, userID, generat
 		return latest.SnapshotID == snapshotID, nil
 	}
 
-	row := s.db.QueryRowContext(ctx, `
+	row := db.QueryRowContext(ctx, `
         WITH target AS (
             SELECT gs.conversation_id
             FROM memory_generation_sources gs
@@ -362,7 +376,8 @@ func (s *Service) CaptureSourceSnapshot(ctx context.Context, conversation domain
 		return domain.MemorySourceSnapshot{}, false, errors.New("conversation user id and conversation id are required")
 	}
 	snapshot := snapshotFromConversation(conversation)
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		key := sourceConversationKey(conversation.UserID, conversation.ConversationID)
@@ -403,7 +418,7 @@ func (s *Service) CaptureSourceSnapshot(ctx context.Context, conversation domain
 	snapshot.CreatedAt = now
 	snapshot.UpdatedAt = now
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return domain.MemorySourceSnapshot{}, false, err
 	}
@@ -467,7 +482,8 @@ func (s *Service) GetSourceSnapshot(ctx context.Context, userID, snapshotID stri
 	if strings.TrimSpace(snapshotID) == "" {
 		return domain.MemorySourceSnapshot{}, false, nil
 	}
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 		snapshot, ok := s.sourceSnapshots[snapshotID]
@@ -476,7 +492,7 @@ func (s *Service) GetSourceSnapshot(ctx context.Context, userID, snapshotID stri
 		}
 		return snapshot, true, nil
 	}
-	row := s.db.QueryRowContext(ctx, `
+	row := db.QueryRowContext(ctx, `
         SELECT snapshot_id, user_id, conversation_id, snapshot_version, source_hash, request_format,
                upstream_provider, mode, finalize_status, metadata, usage, message_count, created_at, updated_at
         FROM memory_source_snapshots
@@ -498,7 +514,7 @@ func (s *Service) GetSourceSnapshot(ctx context.Context, userID, snapshotID stri
 }
 
 func (s *Service) GetLatestSourceSnapshot(ctx context.Context, userID, conversationID string) (domain.MemorySourceSnapshot, bool, error) {
-	if s.db == nil {
+	if s.currentDB() == nil {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 		ids := s.sourceByConversation[sourceConversationKey(userID, conversationID)]
@@ -518,7 +534,8 @@ func (s *Service) ListSourceSnapshots(ctx context.Context, userID, conversationI
 	if limit <= 0 {
 		limit = 50
 	}
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 		ids := append([]string(nil), s.sourceByConversation[sourceConversationKey(userID, conversationID)]...)
@@ -531,7 +548,7 @@ func (s *Service) ListSourceSnapshots(ctx context.Context, userID, conversationI
 		}
 		return items, nil
 	}
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := db.QueryContext(ctx, `
         SELECT snapshot_id, user_id, conversation_id, snapshot_version, source_hash, request_format,
                upstream_provider, mode, finalize_status, metadata, usage, message_count, created_at, updated_at
         FROM memory_source_snapshots
@@ -555,7 +572,8 @@ func (s *Service) ListSourceSnapshots(ctx context.Context, userID, conversationI
 }
 
 func (s *Service) SourceStatsForUser(ctx context.Context, userID string) (UserSourceStats, error) {
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 		stats := UserSourceStats{}
@@ -571,7 +589,7 @@ func (s *Service) SourceStatsForUser(ctx context.Context, userID string) (UserSo
 		}
 		return stats, nil
 	}
-	row := s.db.QueryRowContext(ctx, `
+	row := db.QueryRowContext(ctx, `
         SELECT COUNT(*), MAX(created_at)
         FROM memory_source_snapshots
         WHERE user_id = $1
@@ -668,7 +686,8 @@ func (s *Service) CreateRebuildGeneration(ctx context.Context, input CreateRebui
 		})
 	}
 
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		s.generations[generation.GenerationID] = generation
@@ -679,7 +698,7 @@ func (s *Service) CreateRebuildGeneration(ctx context.Context, input CreateRebui
 		return generation, sourceItems, nil
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return domain.MemoryGeneration{}, nil, err
 	}
@@ -749,7 +768,8 @@ func (s *Service) AddSnapshotToGeneration(ctx context.Context, generationID stri
 		return domain.MemoryGenerationSource{}, false, nil
 	}
 
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		for _, id := range s.sourcesByGeneration[generationID] {
@@ -781,7 +801,7 @@ func (s *Service) AddSnapshotToGeneration(ctx context.Context, generationID stri
 		return item, true, nil
 	}
 
-	existing := s.db.QueryRowContext(ctx, `
+	existing := db.QueryRowContext(ctx, `
         SELECT id, generation_id, user_id, snapshot_id, conversation_id, source_hash, status, last_error, created_at, updated_at, processed_at
         FROM memory_generation_sources
         WHERE generation_id = $1 AND snapshot_id = $2
@@ -806,7 +826,7 @@ func (s *Service) AddSnapshotToGeneration(ctx context.Context, generationID stri
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return domain.MemoryGenerationSource{}, false, err
 	}
@@ -850,7 +870,8 @@ func (s *Service) MarkGenerationSourceRunning(ctx context.Context, userID, gener
 		return nil
 	}
 	now := time.Now().UTC()
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		for id, item := range s.generationSources {
@@ -868,7 +889,7 @@ func (s *Service) MarkGenerationSourceRunning(ctx context.Context, userID, gener
 		}
 		return nil
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -892,7 +913,8 @@ func (s *Service) MarkGenerationSourceRunning(ctx context.Context, userID, gener
 
 func (s *Service) MarkGenerationSourceCompleted(ctx context.Context, userID, generationID, snapshotID string, embeddingCount int) (domain.MemoryGeneration, bool, error) {
 	now := time.Now().UTC()
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		for id, item := range s.generationSources {
@@ -917,7 +939,7 @@ func (s *Service) MarkGenerationSourceCompleted(ctx context.Context, userID, gen
 		}
 		return domain.MemoryGeneration{}, false, errors.New("generation source not found")
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return domain.MemoryGeneration{}, false, err
 	}
@@ -964,7 +986,8 @@ func (s *Service) MarkGenerationSourceCompleted(ctx context.Context, userID, gen
 func (s *Service) MarkGenerationSourceFailed(ctx context.Context, userID, generationID, snapshotID, lastError string) (domain.MemoryGeneration, error) {
 	now := time.Now().UTC()
 	lastError = strings.TrimSpace(lastError)
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		for id, item := range s.generationSources {
@@ -983,7 +1006,7 @@ func (s *Service) MarkGenerationSourceFailed(ctx context.Context, userID, genera
 		s.generations[generationID] = generation
 		return generation, nil
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return domain.MemoryGeneration{}, err
 	}
@@ -1023,7 +1046,8 @@ func (s *Service) ActivateGeneration(ctx context.Context, userID, generationID s
 		return domain.MemoryGeneration{}, errors.New("conversation-scoped rebuilds cannot be activated as the user-wide active generation")
 	}
 	now := time.Now().UTC()
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		generation, ok := s.generations[generationID]
@@ -1045,7 +1069,7 @@ func (s *Service) ActivateGeneration(ctx context.Context, userID, generationID s
 		s.activeGenerations[userID] = generationID
 		return s.generations[generationID], nil
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return domain.MemoryGeneration{}, err
 	}
@@ -1102,7 +1126,8 @@ func (s *Service) latestSnapshotsForScope(ctx context.Context, userID, scope, co
 		}
 		return []domain.MemorySourceSnapshot{snapshot}, nil
 	default:
-		if s.db == nil {
+		db := s.currentDB()
+		if db == nil {
 			s.mu.RLock()
 			defer s.mu.RUnlock()
 			items := make([]domain.MemorySourceSnapshot, 0)
@@ -1115,7 +1140,7 @@ func (s *Service) latestSnapshotsForScope(ctx context.Context, userID, scope, co
 			sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.Before(items[j].CreatedAt) })
 			return items, nil
 		}
-		rows, err := s.db.QueryContext(ctx, `
+		rows, err := db.QueryContext(ctx, `
             SELECT DISTINCT ON (conversation_id)
                 snapshot_id, user_id, conversation_id, snapshot_version, source_hash, request_format,
                 upstream_provider, mode, finalize_status, metadata, usage, message_count, created_at, updated_at
@@ -1141,7 +1166,11 @@ func (s *Service) latestSnapshotsForScope(ctx context.Context, userID, scope, co
 }
 
 func (s *Service) activeGenerationFromDB(ctx context.Context, userID string) (domain.MemoryGeneration, bool, error) {
-	row := s.db.QueryRowContext(ctx, `
+	db := s.currentDB()
+	if db == nil {
+		return domain.MemoryGeneration{}, false, nil
+	}
+	row := db.QueryRowContext(ctx, `
         SELECT generation_id, user_id, status, scope, conversation_id, is_active, structure_version,
                embedding_version, embedding_model, activate_on_success, source_count, processed_count,
                embedding_count, failure_count, last_error, metadata, created_at, updated_at, activated_at
@@ -1171,7 +1200,11 @@ func (s *Service) activeGenerationFromDBRequired(ctx context.Context, userID str
 }
 
 func (s *Service) latestSnapshotHeaderFromDB(ctx context.Context, userID, conversationID string) (domain.MemorySourceSnapshot, bool, error) {
-	row := s.db.QueryRowContext(ctx, `
+	db := s.currentDB()
+	if db == nil {
+		return domain.MemorySourceSnapshot{}, false, nil
+	}
+	row := db.QueryRowContext(ctx, `
         SELECT snapshot_id, user_id, conversation_id, snapshot_version, source_hash, request_format,
                upstream_provider, mode, finalize_status, metadata, usage, message_count, created_at, updated_at
         FROM memory_source_snapshots
@@ -1190,7 +1223,11 @@ func (s *Service) latestSnapshotHeaderFromDB(ctx context.Context, userID, conver
 }
 
 func (s *Service) loadSnapshotMessages(ctx context.Context, snapshotID string) ([]domain.UnifiedMessage, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	db := s.currentDB()
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.QueryContext(ctx, `
         SELECT role, text_content, content_blocks, tool_calls, tool_result, provider_payload
         FROM memory_source_messages
         WHERE snapshot_id = $1

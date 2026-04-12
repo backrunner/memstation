@@ -18,16 +18,26 @@ import (
 type Engine struct {
 	repo        ports.MemoryRepository
 	vectors     ports.VectorStore
+	reranker    ports.Reranker
 	generations *memorygenservice.Service
 
 	configMu       sync.RWMutex
 	relationRecall RelationRecallConfig
+	rerank         RerankConfig
 }
 
 type RelationRecallConfig struct {
 	MaxHops          int
 	HopDecayLambda   float64
 	HopDecayExponent float64
+}
+
+type RerankConfig struct {
+	Model               string
+	CandidateMultiplier int
+	MinCandidates       int
+	MaxCandidates       int
+	BlendWeight         float64
 }
 
 type DebugSearchResult struct {
@@ -37,11 +47,22 @@ type DebugSearchResult struct {
 	BaseScores map[string]float64         `json:"base_scores"`
 }
 
+type searchCandidate struct {
+	Document          domain.MemoryDocument
+	PreliminaryScore  float64
+	BaseSemanticScore float64
+	KeywordScore      float64
+	RelationExpansion float64
+	SupersessionBoost float64
+	ConversationBoost float64
+}
+
 func NewEngine(repo ports.MemoryRepository, vectors ports.VectorStore) *Engine {
 	return &Engine{
 		repo:           repo,
 		vectors:        vectors,
 		relationRecall: DefaultRelationRecallConfig(),
+		rerank:         DefaultRerankConfig(),
 	}
 }
 
@@ -49,11 +70,24 @@ func (e *Engine) SetGenerationService(service *memorygenservice.Service) {
 	e.generations = service
 }
 
+func (e *Engine) SetReranker(reranker ports.Reranker) {
+	e.reranker = reranker
+}
+
 func DefaultRelationRecallConfig() RelationRecallConfig {
 	return RelationRecallConfig{
 		MaxHops:          2,
 		HopDecayLambda:   0.35,
 		HopDecayExponent: 1.25,
+	}
+}
+
+func DefaultRerankConfig() RerankConfig {
+	return RerankConfig{
+		CandidateMultiplier: 6,
+		MinCandidates:       20,
+		MaxCandidates:       50,
+		BlendWeight:         0.35,
 	}
 }
 
@@ -67,6 +101,18 @@ func (e *Engine) RelationRecallConfig() RelationRecallConfig {
 	e.configMu.RLock()
 	defer e.configMu.RUnlock()
 	return e.relationRecall.normalized()
+}
+
+func (e *Engine) SetRerankConfig(cfg RerankConfig) {
+	e.configMu.Lock()
+	e.rerank = cfg.normalized()
+	e.configMu.Unlock()
+}
+
+func (e *Engine) RerankConfig() RerankConfig {
+	e.configMu.RLock()
+	defer e.configMu.RUnlock()
+	return e.rerank.normalized()
 }
 
 func (e *Engine) Inject(ctx context.Context, req domain.UnifiedRequest) (domain.UnifiedRequest, domain.InjectionResult, error) {
@@ -389,10 +435,9 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 		return DebugSearchResult{}, err
 	}
 
-	memories := make([]domain.MemoryDocument, 0, len(docs))
-	componentsByID := map[string]ScoreComponents{}
+	candidates := make([]searchCandidate, 0, len(docs))
 	for _, doc := range docs {
-		if !matchesTemporalSearchInput(doc, input) {
+		if !matchesTemporalSearchInput(doc, input) || !matchesSearchDocument(doc, input) {
 			continue
 		}
 		semanticScore := scoreMap[doc.NodeID]
@@ -403,7 +448,30 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 		relationExpansion := maxFloat(relationScores[doc.NodeID]-baseScore, 0)
 		supersessionBoost := supersessionBoosts[doc.NodeID]
 		conversationBoost := conversationBoosts[doc.NodeID]
-		components := scoreDocument(doc, semanticScores[doc.NodeID], keywordScores[doc.NodeID], relationExpansion, supersessionBoost, conversationBoost, cfg)
+		components := scoreDocument(doc, semanticScores[doc.NodeID], keywordScores[doc.NodeID], relationExpansion, supersessionBoost, conversationBoost, 0, 0, cfg)
+		candidates = append(candidates, searchCandidate{
+			Document:          doc,
+			PreliminaryScore:  components.EffectiveScore,
+			BaseSemanticScore: semanticScores[doc.NodeID],
+			KeywordScore:      keywordScores[doc.NodeID],
+			RelationExpansion: relationExpansion,
+			SupersessionBoost: supersessionBoost,
+			ConversationBoost: conversationBoost,
+		})
+	}
+	rerankScores, rerankRanks := e.rerankCandidates(ctx, input, candidates)
+
+	memories := make([]domain.MemoryDocument, 0, len(candidates))
+	componentsByID := map[string]ScoreComponents{}
+	rerankConfig := e.RerankConfig()
+	for _, candidate := range candidates {
+		doc := candidate.Document
+		rerankScore := rerankScores[doc.NodeID]
+		rerankWeight := 0.0
+		if _, ok := rerankRanks[doc.NodeID]; ok {
+			rerankWeight = rerankConfig.BlendWeight
+		}
+		components := scoreDocument(doc, candidate.BaseSemanticScore, candidate.KeywordScore, candidate.RelationExpansion, candidate.SupersessionBoost, candidate.ConversationBoost, rerankScore, rerankWeight, cfg)
 		if match, ok := keywordMatches[doc.NodeID]; ok {
 			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
 				"matched_keywords": match.Keywords,
@@ -414,23 +482,27 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 				"superseded_alias_node_ids": aliases,
 			})
 		}
-		if supersessionBoost > 0 {
+		if candidate.SupersessionBoost > 0 {
 			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
 				"supersession_canonicalized": true,
 			})
 		}
-		if conversationBoost > 0 {
+		if candidate.ConversationBoost > 0 {
 			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
 				"conversation_expanded": true,
+			})
+		}
+		if rank, ok := rerankRanks[doc.NodeID]; ok {
+			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
+				"rerank_applied": true,
+				"rerank_rank":    rank,
+				"rerank_score":   rerankScore,
 			})
 		}
 		doc.Score = components.SemanticScore
 		doc.EffectiveScore = components.EffectiveScore
 		if cfg.useRelations {
 			doc.Related = relatedMap[doc.NodeID]
-		}
-		if !matchesSearchDocument(doc, input) {
-			continue
 		}
 		if doc.EffectiveScore >= input.MinScore {
 			memories = append(memories, doc)
@@ -508,37 +580,61 @@ func (e *Engine) searchWithoutVectors(ctx context.Context, input domain.SearchIn
 	if err != nil {
 		return DebugSearchResult{}, err
 	}
-	componentsByID := make(map[string]ScoreComponents, len(result.Memories))
-	componentBaseScores := make(map[string]float64, len(result.Memories))
 	cfg := configForVariant(variant)
-	for idx, doc := range result.Memories {
-		components := scoreDocument(doc, baseScores[doc.NodeID], 0, 0, supersessionBoosts[doc.NodeID], conversationBoosts[doc.NodeID], cfg)
+	candidates := make([]searchCandidate, 0, len(result.Memories))
+	componentBaseScores := make(map[string]float64, len(result.Memories))
+	for _, doc := range result.Memories {
+		if doc.ID == "" || !matchesTemporalSearchInput(doc, input) || !matchesSearchDocument(doc, input) {
+			continue
+		}
+		components := scoreDocument(doc, baseScores[doc.NodeID], 0, 0, supersessionBoosts[doc.NodeID], conversationBoosts[doc.NodeID], 0, 0, cfg)
+		candidates = append(candidates, searchCandidate{
+			Document:          doc,
+			PreliminaryScore:  components.EffectiveScore,
+			BaseSemanticScore: baseScores[doc.NodeID],
+			SupersessionBoost: supersessionBoosts[doc.NodeID],
+			ConversationBoost: conversationBoosts[doc.NodeID],
+		})
+		componentBaseScores[doc.NodeID] = components.BaseSemanticScore
+	}
+	rerankScores, rerankRanks := e.rerankCandidates(ctx, input, candidates)
+
+	componentsByID := make(map[string]ScoreComponents, len(candidates))
+	filtered := make([]domain.MemoryDocument, 0, len(candidates))
+	rerankConfig := e.RerankConfig()
+	for _, candidate := range candidates {
+		doc := candidate.Document
+		rerankScore := rerankScores[doc.NodeID]
+		rerankWeight := 0.0
+		if _, ok := rerankRanks[doc.NodeID]; ok {
+			rerankWeight = rerankConfig.BlendWeight
+		}
+		components := scoreDocument(doc, candidate.BaseSemanticScore, 0, 0, candidate.SupersessionBoost, candidate.ConversationBoost, rerankScore, rerankWeight, cfg)
 		if aliases := supersessionAliases[doc.NodeID]; len(aliases) > 0 {
 			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
 				"superseded_alias_node_ids": aliases,
 			})
 		}
-		if supersessionBoosts[doc.NodeID] > 0 {
+		if candidate.SupersessionBoost > 0 {
 			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
 				"supersession_canonicalized": true,
 			})
 		}
-		if conversationBoosts[doc.NodeID] > 0 {
+		if candidate.ConversationBoost > 0 {
 			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
 				"conversation_expanded": true,
 			})
 		}
+		if rank, ok := rerankRanks[doc.NodeID]; ok {
+			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
+				"rerank_applied": true,
+				"rerank_rank":    rank,
+				"rerank_score":   rerankScore,
+			})
+		}
 		doc.Score = components.SemanticScore
 		doc.EffectiveScore = components.EffectiveScore
-		result.Memories[idx] = doc
 		componentsByID[doc.ID] = components
-		componentBaseScores[doc.NodeID] = components.BaseSemanticScore
-	}
-	filtered := make([]domain.MemoryDocument, 0, len(result.Memories))
-	for _, doc := range result.Memories {
-		if doc.ID == "" || !matchesTemporalSearchInput(doc, input) || !matchesSearchDocument(doc, input) {
-			continue
-		}
 		if doc.EffectiveScore < input.MinScore {
 			continue
 		}
@@ -762,6 +858,38 @@ func (cfg RelationRecallConfig) normalized() RelationRecallConfig {
 	return cfg
 }
 
+func (cfg RerankConfig) normalized() RerankConfig {
+	defaults := DefaultRerankConfig()
+	cfg.Model = strings.TrimSpace(cfg.Model)
+	if cfg.CandidateMultiplier <= 0 {
+		cfg.CandidateMultiplier = defaults.CandidateMultiplier
+	}
+	if cfg.CandidateMultiplier > 16 {
+		cfg.CandidateMultiplier = 16
+	}
+	if cfg.MinCandidates <= 0 {
+		cfg.MinCandidates = defaults.MinCandidates
+	}
+	if cfg.MaxCandidates <= 0 {
+		cfg.MaxCandidates = defaults.MaxCandidates
+	}
+	if cfg.MaxCandidates < cfg.MinCandidates {
+		cfg.MaxCandidates = cfg.MinCandidates
+	}
+	if cfg.BlendWeight < 0 {
+		cfg.BlendWeight = defaults.BlendWeight
+	}
+	if cfg.BlendWeight > 1 {
+		cfg.BlendWeight = 1
+	}
+	return cfg
+}
+
+func (cfg RerankConfig) enabled() bool {
+	cfg = cfg.normalized()
+	return cfg.Model != "" && cfg.BlendWeight > 0
+}
+
 func (cfg RelationRecallConfig) hopPenalty(hop int) float64 {
 	cfg = cfg.normalized()
 	if cfg.HopDecayLambda == 0 {
@@ -884,6 +1012,79 @@ func (e *Engine) expandConversationCandidates(ctx context.Context, input domain.
 		return expandedScores, conversationBoosts, docs, nil
 	}
 	return expandedScores, conversationBoosts, append(docs, extraDocs...), nil
+}
+
+func (e *Engine) rerankCandidates(ctx context.Context, input domain.SearchInput, candidates []searchCandidate) (map[string]float64, map[string]int) {
+	scores := map[string]float64{}
+	ranks := map[string]int{}
+	if e == nil || e.reranker == nil || len(candidates) < 2 {
+		return scores, ranks
+	}
+	cfg := e.RerankConfig()
+	if !cfg.enabled() || strings.TrimSpace(input.Query) == "" {
+		return scores, ranks
+	}
+
+	ordered := append([]searchCandidate{}, candidates...)
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i].PreliminaryScore == ordered[j].PreliminaryScore {
+			return ordered[i].Document.UpdatedAt.After(ordered[j].Document.UpdatedAt)
+		}
+		return ordered[i].PreliminaryScore > ordered[j].PreliminaryScore
+	})
+
+	limit := max(input.TopN*cfg.CandidateMultiplier, cfg.MinCandidates)
+	if cfg.MaxCandidates > 0 && limit > cfg.MaxCandidates {
+		limit = cfg.MaxCandidates
+	}
+	if limit > len(ordered) {
+		limit = len(ordered)
+	}
+	if limit < 2 {
+		return scores, ranks
+	}
+
+	documents := make([]domain.RerankDocument, 0, limit)
+	for _, candidate := range ordered[:limit] {
+		text := rerankDocumentText(candidate.Document)
+		if text == "" {
+			continue
+		}
+		documents = append(documents, domain.RerankDocument{
+			ID:   candidate.Document.NodeID,
+			Text: text,
+		})
+	}
+	if len(documents) < 2 {
+		return scores, ranks
+	}
+
+	results, err := e.reranker.Rerank(ctx, domain.RerankInput{
+		UserID:    input.UserID,
+		Query:     input.Query,
+		Model:     cfg.Model,
+		TopN:      len(documents),
+		Documents: documents,
+	})
+	if err != nil {
+		return scores, ranks
+	}
+	for idx, item := range results {
+		if item.DocumentID == "" {
+			continue
+		}
+		scores[item.DocumentID] = item.Score
+		ranks[item.DocumentID] = idx + 1
+	}
+	return scores, ranks
+}
+
+func rerankDocumentText(doc domain.MemoryDocument) string {
+	content := strings.TrimSpace(doc.Content)
+	if content == "" {
+		return ""
+	}
+	return "[" + string(doc.Type) + "] " + content
 }
 
 type relationTraversalEdge struct {

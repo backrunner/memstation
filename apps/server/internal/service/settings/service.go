@@ -12,6 +12,7 @@ import (
 
 	"memstation/apps/server/internal/cache"
 	"memstation/apps/server/internal/ports"
+	"memstation/apps/server/internal/runtimeconfig"
 )
 
 type Snapshot struct {
@@ -34,7 +35,7 @@ type EmbeddingRuntime struct {
 }
 
 type Service struct {
-	db        *sqlpkg.DB
+	db        runtimeconfig.DBHandle
 	encryptor ports.Encryptor
 
 	mu                   sync.RWMutex
@@ -44,7 +45,7 @@ type Service struct {
 	cache                *cache.JSONStore
 }
 
-func NewService(db *sqlpkg.DB, encryptor ports.Encryptor, chatModel, summaryModel, analysisModel, embeddingModel string, maxInjectionTokens int) *Service {
+func NewService(db runtimeconfig.DBHandle, encryptor ports.Encryptor, chatModel, summaryModel, analysisModel, embeddingModel string, maxInjectionTokens int) *Service {
 	return &Service{
 		db:        db,
 		encryptor: encryptor,
@@ -63,6 +64,16 @@ func NewService(db *sqlpkg.DB, encryptor ports.Encryptor, chatModel, summaryMode
 
 func (s *Service) SetCache(store *cache.JSONStore) {
 	s.cache = store
+}
+
+func (s *Service) UpdateDefaultMaxInjectionTokens(value int) {
+	if s == nil || value <= 0 {
+		return
+	}
+	s.mu.Lock()
+	s.defaults.MaxInjectionTokens = value
+	s.mu.Unlock()
+	s.invalidateAllCachedSnapshots(context.Background())
 }
 
 func (s *Service) Snapshot() map[string]any {
@@ -88,7 +99,8 @@ func (s *Service) SnapshotForUser(ctx context.Context, userID string) (map[strin
 	userEmbeddingAPIKey := s.userEmbeddingAPIKeys[userID]
 	s.mu.RUnlock()
 
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		if hasUserSnapshot {
 			userSnapshot.EmbeddingAPIKeyConfigured = strings.TrimSpace(userEmbeddingAPIKey) != ""
 			if s.cache != nil {
@@ -163,7 +175,8 @@ func (s *Service) UpdateForUser(ctx context.Context, userID string, fields map[s
 		snapshot.MaxInjectionTokens = intOrDefault(value, snapshot.MaxInjectionTokens)
 	}
 
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		if clearEmbeddingAPIKey(fields) {
@@ -206,7 +219,7 @@ func (s *Service) UpdateForUser(ctx context.Context, userID string, fields map[s
 	snapshot.EmbeddingAPIKeyConfigured = strings.TrimSpace(encryptedEmbeddingAPIKey) != ""
 
 	now := time.Now().UTC()
-	_, err = s.db.ExecContext(ctx, `
+	_, err = db.ExecContext(ctx, `
         INSERT INTO user_settings (
             id, user_id, chat_model, summary_model, analysis_model, embedding_model,
             embedding_base_url, embedding_api_key_encrypted, retain_source_materials,
@@ -256,7 +269,7 @@ func (s *Service) ResolveEmbeddingRuntime(ctx context.Context, userID string) (E
 		Model:   strings.TrimSpace(anyString(snapshot["embedding_model"])),
 		BaseURL: strings.TrimSpace(anyString(snapshot["embedding_base_url"])),
 	}
-	if s.db == nil {
+	if s.currentDB() == nil {
 		s.mu.RLock()
 		runtime.APIKey = s.userEmbeddingAPIKeys[userID]
 		s.mu.RUnlock()
@@ -284,7 +297,11 @@ func (s *Service) ResolveEmbeddingRuntime(ctx context.Context, userID string) (E
 }
 
 func (s *Service) loadSnapshotFromDB(ctx context.Context, userID string, defaults Snapshot) (Snapshot, error) {
-	row := s.db.QueryRowContext(ctx, `
+	db := s.currentDB()
+	if db == nil {
+		return defaults, nil
+	}
+	row := db.QueryRowContext(ctx, `
         SELECT chat_model, summary_model, analysis_model, embedding_model, embedding_base_url,
                embedding_api_key_encrypted, retain_source_materials, tool_write_enabled, max_injection_tokens
         FROM user_settings
@@ -344,13 +361,14 @@ func (s *Service) loadSnapshotFromDB(ctx context.Context, userID string, default
 }
 
 func (s *Service) loadEncryptedEmbeddingAPIKey(ctx context.Context, userID string) (string, error) {
-	if s.db == nil {
+	db := s.currentDB()
+	if db == nil {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 		return s.userEmbeddingAPIKeys[userID], nil
 	}
 
-	row := s.db.QueryRowContext(ctx, `
+	row := db.QueryRowContext(ctx, `
         SELECT embedding_api_key_encrypted
         FROM user_settings
         WHERE user_id = $1
@@ -384,6 +402,13 @@ func (s *Service) defaultSnapshotMap() map[string]any {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.defaults.asMap()
+}
+
+func (s *Service) currentDB() *sqlpkg.DB {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	return s.db.Current()
 }
 
 func (s Snapshot) asMap() map[string]any {
@@ -462,4 +487,11 @@ func anyInt(value any) int {
 
 func settingsCacheKey(userID string) string {
 	return "settings:user:" + userID
+}
+
+func (s *Service) invalidateAllCachedSnapshots(ctx context.Context) {
+	if s == nil || s.cache == nil {
+		return
+	}
+	_ = s.cache.DeletePrefix(ctx, "settings:user:")
 }

@@ -11,6 +11,7 @@ import (
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/ports"
 	"memstation/apps/server/internal/provider"
+	"memstation/apps/server/internal/runtimeconfig"
 	settingsservice "memstation/apps/server/internal/service/settings"
 )
 
@@ -18,6 +19,7 @@ type Service struct {
 	client   *http.Client
 	resolver provider.ConfigResolver
 	settings *settingsservice.Service
+	timeout  *runtimeconfig.DurationValue
 }
 
 func NewService(resolver provider.ConfigResolver, settings *settingsservice.Service, timeout time.Duration) *Service {
@@ -25,13 +27,17 @@ func NewService(resolver provider.ConfigResolver, settings *settingsservice.Serv
 		timeout = 60 * time.Second
 	}
 	return &Service{
-		client:   &http.Client{Timeout: timeout},
+		client:   &http.Client{},
 		resolver: resolver,
 		settings: settings,
+		timeout:  runtimeconfig.NewDurationValue(timeout),
 	}
 }
 
 func (s *Service) Embed(ctx context.Context, input domain.EmbeddingInput) (domain.EmbeddingResult, error) {
+	ctx, cancel := s.withTimeout(ctx)
+	defer cancel()
+
 	runtime, err := s.resolveRuntime(ctx, input)
 	if err != nil {
 		return domain.EmbeddingResult{}, err
@@ -123,6 +129,30 @@ func (s *Service) resolveRuntime(ctx context.Context, input domain.EmbeddingInpu
 	default:
 		return runtime, nil
 	}
+}
+
+func (s *Service) SetTimeout(timeout time.Duration) {
+	if s == nil {
+		return
+	}
+	if timeout <= 0 {
+		timeout = 60 * time.Second
+	}
+	if s.timeout == nil {
+		s.timeout = runtimeconfig.NewDurationValue(timeout)
+		return
+	}
+	s.timeout.Store(timeout)
+}
+
+func (s *Service) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	timeout := 60 * time.Second
+	if s != nil && s.timeout != nil {
+		if loaded := s.timeout.Load(); loaded > 0 {
+			timeout = loaded
+		}
+	}
+	return context.WithTimeout(ctx, timeout)
 }
 
 func parseModelReference(value string) (domain.Provider, string) {

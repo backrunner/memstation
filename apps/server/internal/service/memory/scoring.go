@@ -18,6 +18,9 @@ const (
 type ScoreComponents struct {
 	BaseSemanticScore float64 `json:"base_semantic_score"`
 	KeywordScore      float64 `json:"keyword_score"`
+	DirectScore       float64 `json:"direct_score"`
+	RerankScore       float64 `json:"rerank_score"`
+	RerankWeight      float64 `json:"rerank_weight"`
 	RelationExpansion float64 `json:"relation_expansion"`
 	SupersessionBoost float64 `json:"supersession_boost"`
 	ConversationBoost float64 `json:"conversation_boost"`
@@ -49,14 +52,24 @@ func configForVariant(variant SearchVariant) searchConfig {
 	}
 }
 
-func scoreDocument(doc domain.MemoryDocument, baseSemanticScore, keywordScore, relationExpansion, supersessionBoost, conversationBoost float64, cfg searchConfig) ScoreComponents {
+func scoreDocument(doc domain.MemoryDocument, baseSemanticScore, keywordScore, relationExpansion, supersessionBoost, conversationBoost, rerankScore, rerankWeight float64, cfg searchConfig) ScoreComponents {
+	directScore := combineDirectSignal(baseSemanticScore, keywordScore)
+	if rerankWeight > 1 {
+		rerankWeight = 1
+	}
+	if rerankWeight < 0 {
+		rerankWeight = 0
+	}
 	components := ScoreComponents{
 		BaseSemanticScore: baseSemanticScore,
 		KeywordScore:      keywordScore,
+		DirectScore:       directScore,
+		RerankScore:       rerankScore,
+		RerankWeight:      rerankWeight,
 		RelationExpansion: relationExpansion,
 		SupersessionBoost: supersessionBoost,
 		ConversationBoost: conversationBoost,
-		SemanticScore:     combineDirectSignal(baseSemanticScore, keywordScore) + relationExpansion + supersessionBoost + conversationBoost,
+		SemanticScore:     blendDirectScore(directScore, rerankScore, rerankWeight) + relationExpansion + supersessionBoost + conversationBoost,
 		ImportanceWeight:  1,
 		TimeDecay:         1,
 		FreshnessPenalty:  1,
@@ -75,8 +88,8 @@ func scoreDocument(doc domain.MemoryDocument, baseSemanticScore, keywordScore, r
 	return components
 }
 
-func ExplainDocumentScore(doc domain.MemoryDocument, baseSemanticScore, keywordScore, relationExpansion, supersessionBoost, conversationBoost float64, variant SearchVariant) ScoreComponents {
-	return scoreDocument(doc, baseSemanticScore, keywordScore, relationExpansion, supersessionBoost, conversationBoost, configForVariant(variant))
+func ExplainDocumentScore(doc domain.MemoryDocument, baseSemanticScore, keywordScore, relationExpansion, supersessionBoost, conversationBoost, rerankScore, rerankWeight float64, variant SearchVariant) ScoreComponents {
+	return scoreDocument(doc, baseSemanticScore, keywordScore, relationExpansion, supersessionBoost, conversationBoost, rerankScore, rerankWeight, configForVariant(variant))
 }
 
 func keywordSignalBoost(keywordScore float64) float64 {
@@ -95,4 +108,11 @@ func combineDirectSignal(baseSemanticScore, keywordScore float64) float64 {
 	default:
 		return baseSemanticScore + keywordSignalBoost(keywordScore)
 	}
+}
+
+func blendDirectScore(directScore, rerankScore, rerankWeight float64) float64 {
+	if rerankWeight <= 0 {
+		return directScore
+	}
+	return ((1 - rerankWeight) * directScore) + (rerankWeight * rerankScore)
 }

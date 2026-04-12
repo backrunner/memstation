@@ -13,11 +13,13 @@ import (
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/provider"
+	"memstation/apps/server/internal/runtimeconfig"
 )
 
 type Adapter struct {
 	client   *http.Client
 	resolver provider.ConfigResolver
+	timeout  *runtimeconfig.DurationValue
 }
 
 func NewAdapter(resolver provider.ConfigResolver, timeout time.Duration) *Adapter {
@@ -25,14 +27,18 @@ func NewAdapter(resolver provider.ConfigResolver, timeout time.Duration) *Adapte
 		timeout = 60 * time.Second
 	}
 	return &Adapter{
-		client:   &http.Client{Timeout: timeout},
+		client:   &http.Client{},
 		resolver: resolver,
+		timeout:  runtimeconfig.NewDurationValue(timeout),
 	}
 }
 
 func (a *Adapter) Name() domain.Provider { return domain.ProviderGemini }
 
 func (a *Adapter) Complete(ctx context.Context, req domain.UnifiedRequest) (*domain.UnifiedResponse, error) {
+	ctx, cancel := a.withTimeout(ctx)
+	defer cancel()
+
 	config, err := a.resolveConfig(ctx)
 	if err != nil {
 		return nil, err
@@ -87,6 +93,9 @@ func (a *Adapter) Complete(ctx context.Context, req domain.UnifiedRequest) (*dom
 }
 
 func (a *Adapter) Stream(ctx context.Context, req domain.UnifiedRequest, emit func(domain.StreamEvent) error) (*domain.UnifiedResponse, error) {
+	ctx, cancel := a.withTimeout(ctx)
+	defer cancel()
+
 	config, err := a.resolveConfig(ctx)
 	if err != nil {
 		return nil, err
@@ -222,6 +231,30 @@ func (a *Adapter) resolveConfig(ctx context.Context) (provider.RuntimeConfig, er
 	return config, nil
 }
 
+func (a *Adapter) SetTimeout(timeout time.Duration) {
+	if a == nil {
+		return
+	}
+	if timeout <= 0 {
+		timeout = 60 * time.Second
+	}
+	if a.timeout == nil {
+		a.timeout = runtimeconfig.NewDurationValue(timeout)
+		return
+	}
+	a.timeout.Store(timeout)
+}
+
+func (a *Adapter) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	timeout := 60 * time.Second
+	if a != nil && a.timeout != nil {
+		if loaded := a.timeout.Load(); loaded > 0 {
+			timeout = loaded
+		}
+	}
+	return context.WithTimeout(ctx, timeout)
+}
+
 type geminiResponse struct {
 	Candidates []struct {
 		Content struct {
@@ -323,7 +356,7 @@ func buildContents(messages []domain.UnifiedMessage) []map[string]any {
 				role = "model"
 			}
 			out = append(out, map[string]any{
-				"role": role,
+				"role":  role,
 				"parts": parts,
 			})
 		}

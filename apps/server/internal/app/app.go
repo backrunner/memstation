@@ -7,9 +7,11 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -27,11 +29,13 @@ import (
 	anthropicprovider "memstation/apps/server/internal/provider/anthropic"
 	geminiprovider "memstation/apps/server/internal/provider/gemini"
 	openaiprovider "memstation/apps/server/internal/provider/openai"
+	"memstation/apps/server/internal/runtimeconfig"
 	"memstation/apps/server/internal/security"
 	adminservice "memstation/apps/server/internal/service/admin"
 	analysisservice "memstation/apps/server/internal/service/analysis"
 	apikeyservice "memstation/apps/server/internal/service/apikey"
 	auditsvc "memstation/apps/server/internal/service/audit"
+	connectionconfigservice "memstation/apps/server/internal/service/connectionconfig"
 	conversationservice "memstation/apps/server/internal/service/conversation"
 	embeddingservice "memstation/apps/server/internal/service/embedding"
 	gatewayservice "memstation/apps/server/internal/service/gateway"
@@ -39,6 +43,7 @@ import (
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
 	multimodalservice "memstation/apps/server/internal/service/multimodal"
 	providerconfigservice "memstation/apps/server/internal/service/providerconfig"
+	rerankservice "memstation/apps/server/internal/service/rerank"
 	settingsservice "memstation/apps/server/internal/service/settings"
 	systemconfigservice "memstation/apps/server/internal/service/systemconfig"
 	usageservice "memstation/apps/server/internal/service/usage"
@@ -64,6 +69,7 @@ type Container struct {
 	Users         *userservice.Service
 	APIKeys       *apikeyservice.Service
 	Settings      *settingsservice.Service
+	ConnectionCfg *connectionconfigservice.Service
 	SystemConfig  *systemconfigservice.Service
 	ProviderCfg   *providerconfigservice.Service
 	Audit         *auditsvc.Service
@@ -104,18 +110,39 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	cleanup := []func(context.Context) error{shutdownTelemetry}
 	health := observability.NewRegistry()
 
-	db, err := bootstrap.OpenPostgres(ctx, cfg)
+	encryptor, err := security.NewAESGCMEncryptor(cfg.MasterKey)
 	if err != nil {
 		return nil, err
 	}
-	if db != nil {
-		cleanup = append(cleanup, func(context.Context) error { return db.Close() })
-		health.Add("database", observability.CheckFunc(func(ctx context.Context) error { return db.PingContext(ctx) }))
-	} else {
-		health.Add("database", observability.CheckFunc(func(context.Context) error { return nil }))
-	}
 
-	systemConfig := systemconfigservice.NewService(db, systemconfigservice.DefaultsFromConfig(cfg))
+	runtimeStore := runtimeconfig.NewFileStore(cfg.RuntimeStatePath)
+	dbHandle := runtimeconfig.NewSwitchableDB(logger, nil)
+	cleanup = append(cleanup, func(context.Context) error { return dbHandle.Close() })
+
+	connectionCfg := connectionconfigservice.NewService(runtimeStore, encryptor, dbHandle, cfg.DatabaseURL)
+	connectionSnapshot, effectiveDatabaseURL, err := connectionCfg.Bootstrap(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cfg.DatabaseURL = effectiveDatabaseURL
+	db := dbHandle.Current()
+	switch {
+	case connectionSnapshot.Database.LastError != "":
+		logger.WarnContext(ctx, "postgres unavailable; starting in degraded mode with in-memory stores", "error", connectionSnapshot.Database.LastError)
+	case !connectionSnapshot.Database.Configured:
+		logger.WarnContext(ctx, "postgres is not configured; starting in degraded mode with in-memory stores")
+	}
+	health.Add("database", observability.CheckFunc(func(ctx context.Context) error {
+		if err := dbHandle.Health(ctx); err != nil {
+			return err
+		}
+		if dbHandle.Current() == nil {
+			return dbHandle.LastError()
+		}
+		return nil
+	}))
+
+	systemConfig := systemconfigservice.NewService(runtimeStore, systemconfigservice.DefaultsFromConfig(cfg))
 	runtimeSnapshot, err := systemConfig.Bootstrap(ctx)
 	if err != nil {
 		return nil, err
@@ -123,12 +150,15 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	cfg = runtimeSnapshot.ApplyConfig(cfg)
 
 	redisClient, err := bootstrap.OpenRedis(ctx, cfg)
+	redisErr := err
 	if err != nil {
-		return nil, err
+		logger.WarnContext(ctx, "redis unavailable; starting in degraded mode without distributed cache or queue connectivity", "error", err)
 	}
 	if redisClient != nil {
 		cleanup = append(cleanup, func(context.Context) error { return redisClient.Close() })
 		health.Add("redis", observability.CheckFunc(func(ctx context.Context) error { return redisClient.Ping(ctx).Err() }))
+	} else if redisErr != nil {
+		health.Add("redis", observability.CheckFunc(func(context.Context) error { return redisErr }))
 	} else {
 		health.Add("redis", observability.CheckFunc(func(context.Context) error { return nil }))
 	}
@@ -139,16 +169,10 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	}
 	cleanup = append(cleanup, jsonCache.Close)
 
-	encryptor, err := security.NewAESGCMEncryptor(cfg.MasterKey)
-	if err != nil {
-		return nil, err
-	}
-	_ = encryptor
-
 	models := modelcap.NewRegistry(cfg.DefaultProvider, cfg.ChatModel, cfg.SummaryModel, cfg.AnalysisModel, cfg.EmbeddingModel)
-	settings := settingsservice.NewService(db, encryptor, cfg.ChatModel, cfg.SummaryModel, cfg.AnalysisModel, cfg.EmbeddingModel, cfg.MaxInjectionTokens)
+	settings := settingsservice.NewService(dbHandle, encryptor, cfg.ChatModel, cfg.SummaryModel, cfg.AnalysisModel, cfg.EmbeddingModel, cfg.MaxInjectionTokens)
 	settings.SetCache(jsonCache)
-	providerCfg := providerconfigservice.NewService(db, encryptor, providerconfigservice.Defaults{
+	providerCfg := providerconfigservice.NewService(runtimeStore, encryptor, providerconfigservice.Defaults{
 		providerconfigservice.ScopeGateway: {
 			domain.ProviderOpenAICompatible: {APIKey: cfg.OpenAIAPIKey, BaseURL: cfg.OpenAIBaseURL},
 			domain.ProviderOpenAIResponses:  {APIKey: cfg.OpenAIAPIKey, BaseURL: cfg.OpenAIBaseURL},
@@ -164,33 +188,33 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		providerconfigservice.ScopeEmbedding: {
 			domain.ProviderOpenAICompatible: {APIKey: cfg.EmbeddingAPIKey, BaseURL: cfg.EmbeddingBaseURL},
 		},
+		providerconfigservice.ScopeRerank: {
+			domain.ProviderCohere: {APIKey: cfg.CohereAPIKey, BaseURL: cfg.CohereBaseURL},
+			domain.ProviderJina:   {APIKey: cfg.JinaAPIKey, BaseURL: cfg.JinaBaseURL},
+		},
 	})
-	audit := auditsvc.NewService(db)
-	users := userservice.NewService(db)
-	apiKeys := apikeyservice.NewService(db)
-
-	var conversationRepo ports.ConversationRepository
-	var mediaRepo ports.MediaRepository
-	var memoryRepo ports.MemoryRepository
-	var outboxRepo ports.OutboxRepository
-	if db != nil {
-		conversationRepo = sqlstore.NewPostgresConversationRepository(db)
-		mediaRepo = sqlstore.NewPostgresMediaRepository(db)
-		memoryRepo = sqlstore.NewPostgresMemoryRepository(db)
-		outboxRepo = sqlstore.NewPostgresOutboxRepository(db)
-	} else {
-		conversationRepo = sqlstore.NewInMemoryConversationRepository()
-		mediaRepo = sqlstore.NewInMemoryMediaRepository()
-		memoryRepo = sqlstore.NewInMemoryMemoryRepository()
-		outboxRepo = sqlstore.NewInMemoryOutboxRepository()
+	if err := providerCfg.Bootstrap(ctx); err != nil {
+		return nil, err
 	}
+	audit := auditsvc.NewService(dbHandle)
+	users := userservice.NewService(dbHandle)
+	apiKeys := apikeyservice.NewService(dbHandle)
+
+	var conversationRepo ports.ConversationRepository = sqlstore.NewHybridConversationRepository(dbHandle)
+	var mediaRepo ports.MediaRepository = sqlstore.NewHybridMediaRepository(dbHandle)
+	var memoryRepo ports.MemoryRepository = sqlstore.NewHybridMemoryRepository(dbHandle)
+	var outboxRepo ports.OutboxRepository = sqlstore.NewHybridOutboxRepository(dbHandle)
 	blobStore, err := blobstore.NewStore(cfg.Multimodal)
 	if err != nil {
 		return nil, err
 	}
-	vectorStore := vector.NewPGVectorStore(db)
-	vectorStore.SetEmbedder(embeddingservice.NewService(providerCfg.Resolver(providerconfigservice.ScopeEmbedding), settings, cfg.ProviderTimeout))
-	generations := memorygenservice.NewService(db, cfg.EmbeddingModel)
+	vectorStore := vector.NewPGVectorStore(dbHandle)
+	if err := vectorStore.SetBackend(cfg.VectorStoreBackend); err != nil {
+		return nil, err
+	}
+	embeddingClient := embeddingservice.NewService(providerCfg.Resolver(providerconfigservice.ScopeEmbedding), settings, cfg.ProviderTimeout)
+	vectorStore.SetEmbedder(embeddingClient)
+	generations := memorygenservice.NewService(dbHandle, cfg.EmbeddingModel)
 	health.Add("vectorstore", observability.CheckFunc(vectorStore.Health))
 	health.Add("outbox", observability.CheckFunc(func(ctx context.Context) error {
 		_, err := outboxRepo.Pending(ctx, 1)
@@ -204,23 +228,41 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		HopDecayLambda:   cfg.MemoryRelationHopDecayLambda,
 		HopDecayExponent: cfg.MemoryRelationHopDecayExponent,
 	})
+	reranker := rerankservice.NewService(providerCfg.Resolver(providerconfigservice.ScopeRerank), cfg.RerankModel, cfg.ProviderTimeout)
+	memoryEngine.SetReranker(reranker)
+	memoryEngine.SetRerankConfig(memoryservice.RerankConfig{
+		Model:               cfg.RerankModel,
+		CandidateMultiplier: cfg.RerankCandidateMultiplier,
+		MinCandidates:       cfg.RerankMinCandidates,
+		MaxCandidates:       cfg.RerankMaxCandidates,
+		BlendWeight:         cfg.RerankBlendWeight,
+	})
 	conversations := conversationservice.NewService(conversationRepo, outboxRepo, cfg.MessageThreshold, cfg.TokenThreshold)
 	multimodal := multimodalservice.NewService(mediaRepo, blobStore, cfg.Multimodal)
+	gatewayOpenAICompatible := openaiprovider.NewCompatibleAdapter(providerCfg.Resolver(providerconfigservice.ScopeGateway), cfg.ProviderTimeout)
+	gatewayOpenAIResponses := openaiprovider.NewResponsesAdapter(providerCfg.Resolver(providerconfigservice.ScopeGateway), cfg.ProviderTimeout)
+	gatewayAnthropic := anthropicprovider.NewAdapter(providerCfg.Resolver(providerconfigservice.ScopeGateway), cfg.ProviderTimeout)
+	gatewayGemini := geminiprovider.NewAdapter(providerCfg.Resolver(providerconfigservice.ScopeGateway), cfg.ProviderTimeout)
 	gatewayProviderRegistry := provider.NewRegistry(
 		cfg.DefaultProvider,
-		openaiprovider.NewCompatibleAdapter(providerCfg.Resolver(providerconfigservice.ScopeGateway), cfg.ProviderTimeout),
-		openaiprovider.NewResponsesAdapter(providerCfg.Resolver(providerconfigservice.ScopeGateway), cfg.ProviderTimeout),
-		anthropicprovider.NewAdapter(providerCfg.Resolver(providerconfigservice.ScopeGateway), cfg.ProviderTimeout),
-		geminiprovider.NewAdapter(providerCfg.Resolver(providerconfigservice.ScopeGateway), cfg.ProviderTimeout),
+		gatewayOpenAICompatible,
+		gatewayOpenAIResponses,
+		gatewayAnthropic,
+		gatewayGemini,
 	)
+	internalOpenAICompatible := openaiprovider.NewCompatibleAdapter(providerCfg.Resolver(providerconfigservice.ScopeInternal), cfg.ProviderTimeout)
+	internalOpenAIResponses := openaiprovider.NewResponsesAdapter(providerCfg.Resolver(providerconfigservice.ScopeInternal), cfg.ProviderTimeout)
+	internalAnthropic := anthropicprovider.NewAdapter(providerCfg.Resolver(providerconfigservice.ScopeInternal), cfg.ProviderTimeout)
+	internalGemini := geminiprovider.NewAdapter(providerCfg.Resolver(providerconfigservice.ScopeInternal), cfg.ProviderTimeout)
 	internalProviderRegistry := provider.NewRegistry(
 		cfg.InternalDefaultProvider,
-		openaiprovider.NewCompatibleAdapter(providerCfg.Resolver(providerconfigservice.ScopeInternal), cfg.ProviderTimeout),
-		openaiprovider.NewResponsesAdapter(providerCfg.Resolver(providerconfigservice.ScopeInternal), cfg.ProviderTimeout),
-		anthropicprovider.NewAdapter(providerCfg.Resolver(providerconfigservice.ScopeInternal), cfg.ProviderTimeout),
-		geminiprovider.NewAdapter(providerCfg.Resolver(providerconfigservice.ScopeInternal), cfg.ProviderTimeout),
+		internalOpenAICompatible,
+		internalOpenAIResponses,
+		internalAnthropic,
+		internalGemini,
 	)
 	gateway := gatewayservice.NewService(gatewayProviderRegistry, memoryEngine, conversations, settings, cfg.DefaultProvider)
+	gateway.SetMaxContextTokens(cfg.MaxContextTokens)
 	memories := memoryservice.NewService(memoryEngine, memoryRepo)
 	memories.SetKeyMemoryCache(jsonCache)
 	memories.SetVectorStore(vectorStore)
@@ -229,7 +271,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	gateway.SetToolRuntime(gatewayservice.NewToolRuntime(memories, audit, keySet(cfg.KeyMemoryWriteKeys), 3))
 	admin := adminservice.NewService(conversationRepo, mediaRepo, memoryRepo, settings, audit, models)
 	admin.SetGenerationService(generations)
-	usage := usageservice.NewService(db, conversationRepo)
+	usage := usageservice.NewService(dbHandle, conversationRepo)
 	admin.AttachUserRuntime(users, apiKeys, usage)
 	analysis := analysisservice.NewService()
 	sessionManager := security.NewAdminSessionManager(cfg.MasterKey, 8*time.Hour)
@@ -266,17 +308,55 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	relay := worker.NewRelay(logger, outboxRepo, publisher)
 	scheduler := worker.NewScheduler(logger, relay, conversations, cfg.ConversationTimeout)
 	systemConfig.SetLiveApplier(systemconfigservice.LiveApplier{
+		Validate: func(snapshot systemconfigservice.Snapshot) error {
+			if _, err := blobstore.NewStore(snapshot.MultimodalConfig()); err != nil {
+				return err
+			}
+			return nil
+		},
 		SetDefaultProvider: func(provider domain.Provider) {
 			gateway.SetDefaultProvider(provider)
 		},
 		SetInternalDefaultProvider: func(provider domain.Provider) {
 			internalProviderRegistry.SetDefaultProvider(provider)
 		},
+		SetVectorStoreBackend: func(backend string) {
+			if err := vectorStore.SetBackend(backend); err != nil {
+				logger.WarnContext(ctx, "ignored unsupported live vector store backend update", "backend", backend, "error", err)
+			}
+		},
 		SetThresholds: func(messageThreshold, tokenThreshold int) {
 			conversations.UpdateThresholds(messageThreshold, tokenThreshold)
 		},
 		SetConversationTimeout: func(timeout time.Duration) {
 			scheduler.UpdateTimeoutWindow(timeout)
+		},
+		SetProviderTimeout: func(timeout time.Duration) {
+			gatewayOpenAICompatible.SetTimeout(timeout)
+			gatewayOpenAIResponses.SetTimeout(timeout)
+			gatewayAnthropic.SetTimeout(timeout)
+			gatewayGemini.SetTimeout(timeout)
+			internalOpenAICompatible.SetTimeout(timeout)
+			internalOpenAIResponses.SetTimeout(timeout)
+			internalAnthropic.SetTimeout(timeout)
+			internalGemini.SetTimeout(timeout)
+			embeddingClient.SetTimeout(timeout)
+			reranker.SetTimeout(timeout)
+		},
+		SetMaxContextTokens: func(tokens int) {
+			gateway.SetMaxContextTokens(tokens)
+		},
+		SetMaxInjectionTokens: func(tokens int) {
+			settings.UpdateDefaultMaxInjectionTokens(tokens)
+		},
+		SetRerankConfig: func(model string, candidateMultiplier, minCandidates, maxCandidates int, blendWeight float64) {
+			memoryEngine.SetRerankConfig(memoryservice.RerankConfig{
+				Model:               model,
+				CandidateMultiplier: candidateMultiplier,
+				MinCandidates:       minCandidates,
+				MaxCandidates:       maxCandidates,
+				BlendWeight:         blendWeight,
+			})
 		},
 		SetMemoryRelationRecall: func(maxHops int, decayLambda, decayExponent float64) {
 			memoryEngine.SetRelationRecallConfig(memoryservice.RelationRecallConfig{
@@ -289,6 +369,17 @@ func buildContainer(ctx context.Context) (*Container, error) {
 			if rateLimiter != nil {
 				rateLimiter.Update(float64(rps), burst)
 			}
+		},
+		SetCacheTTL: func(ttl time.Duration) {
+			jsonCache.UpdateTTL(ttl)
+		},
+		SetMultimodalConfig: func(nextCfg bootstrap.MultimodalConfig) {
+			nextBlobStore, err := blobstore.NewStore(nextCfg)
+			if err != nil {
+				logger.WarnContext(ctx, "ignored invalid live multimodal config update", "error", err)
+				return
+			}
+			multimodal.UpdateRuntime(nextCfg, nextBlobStore)
 		},
 	})
 	workerMux := worker.NewServeMux(logger, worker.Services{
@@ -319,28 +410,29 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	}
 
 	router := httptransport.NewRouter(httptransport.Dependencies{
-		Config:         cfg,
-		Logger:         logger,
-		Health:         health,
-		Auth:           auth,
-		RateLimiter:    rateLimiter,
-		Session:        sessionManager,
-		Models:         models,
-		GraphQL:        graphQLResolver,
-		Gateway:        gateway,
-		Multimodal:     multimodal,
-		Memory:         memories,
-		Generations:    generations,
-		Admin:          admin,
-		Audit:          audit,
-		Usage:          usage,
-		Users:          users,
-		APIKeys:        apiKeys,
-		Settings:       settings,
-		SystemConfig:   systemConfig,
-		ProviderConfig: providerCfg,
-		Publisher:      publisher,
-		Inspector:      inspector,
+		Config:           cfg,
+		Logger:           logger,
+		Health:           health,
+		Auth:             auth,
+		RateLimiter:      rateLimiter,
+		Session:          sessionManager,
+		Models:           models,
+		GraphQL:          graphQLResolver,
+		Gateway:          gateway,
+		Multimodal:       multimodal,
+		Memory:           memories,
+		Generations:      generations,
+		Admin:            admin,
+		Audit:            audit,
+		Usage:            usage,
+		Users:            users,
+		APIKeys:          apiKeys,
+		Settings:         settings,
+		ConnectionConfig: connectionCfg,
+		SystemConfig:     systemConfig,
+		ProviderConfig:   providerCfg,
+		Publisher:        publisher,
+		Inspector:        inspector,
 	})
 	grpcServer := grpctransport.NewServer(grpctransport.Dependencies{
 		Config:      cfg,
@@ -369,6 +461,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		Users:         users,
 		APIKeys:       apiKeys,
 		Settings:      settings,
+		ConnectionCfg: connectionCfg,
 		SystemConfig:  systemConfig,
 		ProviderCfg:   providerCfg,
 		Audit:         audit,
@@ -409,6 +502,9 @@ func RunServe(ctx context.Context) error {
 	errCh := make(chan error, 2)
 	go func() {
 		container.Logger.InfoContext(ctx, "starting HTTP server", "addr", server.Addr)
+		if uri := managerConnectionURI(container.Config); uri != "" {
+			container.Logger.InfoContext(ctx, "manager target uri ready", "uri", uri)
+		}
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
@@ -581,6 +677,27 @@ func keySet(values []string) map[string]struct{} {
 }
 
 func itoa(value int) string { return strconv.Itoa(value) }
+
+func managerConnectionURI(cfg bootstrap.Config) string {
+	baseURL := strings.TrimSpace(cfg.PublicBaseURL)
+	if baseURL == "" {
+		baseURL = "http://127.0.0.1:" + itoa(cfg.Port)
+	}
+	parsed, err := url.Parse(baseURL)
+	if err != nil || parsed.Host == "" {
+		return ""
+	}
+	scheme := "memstation"
+	if strings.EqualFold(parsed.Scheme, "https") {
+		scheme = "memstations"
+	}
+	target := &url.URL{
+		Scheme: scheme,
+		Host:   parsed.Host,
+		Path:   parsed.EscapedPath(),
+	}
+	return target.String()
+}
 
 type logWriter struct{ logger *slog.Logger }
 
