@@ -5,7 +5,6 @@
 
   import { fetchConfig, saveConfig } from '$lib/api/client';
   import { selectedTarget, targetState } from '$lib/stores/targets';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
   import type { ProviderSetPayload, ProviderSummary } from '$lib/types';
 
   type ProviderScope = 'gateway' | 'internal' | 'embedding' | 'rerank';
@@ -113,24 +112,10 @@
     }
   }
 
-  function scopeDescription(scope: ProviderScope): string {
-    switch (scope) {
-      case 'gateway':
-        return 'Proxy traffic defaults and public routes.';
-      case 'internal':
-        return 'Summary, analysis, and other internal model workloads.';
-      case 'embedding':
-        return 'Embedding generation isolated from chat credentials.';
-      case 'rerank':
-        return 'Candidate reranking providers for recall quality.';
-    }
-  }
-
   $: providerSets = normalizeProviderSets(payload);
   $: providerScopeCards = providerScopeOrder.map((scope) => ({
     scope,
     title: scopeTitle(scope),
-    description: scopeDescription(scope),
     providers: providerSets[scope] ?? [],
     defaultProvider:
       scope === 'gateway' ? String(payload.default_provider ?? '') :
@@ -142,10 +127,7 @@
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">Settings</span>
-    <h1 class="page-title">Models, thresholds, and provider overrides</h1>
-    <p class="page-description">
-      Adjust user-facing runtime defaults without turning the manager into a proxy. Changes are written directly to the selected MemStation target over admin REST.
-    </p>
+    <h1 class="page-title">Model routing</h1>
   </div>
 
   {#if !$targetState.session.authenticated}
@@ -159,7 +141,6 @@
       <section class="card">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Primary settings</div>
             <h2 class="page-title" style="font-size: 1.35rem;">Model routing defaults</h2>
           </div>
         </div>
@@ -205,7 +186,6 @@
       <section class="card">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Provider state</div>
             <h2 class="page-title" style="font-size: 1.35rem;">Current provider set summary</h2>
           </div>
         </div>
@@ -214,18 +194,14 @@
           {#each providerScopeCards as card}
             <div class="debug-block" style="background: var(--bg-panel-muted);">
               <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px; align-items: flex-start;">
-                <div>
-                  <div class="sidebar-label">{card.scope}</div>
-                  <strong>{card.title}</strong>
-                </div>
-                <StatusBadge tone={card.providers.length > 0 ? 'success' : 'warning'} label={`${card.providers.length} provider${card.providers.length === 1 ? '' : 's'}`} />
+                <strong>{card.title}</strong>
+                <span class="helper-text">{card.providers.length} provider{card.providers.length === 1 ? '' : 's'}</span>
               </div>
-              <div class="helper-text">{card.description}</div>
               {#if card.defaultProvider}
-                <div class="helper-text" style="margin-top: 10px;">Default route: {card.defaultProvider}</div>
+                <div class="helper-text">Default route · {card.defaultProvider}</div>
               {/if}
               <div class="helper-text" style="margin-top: 10px;">
-                Available: {card.providers.length > 0 ? card.providers.map((provider) => provider.provider).join(', ') : 'none'}
+                Available · {card.providers.length > 0 ? card.providers.map((provider) => provider.provider).join(', ') : 'none'}
               </div>
             </div>
           {/each}

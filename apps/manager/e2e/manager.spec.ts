@@ -27,12 +27,13 @@ async function configureTarget(page: Page): Promise<void> {
 
 async function login(page: Page): Promise<void> {
   await page.goto('/login');
-  await expect(page.getByRole('heading', { name: /Sign in to the selected MemStation target/i })).toBeVisible();
-  await expect(page.getByText(`Target: ${targetConfig.label} · ${targetConfig.baseUrl}`)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Sign in$/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: targetConfig.label })).toBeVisible();
+  await expect(page.getByText(targetConfig.baseUrl)).toBeVisible();
   await page.getByPlaceholder('MEMSTATION_ADMIN_TOKEN').fill(adminToken);
   await page.getByRole('button', { name: 'Start admin session' }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByRole('heading', { name: /Operational overview for/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Overview$/i })).toBeVisible();
 }
 
 async function expectRouteHealthy(page: Page, path: string, heading: RegExp): Promise<void> {
@@ -100,7 +101,7 @@ test('dashboard and major workspaces load live target data', async ({ page }) =>
   await expectRouteHealthy(page, '/memory', /Inspect retrieval quality/i);
   await expect(page.getByText('Launch checklist').first()).toBeVisible();
 
-  await expectRouteHealthy(page, '/operations/health', /Live and readiness signals/i);
+  await expectRouteHealthy(page, '/operations/health', /^Health$/i);
   await expect(page.getByText('postgres').first()).toBeVisible();
 
   await expectRouteHealthy(page, '/operations/cache', /L1\/L2 cache posture/i);
@@ -112,10 +113,10 @@ test('dashboard and major workspaces load live target data', async ({ page }) =>
   await expectRouteHealthy(page, '/operations/tasks/memory/task-2', /^task-2$/i);
   await expect(page.getByText('fixture analysis timeout').first()).toBeVisible();
 
-  await expectRouteHealthy(page, '/statistics/tokens', /Token and workload analysis/i);
+  await expectRouteHealthy(page, '/statistics/tokens', /Token usage/i);
   await expect(page.getByText('Filtered Tokens').first()).toBeVisible();
 
-  await expectRouteHealthy(page, '/settings/providers', /Manage gateway, internal, embedding, and rerank provider sets/i);
+  await expectRouteHealthy(page, '/settings/providers', /Provider sets/i);
   await expect(page.getByText('openai_compatible').first()).toBeVisible();
 
   await expectRouteHealthy(page, '/playground/protocols', /Inspect raw protocol compatibility/i);
@@ -272,23 +273,23 @@ test('conversation detail renders multimodal tool payloads from raw messages and
 test('system runtime settings persist direct target overrides and can reset to defaults', async ({ page }) => {
   await page.goto('/settings/system');
   await expect(page.getByRole('heading', { name: /System runtime/i })).toBeVisible();
-  const unsavedCard = page.locator('.kpi-card').filter({ hasText: 'Unsaved' }).first();
-  const liveAppliedCard = page.locator('.kpi-card').filter({ hasText: 'Live' }).first();
+  const unsavedCard = page.locator('.summary-chip').filter({ hasText: 'unsaved' }).first();
+  const liveAppliedCard = page.locator('.summary-chip').filter({ hasText: 'live' }).first();
 
-  await expect(unsavedCard.locator('.kpi-value')).toHaveText('0');
-  await expect(liveAppliedCard.locator('.kpi-value')).toHaveText('0');
+  await expect(unsavedCard).toContainText('0');
+  await expect(liveAppliedCard).toContainText('0');
 
   await page.getByLabel('Provider timeout').fill('75');
   await page.getByLabel('Cache TTL').fill('333');
   await page.getByLabel('Rerank model').fill('jina:jina-reranker-v2-base-multilingual');
   await page.getByLabel('Rerank blend weight').fill('0.5');
 
-  await expect(unsavedCard.locator('.kpi-value')).toHaveText('4');
+  await expect(unsavedCard).toContainText('4');
   await page.getByRole('button', { name: 'Save system settings' }).click();
 
   await expect(page.getByText('System settings applied to the target.')).toBeVisible();
-  await expect(unsavedCard.locator('.kpi-value')).toHaveText('0');
-  await expect(liveAppliedCard.locator('.kpi-value')).toHaveText('4');
+  await expect(unsavedCard).toContainText('0');
+  await expect(liveAppliedCard).toContainText('4');
 
   await page.reload();
   await expect(page.getByLabel('Provider timeout')).toHaveValue('75');
@@ -325,7 +326,7 @@ test('database connection overrides can be applied and cleared from system setti
 
 test('model and provider settings persist through direct writes to the selected target', async ({ page }) => {
   await page.goto('/settings/models');
-  await expect(page.getByRole('heading', { name: /Models, thresholds, and provider overrides/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Model routing/i })).toBeVisible();
 
   await page.getByLabel('Chat model').fill('gpt-4.1-mini-playwright');
   await page.getByLabel('Embedding model').fill('text-embedding-3-large-playwright');
@@ -341,7 +342,7 @@ test('model and provider settings persist through direct writes to the selected 
   await expect(page.getByLabel('Max injection tokens')).toHaveValue('4096');
 
   await page.goto('/settings/providers');
-  await expect(page.getByRole('heading', { name: /Manage gateway, internal, embedding, and rerank provider sets/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Provider sets/i })).toBeVisible();
 
   const gatewayProviderSection = page.locator('section.card').filter({ hasText: 'Gateway proxy providers' }).first();
   const anthropicCard = gatewayProviderSection

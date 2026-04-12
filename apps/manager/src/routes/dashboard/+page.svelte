@@ -6,7 +6,6 @@
   import { fetchAudit, fetchConversations, fetchOverview, fetchQueues, fetchUsers } from '$lib/api/client';
   import EChart from '$lib/components/EChart.svelte';
   import KpiCard from '$lib/components/KpiCard.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type { AuditEventRecord, ConversationListItem, DashboardOverview, QueueInfo, UserSummary } from '$lib/types';
 
@@ -145,10 +144,7 @@
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">Dashboard</span>
-    <h1 class="page-title">Operational overview for {$selectedTarget?.label ?? 'your target'}</h1>
-    <p class="page-description">
-      Assess traffic pressure, queue buildup, user footprint, and recent sensitive actions before drilling into conversations, memory, or queue diagnostics.
-    </p>
+    <h1 class="page-title">Overview</h1>
   </div>
 
   {#if !$targetState.session.authenticated}
@@ -158,13 +154,17 @@
   {:else if loading}
     <div class="notice-card">Loading dashboard metrics...</div>
   {:else}
-    <div class="kpi-grid six-up">
-      <KpiCard label="Active Conversations" value={String(overview?.active_conversations ?? 0)} meta="Sessions still open or ending" />
-      <KpiCard label="Stored Memories" value={String(overview?.memory_count ?? 0)} meta="Summaries, facts, impressions, and nodes" />
-      <KpiCard label="Key Memories" value={String(overview?.key_memory_count ?? 0)} meta="Stable operator-visible slots" />
-      <KpiCard label="Users" value={String(userCount)} meta="Users visible on the target" />
-      <KpiCard label="Pending Tasks" value={String(pendingTasks)} meta="Queued work waiting on workers" />
-      <KpiCard label="Total Tokens" value={totalTokens.toLocaleString()} meta="Aggregate token volume across users" />
+    <div class="kpi-grid">
+      <KpiCard label="Active Conversations" value={String(overview?.active_conversations ?? 0)} />
+      <KpiCard label="Stored Memories" value={String(overview?.memory_count ?? 0)} />
+      <KpiCard label="Pending Tasks" value={String(pendingTasks)} />
+      <KpiCard label="Total Tokens" value={totalTokens.toLocaleString()} />
+    </div>
+
+    <div class="summary-strip">
+      <div class="summary-chip"><strong>{userCount}</strong> users</div>
+      <div class="summary-chip"><strong>{overview?.key_memory_count ?? 0}</strong> key memories</div>
+      <div class="summary-chip"><strong>{retryTasks}</strong> retries</div>
     </div>
 
     <div class="grid-2">
@@ -198,15 +198,14 @@
       <section class="table-card">
         <div class="card" style="border: none; box-shadow: none; border-radius: 0;">
           <div class="page-header">
-            <div>
-              <div class="sidebar-label">Queues</div>
-              <h2 class="page-title" style="font-size: 1.35rem;">Worker lanes</h2>
-            </div>
-            <div class="toolbar">
-              <StatusBadge tone={retryTasks > 0 ? 'warning' : 'success'} label={`${retryTasks} retry`} />
-              <a class="button-secondary" href="/operations/queues">Queue details</a>
-            </div>
+          <div>
+            <div class="sidebar-label">Queues</div>
+            <h2 class="page-title" style="font-size: 1.35rem;">Worker lanes</h2>
           </div>
+          <div class="toolbar">
+            <a class="button-secondary" href="/operations/queues">Queue details</a>
+          </div>
+        </div>
         </div>
         <div class="table-scroll">
           <table class="data-table">

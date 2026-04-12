@@ -570,7 +570,6 @@
   <div class="hero-card">
     <span class="sidebar-label">Settings / System</span>
     <h1 class="page-title">System runtime</h1>
-    <p class="page-description">Edit live deployment policy for the selected target.</p>
   </div>
 
   {#if !$targetState.session.authenticated}
@@ -583,7 +582,6 @@
     <section class="card page-stack">
       <div class="page-header">
         <div>
-          <div class="sidebar-label">Database</div>
           <h2 class="page-title" style="font-size: 1.35rem;">Database connection</h2>
         </div>
         <StatusBadge tone={databaseTone(database.status)} label={database.status} />
@@ -629,23 +627,11 @@
       </div>
     </section>
 
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <span class="kpi-label">Overrides</span>
-        <span class="kpi-value">{overrideCount}</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Unsaved</span>
-        <span class="kpi-value">{dirtyCount}</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Live</span>
-        <span class="kpi-value">{liveAppliedCount}</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Readiness</span>
-        <span class="kpi-value">{ready?.status ?? 'unknown'}</span>
-      </div>
+    <div class="summary-strip">
+      <div class="summary-chip"><strong>{overrideCount}</strong> overrides</div>
+      <div class="summary-chip"><strong>{dirtyCount}</strong> unsaved</div>
+      <div class="summary-chip"><strong>{liveAppliedCount}</strong> live</div>
+      <div class="summary-chip"><strong>{ready?.status ?? 'unknown'}</strong> readiness</div>
     </div>
 
     {#if success}
@@ -653,9 +639,6 @@
     {/if}
 
     <div class="inline-group system-actions" style="justify-content: flex-end;">
-      {#if dirtyCount > 0}
-        <StatusBadge tone="brand" label={`${dirtyCount} unsaved change${dirtyCount > 1 ? 's' : ''}`} />
-      {/if}
       <button class="button-ghost" type="button" disabled={saving} on:click={resetAll}>Reset all overrides</button>
       <button class="button" type="button" disabled={saving} on:click={persist}>{saving ? 'Saving...' : 'Save system settings'}</button>
     </div>
@@ -664,8 +647,7 @@
       <section class="card page-stack">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Traffic control</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Providers and request bounds</h2>
+            <h2 class="page-title" style="font-size: 1.35rem;">Traffic</h2>
           </div>
         </div>
 
@@ -710,8 +692,7 @@
       <section class="card page-stack">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Memory recall and web</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Memory budgets and reranking</h2>
+            <h2 class="page-title" style="font-size: 1.35rem;">Memory and web</h2>
           </div>
         </div>
 
@@ -802,12 +783,11 @@
     </div>
 
     <section class="card page-stack">
-      <div class="page-header">
-        <div>
-          <div class="sidebar-label">Multimodal pipeline</div>
-          <h2 class="page-title" style="font-size: 1.35rem;">Storage and extraction</h2>
+        <div class="page-header">
+          <div>
+            <h2 class="page-title" style="font-size: 1.35rem;">Multimodal</h2>
+          </div>
         </div>
-      </div>
 
       <div class="form-grid two-up">
         <label class="field">
@@ -873,12 +853,11 @@
     </section>
 
     <section class="card page-stack">
-      <div class="page-header">
-        <div>
-          <div class="sidebar-label">Changed</div>
-          <h2 class="page-title" style="font-size: 1.35rem;">Edited and overridden fields</h2>
+        <div class="page-header">
+          <div>
+            <h2 class="page-title" style="font-size: 1.35rem;">Changes</h2>
+          </div>
         </div>
-      </div>
 
       {#if trackedRuntimeKeys().length === 0}
         <div class="empty-state">Everything is using deployment defaults.</div>

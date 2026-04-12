@@ -7,9 +7,27 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { Select } from 'bits-ui';
-  import { LayoutDashboard, LogIn, MessageSquareText, Database, ServerCog, ShieldCheck, FolderCog, RefreshCw, Users, BarChart3, Settings, Play } from 'lucide-svelte';
+  import {
+    Activity,
+    BarChart3,
+    Bot,
+    Brain,
+    Braces,
+    Boxes,
+    ClipboardList,
+    HardDrive,
+    LayoutDashboard,
+    LogIn,
+    MessageSquareText,
+    PlugZap,
+    RefreshCw,
+    Search,
+    Settings2,
+    ShieldCheck,
+    Users,
+    Workflow
+  } from 'lucide-svelte';
 
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
   import TargetManagerDialog from '$lib/components/TargetManagerDialog.svelte';
   import { fetchAdminSession, loginAdmin, logoutAdmin } from '$lib/api/client';
   import {
@@ -30,11 +48,11 @@
       label: 'Operate',
       items: [
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { href: '/playground/chat', label: 'Playground Chat', icon: Play },
-        { href: '/playground/memory', label: 'Playground Memory', icon: Play },
-        { href: '/playground/protocols', label: 'Playground Protocols', icon: Play },
+        { href: '/playground/chat', label: 'Playground Chat', icon: Bot },
+        { href: '/playground/memory', label: 'Playground Memory', icon: Search },
+        { href: '/playground/protocols', label: 'Playground Protocols', icon: Braces },
         { href: '/conversations', label: 'Conversations', icon: MessageSquareText },
-        { href: '/memory', label: 'Memory Workspace', icon: Database }
+        { href: '/memory', label: 'Memory Workspace', icon: Brain }
       ]
     },
     {
@@ -42,18 +60,18 @@
       items: [
         { href: '/users', label: 'Users', icon: Users },
         { href: '/statistics/tokens', label: 'Statistics', icon: BarChart3 },
-        { href: '/settings/system', label: 'System', icon: Settings },
-        { href: '/settings/models', label: 'Models', icon: Settings },
-        { href: '/settings/providers', label: 'Providers', icon: Settings }
+        { href: '/settings/system', label: 'System', icon: Settings2 },
+        { href: '/settings/models', label: 'Models', icon: Boxes },
+        { href: '/settings/providers', label: 'Providers', icon: PlugZap }
       ]
     },
     {
       label: 'Operations',
       items: [
-        { href: '/operations/health', label: 'Health', icon: ServerCog },
-        { href: '/operations/queues', label: 'Queues', icon: FolderCog },
-        { href: '/operations/tasks', label: 'Tasks', icon: FolderCog },
-        { href: '/operations/cache', label: 'Cache', icon: ServerCog },
+        { href: '/operations/health', label: 'Health', icon: Activity },
+        { href: '/operations/queues', label: 'Queues', icon: Workflow },
+        { href: '/operations/tasks', label: 'Tasks', icon: ClipboardList },
+        { href: '/operations/cache', label: 'Cache', icon: HardDrive },
         { href: '/audit', label: 'Audit', icon: ShieldCheck }
       ]
     }
@@ -127,6 +145,10 @@
     lastTargetId = savedTarget.id;
     void refreshSession(savedTarget);
   }
+
+  $: sessionTone = $targetState.session.authenticated ? 'success' : $targetState.session.error ? 'danger' : 'warning';
+  $: sessionLabel = $targetState.session.checking ? 'Checking Session' : $targetState.session.authenticated ? 'Admin Session Active' : 'Login Required';
+  $: isLoginRoute = $page.url.pathname === '/login';
 </script>
 
 <svelte:head>
@@ -138,35 +160,25 @@
   <aside class="shell-sidebar">
     <div class="brand-block">
       <span class="sidebar-label">MemStation</span>
-      <span class="brand-title">Manager Control Plane</span>
-      <span class="brand-subtitle">Direct-to-target operations console.</span>
-    </div>
-
-    <div class="sidebar-section">
-      <span class="sidebar-label">Session</span>
-      <div class="inline-group" style="justify-content: space-between;">
-        <StatusBadge tone={$targetState.session.authenticated ? 'success' : $targetState.session.error ? 'danger' : 'warning'} label={$targetState.session.checking ? 'Checking' : $targetState.session.authenticated ? 'Admin Session Active' : 'Login Required'} />
-        {#if $targetState.session.authenticated}
-          <button class="button-ghost" type="button" on:click={handleLogout}>Logout</button>
-        {:else}
-          <a class="button-ghost" href="/login">Login</a>
-        {/if}
+      <span class="brand-title">Manager</span>
+      <div class={`shell-status ${sessionTone}`}>
+        <span>{sessionLabel}</span>
       </div>
       {#if $targetState.session.error}
-        <div class="error-state">{$targetState.session.error}</div>
+        <div class="helper-text">{$targetState.session.error}</div>
       {/if}
     </div>
 
     {#each navSections as section}
-      <div class="sidebar-section">
+          <div class="sidebar-section">
         <span class="sidebar-label">{section.label}</span>
         <nav class="nav-list">
           {#each section.items as item}
             <a class={`nav-link ${isActive($page.url.pathname, item.href) ? 'is-active' : ''}`} href={item.href}>
-              <span class="inline-group">
+              <span class="nav-link-icon">
                 <svelte:component this={item.icon} size={16} />
-                <span>{item.label}</span>
               </span>
+              <span>{item.label}</span>
             </a>
           {/each}
         </nav>
@@ -176,14 +188,15 @@
 
   <main class="shell-main">
     <div class="topbar">
-      <div>
-        <div class="inline-group" style="margin-bottom: 6px;">
+      {#if !isLoginRoute}
+        <div class="topbar-meta">
           <span class="sidebar-label">Target</span>
-          <StatusBadge tone="brand" label={$selectedTarget?.environment ?? 'unknown'} />
+          <div class="topbar-title">{$selectedTarget?.label ?? 'No target selected'}</div>
+          <div class="helper-text">
+            {$selectedTarget?.environment ?? 'unknown'}{#if $selectedTarget?.baseUrl} · {$selectedTarget.baseUrl}{/if}
+          </div>
         </div>
-        <div class="brand-title" style="font-size: 1rem;">{$selectedTarget?.label ?? 'No target selected'}</div>
-        <div class="brand-subtitle">{$selectedTarget?.baseUrl ?? 'Select a MemStation target to begin.'}</div>
-      </div>
+      {/if}
 
       <div class="topbar-group">
         <div style="min-width: 280px;">
@@ -209,9 +222,12 @@
         <button class="button-secondary" type="button" on:click={() => (targetDialogOpen = true)}>
           Manage Targets
         </button>
+        {#if $targetState.session.authenticated}
+          <button class="button-ghost" type="button" on:click={handleLogout}>Logout</button>
+        {/if}
         <a class="button" href={$targetState.session.authenticated ? '/dashboard' : '/login'}>
           <LogIn size={16} />
-          {$targetState.session.authenticated ? 'Open Workspace' : 'Login'}
+          {$targetState.session.authenticated ? 'Workspace' : 'Login'}
         </a>
       </div>
     </div>

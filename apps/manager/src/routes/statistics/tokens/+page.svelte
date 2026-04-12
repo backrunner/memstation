@@ -184,11 +184,8 @@
 
 <section class="page-stack">
   <div class="hero-card">
-    <span class="sidebar-label">Statistics / Tokens</span>
-    <h1 class="page-title">Token and workload analysis across users, providers, and recent conversations</h1>
-    <p class="page-description">
-      Filter by user or provider, inspect recent usage pressure, and identify which conversation chains are driving the most token burn on the selected target.
-    </p>
+    <span class="sidebar-label">Statistics</span>
+    <h1 class="page-title">Token usage</h1>
   </div>
 
   {#if !$targetState.session.authenticated}
@@ -249,10 +246,10 @@
     </section>
 
     <div class="kpi-grid">
-      <KpiCard label="Filtered Tokens" value={totalTokens.toLocaleString()} meta="Sum of visible conversations" />
-      <KpiCard label="Conversations" value={String(filteredConversations.length)} meta="Sessions within current filters" />
-      <KpiCard label="Active Users" value={String(activeUsers)} meta="Distinct users in result set" />
-      <KpiCard label="Avg Tokens" value={averageTokens.toLocaleString()} meta="Average per visible conversation" />
+      <KpiCard label="Filtered Tokens" value={totalTokens.toLocaleString()} />
+      <KpiCard label="Conversations" value={String(filteredConversations.length)} />
+      <KpiCard label="Active Users" value={String(activeUsers)} />
+      <KpiCard label="Avg Tokens" value={averageTokens.toLocaleString()} />
     </div>
 
     <div class="grid-2">

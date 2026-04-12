@@ -176,11 +176,10 @@
                   <div class="sidebar-label">Resolved target</div>
                   <div class="target-preview-primary">{locatorPreview.target.baseUrl}</div>
                 </div>
-                <div class="target-preview-meta">
-                  <span>{locatorPreview.target.label ?? 'Custom target'}</span>
-                  <span>{locatorPreview.target.environment ?? defaultEnvironment}</span>
+                <div class="helper-text">
+                  {locatorPreview.target.label ?? 'Custom target'} · {locatorPreview.target.environment ?? defaultEnvironment}
                   {#if locatorPreview.adminKey}
-                    <span>temporary admin key</span>
+                    · temporary admin key
                   {/if}
                 </div>
               </div>
@@ -243,7 +242,7 @@
 <style>
   .target-preview {
     display: grid;
-    gap: 10px;
+    gap: 6px;
     padding: 14px 16px;
     border: 1px solid var(--border-soft);
     border-radius: var(--radius-md);
@@ -252,19 +251,5 @@
 
   .target-preview-primary {
     font-weight: 600;
-  }
-
-  .target-preview-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-  }
-
-  .target-preview-meta span {
-    padding: 4px 10px;
-    border-radius: 999px;
-    background: rgba(15, 94, 168, 0.08);
   }
 </style>

@@ -232,7 +232,6 @@
   <div class="hero-card">
     <span class="sidebar-label">User Detail</span>
     <h1 class="page-title">{$page.params.id}</h1>
-    <p class="page-description">Settings, keys, recent sessions, and memory for this user.</p>
   </div>
 
   {#if !$targetState.session.authenticated}
@@ -248,7 +247,7 @@
     {#if createdKey}
       <div class="card">
         <div class="sidebar-label">New API key</div>
-        <div class="page-description" style="margin-top: 8px;">Shown once.</div>
+        <div class="helper-text" style="margin-top: 8px;">Shown once.</div>
         <pre class="json-block" style="margin-top: 12px;">{createdKey}</pre>
       </div>
     {/if}
@@ -276,12 +275,11 @@
       <section class="card">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Profile</div>
             <h2 class="page-title" style="font-size: 1.35rem;">Identity and settings</h2>
+            {#if detail.user.is_admin}
+              <div class="helper-text" style="margin-top: 4px;">Admin user</div>
+            {/if}
           </div>
-          {#if detail.user.is_admin}
-            <StatusBadge tone="brand" label="Admin" />
-          {/if}
         </div>
 
         <div class="profile-strip">
@@ -290,13 +288,15 @@
             <strong>{detail.user.name}</strong>
           </div>
           <div>
-            <div class="sidebar-label">User ID</div>
-            <span>{detail.user.id}</span>
-          </div>
-          <div>
             <div class="sidebar-label">Created</div>
             <span>{new Date(detail.user.created_at).toLocaleString()}</span>
           </div>
+          {#if detail.user.email}
+            <div>
+              <div class="sidebar-label">Email</div>
+              <span>{detail.user.email}</span>
+            </div>
+          {/if}
         </div>
 
         <div class="form-grid two-up" style="margin-top: 12px;">
@@ -344,7 +344,6 @@
       <section class="card">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Retention & rebuild</div>
             <h2 class="page-title" style="font-size: 1.35rem;">Retention and rebuild</h2>
           </div>
         </div>
@@ -399,7 +398,6 @@
       <section class="card">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">API keys</div>
             <h2 class="page-title" style="font-size: 1.35rem;">API keys</h2>
           </div>
         </div>
@@ -440,7 +438,6 @@
         <div class="card" style="border: none; box-shadow: none; border-radius: 0;">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Recent conversations</div>
             <h2 class="page-title" style="font-size: 1.35rem;">Recent sessions</h2>
           </div>
           <a class="button-ghost" href={`/memory?user_id=${detail.user.id}`}>Open memory workspace</a>
@@ -480,7 +477,6 @@
       <section class="card">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Recent key memories</div>
             <h2 class="page-title" style="font-size: 1.35rem;">Stable memory slots</h2>
           </div>
           <a class="button-ghost" href={`/memory/keys?user_id=${detail.user.id}`}>Manage key memories</a>
@@ -498,12 +494,9 @@
                       <div class="subtle-text" style="margin-top: 4px;">{keyMemoryMeta(keyMemory)}</div>
                     {/if}
                   </div>
-                  <div class="inline-group" style="justify-content: flex-end;">
-                    {#if keyMemory.review_status && keyMemory.review_status !== 'approved'}
-                      <StatusBadge tone={reviewTone(keyMemory.review_status)} label={keyMemory.review_status} />
-                    {/if}
-                    <a class="button-ghost" href={`/memory/keys?user_id=${detail.user.id}`}>Open workspace</a>
-                  </div>
+                  {#if keyMemory.review_status && keyMemory.review_status !== 'approved'}
+                    <StatusBadge tone={reviewTone(keyMemory.review_status)} label={keyMemory.review_status} />
+                  {/if}
                 </div>
                 <div class="message-body key-memory-value">{keyMemorySummary(keyMemory.value)}</div>
                 {#if keyMemoryFacts(keyMemory).length > 0}

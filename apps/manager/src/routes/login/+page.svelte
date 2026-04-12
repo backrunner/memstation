@@ -36,49 +36,45 @@
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">Admin Access</span>
-    <h1 class="page-title">Sign in to the selected MemStation target</h1>
-    <p class="page-description">
-      The manager never stores the admin token in browser storage. The token stays in memory for the current tab and is also exchanged for the target's admin session cookie when supported.
-    </p>
+    <h1 class="page-title">Sign in</h1>
   </div>
 
-  <div class="grid-2">
-    <section class="card">
-      <div class="page-header">
-        <div>
-          <h2 class="page-title" style="font-size: 1.35rem;">Login</h2>
-          <p class="page-description">Target: {$selectedTarget?.label ?? 'None selected'} · {$selectedTarget?.baseUrl ?? 'N/A'}</p>
-        </div>
+  <section class="card login-card">
+    <div class="page-header">
+      <div>
+        <h2 class="page-title" style="font-size: 1.2rem;">{$selectedTarget?.label ?? 'None selected'}</h2>
+        <div class="helper-text" style="margin-top: 4px;">{$selectedTarget?.baseUrl ?? 'Select a target first.'}</div>
       </div>
+      {#if $targetState.session.authenticated}
+        <a class="button-secondary" href="/dashboard">Open dashboard</a>
+      {/if}
+    </div>
 
-      <div class="toolbar">
-        <label class="field">
-          <span class="field-label">Admin token</span>
-          <input class="input" bind:value={token} type="password" autocomplete="off" placeholder="MEMSTATION_ADMIN_TOKEN" />
-        </label>
-        {#if error}
-          <div class="error-state">{error}</div>
-        {/if}
+    <div class="toolbar">
+      <label class="field">
+        <span class="field-label">Admin token</span>
+        <input class="input" bind:value={token} type="password" autocomplete="off" placeholder="MEMSTATION_ADMIN_TOKEN" />
+      </label>
+      <div class="helper-text">Token stays in memory for the current tab only.</div>
+      {#if error}
+        <div class="error-state">{error}</div>
+      {/if}
+      {#if $targetState.session.authenticated}
+        <div class="notice-card">An admin session is already active for this target.</div>
+      {:else if $targetState.session.checking}
+        <div class="notice-card">Checking current session…</div>
+      {/if}
+      <div class="inline-group" style="justify-content: flex-end;">
         <button class="button" type="button" disabled={submitting || !$selectedTarget} on:click={submit}>
           {submitting ? 'Signing in...' : 'Start admin session'}
         </button>
       </div>
-    </section>
-
-    <section class="card">
-      <div class="sidebar-label">Current session</div>
-      <div class="toolbar" style="margin-top: 12px;">
-        <div class="notice-card">
-          {#if $targetState.session.authenticated}
-            Active admin session detected for this target. You can return to the dashboard immediately.
-          {:else if $targetState.session.checking}
-            Checking the target session state.
-          {:else}
-            No admin session is currently active for this target.
-          {/if}
-        </div>
-        <a class="button-secondary" href="/dashboard">Go to dashboard</a>
-      </div>
-    </section>
-  </div>
+    </div>
+  </section>
 </section>
+
+<style>
+  .login-card {
+    max-width: 720px;
+  }
+</style>

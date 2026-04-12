@@ -98,9 +98,8 @@
 
 <section class="page-stack">
   <div class="hero-card">
-    <span class="sidebar-label">Operations / Health</span>
-    <h1 class="page-title">Live and readiness signals</h1>
-    <p class="page-description">Readiness, dependency drift, queues, and provider posture for the selected target.</p>
+    <span class="sidebar-label">Operations</span>
+    <h1 class="page-title">Health</h1>
   </div>
 
   {#if !$targetState.session.authenticated}
@@ -110,39 +109,18 @@
   {:else if loading}
     <div class="notice-card">Loading target health...</div>
   {:else}
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <span class="kpi-label">Readiness</span>
-        <span class="kpi-value">{ready?.status ?? 'unknown'}</span>
-        <span class="kpi-meta">Current gate.</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Restart Pending</span>
-        <span class="kpi-value">{restartPending}</span>
-        <span class="kpi-meta">Need restart.</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Live Overrides</span>
-        <span class="kpi-value">{liveOverrides}</span>
-        <span class="kpi-meta">Applied now.</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Queue Pressure</span>
-        <span class="kpi-value">{backlogTotal}</span>
-        <span class="kpi-meta">Queued work.</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Provider Issues</span>
-        <span class="kpi-value">{degradedProviders + warningProviders}</span>
-        <span class="kpi-meta">Need review.</span>
-      </div>
+    <div class="summary-strip">
+      <div class="summary-chip"><strong>{ready?.status ?? 'unknown'}</strong> readiness</div>
+      <div class="summary-chip"><strong>{restartPending}</strong> restart pending</div>
+      <div class="summary-chip"><strong>{liveOverrides}</strong> live overrides</div>
+      <div class="summary-chip"><strong>{backlogTotal}</strong> queued</div>
+      <div class="summary-chip"><strong>{degradedProviders + warningProviders}</strong> provider issues</div>
     </div>
 
     <div class="grid-2">
       <section class="card">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Liveness</div>
             <h2 class="page-title" style="font-size: 1.35rem;">Process heartbeat</h2>
           </div>
           <StatusBadge tone={live?.status === 'live' ? 'success' : 'danger'} label={live?.status ?? 'unknown'} />
@@ -162,7 +140,6 @@
       <section class="card">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Readiness</div>
             <h2 class="page-title" style="font-size: 1.35rem;">Dependency gate</h2>
           </div>
           <StatusBadge tone={ready?.status === 'ready' ? 'success' : 'warning'} label={ready?.status ?? 'unknown'} />
@@ -188,8 +165,7 @@
       <section class="card">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Runtime drift</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Desired versus live configuration</h2>
+            <h2 class="page-title" style="font-size: 1.35rem;">Runtime drift</h2>
           </div>
           <a class="button-ghost" href="/settings/system">Open system settings</a>
         </div>
@@ -214,8 +190,7 @@
       <section class="card">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Queue posture</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Worker lane pressure at a glance</h2>
+            <h2 class="page-title" style="font-size: 1.35rem;">Queue posture</h2>
           </div>
           <div class="runtime-field-status">
             <StatusBadge tone={worstLatency > 1000 ? 'warning' : 'success'} label={`${worstLatency} ms worst latency`} />
@@ -239,12 +214,11 @@
 
     <section class="card">
       <div class="page-header">
-        <div>
-          <div class="sidebar-label">Provider posture</div>
-          <h2 class="page-title" style="font-size: 1.35rem;">Credential, endpoint, and drift diagnostics</h2>
+          <div>
+            <h2 class="page-title" style="font-size: 1.35rem;">Provider posture</h2>
+          </div>
+          <a class="button-ghost" href="/settings/providers">Open provider settings</a>
         </div>
-        <a class="button-ghost" href="/settings/providers">Open provider settings</a>
-      </div>
       <div class="toolbar">
         {#each providers as provider}
           <div class="debug-block">

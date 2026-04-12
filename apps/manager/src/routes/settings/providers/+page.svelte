@@ -172,38 +172,29 @@
     }
   }
 
-  function scopeDescription(scope: ProviderScope): string {
-    switch (scope) {
-      case 'gateway':
-        return 'External proxy traffic.';
-      case 'internal':
-        return 'Internal model tasks.';
-      case 'embedding':
-        return 'Embedding-only credentials.';
-      case 'rerank':
-        return 'Candidate reranking.';
+  function providerMeta(form: ProviderForm, diagnostic?: ProviderDiagnostic): string {
+    const parts = [form.hasAPIKey ? 'stored key' : 'no key'];
+    if (form.source === 'override') {
+      parts.push('override');
     }
-  }
-
-  function routeLabel(diagnostic?: ProviderDiagnostic): string {
     if (diagnostic?.is_desired_default && diagnostic?.is_live_default) {
-      return 'active default';
+      parts.push('active default');
+    } else if (diagnostic?.is_desired_default) {
+      parts.push(diagnostic.restart_required ? 'default after restart' : 'desired default');
+    } else if (diagnostic?.is_live_default) {
+      parts.push('live default');
     }
-    if (diagnostic?.is_desired_default) {
-      return diagnostic.restart_required ? 'default after restart' : 'desired default';
+    if (diagnostic?.restart_required) {
+      parts.push('restart pending');
     }
-    if (diagnostic?.is_live_default) {
-      return 'live default';
-    }
-    return '';
+    return parts.join(' · ');
   }
 </script>
 
 <section class="page-stack">
   <div class="hero-card">
-    <span class="sidebar-label">Settings / Providers</span>
-    <h1 class="page-title">Manage gateway, internal, embedding, and rerank provider sets</h1>
-    <p class="page-description">Rotate provider endpoints and encrypted credentials for the selected target.</p>
+    <span class="sidebar-label">Settings</span>
+    <h1 class="page-title">Provider sets</h1>
   </div>
 
   {#if !$targetState.session.authenticated}
@@ -217,36 +208,18 @@
       <div class="notice-card">{success}</div>
     {/if}
 
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <span class="kpi-label">Ready Providers</span>
-        <span class="kpi-value">{diagnostics.filter((item) => item.status === 'ready').length}</span>
-        <span class="kpi-meta">Ready now.</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Warnings</span>
-        <span class="kpi-value">{diagnostics.filter((item) => item.status === 'warning').length}</span>
-        <span class="kpi-meta">Need review.</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Degraded</span>
-        <span class="kpi-value">{diagnostics.filter((item) => item.status === 'degraded').length}</span>
-        <span class="kpi-meta">Blocking issues.</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Restart Pending</span>
-        <span class="kpi-value">{diagnostics.filter((item) => item.restart_required).length}</span>
-        <span class="kpi-meta">Pending live sync.</span>
-      </div>
+    <div class="summary-strip">
+      <div class="summary-chip"><strong>{diagnostics.filter((item) => item.status === 'ready').length}</strong> ready</div>
+      <div class="summary-chip"><strong>{diagnostics.filter((item) => item.status === 'warning').length}</strong> warnings</div>
+      <div class="summary-chip"><strong>{diagnostics.filter((item) => item.status === 'degraded').length}</strong> degraded</div>
+      <div class="summary-chip"><strong>{diagnostics.filter((item) => item.restart_required).length}</strong> restart pending</div>
     </div>
 
     {#each scopeOrder as scope}
       <section class="card page-stack">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">{scope}</div>
             <h2 class="page-title" style="font-size: 1.35rem;">{scopeTitle(scope)}</h2>
-            <p class="page-description">{scopeDescription(scope)}</p>
           </div>
         </div>
 
@@ -256,27 +229,13 @@
             <section class="card">
               <div class="page-header">
                 <div>
-                  <div class="sidebar-label">{form.provider}</div>
                   <h3 class="page-title" style="font-size: 1.15rem; text-transform: capitalize;">{form.provider}</h3>
+                  <div class="helper-text">{providerMeta(form, diagnostic)}</div>
                 </div>
-                <div class="toolbar" style="gap: 8px;">
-                  <StatusBadge tone={toneFor(diagnostic?.status)} label={diagnostic?.status ?? 'unknown'} />
-                  {#if form.source === 'override'}
-                    <StatusBadge tone="brand" label="override" />
-                  {/if}
-                </div>
+                <StatusBadge tone={toneFor(diagnostic?.status)} label={diagnostic?.status ?? 'unknown'} />
               </div>
 
               <div class="toolbar">
-                <div class="provider-summary">
-                  <span>{form.hasAPIKey ? 'Stored key' : 'No key'}</span>
-                  {#if routeLabel(diagnostic)}
-                    <span>{routeLabel(diagnostic)}</span>
-                  {/if}
-                  {#if diagnostic?.restart_required}
-                    <span>restart pending</span>
-                  {/if}
-                </div>
                 <label class="field">
                   <span class="field-label">Base URL</span>
                   <input class="input" bind:value={form.baseUrl} placeholder="https://api.example.com/v1" />
@@ -285,12 +244,8 @@
                   <span class="field-label">Rotate API key</span>
                   <input class="input" bind:value={form.apiKey} type="password" autocomplete="off" placeholder="Leave blank to keep existing secret" />
                 </label>
-                <div class="target-preview">
-                  <div class="target-preview-meta">
-                    <span>{diagnostic?.host ?? 'no host'}</span>
-                    <span>{diagnostic?.scheme ?? 'n/a'}</span>
-                    <span>{diagnostic?.live_timeout_seconds ?? 0}s live</span>
-                  </div>
+                <div class="provider-meta">
+                  <div class="helper-text">{diagnostic?.host || form.baseUrl || 'No host configured'} · {diagnostic?.scheme ?? 'n/a'} · {diagnostic?.live_timeout_seconds ?? 0}s live</div>
                   {#if (diagnostic?.issues.length ?? 0) > 0}
                     <div class="helper-text">{diagnostic?.issues?.[0]}</div>
                   {/if}
@@ -317,41 +272,13 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .provider-summary {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-  }
-
-  .provider-summary span {
-    padding: 4px 10px;
-    border-radius: 999px;
-    background: rgba(15, 94, 168, 0.08);
-  }
-
-  .target-preview {
+  .provider-meta {
     display: grid;
-    gap: 10px;
-    padding: 14px 16px;
+    gap: 4px;
+    padding: 12px 14px;
     border: 1px solid var(--border-soft);
     border-radius: var(--radius-md);
     background: var(--bg-panel-muted);
-  }
-
-  .target-preview-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-  }
-
-  .target-preview-meta span {
-    padding: 4px 10px;
-    border-radius: 999px;
-    background: rgba(15, 94, 168, 0.08);
   }
 
   @media (min-width: 1720px) {
