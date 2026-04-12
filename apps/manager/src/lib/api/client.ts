@@ -39,6 +39,7 @@ import type {
   UpdateUserSettingsResponse,
   UsageRecord
 } from '$lib/types';
+import { getAdminKey } from '$lib/targets/admin-keys';
 
 export interface GatewayRequestOptions {
   target: MemStationTarget;
@@ -121,11 +122,15 @@ async function requestJSON<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 async function adminRequest<T>(target: MemStationTarget, path: string, init?: RequestInit): Promise<T> {
+  const adminKey = getAdminKey(target.id);
   return requestJSON<T>(`${normalizeBaseUrl(target.baseUrl)}${path}`, {
     credentials: 'include',
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      ...(adminKey && !new Headers(init?.headers).has('Authorization')
+        ? { Authorization: `Bearer ${adminKey}` }
+        : {}),
       ...(init?.headers ?? {})
     }
   });

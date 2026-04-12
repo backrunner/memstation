@@ -12,10 +12,9 @@
     revokeUserAPIKey,
     updateUserSettings
   } from '$lib/api/client';
-  import JsonView from '$lib/components/JsonView.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { MemoryGeneration, UserDetailPayload, UserSourcesPayload } from '$lib/types';
+  import type { KeyMemoryRecord, MemoryGeneration, UserDetailPayload, UserSourcesPayload } from '$lib/types';
 
   let loading = true;
   let saving = false;
@@ -181,15 +180,59 @@
     }
     return 'muted';
   }
+
+  function reviewTone(reviewStatus?: string): 'brand' | 'success' | 'warning' | 'danger' | 'muted' {
+    if (reviewStatus === 'approved') {
+      return 'success';
+    }
+    if (reviewStatus === 'rejected') {
+      return 'danger';
+    }
+    if (!reviewStatus) {
+      return 'muted';
+    }
+    return 'warning';
+  }
+
+  function formatDateTime(value?: string): string {
+    return value ? new Date(value).toLocaleString() : 'Not recorded';
+  }
+
+  function keyMemorySummary(value?: string): string {
+    const trimmed = String(value ?? '').trim();
+    if (!trimmed) {
+      return 'No stable value has been stored for this slot yet.';
+    }
+    return trimmed.length > 220 ? `${trimmed.slice(0, 217)}...` : trimmed;
+  }
+
+  function keyMemoryFacts(item: KeyMemoryRecord): Array<{ label: string; value: string }> {
+    const facts = [
+      item.source ? { label: 'Source', value: item.source } : null,
+      item.last_confirmed_at ? { label: 'Last confirmed', value: formatDateTime(item.last_confirmed_at) } : null,
+      item.activity_at ? { label: 'Activity', value: formatDateTime(item.activity_at) } : null,
+      item.updated_at ? { label: 'Updated', value: formatDateTime(item.updated_at) } : null,
+      item.importance !== undefined ? { label: 'Importance', value: item.importance.toFixed(3) } : null,
+      item.effective_score !== undefined ? { label: 'Effective score', value: item.effective_score.toFixed(3) } : null
+    ];
+    return facts.filter((entry): entry is { label: string; value: string } => Boolean(entry));
+  }
+
+  function keyMemoryMeta(item: KeyMemoryRecord): string {
+    const parts = [
+      item.source ?? '',
+      item.category ?? '',
+      item.updated_at ? formatDateTime(item.updated_at) : ''
+    ].filter(Boolean);
+    return parts.join(' · ');
+  }
 </script>
 
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">User Detail</span>
     <h1 class="page-title">{$page.params.id}</h1>
-    <p class="page-description">
-      Review settings, key inventory, recent conversations, key memories, and token usage for this user without proxying through the manager backend.
-    </p>
+    <p class="page-description">Settings, keys, recent sessions, and memory for this user.</p>
   </div>
 
   {#if !$targetState.session.authenticated}
@@ -205,36 +248,27 @@
     {#if createdKey}
       <div class="card">
         <div class="sidebar-label">New API key</div>
-        <div class="page-description" style="margin-top: 8px;">Copy this secret now. The target will only reveal it once.</div>
+        <div class="page-description" style="margin-top: 8px;">Shown once.</div>
         <pre class="json-block" style="margin-top: 12px;">{createdKey}</pre>
       </div>
     {/if}
 
-    <div class="kpi-grid">
+    <div class="kpi-grid compact-kpis">
       <div class="kpi-card">
         <span class="kpi-label">API Keys</span>
         <strong class="kpi-value">{detail.stats.api_key_count}</strong>
-        <span class="kpi-meta">Active and revoked keys for this user</span>
       </div>
       <div class="kpi-card">
-        <span class="kpi-label">Conversations</span>
+        <span class="kpi-label">Sessions</span>
         <strong class="kpi-value">{detail.stats.conversation_count}</strong>
-        <span class="kpi-meta">Persisted sessions on the selected target</span>
       </div>
       <div class="kpi-card">
-        <span class="kpi-label">Key Memories</span>
+        <span class="kpi-label">Key Memory</span>
         <strong class="kpi-value">{detail.stats.key_memory_count}</strong>
-        <span class="kpi-meta">Operator-visible memory slots</span>
       </div>
       <div class="kpi-card">
         <span class="kpi-label">Total Tokens</span>
         <strong class="kpi-value">{detail.token_usage.total_tokens.toLocaleString()}</strong>
-        <span class="kpi-meta">Usage for this user</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Retained Snapshots</span>
-        <strong class="kpi-value">{sources?.source_stats.snapshot_count ?? 0}</strong>
-        <span class="kpi-meta">Normalized source materials available for rebuild</span>
       </div>
     </div>
 
@@ -243,25 +277,25 @@
         <div class="page-header">
           <div>
             <div class="sidebar-label">Profile</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Identity and runtime settings</h2>
+            <h2 class="page-title" style="font-size: 1.35rem;">Identity and settings</h2>
           </div>
           {#if detail.user.is_admin}
             <StatusBadge tone="brand" label="Admin" />
           {/if}
         </div>
 
-        <div class="toolbar">
-          <div class="debug-block">
+        <div class="profile-strip">
+          <div>
             <div class="sidebar-label">Name</div>
-            <div>{detail.user.name}</div>
+            <strong>{detail.user.name}</strong>
           </div>
-          <div class="debug-block">
+          <div>
             <div class="sidebar-label">User ID</div>
-            <div>{detail.user.id}</div>
+            <span>{detail.user.id}</span>
           </div>
-          <div class="debug-block">
+          <div>
             <div class="sidebar-label">Created</div>
-            <div>{new Date(detail.user.created_at).toLocaleString()}</div>
+            <span>{new Date(detail.user.created_at).toLocaleString()}</span>
           </div>
         </div>
 
@@ -281,22 +315,20 @@
           <label class="field">
             <span class="field-label">Embedding model</span>
             <input class="input" bind:value={embeddingModel} />
-            <div class="field-hint">Embeddings use the deployment-level embedding provider set configured under Settings / Providers.</div>
           </label>
           <div class="field">
-            <span class="field-label">Tool writes enabled</span>
+            <span class="field-label">Tool writes</span>
             <div class="inline-group">
-              <button class={toolWriteEnabled ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (toolWriteEnabled = true)}>Enabled</button>
-              <button class={!toolWriteEnabled ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (toolWriteEnabled = false)}>Disabled</button>
+              <button class={toolWriteEnabled ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (toolWriteEnabled = true)}>On</button>
+              <button class={!toolWriteEnabled ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (toolWriteEnabled = false)}>Off</button>
             </div>
           </div>
           <div class="field">
-            <span class="field-label">Retain source materials</span>
+            <span class="field-label">Source retention</span>
             <div class="inline-group">
-              <button class={retainSourceMaterials ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (retainSourceMaterials = true)}>Enabled</button>
-              <button class={!retainSourceMaterials ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (retainSourceMaterials = false)}>Disabled</button>
+              <button class={retainSourceMaterials ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (retainSourceMaterials = true)}>On</button>
+              <button class={!retainSourceMaterials ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (retainSourceMaterials = false)}>Off</button>
             </div>
-            <div class="field-hint">Store normalized source snapshots so future structure or embedding rebuilds can replay this user's conversations.</div>
           </div>
           <label class="field">
             <span class="field-label">Max injection tokens</span>
@@ -313,7 +345,7 @@
         <div class="page-header">
           <div>
             <div class="sidebar-label">Retention & rebuild</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Source snapshot and generation status</h2>
+            <h2 class="page-title" style="font-size: 1.35rem;">Retention and rebuild</h2>
           </div>
         </div>
         <div class="toolbar">
@@ -351,11 +383,11 @@
                 <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px;">
                   <div>
                     <strong>{generation.scope}</strong>
-                    <div class="subtle-text">{generation.generation_id}</div>
+                    <div class="subtle-text">{generation.processed_count}/{generation.source_count} snapshots · {generation.embedding_count} embeddings</div>
                   </div>
                   <StatusBadge tone={generationTone(generation)} label={generation.is_active ? 'active' : generation.status} />
                 </div>
-                <div class="helper-text">{generation.processed_count}/{generation.source_count} snapshots · {generation.embedding_count} embeddings</div>
+                <div class="helper-text">{generation.generation_id}</div>
               </div>
             {/each}
           {/if}
@@ -368,7 +400,7 @@
         <div class="page-header">
           <div>
             <div class="sidebar-label">API keys</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Create, inspect, and revoke credentials</h2>
+            <h2 class="page-title" style="font-size: 1.35rem;">API keys</h2>
           </div>
         </div>
         <div class="inline-group" style="align-items: end; margin-bottom: 14px;">
@@ -409,7 +441,7 @@
         <div class="page-header">
           <div>
             <div class="sidebar-label">Recent conversations</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Most recent sessions</h2>
+            <h2 class="page-title" style="font-size: 1.35rem;">Recent sessions</h2>
           </div>
           <a class="button-ghost" href={`/memory?user_id=${detail.user.id}`}>Open memory workspace</a>
         </div>
@@ -456,14 +488,34 @@
         {#if detail.key_memories.length === 0}
           <div class="empty-state">This user does not have any key memories yet.</div>
         {:else}
-          <div class="toolbar">
+          <div class="toolbar key-memory-stack">
             {#each detail.key_memories as keyMemory}
-              <div class="debug-block">
+              <div class="debug-block key-memory-card">
                 <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px;">
-                  <strong>{keyMemory.key}</strong>
-                  <StatusBadge tone="muted" label={keyMemory.category ?? 'uncategorized'} />
+                  <div>
+                    <strong>{keyMemory.key}</strong>
+                    {#if keyMemoryMeta(keyMemory)}
+                      <div class="subtle-text" style="margin-top: 4px;">{keyMemoryMeta(keyMemory)}</div>
+                    {/if}
+                  </div>
+                  <div class="inline-group" style="justify-content: flex-end;">
+                    {#if keyMemory.review_status && keyMemory.review_status !== 'approved'}
+                      <StatusBadge tone={reviewTone(keyMemory.review_status)} label={keyMemory.review_status} />
+                    {/if}
+                    <a class="button-ghost" href={`/memory/keys?user_id=${detail.user.id}`}>Open workspace</a>
+                  </div>
                 </div>
-                <JsonView value={keyMemory} />
+                <div class="message-body key-memory-value">{keyMemorySummary(keyMemory.value)}</div>
+                {#if keyMemoryFacts(keyMemory).length > 0}
+                  <div class="key-memory-facts">
+                    {#each keyMemoryFacts(keyMemory) as fact}
+                      <div class="key-memory-fact">
+                        <span class="sidebar-label">{fact.label}</span>
+                        <span class="subtle-text">{fact.value}</span>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
               </div>
             {/each}
           </div>
@@ -472,3 +524,58 @@
     </div>
   {/if}
 </section>
+
+<style>
+  .compact-kpis .kpi-card {
+    gap: 6px;
+  }
+
+  .profile-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+    background: var(--bg-panel-muted);
+  }
+
+  .key-memory-stack {
+    gap: 14px;
+  }
+
+  .key-memory-card {
+    background: rgba(255, 255, 255, 0.94);
+  }
+
+  .key-memory-value {
+    padding: 14px 16px;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+    background: var(--bg-panel-muted);
+    color: var(--text-primary);
+  }
+
+  .key-memory-facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .key-memory-fact {
+    display: grid;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  @media (max-width: 900px) {
+    .profile-strip,
+    .key-memory-facts {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

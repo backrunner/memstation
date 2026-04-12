@@ -6,9 +6,16 @@
   import { fetchConfig, fetchHealth, saveConfig } from '$lib/api/client';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { AdminConfigPayload, HealthPayload, RuntimeFieldMeta, SystemRuntimeConfig } from '$lib/types';
+  import type {
+    AdminConfigPayload,
+    DatabaseConfigSnapshot,
+    HealthPayload,
+    RuntimeFieldMeta,
+    SystemRuntimeConfig
+  } from '$lib/types';
 
   type RuntimeKey = keyof SystemRuntimeConfig;
+  type StatusTone = 'brand' | 'success' | 'warning' | 'danger' | 'muted';
 
   const trafficFields: RuntimeKey[] = [
     'default_provider',
@@ -26,6 +33,13 @@
     'memory_relation_hop_decay_lambda',
     'memory_relation_hop_decay_exponent',
     'cache_ttl_seconds'
+  ];
+  const rerankFields: RuntimeKey[] = [
+    'rerank_model',
+    'rerank_candidate_multiplier',
+    'rerank_min_candidates',
+    'rerank_max_candidates',
+    'rerank_blend_weight'
   ];
   const webFields: RuntimeKey[] = [
     'rate_limit_rps',
@@ -50,18 +64,23 @@
 
   let loading = true;
   let saving = false;
+  let databaseSaving = false;
   let error = '';
   let success = '';
   let lastLoadKey = '';
   let ready: HealthPayload | null = null;
+  let database = emptyDatabase();
+  let databaseInput = '';
   let runtimeDefaults = emptyRuntime();
+  let runtimeSaved = emptyRuntime();
   let runtime = emptyRuntime();
   let runtimeLive = emptyRuntime();
   let runtimeMeta: Record<string, RuntimeFieldMeta> = {};
   let corsAllowedOriginsText = '';
   let allowedMimeTypesText = '';
-  let pendingRestartCount = 0;
   let liveAppliedCount = 0;
+  let dirtyCount = 0;
+  let overrideCount = 0;
 
   onMount(async () => {
     await loadData();
@@ -73,8 +92,16 @@
     void loadData();
   }
 
-  $: pendingRestartCount = allRuntimeKeys().filter((key) => runtimeDiffers(key) && metaFor(key).apply_mode === 'restart').length;
-  $: liveAppliedCount = allRuntimeKeys().filter((key) => runtimeDiffers(key) && metaFor(key).apply_mode === 'live').length;
+  $: {
+    runtimeSaved;
+    runtimeLive;
+    runtimeDefaults;
+    runtimeMeta;
+    runtime;
+    liveAppliedCount = allRuntimeKeys().filter((key) => syncStateFor(key) === 'live_active').length;
+    dirtyCount = allRuntimeKeys().filter((key) => draftDiffers(key)).length;
+    overrideCount = allRuntimeKeys().filter((key) => isCustomized(key)).length;
+  }
 
   function emptyRuntime(): SystemRuntimeConfig {
     return {
@@ -87,6 +114,11 @@
       token_threshold: 64000,
       max_context_tokens: 8192,
       max_injection_tokens: 2048,
+      rerank_model: '',
+      rerank_candidate_multiplier: 6,
+      rerank_min_candidates: 20,
+      rerank_max_candidates: 50,
+      rerank_blend_weight: 0.35,
       memory_relation_max_hops: 2,
       memory_relation_hop_decay_lambda: 0.35,
       memory_relation_hop_decay_exponent: 1.25,
@@ -110,6 +142,14 @@
     };
   }
 
+  function emptyDatabase(): DatabaseConfigSnapshot {
+    return {
+      configured: false,
+      source: 'unset',
+      status: 'inactive'
+    };
+  }
+
   function allRuntimeKeys(): RuntimeKey[] {
     return [
       'default_provider',
@@ -121,6 +161,11 @@
       'token_threshold',
       'max_context_tokens',
       'max_injection_tokens',
+      'rerank_model',
+      'rerank_candidate_multiplier',
+      'rerank_min_candidates',
+      'rerank_max_candidates',
+      'rerank_blend_weight',
       'memory_relation_max_hops',
       'memory_relation_hop_decay_lambda',
       'memory_relation_hop_decay_exponent',
@@ -156,6 +201,11 @@
       token_threshold: Number(runtimeValue.token_threshold ?? 64000),
       max_context_tokens: Number(runtimeValue.max_context_tokens ?? 8192),
       max_injection_tokens: Number(runtimeValue.max_injection_tokens ?? 2048),
+      rerank_model: String(runtimeValue.rerank_model ?? ''),
+      rerank_candidate_multiplier: Number(runtimeValue.rerank_candidate_multiplier ?? 6),
+      rerank_min_candidates: Number(runtimeValue.rerank_min_candidates ?? 20),
+      rerank_max_candidates: Number(runtimeValue.rerank_max_candidates ?? 50),
+      rerank_blend_weight: Number(runtimeValue.rerank_blend_weight ?? 0.35),
       memory_relation_max_hops: Number(runtimeValue.memory_relation_max_hops ?? 2),
       memory_relation_hop_decay_lambda: Number(runtimeValue.memory_relation_hop_decay_lambda ?? 0.35),
       memory_relation_hop_decay_exponent: Number(runtimeValue.memory_relation_hop_decay_exponent ?? 1.25),
@@ -183,8 +233,23 @@
     };
   }
 
+  function normalizeDatabase(value: unknown): DatabaseConfigSnapshot {
+    const databaseValue = (value ?? {}) as Partial<DatabaseConfigSnapshot>;
+    return {
+      configured: Boolean(databaseValue.configured),
+      source: String(databaseValue.source ?? 'unset'),
+      status: String(databaseValue.status ?? 'inactive'),
+      display: databaseValue.display ? String(databaseValue.display) : undefined,
+      last_error: databaseValue.last_error ? String(databaseValue.last_error) : undefined,
+      updated_at: databaseValue.updated_at ? String(databaseValue.updated_at) : undefined
+    };
+  }
+
   function applyConfig(payload: AdminConfigPayload): void {
+    database = normalizeDatabase(payload.database);
+    databaseInput = '';
     runtimeDefaults = normalizeRuntime(payload.runtime_defaults ?? payload.runtime);
+    runtimeSaved = normalizeRuntime(payload.runtime);
     runtime = normalizeRuntime(payload.runtime);
     runtimeLive = normalizeRuntime(payload.runtime_live ?? payload.runtime);
     runtimeMeta = payload.runtime_meta ?? {};
@@ -194,18 +259,42 @@
 
   function metaFor(key: RuntimeKey): RuntimeFieldMeta {
     return runtimeMeta[key] ?? {
-      apply_mode: 'restart',
+      apply_mode: 'live',
       source: 'default',
       category: 'runtime',
       description: ''
     };
   }
 
-  function runtimeDiffers(key: RuntimeKey): boolean {
-    if (Array.isArray(runtime[key])) {
-      return (runtime[key] as string[]).join(',') !== (runtimeLive[key] as string[]).join(',');
+  function valuesEqual(left: SystemRuntimeConfig[RuntimeKey], right: SystemRuntimeConfig[RuntimeKey]): boolean {
+    if (Array.isArray(left) && Array.isArray(right)) {
+      return left.join(',') === right.join(',');
     }
-    return String(runtime[key]) !== String(runtimeLive[key]);
+    return String(left) === String(right);
+  }
+
+  function runtimeDiffers(key: RuntimeKey): boolean {
+    return !valuesEqual(runtimeSaved[key], runtimeLive[key]);
+  }
+
+  function draftDiffers(key: RuntimeKey): boolean {
+    return !valuesEqual(runtime[key], runtimeSaved[key]);
+  }
+
+  function isCustomized(key: RuntimeKey): boolean {
+    return !valuesEqual(runtimeSaved[key], runtimeDefaults[key]);
+  }
+
+  function syncStateFor(key: RuntimeKey): 'restart_pending' | 'restart_active' | 'live_active' | 'live_drift' | 'default' {
+    const meta = metaFor(key);
+    const differs = runtimeDiffers(key);
+    if (!isCustomized(key)) {
+      return differs && meta.apply_mode === 'live' ? 'live_drift' : 'default';
+    }
+    if (meta.apply_mode === 'restart') {
+      return differs ? 'restart_pending' : 'restart_active';
+    }
+    return differs ? 'live_drift' : 'live_active';
   }
 
   function formatRuntimeValue(key: RuntimeKey, value: SystemRuntimeConfig[RuntimeKey]): string {
@@ -220,6 +309,20 @@
 
   function defaultValueFor(key: RuntimeKey): SystemRuntimeConfig[RuntimeKey] {
     return runtimeDefaults[key];
+  }
+
+  function revertDraft(key: RuntimeKey): void {
+    if (key === 'cors_allowed_origins' || key === 'multimodal_allowed_mime_types') {
+      if (key === 'cors_allowed_origins') {
+        runtime = { ...runtime, cors_allowed_origins: [...runtimeSaved.cors_allowed_origins] };
+        corsAllowedOriginsText = runtimeSaved.cors_allowed_origins.join('\n');
+      } else {
+        runtime = { ...runtime, multimodal_allowed_mime_types: [...runtimeSaved.multimodal_allowed_mime_types] };
+        allowedMimeTypesText = runtimeSaved.multimodal_allowed_mime_types.join('\n');
+      }
+      return;
+    }
+    runtime = { ...runtime, [key]: runtimeSaved[key] } as SystemRuntimeConfig;
   }
 
   function setLocalDefault(key: RuntimeKey): void {
@@ -280,14 +383,55 @@
         }
       });
       applyConfig(payload);
-      const nextPendingRestartCount = allRuntimeKeys().filter((key) => runtimeDiffers(key) && metaFor(key).apply_mode === 'restart').length;
-      success = nextPendingRestartCount > 0
-        ? 'System configuration saved. Some changes are staged and require a target restart before they become effective.'
-        : 'System configuration saved and live-update fields were applied immediately.';
+      success = 'System settings applied to the target.';
     } catch (cause) {
       error = cause instanceof Error ? cause.message : 'Failed to save system settings';
     } finally {
       saving = false;
+    }
+  }
+
+  async function persistDatabase(): Promise<void> {
+    if (!$selectedTarget || !databaseInput.trim()) {
+      return;
+    }
+    databaseSaving = true;
+    error = '';
+    success = '';
+    try {
+      const payload = await saveConfig($selectedTarget, {
+        database: {
+          url: databaseInput.trim()
+        }
+      });
+      applyConfig(payload);
+      success = 'Database connection updated and applied to the target.';
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : 'Failed to update database connection';
+    } finally {
+      databaseSaving = false;
+    }
+  }
+
+  async function clearDatabase(): Promise<void> {
+    if (!$selectedTarget) {
+      return;
+    }
+    databaseSaving = true;
+    error = '';
+    success = '';
+    try {
+      const payload = await saveConfig($selectedTarget, {
+        database: {
+          clear: true
+        }
+      });
+      applyConfig(payload);
+      success = 'Database override cleared. The target is now using the deployment default, if one exists.';
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : 'Failed to clear database connection override';
+    } finally {
+      databaseSaving = false;
     }
   }
 
@@ -332,15 +476,101 @@
       saving = false;
     }
   }
+
+  function trackedRuntimeKeys(): RuntimeKey[] {
+    return allRuntimeKeys().filter((key) => draftDiffers(key) || isCustomized(key) || runtimeDiffers(key));
+  }
+
+  function displayKeyName(key: RuntimeKey): string {
+    const labels: Partial<Record<RuntimeKey, string>> = {
+      default_provider: 'Gateway provider',
+      internal_default_provider: 'Internal provider',
+      vector_store_backend: 'Vector store',
+      conversation_timeout_seconds: 'Conversation timeout',
+      provider_timeout_seconds: 'Provider timeout',
+      message_threshold: 'Message threshold',
+      token_threshold: 'Token threshold',
+      max_context_tokens: 'Context budget',
+      max_injection_tokens: 'Injection budget',
+      rerank_model: 'Rerank model',
+      rerank_candidate_multiplier: 'Candidate multiplier',
+      rerank_min_candidates: 'Min rerank candidates',
+      rerank_max_candidates: 'Max rerank candidates',
+      rerank_blend_weight: 'Blend weight',
+      memory_relation_max_hops: 'Relation max hops',
+      memory_relation_hop_decay_lambda: 'Hop decay lambda',
+      memory_relation_hop_decay_exponent: 'Hop decay exponent',
+      rate_limit_rps: 'Rate limit RPS',
+      rate_limit_burst: 'Rate limit burst',
+      cache_ttl_seconds: 'Cache TTL',
+      cors_allowed_origins: 'CORS origins',
+      session_cookie_cross_site: 'Cross-site cookie',
+      multimodal_enabled: 'Multimodal ingestion',
+      multimodal_storage_backend: 'Blob storage',
+      multimodal_storage_local_root: 'Local blob root',
+      multimodal_storage_bucket: 'Remote bucket',
+      multimodal_extract_image_model: 'Image extractor',
+      multimodal_extract_audio_model: 'Audio extractor',
+      multimodal_extract_video_model: 'Video extractor',
+      multimodal_extract_file_model: 'File extractor',
+      multimodal_audio_transcription_enabled: 'Audio transcription',
+      multimodal_video_frame_sampling_enabled: 'Video frame sampling',
+      multimodal_max_asset_bytes: 'Max asset bytes',
+      multimodal_allowed_mime_types: 'Allowed MIME types'
+    };
+    return labels[key] ?? key;
+  }
+
+  function summaryTextFor(key: RuntimeKey): string {
+    const draftValue = formatRuntimeValue(key, runtime[key]);
+    const savedValue = formatRuntimeValue(key, runtimeSaved[key]);
+    const liveValue = formatRuntimeValue(key, runtimeLive[key]);
+    const defaultValue = formatRuntimeValue(key, runtimeDefaults[key]);
+
+    if (draftDiffers(key)) {
+      return `Draft ${draftValue} · Saved ${savedValue}`;
+    }
+    if (runtimeDiffers(key)) {
+      return `Saved ${savedValue} · Live ${liveValue}`;
+    }
+    if (isCustomized(key)) {
+      return `Saved ${savedValue} · Default ${defaultValue}`;
+    }
+    return `Draft ${draftValue}`;
+  }
+
+  function databaseTone(status: string): StatusTone {
+    switch (status) {
+      case 'ready':
+        return 'success';
+      case 'degraded':
+        return 'danger';
+      case 'inactive':
+        return 'muted';
+      default:
+        return 'warning';
+    }
+  }
+
+  function databaseSourceLabel(source: string): string {
+    switch (source) {
+      case 'override':
+        return 'Manager override';
+      case 'env':
+        return 'Environment default';
+      case 'unset':
+        return 'Not configured';
+      default:
+        return source;
+    }
+  }
 </script>
 
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">Settings / System</span>
-    <h1 class="page-title">Control deployment-level runtime policy for the selected MemStation target</h1>
-    <p class="page-description">
-      Write runtime overrides directly to the target, review which changes apply immediately, and separate staged restart-required settings from live operational controls.
-    </p>
+    <h1 class="page-title">System runtime</h1>
+    <p class="page-description">Edit live deployment policy for the selected target.</p>
   </div>
 
   {#if !$targetState.session.authenticated}
@@ -350,26 +580,71 @@
   {:else if loading}
     <div class="notice-card">Loading system settings...</div>
   {:else}
+    <section class="card page-stack">
+      <div class="page-header">
+        <div>
+          <div class="sidebar-label">Database</div>
+          <h2 class="page-title" style="font-size: 1.35rem;">Database connection</h2>
+        </div>
+        <StatusBadge tone={databaseTone(database.status)} label={database.status} />
+      </div>
+
+      <div class="grid-2 system-layout-grid">
+        <div class="page-stack" style="gap: 10px;">
+          <div class="debug-block">
+            <strong>{database.display ?? 'No database connection is configured.'}</strong>
+            <div class="helper-text">{databaseSourceLabel(database.source)}</div>
+            {#if database.updated_at}
+              <div class="helper-text">Updated {new Date(database.updated_at).toLocaleString()}</div>
+            {/if}
+          </div>
+          {#if database.last_error}
+            <div class="error-state" style="margin: 0;">{database.last_error}</div>
+          {/if}
+        </div>
+
+        <div class="page-stack" style="gap: 12px;">
+          <label class="field">
+            <span class="field-label">Connection URI</span>
+            <input
+              class="input"
+              bind:value={databaseInput}
+              placeholder="postgres://user:password@127.0.0.1:5432/memstation?sslmode=disable"
+            />
+          </label>
+          <div class="inline-group system-actions" style="justify-content: flex-end;">
+            <button
+              class="button-ghost"
+              type="button"
+              disabled={databaseSaving || database.source !== 'override'}
+              on:click={clearDatabase}
+            >
+              Clear override
+            </button>
+            <button class="button" type="button" disabled={databaseSaving || !databaseInput.trim()} on:click={persistDatabase}>
+              {databaseSaving ? 'Applying...' : 'Apply database'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <div class="kpi-grid">
       <div class="kpi-card">
-        <span class="kpi-label">Runtime fields</span>
-        <span class="kpi-value">{allRuntimeKeys().length}</span>
-        <span class="kpi-meta">Deployment-level controls tracked by the target.</span>
+        <span class="kpi-label">Overrides</span>
+        <span class="kpi-value">{overrideCount}</span>
       </div>
       <div class="kpi-card">
-        <span class="kpi-label">Live applied</span>
+        <span class="kpi-label">Unsaved</span>
+        <span class="kpi-value">{dirtyCount}</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">Live</span>
         <span class="kpi-value">{liveAppliedCount}</span>
-        <span class="kpi-meta">Fields currently diverging from the original process defaults but already active.</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Restart staged</span>
-        <span class="kpi-value">{pendingRestartCount}</span>
-        <span class="kpi-meta">Saved fields whose live process value still differs from the desired override.</span>
       </div>
       <div class="kpi-card">
         <span class="kpi-label">Readiness</span>
         <span class="kpi-value">{ready?.status ?? 'unknown'}</span>
-        <span class="kpi-meta">Current target dependency posture.</span>
       </div>
     </div>
 
@@ -377,16 +652,20 @@
       <div class="notice-card">{success}</div>
     {/if}
 
-    <div class="inline-group" style="justify-content: flex-end;">
+    <div class="inline-group system-actions" style="justify-content: flex-end;">
+      {#if dirtyCount > 0}
+        <StatusBadge tone="brand" label={`${dirtyCount} unsaved change${dirtyCount > 1 ? 's' : ''}`} />
+      {/if}
       <button class="button-ghost" type="button" disabled={saving} on:click={resetAll}>Reset all overrides</button>
+      <button class="button" type="button" disabled={saving} on:click={persist}>{saving ? 'Saving...' : 'Save system settings'}</button>
     </div>
 
-    <div class="grid-2">
+    <div class="grid-2 system-layout-grid">
       <section class="card page-stack">
         <div class="page-header">
           <div>
             <div class="sidebar-label">Traffic control</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Provider selection, finalize policy, and upstream latency guards</h2>
+            <h2 class="page-title" style="font-size: 1.35rem;">Providers and request bounds</h2>
           </div>
         </div>
 
@@ -410,11 +689,11 @@
             </select>
           </label>
           <label class="field">
-            <span class="field-label">Conversation timeout (seconds)</span>
+            <span class="field-label">Conversation timeout</span>
             <input class="input" type="number" min="0" bind:value={runtime.conversation_timeout_seconds} />
           </label>
           <label class="field">
-            <span class="field-label">Provider timeout (seconds)</span>
+            <span class="field-label">Provider timeout</span>
             <input class="input" type="number" min="0" bind:value={runtime.provider_timeout_seconds} />
           </label>
           <label class="field">
@@ -426,40 +705,20 @@
             <input class="input" type="number" min="0" bind:value={runtime.token_threshold} />
           </label>
         </div>
-
-        <div class="runtime-field-list">
-          {#each trafficFields as key}
-            <div class="runtime-field-row">
-              <div>
-                <strong>{key}</strong>
-                <div class="helper-text">{metaFor(key).description}</div>
-                <div class="helper-text">Default value: {formatRuntimeValue(key, defaultValueFor(key))}</div>
-                <div class="helper-text">Live value: {formatRuntimeValue(key, runtimeLive[key])}</div>
-              </div>
-              <div class="runtime-field-status">
-                <StatusBadge tone={metaFor(key).apply_mode === 'live' ? 'success' : 'warning'} label={metaFor(key).apply_mode} />
-                <StatusBadge tone={metaFor(key).source === 'override' ? 'brand' : 'muted'} label={metaFor(key).source} />
-                {#if runtimeDiffers(key)}
-                  <StatusBadge tone={metaFor(key).apply_mode === 'restart' ? 'warning' : 'brand'} label={metaFor(key).apply_mode === 'restart' ? 'restart pending' : 'applied'} />
-                {/if}
-                <button class="button-ghost" type="button" disabled={saving || metaFor(key).source !== 'override'} on:click={() => resetField(key)}>Reset</button>
-                <button class="button-ghost" type="button" disabled={saving} on:click={() => setLocalDefault(key)}>Use default</button>
-              </div>
-            </div>
-          {/each}
-        </div>
       </section>
 
       <section class="card page-stack">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Memory and web</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Context budgets, cache, and browser-facing controls</h2>
+            <div class="sidebar-label">Memory recall and web</div>
+            <h2 class="page-title" style="font-size: 1.35rem;">Memory budgets and reranking</h2>
           </div>
-          <StatusBadge tone={ready?.status === 'ready' ? 'success' : 'warning'} label={ready?.status ?? 'unknown'} />
         </div>
 
         <div class="form-grid two-up">
+          <div class="settings-subsection">
+            <div class="sidebar-label">Recall budgets</div>
+          </div>
           <label class="field">
             <span class="field-label">Vector store backend</span>
             <select class="input" bind:value={runtime.vector_store_backend}>
@@ -475,24 +734,50 @@
             <input class="input" type="number" min="0" bind:value={runtime.max_injection_tokens} />
           </label>
           <label class="field">
+            <span class="field-label">Cache TTL</span>
+            <input class="input" type="number" min="0" bind:value={runtime.cache_ttl_seconds} />
+          </label>
+          <div class="settings-subsection">
+            <div class="sidebar-label">Reranking</div>
+          </div>
+          <label class="field">
+            <span class="field-label">Rerank model</span>
+            <input class="input" bind:value={runtime.rerank_model} placeholder="cohere:rerank-v3.5" />
+          </label>
+          <label class="field">
+            <span class="field-label">Candidate multiplier</span>
+            <input class="input" type="number" min="1" max="16" bind:value={runtime.rerank_candidate_multiplier} />
+          </label>
+          <label class="field">
+            <span class="field-label">Min rerank candidates</span>
+            <input class="input" type="number" min="1" bind:value={runtime.rerank_min_candidates} />
+          </label>
+          <label class="field">
+            <span class="field-label">Max rerank candidates</span>
+            <input class="input" type="number" min="1" bind:value={runtime.rerank_max_candidates} />
+          </label>
+          <label class="field">
+            <span class="field-label">Rerank blend weight</span>
+            <input class="input" type="number" min="0" max="1" step="0.05" bind:value={runtime.rerank_blend_weight} />
+          </label>
+          <div class="settings-subsection">
+            <div class="sidebar-label">Relation expansion</div>
+          </div>
+          <label class="field">
             <span class="field-label">Relation max hops</span>
             <input class="input" type="number" min="1" max="4" bind:value={runtime.memory_relation_max_hops} />
-            <span class="field-help">Bounded graph recall depth for online memory expansion.</span>
           </label>
           <label class="field">
             <span class="field-label">Hop decay lambda</span>
             <input class="input" type="number" min="0" max="2" step="0.05" bind:value={runtime.memory_relation_hop_decay_lambda} />
-            <span class="field-help">Higher values make distant relations fade faster.</span>
           </label>
           <label class="field">
             <span class="field-label">Hop decay exponent</span>
             <input class="input" type="number" min="0.5" max="3" step="0.05" bind:value={runtime.memory_relation_hop_decay_exponent} />
-            <span class="field-help">Values above 1 create a stronger-than-linear distance penalty.</span>
           </label>
-          <label class="field">
-            <span class="field-label">Cache TTL (seconds)</span>
-            <input class="input" type="number" min="0" bind:value={runtime.cache_ttl_seconds} />
-          </label>
+          <div class="settings-subsection">
+            <div class="sidebar-label">Web controls</div>
+          </div>
           <label class="field">
             <span class="field-label">Rate limit RPS</span>
             <input class="input" type="number" min="0" bind:value={runtime.rate_limit_rps} />
@@ -511,30 +796,7 @@
           <label class="field" style="grid-column: 1 / -1;">
             <span class="field-label">CORS allowed origins</span>
             <textarea class="textarea" rows="5" bind:value={corsAllowedOriginsText} placeholder="https://manager.example.com\nhttp://localhost:5173"></textarea>
-            <span class="field-help">One origin per line or separated by commas. Leave empty to clear the override.</span>
           </label>
-        </div>
-
-        <div class="runtime-field-list">
-          {#each [...memoryFields, ...webFields] as key}
-            <div class="runtime-field-row">
-              <div>
-                <strong>{key}</strong>
-                <div class="helper-text">{metaFor(key).description}</div>
-                <div class="helper-text">Default value: {formatRuntimeValue(key, defaultValueFor(key))}</div>
-                <div class="helper-text">Live value: {formatRuntimeValue(key, runtimeLive[key])}</div>
-              </div>
-              <div class="runtime-field-status">
-                <StatusBadge tone={metaFor(key).apply_mode === 'live' ? 'success' : 'warning'} label={metaFor(key).apply_mode} />
-                <StatusBadge tone={metaFor(key).source === 'override' ? 'brand' : 'muted'} label={metaFor(key).source} />
-                {#if runtimeDiffers(key)}
-                  <StatusBadge tone={metaFor(key).apply_mode === 'restart' ? 'warning' : 'brand'} label={metaFor(key).apply_mode === 'restart' ? 'restart pending' : 'applied'} />
-                {/if}
-                <button class="button-ghost" type="button" disabled={saving || metaFor(key).source !== 'override'} on:click={() => resetField(key)}>Reset</button>
-                <button class="button-ghost" type="button" disabled={saving} on:click={() => setLocalDefault(key)}>Use default</button>
-              </div>
-            </div>
-          {/each}
         </div>
       </section>
     </div>
@@ -543,7 +805,7 @@
       <div class="page-header">
         <div>
           <div class="sidebar-label">Multimodal pipeline</div>
-          <h2 class="page-title" style="font-size: 1.35rem;">Blob retention, extractor models, and ingestion guardrails</h2>
+          <h2 class="page-title" style="font-size: 1.35rem;">Storage and extraction</h2>
         </div>
       </div>
 
@@ -559,7 +821,6 @@
           <span class="field-label">Blob storage backend</span>
           <select class="input" bind:value={runtime.multimodal_storage_backend}>
             <option value="local">local</option>
-            <option value="s3">s3</option>
           </select>
         </label>
         <label class="field">
@@ -607,62 +868,72 @@
         <label class="field" style="grid-column: 1 / -1;">
           <span class="field-label">Allowed MIME types</span>
           <textarea class="textarea" rows="6" bind:value={allowedMimeTypesText} placeholder="image/png&#10;application/pdf&#10;audio/mpeg"></textarea>
-          <span class="field-help">One MIME type per line or separated by commas. This allow-list gates hosted uploads and extraction.</span>
         </label>
-      </div>
-
-      <div class="runtime-field-list">
-        {#each multimodalFields as key}
-          <div class="runtime-field-row">
-            <div>
-              <strong>{key}</strong>
-              <div class="helper-text">{metaFor(key).description}</div>
-              <div class="helper-text">Default value: {formatRuntimeValue(key, defaultValueFor(key))}</div>
-              <div class="helper-text">Live value: {formatRuntimeValue(key, runtimeLive[key])}</div>
-            </div>
-            <div class="runtime-field-status">
-              <StatusBadge tone={metaFor(key).apply_mode === 'live' ? 'success' : 'warning'} label={metaFor(key).apply_mode} />
-              <StatusBadge tone={metaFor(key).source === 'override' ? 'brand' : 'muted'} label={metaFor(key).source} />
-              {#if runtimeDiffers(key)}
-                <StatusBadge tone={metaFor(key).apply_mode === 'restart' ? 'warning' : 'brand'} label={metaFor(key).apply_mode === 'restart' ? 'restart pending' : 'applied'} />
-              {/if}
-              <button class="button-ghost" type="button" disabled={saving || metaFor(key).source !== 'override'} on:click={() => resetField(key)}>Reset</button>
-              <button class="button-ghost" type="button" disabled={saving} on:click={() => setLocalDefault(key)}>Use default</button>
-            </div>
-          </div>
-        {/each}
       </div>
     </section>
 
     <section class="card page-stack">
       <div class="page-header">
         <div>
-          <div class="sidebar-label">Dependency posture</div>
-          <h2 class="page-title" style="font-size: 1.35rem;">Readiness details for the selected target</h2>
-        </div>
-        <div class="runtime-field-status">
-          {#if pendingRestartCount > 0}
-            <StatusBadge tone="warning" label={`${pendingRestartCount} restart pending`} />
-          {/if}
-          {#if liveAppliedCount > 0}
-            <StatusBadge tone="brand" label={`${liveAppliedCount} live override${liveAppliedCount > 1 ? 's' : ''}`} />
-          {/if}
+          <div class="sidebar-label">Changed</div>
+          <h2 class="page-title" style="font-size: 1.35rem;">Edited and overridden fields</h2>
         </div>
       </div>
-      <div class="grid-3">
-        {#each Object.entries(ready?.services ?? {}) as [name, status]}
-          <div class="debug-block">
-            <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
-              <strong>{name}</strong>
-              <StatusBadge tone={status === 'ok' ? 'success' : 'warning'} label={status} />
+
+      {#if trackedRuntimeKeys().length === 0}
+        <div class="empty-state">Everything is using deployment defaults.</div>
+      {:else}
+        <div class="runtime-field-list compact-runtime-list">
+          {#each trackedRuntimeKeys() as key}
+            <div class="runtime-field-row compact-runtime-row">
+              <div>
+                <strong>{displayKeyName(key)}</strong>
+                <div class="helper-text">{summaryTextFor(key)}</div>
+              </div>
+              <div class="runtime-field-status">
+                {#if draftDiffers(key)}
+                  <button class="button-ghost" type="button" disabled={saving} on:click={() => revertDraft(key)}>Revert</button>
+                {/if}
+                {#if isCustomized(key)}
+                  <button class="button-ghost" type="button" disabled={saving} on:click={() => resetField(key)}>Clear</button>
+                {/if}
+              </div>
             </div>
-            <div class="helper-text">Runtime settings write through the target itself; this panel does not proxy or cache admin mutations.</div>
-          </div>
-        {/each}
-      </div>
-      <div class="inline-group" style="justify-content: flex-end;">
-        <button class="button" type="button" disabled={saving} on:click={persist}>{saving ? 'Saving...' : 'Save system settings'}</button>
-      </div>
+          {/each}
+        </div>
+      {/if}
     </section>
   {/if}
 </section>
+
+<style>
+  .system-actions {
+    flex-wrap: wrap;
+  }
+
+  .system-layout-grid {
+    align-items: start;
+  }
+
+  .settings-subsection {
+    grid-column: 1 / -1;
+    margin-top: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-soft);
+  }
+
+  .settings-subsection:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .compact-runtime-list {
+    gap: 10px;
+  }
+
+  .compact-runtime-row {
+    align-items: center;
+    padding-block: 12px;
+  }
+</style>

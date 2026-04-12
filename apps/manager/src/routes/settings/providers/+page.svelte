@@ -8,7 +8,7 @@
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type { AdminConfigPayload, ProviderDiagnostic, ProviderSetPayload, ProviderSummary } from '$lib/types';
 
-  type ProviderScope = 'gateway' | 'internal' | 'embedding';
+  type ProviderScope = 'gateway' | 'internal' | 'embedding' | 'rerank';
 
   type ProviderForm = {
     scope: ProviderScope;
@@ -20,7 +20,7 @@
     updatedAt?: string;
   };
 
-  const scopeOrder: ProviderScope[] = ['gateway', 'internal', 'embedding'];
+  const scopeOrder: ProviderScope[] = ['gateway', 'internal', 'embedding', 'rerank'];
 
   let loading = true;
   let saving = false;
@@ -46,7 +46,8 @@
     return {
       gateway: sets.gateway ?? ((configPayload?.providers as ProviderSummary[] | undefined) ?? []),
       internal: sets.internal ?? [],
-      embedding: sets.embedding ?? []
+      embedding: sets.embedding ?? [],
+      rerank: sets.rerank ?? []
     };
   }
 
@@ -166,28 +167,43 @@
         return 'Internal LLM providers';
       case 'embedding':
         return 'Embedding providers';
+      case 'rerank':
+        return 'Reranker providers';
     }
   }
 
   function scopeDescription(scope: ProviderScope): string {
     switch (scope) {
       case 'gateway':
-        return 'These endpoints serve external proxy traffic routed through MemStation.';
+        return 'External proxy traffic.';
       case 'internal':
-        return 'These endpoints power internal model-driven tasks such as scoring and future memory pipelines.';
+        return 'Internal model tasks.';
       case 'embedding':
-        return 'Embedding generation uses the OpenAI-compatible embedding interface and is isolated from chat provider credentials.';
+        return 'Embedding-only credentials.';
+      case 'rerank':
+        return 'Candidate reranking.';
     }
+  }
+
+  function routeLabel(diagnostic?: ProviderDiagnostic): string {
+    if (diagnostic?.is_desired_default && diagnostic?.is_live_default) {
+      return 'active default';
+    }
+    if (diagnostic?.is_desired_default) {
+      return diagnostic.restart_required ? 'default after restart' : 'desired default';
+    }
+    if (diagnostic?.is_live_default) {
+      return 'live default';
+    }
+    return '';
   }
 </script>
 
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">Settings / Providers</span>
-    <h1 class="page-title">Manage gateway, internal, and embedding provider sets</h1>
-    <p class="page-description">
-      Rotate credentials and endpoints per provider set directly against the selected target. The manager never displays stored plaintext secrets.
-    </p>
+    <h1 class="page-title">Manage gateway, internal, embedding, and rerank provider sets</h1>
+    <p class="page-description">Rotate provider endpoints and encrypted credentials for the selected target.</p>
   </div>
 
   {#if !$targetState.session.authenticated}
@@ -205,22 +221,22 @@
       <div class="kpi-card">
         <span class="kpi-label">Ready Providers</span>
         <span class="kpi-value">{diagnostics.filter((item) => item.status === 'ready').length}</span>
-        <span class="kpi-meta">Providers with credentials and clean endpoint posture.</span>
+        <span class="kpi-meta">Ready now.</span>
       </div>
       <div class="kpi-card">
         <span class="kpi-label">Warnings</span>
         <span class="kpi-value">{diagnostics.filter((item) => item.status === 'warning').length}</span>
-        <span class="kpi-meta">Providers with partial configuration or restart-only drift.</span>
+        <span class="kpi-meta">Need review.</span>
       </div>
       <div class="kpi-card">
         <span class="kpi-label">Degraded</span>
         <span class="kpi-value">{diagnostics.filter((item) => item.status === 'degraded').length}</span>
-        <span class="kpi-meta">Default-route risk requiring operator action.</span>
+        <span class="kpi-meta">Blocking issues.</span>
       </div>
       <div class="kpi-card">
         <span class="kpi-label">Restart Pending</span>
         <span class="kpi-value">{diagnostics.filter((item) => item.restart_required).length}</span>
-        <span class="kpi-meta">Provider timeout drift not yet active in this process.</span>
+        <span class="kpi-meta">Pending live sync.</span>
       </div>
     </div>
 
@@ -234,7 +250,7 @@
           </div>
         </div>
 
-        <div class="grid-3">
+        <div class="provider-card-grid">
           {#each formsForScope(scope) as form}
             {@const diagnostic = diagnosticFor(form.scope, form.provider)}
             <section class="card">
@@ -245,21 +261,20 @@
                 </div>
                 <div class="toolbar" style="gap: 8px;">
                   <StatusBadge tone={toneFor(diagnostic?.status)} label={diagnostic?.status ?? 'unknown'} />
-                  <StatusBadge tone={form.hasAPIKey ? 'success' : 'warning'} label={form.hasAPIKey ? 'Key configured' : 'No key'} />
-                  <StatusBadge tone={form.source === 'override' ? 'brand' : 'muted'} label={form.source} />
+                  {#if form.source === 'override'}
+                    <StatusBadge tone="brand" label="override" />
+                  {/if}
                 </div>
               </div>
 
               <div class="toolbar">
-                <div class="runtime-field-status" style="justify-content: flex-start;">
-                  {#if diagnostic?.is_desired_default}
-                    <StatusBadge tone="brand" label="Desired default" />
-                  {/if}
-                  {#if diagnostic?.is_live_default}
-                    <StatusBadge tone="success" label="Live default" />
+                <div class="provider-summary">
+                  <span>{form.hasAPIKey ? 'Stored key' : 'No key'}</span>
+                  {#if routeLabel(diagnostic)}
+                    <span>{routeLabel(diagnostic)}</span>
                   {/if}
                   {#if diagnostic?.restart_required}
-                    <StatusBadge tone="warning" label="Restart pending" />
+                    <span>restart pending</span>
                   {/if}
                 </div>
                 <label class="field">
@@ -269,25 +284,18 @@
                 <label class="field">
                   <span class="field-label">Rotate API key</span>
                   <input class="input" bind:value={form.apiKey} type="password" autocomplete="off" placeholder="Leave blank to keep existing secret" />
-                  <span class="field-help">Submitting a value writes a new encrypted credential and records an audit event.</span>
                 </label>
-                <div class="debug-block" style="background: var(--bg-panel-muted);">
-                  <div class="sidebar-label">Diagnostic posture</div>
-                  <div class="helper-text">Host: {diagnostic?.host ?? 'n/a'} · scheme: {diagnostic?.scheme ?? 'n/a'}</div>
-                  <div class="helper-text">
-                    timeout desired/live: {diagnostic?.desired_timeout_seconds ?? 0}s / {diagnostic?.live_timeout_seconds ?? 0}s
+                <div class="target-preview">
+                  <div class="target-preview-meta">
+                    <span>{diagnostic?.host ?? 'no host'}</span>
+                    <span>{diagnostic?.scheme ?? 'n/a'}</span>
+                    <span>{diagnostic?.live_timeout_seconds ?? 0}s live</span>
                   </div>
                   {#if (diagnostic?.issues.length ?? 0) > 0}
-                    <div class="toolbar" style="margin-top: 10px;">
-                      {#each diagnostic?.issues ?? [] as issue}
-                        <div class="notice-card" style="padding: 12px;">{issue}</div>
-                      {/each}
-                    </div>
-                  {:else}
-                    <div class="helper-text" style="margin-top: 10px;">No provider posture issues detected on this target.</div>
+                    <div class="helper-text">{diagnostic?.issues?.[0]}</div>
                   {/if}
                 </div>
-                <div class="helper-text">Last updated: {form.updatedAt ? new Date(form.updatedAt).toLocaleString() : 'Default runtime config'}</div>
+                <div class="helper-text">{form.updatedAt ? new Date(form.updatedAt).toLocaleString() : 'Using seeded defaults'}</div>
               </div>
             </section>
           {/each}
@@ -300,3 +308,61 @@
     </div>
   {/if}
 </section>
+
+<style>
+  .provider-card-grid {
+    display: grid;
+    gap: 16px;
+    align-items: start;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .provider-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+  }
+
+  .provider-summary span {
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(15, 94, 168, 0.08);
+  }
+
+  .target-preview {
+    display: grid;
+    gap: 10px;
+    padding: 14px 16px;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+    background: var(--bg-panel-muted);
+  }
+
+  .target-preview-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+  }
+
+  .target-preview-meta span {
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(15, 94, 168, 0.08);
+  }
+
+  @media (min-width: 1720px) {
+    .provider-card-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 1120px) {
+    .provider-card-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

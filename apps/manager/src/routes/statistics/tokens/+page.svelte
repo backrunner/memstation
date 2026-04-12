@@ -149,11 +149,11 @@
       const date = new Date();
       date.setHours(0, 0, 0, 0);
       date.setDate(date.getDate() - offset);
-      const key = date.toISOString().slice(0, 10);
+      const key = localDateKey(date);
       bucketMap.set(key, 0);
     }
     for (const item of items) {
-      const key = new Date(item.updated_at).toISOString().slice(0, 10);
+      const key = localDateKey(new Date(item.updated_at));
       if (bucketMap.has(key)) {
         bucketMap.set(key, (bucketMap.get(key) ?? 0) + item.total_tokens);
       }
@@ -162,6 +162,13 @@
       label: key.slice(5),
       total
     }));
+  }
+
+  function localDateKey(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   function buildBreakdown(items: ConversationListItem[]): Array<{ label: string; total: number }> {

@@ -437,6 +437,7 @@ export interface ProviderSetPayload {
   gateway?: ProviderSummary[];
   internal?: ProviderSummary[];
   embedding?: ProviderSummary[];
+  rerank?: ProviderSummary[];
 }
 
 export interface ProviderDiagnostic {
@@ -464,6 +465,15 @@ export interface RuntimeFieldMeta {
   description: string;
 }
 
+export interface DatabaseConfigSnapshot {
+  configured: boolean;
+  source: 'unset' | 'env' | 'override' | string;
+  status: 'inactive' | 'ready' | 'degraded' | string;
+  display?: string;
+  last_error?: string;
+  updated_at?: string;
+}
+
 export interface SystemRuntimeConfig {
   default_provider: string;
   internal_default_provider: string;
@@ -474,6 +484,11 @@ export interface SystemRuntimeConfig {
   token_threshold: number;
   max_context_tokens: number;
   max_injection_tokens: number;
+  rerank_model: string;
+  rerank_candidate_multiplier: number;
+  rerank_min_candidates: number;
+  rerank_max_candidates: number;
+  rerank_blend_weight: number;
   memory_relation_max_hops: number;
   memory_relation_hop_decay_lambda: number;
   memory_relation_hop_decay_exponent: number;
@@ -549,6 +564,7 @@ export interface UpdateUserSettingsResponse {
 export interface AdminConfigPayload extends Record<string, unknown> {
   providers?: ProviderSummary[];
   provider_sets?: ProviderSetPayload;
+  database?: DatabaseConfigSnapshot;
   runtime_defaults?: SystemRuntimeConfig;
   runtime?: SystemRuntimeConfig;
   runtime_live?: SystemRuntimeConfig;

@@ -4,8 +4,11 @@
   import { onMount } from 'svelte';
 
   import { fetchConfig, saveConfig } from '$lib/api/client';
-  import JsonView from '$lib/components/JsonView.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
+  import StatusBadge from '$lib/components/StatusBadge.svelte';
+  import type { ProviderSetPayload, ProviderSummary } from '$lib/types';
+
+  type ProviderScope = 'gateway' | 'internal' | 'embedding' | 'rerank';
 
   let loading = true;
   let saving = false;
@@ -19,6 +22,8 @@
   let embeddingModel = '';
   let toolWriteEnabled = false;
   let maxInjectionTokens = 0;
+
+  const providerScopeOrder: ProviderScope[] = ['gateway', 'internal', 'embedding', 'rerank'];
 
   onMount(async () => {
     await loadConfig();
@@ -84,6 +89,54 @@
       saving = false;
     }
   }
+
+  function normalizeProviderSets(configPayload: Record<string, unknown>): Record<ProviderScope, ProviderSummary[]> {
+    const sets = (configPayload.provider_sets ?? {}) as ProviderSetPayload;
+    return {
+      gateway: sets.gateway ?? ((configPayload.providers as ProviderSummary[] | undefined) ?? []),
+      internal: sets.internal ?? [],
+      embedding: sets.embedding ?? [],
+      rerank: sets.rerank ?? []
+    };
+  }
+
+  function scopeTitle(scope: ProviderScope): string {
+    switch (scope) {
+      case 'gateway':
+        return 'Gateway';
+      case 'internal':
+        return 'Internal';
+      case 'embedding':
+        return 'Embedding';
+      case 'rerank':
+        return 'Rerank';
+    }
+  }
+
+  function scopeDescription(scope: ProviderScope): string {
+    switch (scope) {
+      case 'gateway':
+        return 'Proxy traffic defaults and public routes.';
+      case 'internal':
+        return 'Summary, analysis, and other internal model workloads.';
+      case 'embedding':
+        return 'Embedding generation isolated from chat credentials.';
+      case 'rerank':
+        return 'Candidate reranking providers for recall quality.';
+    }
+  }
+
+  $: providerSets = normalizeProviderSets(payload);
+  $: providerScopeCards = providerScopeOrder.map((scope) => ({
+    scope,
+    title: scopeTitle(scope),
+    description: scopeDescription(scope),
+    providers: providerSets[scope] ?? [],
+    defaultProvider:
+      scope === 'gateway' ? String(payload.default_provider ?? '') :
+      scope === 'internal' ? String(payload.internal_default_provider ?? '') :
+      ''
+  }));
 </script>
 
 <section class="page-stack">
@@ -156,8 +209,38 @@
             <h2 class="page-title" style="font-size: 1.35rem;">Current provider set summary</h2>
           </div>
         </div>
-        <JsonView value={payload.provider_sets ?? payload.providers ?? []} emptyLabel="No provider summary returned." />
+
+        <div class="grid-2 model-provider-grid">
+          {#each providerScopeCards as card}
+            <div class="debug-block" style="background: var(--bg-panel-muted);">
+              <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px; align-items: flex-start;">
+                <div>
+                  <div class="sidebar-label">{card.scope}</div>
+                  <strong>{card.title}</strong>
+                </div>
+                <StatusBadge tone={card.providers.length > 0 ? 'success' : 'warning'} label={`${card.providers.length} provider${card.providers.length === 1 ? '' : 's'}`} />
+              </div>
+              <div class="helper-text">{card.description}</div>
+              {#if card.defaultProvider}
+                <div class="helper-text" style="margin-top: 10px;">Default route: {card.defaultProvider}</div>
+              {/if}
+              <div class="helper-text" style="margin-top: 10px;">
+                Available: {card.providers.length > 0 ? card.providers.map((provider) => provider.provider).join(', ') : 'none'}
+              </div>
+            </div>
+          {/each}
+        </div>
+
+        <div class="inline-group" style="justify-content: flex-end; margin-top: 16px;">
+          <a class="button-secondary" href="/settings/providers">Open provider settings</a>
+        </div>
       </section>
     </div>
   {/if}
 </section>
+
+<style>
+  .model-provider-grid {
+    align-items: start;
+  }
+</style>

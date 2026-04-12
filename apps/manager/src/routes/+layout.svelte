@@ -11,12 +11,15 @@
 
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import TargetManagerDialog from '$lib/components/TargetManagerDialog.svelte';
-  import { fetchAdminSession, logoutAdmin } from '$lib/api/client';
+  import { fetchAdminSession, loginAdmin, logoutAdmin } from '$lib/api/client';
   import {
+    clearTargetAdminKey,
     initializeTargets,
+    peekTargetAdminKey,
     removeTarget,
     selectTarget,
     selectedTarget,
+    stageTargetAdminKey,
     targetState,
     updateSession,
     upsertTarget
@@ -77,12 +80,27 @@
     void refreshSession();
   }
 
-  async function refreshSession(): Promise<void> {
-    if (!$selectedTarget) {
+  async function refreshSession(target = $selectedTarget): Promise<void> {
+    if (!target) {
       return;
     }
     updateSession({ authenticated: false, checking: true });
-    updateSession(await fetchAdminSession($selectedTarget));
+    const pendingKey = peekTargetAdminKey(target.id);
+    let loginError = '';
+
+    if (pendingKey) {
+      try {
+        await loginAdmin(target, pendingKey);
+      } catch (error) {
+        loginError = error instanceof Error ? error.message : 'Auto sign-in failed';
+      }
+    }
+
+    const session = await fetchAdminSession(target);
+    if (loginError && !session.authenticated) {
+      session.error = loginError;
+    }
+    updateSession(session);
   }
 
   async function handleLogout(): Promise<void> {
@@ -90,12 +108,24 @@
       return;
     }
     await logoutAdmin($selectedTarget);
+    clearTargetAdminKey($selectedTarget.id);
     await refreshSession();
     await goto('/login');
   }
 
   function isActive(pathname: string, href: string): boolean {
     return pathname === href || pathname.startsWith(`${href}/`);
+  }
+
+  function refreshSelectedSession(): void {
+    void refreshSession();
+  }
+
+  function handleTargetSave(event: CustomEvent<{ target: Parameters<typeof upsertTarget>[0]; adminKey?: string }>): void {
+    const savedTarget = upsertTarget(event.detail.target);
+    stageTargetAdminKey(savedTarget.id, event.detail.adminKey);
+    lastTargetId = savedTarget.id;
+    void refreshSession(savedTarget);
   }
 </script>
 
@@ -109,7 +139,7 @@
     <div class="brand-block">
       <span class="sidebar-label">MemStation</span>
       <span class="brand-title">Manager Control Plane</span>
-      <span class="brand-subtitle">Direct-to-target operations console with gateway, memory, and queue diagnostics.</span>
+      <span class="brand-subtitle">Direct-to-target operations console.</span>
     </div>
 
     <div class="sidebar-section">
@@ -150,7 +180,6 @@
         <div class="inline-group" style="margin-bottom: 6px;">
           <span class="sidebar-label">Target</span>
           <StatusBadge tone="brand" label={$selectedTarget?.environment ?? 'unknown'} />
-          <StatusBadge tone="muted" label={$selectedTarget?.kind ?? 'single'} />
         </div>
         <div class="brand-title" style="font-size: 1rem;">{$selectedTarget?.label ?? 'No target selected'}</div>
         <div class="brand-subtitle">{$selectedTarget?.baseUrl ?? 'Select a MemStation target to begin.'}</div>
@@ -173,7 +202,7 @@
             </Select.Portal>
           </Select.Root>
         </div>
-        <button class="button-secondary" type="button" on:click={refreshSession} title="Refresh target session and health">
+        <button class="button-secondary" type="button" on:click={refreshSelectedSession} title="Refresh target session and health">
           <RefreshCw size={16} />
           Refresh
         </button>
@@ -195,6 +224,6 @@
   bind:open={targetDialogOpen}
   targets={$targetState.targets}
   selectedId={$targetState.selectedId}
-  on:save={(event) => upsertTarget(event.detail)}
+  on:save={handleTargetSave}
   on:remove={(event) => removeTarget(event.detail.id)}
 />

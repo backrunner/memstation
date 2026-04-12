@@ -4,7 +4,7 @@
   import { goto } from '$app/navigation';
 
   import { loginAdmin } from '$lib/api/client';
-  import { selectedTarget, targetState, updateSession } from '$lib/stores/targets';
+  import { selectedTarget, stageTargetAdminKey, targetState, updateSession } from '$lib/stores/targets';
 
   let token = '';
   let error = '';
@@ -19,7 +19,9 @@
     submitting = true;
     error = '';
     try {
-      await loginAdmin($selectedTarget, token.trim());
+      const adminToken = token.trim();
+      await loginAdmin($selectedTarget, adminToken);
+      stageTargetAdminKey($selectedTarget.id, adminToken);
       updateSession({ authenticated: true, checking: false, checkedAt: new Date().toISOString() });
       token = '';
       await goto('/dashboard');
@@ -36,7 +38,7 @@
     <span class="sidebar-label">Admin Access</span>
     <h1 class="page-title">Sign in to the selected MemStation target</h1>
     <p class="page-description">
-      The manager never stores the admin token in browser storage. The token is posted directly to the selected target, which issues the admin session cookie.
+      The manager never stores the admin token in browser storage. The token stays in memory for the current tab and is also exchanged for the target's admin session cookie when supported.
     </p>
   </div>
 

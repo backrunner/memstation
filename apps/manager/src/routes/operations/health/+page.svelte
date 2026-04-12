@@ -8,6 +8,13 @@
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type { AdminConfigPayload, HealthPayload, ProviderDiagnostic, QueueInfo } from '$lib/types';
 
+  type RuntimeDriftEntry = {
+    key: string;
+    applyMode: string;
+    desired: string;
+    live: string;
+  };
+
   let loading = true;
   let error = '';
   let config: AdminConfigPayload | null = null;
@@ -22,6 +29,7 @@
   let worstLatency = 0;
   let degradedProviders = 0;
   let warningProviders = 0;
+  let runtimeDriftEntries: RuntimeDriftEntry[] = [];
 
   onMount(async () => {
     await loadHealth();
@@ -63,23 +71,36 @@
 
   $: liveOverrides = Object.entries(config?.runtime_meta ?? {}).filter(([key, meta]) => {
     const desired = config?.runtime?.[key as keyof NonNullable<typeof config.runtime>];
+    const defaults = config?.runtime_defaults?.[key as keyof NonNullable<typeof config.runtime_defaults>];
     const liveValue = config?.runtime_live?.[key as keyof NonNullable<typeof config.runtime_live>];
-    return meta.apply_mode === 'live' && JSON.stringify(desired) !== JSON.stringify(liveValue);
+    return meta.apply_mode === 'live'
+      && JSON.stringify(desired) === JSON.stringify(liveValue)
+      && JSON.stringify(desired) !== JSON.stringify(defaults);
   }).length;
 
   $: backlogTotal = queues.reduce((sum, queue) => sum + queue.pending + queue.retry + (queue.archived ?? 0), 0);
   $: worstLatency = queues.reduce((max, queue) => Math.max(max, queue.latency_ms ?? 0), 0);
   $: degradedProviders = providers.filter((item) => item.status === 'degraded').length;
   $: warningProviders = providers.filter((item) => item.status === 'warning').length;
+  $: runtimeDriftEntries = Object.entries(config?.runtime_meta ?? {})
+    .filter(([key]) => {
+      const desired = config?.runtime?.[key as keyof NonNullable<typeof config.runtime>];
+      const liveValue = config?.runtime_live?.[key as keyof NonNullable<typeof config.runtime_live>];
+      return JSON.stringify(desired) !== JSON.stringify(liveValue);
+    })
+    .map(([key, meta]) => ({
+      key,
+      applyMode: meta.apply_mode,
+      desired: JSON.stringify(config?.runtime?.[key as keyof NonNullable<typeof config.runtime>]),
+      live: JSON.stringify(config?.runtime_live?.[key as keyof NonNullable<typeof config.runtime_live>])
+    }));
 </script>
 
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">Operations / Health</span>
     <h1 class="page-title">Live and readiness signals</h1>
-    <p class="page-description">
-      Compare liveness and readiness responses, then drill into per-component readiness to identify degraded dependencies quickly.
-    </p>
+    <p class="page-description">Readiness, dependency drift, queues, and provider posture for the selected target.</p>
   </div>
 
   {#if !$targetState.session.authenticated}
@@ -93,27 +114,27 @@
       <div class="kpi-card">
         <span class="kpi-label">Readiness</span>
         <span class="kpi-value">{ready?.status ?? 'unknown'}</span>
-        <span class="kpi-meta">Current dependency gate.</span>
+        <span class="kpi-meta">Current gate.</span>
       </div>
       <div class="kpi-card">
         <span class="kpi-label">Restart Pending</span>
         <span class="kpi-value">{restartPending}</span>
-        <span class="kpi-meta">Saved runtime settings not yet active in this process.</span>
+        <span class="kpi-meta">Need restart.</span>
       </div>
       <div class="kpi-card">
         <span class="kpi-label">Live Overrides</span>
         <span class="kpi-value">{liveOverrides}</span>
-        <span class="kpi-meta">Hot-applied runtime changes active on the target.</span>
+        <span class="kpi-meta">Applied now.</span>
       </div>
       <div class="kpi-card">
         <span class="kpi-label">Queue Pressure</span>
         <span class="kpi-value">{backlogTotal}</span>
-        <span class="kpi-meta">Pending, retry, and archived tasks across worker lanes.</span>
+        <span class="kpi-meta">Queued work.</span>
       </div>
       <div class="kpi-card">
         <span class="kpi-label">Provider Issues</span>
         <span class="kpi-value">{degradedProviders + warningProviders}</span>
-        <span class="kpi-meta">Credential or endpoint posture requiring review.</span>
+        <span class="kpi-meta">Need review.</span>
       </div>
     </div>
 
@@ -172,22 +193,22 @@
           </div>
           <a class="button-ghost" href="/settings/system">Open system settings</a>
         </div>
-        <div class="toolbar">
-          {#each Object.entries(config?.runtime_meta ?? {}) as [key, meta]}
-            <div class="debug-block">
-              <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
-                <strong>{key}</strong>
-                <div class="runtime-field-status">
-                  <StatusBadge tone={meta.apply_mode === 'live' ? 'success' : 'warning'} label={meta.apply_mode} />
-                  <StatusBadge tone={meta.source === 'override' ? 'brand' : 'muted'} label={meta.source} />
+        {#if runtimeDriftEntries.length === 0}
+          <div class="notice-card">No runtime drift.</div>
+        {:else}
+          <div class="toolbar">
+            {#each runtimeDriftEntries as entry}
+              <div class="debug-block">
+                <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
+                  <strong>{entry.key}</strong>
+                  <StatusBadge tone={entry.applyMode === 'live' ? 'danger' : 'warning'} label={entry.applyMode === 'live' ? 'drift' : 'restart'} />
                 </div>
+                <div class="helper-text">desired {entry.desired}</div>
+                <div class="helper-text">live {entry.live}</div>
               </div>
-              <div class="helper-text">{meta.description}</div>
-              <div class="helper-text" style="margin-top: 8px;">desired: {JSON.stringify(config?.runtime?.[key as keyof NonNullable<typeof config.runtime>])}</div>
-              <div class="helper-text">live: {JSON.stringify(config?.runtime_live?.[key as keyof NonNullable<typeof config.runtime_live>])}</div>
-            </div>
-          {/each}
-        </div>
+            {/each}
+          </div>
+        {/if}
       </section>
 
       <section class="card">
@@ -229,12 +250,7 @@
           <div class="debug-block">
             <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
               <strong>{provider.scope} / {provider.provider}</strong>
-              <div class="runtime-field-status">
-                <StatusBadge tone={provider.status === 'ready' ? 'success' : provider.status === 'degraded' ? 'danger' : 'warning'} label={provider.status} />
-                {#if provider.is_desired_default}
-                  <StatusBadge tone="brand" label="desired default" />
-                {/if}
-              </div>
+              <StatusBadge tone={provider.status === 'ready' ? 'success' : provider.status === 'degraded' ? 'danger' : 'warning'} label={provider.status} />
             </div>
             <div class="helper-text">{provider.host ?? provider.base_url}</div>
             <div class="helper-text">timeout {provider.live_timeout_seconds}s live / {provider.desired_timeout_seconds}s desired</div>

@@ -20,6 +20,11 @@ const runtimeDefaults = Object.freeze({
   token_threshold: 64000,
   max_context_tokens: 8192,
   max_injection_tokens: 2048,
+  rerank_model: 'cohere:rerank-v3.5',
+  rerank_candidate_multiplier: 6,
+  rerank_min_candidates: 20,
+  rerank_max_candidates: 50,
+  rerank_blend_weight: 0.35,
   rate_limit_rps: 20,
   rate_limit_burst: 40,
   cache_ttl_seconds: 120,
@@ -28,20 +33,25 @@ const runtimeDefaults = Object.freeze({
 });
 
 const runtimeMeta = Object.freeze({
-  default_provider: { apply_mode: 'restart', source: 'default', category: 'traffic', description: 'Default gateway provider for automatic routing.' },
-  internal_default_provider: { apply_mode: 'restart', source: 'default', category: 'traffic', description: 'Default internal provider for summary and analysis workloads.' },
-  vector_store_backend: { apply_mode: 'restart', source: 'default', category: 'memory', description: 'Vector store backend selection.' },
+  default_provider: { apply_mode: 'live', source: 'default', category: 'traffic', description: 'Default gateway provider for automatic routing.' },
+  internal_default_provider: { apply_mode: 'live', source: 'default', category: 'traffic', description: 'Default internal provider for summary and analysis workloads.' },
+  vector_store_backend: { apply_mode: 'live', source: 'default', category: 'memory', description: 'Vector store backend selection.' },
   conversation_timeout_seconds: { apply_mode: 'live', source: 'default', category: 'traffic', description: 'Conversation idle timeout.' },
-  provider_timeout_seconds: { apply_mode: 'restart', source: 'default', category: 'traffic', description: 'Per-provider upstream timeout.' },
+  provider_timeout_seconds: { apply_mode: 'live', source: 'default', category: 'traffic', description: 'Per-provider upstream timeout.' },
   message_threshold: { apply_mode: 'live', source: 'default', category: 'traffic', description: 'Message count threshold for finalize.' },
   token_threshold: { apply_mode: 'live', source: 'default', category: 'traffic', description: 'Token threshold for finalize.' },
-  max_context_tokens: { apply_mode: 'restart', source: 'default', category: 'memory', description: 'Injection context budget.' },
+  max_context_tokens: { apply_mode: 'live', source: 'default', category: 'memory', description: 'Injection context budget.' },
   max_injection_tokens: { apply_mode: 'live', source: 'default', category: 'memory', description: 'Max injected memory tokens.' },
+  rerank_model: { apply_mode: 'live', source: 'default', category: 'memory', description: 'Provider-prefixed rerank model reference.' },
+  rerank_candidate_multiplier: { apply_mode: 'live', source: 'default', category: 'memory', description: 'Vector expansion factor before reranking.' },
+  rerank_min_candidates: { apply_mode: 'live', source: 'default', category: 'memory', description: 'Minimum candidate pool sent into reranking.' },
+  rerank_max_candidates: { apply_mode: 'live', source: 'default', category: 'memory', description: 'Maximum candidate pool sent into reranking.' },
+  rerank_blend_weight: { apply_mode: 'live', source: 'default', category: 'memory', description: 'Blend factor applied to rerank scores.' },
   rate_limit_rps: { apply_mode: 'live', source: 'default', category: 'web', description: 'Gateway rate limit per second.' },
   rate_limit_burst: { apply_mode: 'live', source: 'default', category: 'web', description: 'Gateway burst allowance.' },
   cache_ttl_seconds: { apply_mode: 'live', source: 'default', category: 'memory', description: 'Cache TTL in seconds.' },
-  cors_allowed_origins: { apply_mode: 'restart', source: 'default', category: 'web', description: 'Allowed manager origins.' },
-  session_cookie_cross_site: { apply_mode: 'restart', source: 'default', category: 'web', description: 'Cross-site cookie mode.' }
+  cors_allowed_origins: { apply_mode: 'live', source: 'default', category: 'web', description: 'Allowed manager origins.' },
+  session_cookie_cross_site: { apply_mode: 'live', source: 'default', category: 'web', description: 'Cross-site cookie mode.' }
 });
 
 const providerSetDefaults = Object.freeze({
@@ -122,6 +132,24 @@ const providerSetDefaults = Object.freeze({
       has_api_key: true,
       source: 'fixture'
     }
+  ],
+  rerank: [
+    {
+      provider: 'cohere',
+      base_url: 'https://api.cohere.com/v2',
+      host: 'api.cohere.com',
+      scheme: 'https',
+      has_api_key: true,
+      source: 'fixture'
+    },
+    {
+      provider: 'jina',
+      base_url: 'https://api.jina.ai/v1',
+      host: 'api.jina.ai',
+      scheme: 'https',
+      has_api_key: false,
+      source: 'fixture'
+    }
   ]
 });
 
@@ -132,6 +160,14 @@ const modelDefaults = Object.freeze({
   embedding_model: 'text-embedding-3-large',
   tool_write_enabled: false,
   max_injection_tokens: 2048
+});
+
+const databaseDefault = Object.freeze({
+  configured: true,
+  source: 'env',
+  status: 'ready',
+  display: 'postgres://fixture:****@127.0.0.1:5432/memstation?sslmode=disable',
+  updated_at: isoOffset(180)
 });
 
 let state = createState();
@@ -385,15 +421,28 @@ function runtimeDefaultFieldForScope(scope) {
   }
 }
 
+function buildRuntimeMeta() {
+  return Object.fromEntries(
+    Object.entries(state.runtime_meta).map(([key, meta]) => [
+      key,
+      {
+        ...meta,
+        source: state.runtime_override_keys[key] ? 'override' : 'default'
+      }
+    ])
+  );
+}
+
 function buildConfigPayload() {
   const providerSets = providerSetSummaries();
   return {
     providers: providerSets.gateway || [],
     provider_sets: providerSets,
+    database: clone(state.database),
     runtime_defaults: clone(state.runtime_defaults),
     runtime: clone(state.runtime),
     runtime_live: clone(state.runtime_live),
-    runtime_meta: clone(state.runtime_meta),
+    runtime_meta: buildRuntimeMeta(),
     ...clone(state.model_settings)
   };
 }
@@ -458,6 +507,43 @@ function applyProviderOverride(scope, providerName, providerPatch) {
     target.source = 'override';
   }
   target.updated_at = nowISO();
+}
+
+function maskDatabaseURL(value) {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return '';
+  }
+  try {
+    const parsed = new URL(raw);
+    if (parsed.password) {
+      parsed.password = '****';
+    }
+    return parsed.toString();
+  } catch {
+    return '[configured]';
+  }
+}
+
+function databaseSnapshot(urlValue, source = 'override') {
+  const trimmed = String(urlValue || '').trim();
+  if (!trimmed) {
+    return {
+      configured: false,
+      source: 'unset',
+      status: 'inactive',
+      display: '',
+      updated_at: nowISO()
+    };
+  }
+  return {
+    configured: true,
+    source,
+    status: trimmed.includes('invalid') ? 'degraded' : 'ready',
+    display: maskDatabaseURL(trimmed),
+    last_error: trimmed.includes('invalid') ? 'fixture failed to connect to the requested database' : '',
+    updated_at: nowISO()
+  };
 }
 
 function createPreview(conversationId, userText) {
@@ -1415,10 +1501,12 @@ function createState() {
   };
 
   return {
+    database: clone(databaseDefault),
     runtime_defaults: clone(runtimeDefaults),
     runtime: clone(runtimeDefaults),
     runtime_live: clone(runtimeDefaults),
     runtime_meta: clone(runtimeMeta),
+    runtime_override_keys: {},
     provider_sets: Object.fromEntries(
       Object.entries(providerSetDefaults).map(([scope, providers]) => [
         scope,
@@ -2005,16 +2093,21 @@ const server = http.createServer(async (req, res) => {
     const body = await readJSON(req);
     const runtimePatch = body.runtime || {};
     const nextRuntime = { ...state.runtime };
+    const nextRuntimeOverrideKeys = { ...state.runtime_override_keys };
     for (const [key, value] of Object.entries(runtimePatch)) {
       if (value === null) {
         nextRuntime[key] = clone(state.runtime_defaults[key]);
+        delete nextRuntimeOverrideKeys[key];
       } else if (key === 'cors_allowed_origins' && Array.isArray(value)) {
         nextRuntime[key] = value.map(String);
+        nextRuntimeOverrideKeys[key] = true;
       } else if (value !== undefined) {
         nextRuntime[key] = value;
+        nextRuntimeOverrideKeys[key] = true;
       }
     }
     state.runtime = nextRuntime;
+    state.runtime_override_keys = nextRuntimeOverrideKeys;
     for (const [key, meta] of Object.entries(state.runtime_meta)) {
       if (meta.apply_mode === 'live' && key in runtimePatch) {
         state.runtime_live[key] = clone(state.runtime[key]);
@@ -2038,6 +2131,14 @@ const server = http.createServer(async (req, res) => {
     if (body.providers && typeof body.providers === 'object') {
       for (const [providerName, providerPatch] of Object.entries(body.providers)) {
         applyProviderOverride('gateway', providerName, providerPatch);
+      }
+    }
+
+    if (body.database && typeof body.database === 'object') {
+      if (body.database.clear) {
+        state.database = clone(databaseDefault);
+      } else if (typeof body.database.url === 'string') {
+        state.database = databaseSnapshot(body.database.url, 'override');
       }
     }
 

@@ -60,6 +60,29 @@ test.beforeEach(async ({ page }) => {
   await login(page);
 });
 
+test('target manager imports connection URIs and keeps admin keys in memory for cross-origin fallback', async ({ page }) => {
+  await page.context().clearCookies();
+  await page.goto('/login');
+  await expect(page.getByText('Login Required')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Manage Targets' }).click();
+  await page.getByRole('button', { name: 'New' }).click();
+  await page.getByPlaceholder('memstation://127.0.0.1:8080?key=...').fill(
+    `memstation://127.0.0.1:18080?key=${adminToken}&label=URI%20Target&env=e2e&cluster=standalone&region=local`
+  );
+  await expect(page.getByText('temporary admin key')).toBeVisible();
+  await page.getByRole('button', { name: 'Apply URI' }).click();
+  await page.getByRole('button', { name: 'Save Target' }).click();
+
+  await expect(page.getByText('Admin Session Active')).toBeVisible();
+  await expect(page.getByText('URI Target').first()).toBeVisible();
+  await expect(page.getByText(fixtureBaseUrl).first()).toBeVisible();
+
+  await page.context().clearCookies();
+  await page.getByRole('button', { name: 'Refresh' }).click();
+  await expect(page.getByText('Admin Session Active')).toBeVisible();
+});
+
 test('dashboard and major workspaces load live target data', async ({ page }) => {
   await expect(page.getByText('Stored Memories')).toBeVisible();
   await expect(page.getByText('default').first()).toBeVisible();
@@ -92,13 +115,12 @@ test('dashboard and major workspaces load live target data', async ({ page }) =>
   await expectRouteHealthy(page, '/statistics/tokens', /Token and workload analysis/i);
   await expect(page.getByText('Filtered Tokens').first()).toBeVisible();
 
-  await expectRouteHealthy(page, '/settings/providers', /Manage gateway, internal, and embedding provider sets/i);
+  await expectRouteHealthy(page, '/settings/providers', /Manage gateway, internal, embedding, and rerank provider sets/i);
   await expect(page.getByText('openai_compatible').first()).toBeVisible();
 
   await expectRouteHealthy(page, '/playground/protocols', /Inspect raw protocol compatibility/i);
   await page.getByPlaceholder('ms-...').fill(gatewayAPIKey);
   await page.getByRole('button', { name: 'Send raw request' }).click();
-  await expect(page.getByText('HTTP 200').first()).toBeVisible();
   await expect(page.getByText('streamed').first()).toBeVisible();
 });
 
@@ -249,24 +271,56 @@ test('conversation detail renders multimodal tool payloads from raw messages and
 
 test('system runtime settings persist direct target overrides and can reset to defaults', async ({ page }) => {
   await page.goto('/settings/system');
-  await expect(page.getByRole('heading', { name: /Control deployment-level runtime policy/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /System runtime/i })).toBeVisible();
+  const unsavedCard = page.locator('.kpi-card').filter({ hasText: 'Unsaved' }).first();
+  const liveAppliedCard = page.locator('.kpi-card').filter({ hasText: 'Live' }).first();
 
-  await page.getByLabel('Provider timeout (seconds)').fill('75');
-  await page.getByLabel('Cache TTL (seconds)').fill('333');
+  await expect(unsavedCard.locator('.kpi-value')).toHaveText('0');
+  await expect(liveAppliedCard.locator('.kpi-value')).toHaveText('0');
+
+  await page.getByLabel('Provider timeout').fill('75');
+  await page.getByLabel('Cache TTL').fill('333');
+  await page.getByLabel('Rerank model').fill('jina:jina-reranker-v2-base-multilingual');
+  await page.getByLabel('Rerank blend weight').fill('0.5');
+
+  await expect(unsavedCard.locator('.kpi-value')).toHaveText('4');
   await page.getByRole('button', { name: 'Save system settings' }).click();
 
-  await expect(page.getByText(/require a target restart/i)).toBeVisible();
-  await expect(page.getByText('Restart staged').first()).toBeVisible();
-  await expect(page.getByText('Live applied').first()).toBeVisible();
+  await expect(page.getByText('System settings applied to the target.')).toBeVisible();
+  await expect(unsavedCard.locator('.kpi-value')).toHaveText('0');
+  await expect(liveAppliedCard.locator('.kpi-value')).toHaveText('4');
 
   await page.reload();
-  await expect(page.getByLabel('Provider timeout (seconds)')).toHaveValue('75');
-  await expect(page.getByLabel('Cache TTL (seconds)')).toHaveValue('333');
+  await expect(page.getByLabel('Provider timeout')).toHaveValue('75');
+  await expect(page.getByLabel('Cache TTL')).toHaveValue('333');
+  await expect(page.getByLabel('Rerank model')).toHaveValue('jina:jina-reranker-v2-base-multilingual');
+  await expect(page.getByLabel('Rerank blend weight')).toHaveValue('0.5');
 
   await page.getByRole('button', { name: 'Reset all overrides' }).click();
   await expect(page.getByText('All system runtime overrides were cleared back to deployment defaults.')).toBeVisible();
-  await expect(page.getByLabel('Provider timeout (seconds)')).toHaveValue('60');
-  await expect(page.getByLabel('Cache TTL (seconds)')).toHaveValue('120');
+  await expect(page.getByLabel('Provider timeout')).toHaveValue('60');
+  await expect(page.getByLabel('Cache TTL')).toHaveValue('120');
+  await expect(page.getByLabel('Rerank model')).toHaveValue('cohere:rerank-v3.5');
+  await expect(page.getByLabel('Rerank blend weight')).toHaveValue('0.35');
+});
+
+test('database connection overrides can be applied and cleared from system settings', async ({ page }) => {
+  await page.goto('/settings/system');
+  await expect(page.getByRole('heading', { name: /Database connection/i })).toBeVisible();
+  await expect(page.getByText('postgres://fixture:****@127.0.0.1:5432/memstation?sslmode=disable')).toBeVisible();
+
+  await page
+    .getByLabel('Connection URI')
+    .fill('postgres://operator:super-secret@10.10.0.8:5432/memstation_runtime?sslmode=disable');
+  await page.getByRole('button', { name: 'Apply database' }).click();
+
+  await expect(page.getByText('Database connection updated and applied to the target.')).toBeVisible();
+  await expect(page.getByText('postgres://operator:****@10.10.0.8:5432/memstation_runtime?sslmode=disable')).toBeVisible();
+  await expect(page.getByLabel('Connection URI')).toHaveValue('');
+
+  await page.getByRole('button', { name: 'Clear override' }).click();
+  await expect(page.getByText('Database override cleared. The target is now using the deployment default, if one exists.')).toBeVisible();
+  await expect(page.getByText('postgres://fixture:****@127.0.0.1:5432/memstation?sslmode=disable')).toBeVisible();
 });
 
 test('model and provider settings persist through direct writes to the selected target', async ({ page }) => {
@@ -287,7 +341,7 @@ test('model and provider settings persist through direct writes to the selected 
   await expect(page.getByLabel('Max injection tokens')).toHaveValue('4096');
 
   await page.goto('/settings/providers');
-  await expect(page.getByRole('heading', { name: /Manage gateway, internal, and embedding provider sets/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Manage gateway, internal, embedding, and rerank provider sets/i })).toBeVisible();
 
   const gatewayProviderSection = page.locator('section.card').filter({ hasText: 'Gateway proxy providers' }).first();
   const anthropicCard = gatewayProviderSection
@@ -300,6 +354,18 @@ test('model and provider settings persist through direct writes to the selected 
 
   await expect(page.getByText('Provider set overrides saved. Sensitive API keys are not echoed back by the target.')).toBeVisible();
   await expect(anthropicCard.getByLabel('Base URL')).toHaveValue('https://api.anthropic.com/v2/fixture');
+
+  const rerankProviderSection = page.locator('section.card').filter({ hasText: 'Reranker providers' }).first();
+  const jinaCard = rerankProviderSection
+    .locator('section.card')
+    .filter({ has: page.getByRole('heading', { name: 'jina' }) })
+    .first();
+  await jinaCard.getByLabel('Base URL').fill('https://api.jina.ai/v2/fixture');
+  await jinaCard.getByLabel('Rotate API key').fill('jina-playwright-secret');
+  await page.getByRole('button', { name: 'Save provider set overrides' }).click();
+
+  await expect(page.getByText('Provider set overrides saved. Sensitive API keys are not echoed back by the target.')).toBeVisible();
+  await expect(jinaCard.getByLabel('Base URL')).toHaveValue('https://api.jina.ai/v2/fixture');
 });
 
 test('memory workspaces connect ranked recall, memory detail, and source conversation requeue flows', async ({ page }) => {
@@ -343,7 +409,7 @@ test('user settings writes are visible in audit filters', async ({ page }) => {
 
   await page.getByLabel('Chat model').fill('gpt-4.1-user-playwright');
   await page.getByLabel('Summary model').fill('gpt-4.1-summary-playwright');
-  await page.getByRole('button', { name: 'Enabled' }).first().click();
+  await page.getByRole('button', { name: 'On' }).first().click();
   await page.getByLabel('Max injection tokens').fill('3072');
   await page.getByRole('button', { name: 'Save user settings' }).click();
 

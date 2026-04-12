@@ -1,6 +1,8 @@
 import { browser } from '$app/environment';
 import { derived, get, writable } from 'svelte/store';
 
+import { forgetAdminKey, getAdminKey, rememberAdminKey } from '$lib/targets/admin-keys';
+import { parseTargetLocator } from '$lib/targets/uri';
 import type { AdminSessionState, MemStationTarget } from '$lib/types';
 
 const TARGETS_STORAGE_KEY = 'memstation.manager.targets';
@@ -17,16 +19,35 @@ function normalizeBaseUrl(value: string): string {
   return value.trim().replace(/\/$/, '');
 }
 
+function stageInitialTarget(input: string | undefined): Partial<MemStationTarget> | null {
+  const value = input?.trim();
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = parseTargetLocator(value);
+    if (parsed.adminKey) {
+      rememberAdminKey('local-default', parsed.adminKey);
+    }
+    return parsed.target;
+  } catch (error) {
+    console.warn('failed to parse PUBLIC_MEMSTATION_DEFAULT_TARGET', error);
+    return null;
+  }
+}
+
 function defaultTarget(): MemStationTarget {
-  const baseUrl = normalizeBaseUrl(import.meta.env.PUBLIC_MEMSTATION_DEFAULT_TARGET ?? 'http://localhost:8080');
+  const staged = stageInitialTarget(import.meta.env.PUBLIC_MEMSTATION_DEFAULT_TARGET);
+  const baseUrl = normalizeBaseUrl(staged?.baseUrl ?? 'http://localhost:8080');
   return {
     id: 'local-default',
-    label: 'Local Dev',
+    label: staged?.label?.trim() || 'Local Dev',
     baseUrl,
-    environment: 'local',
-    clusterName: 'standalone',
-    region: 'local',
-    kind: 'single'
+    environment: staged?.environment?.trim() || 'local',
+    clusterName: staged?.clusterName?.trim() || 'standalone',
+    region: staged?.region?.trim() || 'local',
+    kind: staged?.kind ?? 'single'
   };
 }
 
@@ -102,7 +123,8 @@ export function selectTarget(targetId: string): void {
   });
 }
 
-export function upsertTarget(input: Partial<MemStationTarget>): void {
+export function upsertTarget(input: Partial<MemStationTarget>): MemStationTarget {
+  let savedTarget = defaultTarget();
   targetState.update((state) => {
     const current = input.id ? state.targets.find((item) => item.id === input.id) : undefined;
     const nextTarget: MemStationTarget = {
@@ -122,11 +144,14 @@ export function upsertTarget(input: Partial<MemStationTarget>): void {
     const next = {
       ...state,
       targets,
-      selectedId: nextTarget.id
+      selectedId: nextTarget.id,
+      session: { authenticated: false, checking: true }
     };
     persistState(next);
+    savedTarget = nextTarget;
     return next;
   });
+  return savedTarget;
 }
 
 export function removeTarget(targetId: string): void {
@@ -145,10 +170,23 @@ export function removeTarget(targetId: string): void {
     persistState(next);
     return next;
   });
+  forgetAdminKey(targetId);
 }
 
 export function updateSession(session: AdminSessionState): void {
   targetState.update((state) => ({ ...state, session }));
+}
+
+export function stageTargetAdminKey(targetId: string, adminKey: string | undefined): void {
+  rememberAdminKey(targetId, adminKey);
+}
+
+export function peekTargetAdminKey(targetId: string): string | undefined {
+  return getAdminKey(targetId);
+}
+
+export function clearTargetAdminKey(targetId: string): void {
+  forgetAdminKey(targetId);
 }
 
 export function currentTarget(): MemStationTarget {
