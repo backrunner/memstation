@@ -184,6 +184,10 @@ function isoOffset(minutes) {
   return new Date(Date.now() - minutes * 60 * 1000).toISOString();
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function json(req, res, payload, status = 200, extraHeaders = {}) {
   setCORSHeaders(req, res);
   res.writeHead(status, {
@@ -907,7 +911,16 @@ function normalizeInboundMessages(protocol, payload) {
   }
 }
 
-function writeChatCompletionStream(req, res, requestId, responseText, thinking, usage) {
+async function writeFrames(res, frames, chunkDelayMs = 0) {
+  for (const frame of frames) {
+    res.write(frame);
+    if (chunkDelayMs > 0) {
+      await sleep(chunkDelayMs);
+    }
+  }
+}
+
+async function writeChatCompletionStream(req, res, requestId, responseText, thinking, usage, chunkDelayMs = 0) {
   setCORSHeaders(req, res);
   res.writeHead(200, {
     'Content-Type': 'text/event-stream; charset=utf-8',
@@ -917,14 +930,24 @@ function writeChatCompletionStream(req, res, requestId, responseText, thinking, 
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Expose-Headers': gatewayExposeHeaders
   });
-  res.write(`data: ${JSON.stringify({ id: `chatcmpl-${requestId}`, choices: [{ delta: { role: 'assistant', reasoning: thinking } }] })}\n\n`);
-  res.write(`data: ${JSON.stringify({ id: `chatcmpl-${requestId}`, choices: [{ delta: { content: responseText.slice(0, Math.ceil(responseText.length / 2)) } }] })}\n\n`);
-  res.write(`data: ${JSON.stringify({ id: `chatcmpl-${requestId}`, choices: [{ delta: { content: responseText.slice(Math.ceil(responseText.length / 2)) } }], usage: { prompt_tokens: usage.input_tokens, completion_tokens: usage.output_tokens, total_tokens: usage.total_tokens } })}\n\n`);
-  res.write('data: [DONE]\n\n');
+  await writeFrames(
+    res,
+    [
+      `data: ${JSON.stringify({ id: `chatcmpl-${requestId}`, choices: [{ delta: { role: 'assistant', reasoning: thinking } }] })}\n\n`,
+      `data: ${JSON.stringify({ id: `chatcmpl-${requestId}`, choices: [{ delta: { content: responseText.slice(0, Math.ceil(responseText.length / 2)) } }] })}\n\n`,
+      `data: ${JSON.stringify({
+        id: `chatcmpl-${requestId}`,
+        choices: [{ delta: { content: responseText.slice(Math.ceil(responseText.length / 2)) } }],
+        usage: { prompt_tokens: usage.input_tokens, completion_tokens: usage.output_tokens, total_tokens: usage.total_tokens }
+      })}\n\n`,
+      'data: [DONE]\n\n'
+    ],
+    chunkDelayMs
+  );
   res.end();
 }
 
-function writeResponsesStream(req, res, responseText, thinking) {
+async function writeResponsesStream(req, res, responseText, thinking, chunkDelayMs = 0) {
   setCORSHeaders(req, res);
   res.writeHead(200, {
     'Content-Type': 'text/event-stream; charset=utf-8',
@@ -934,14 +957,20 @@ function writeResponsesStream(req, res, responseText, thinking) {
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Expose-Headers': gatewayExposeHeaders
   });
-  res.write(`event: response.reasoning.delta\ndata: ${JSON.stringify({ type: 'response.reasoning.delta', delta: thinking })}\n\n`);
-  res.write(`event: response.output_text.delta\ndata: ${JSON.stringify({ type: 'response.output_text.delta', delta: responseText.slice(0, Math.ceil(responseText.length / 2)) })}\n\n`);
-  res.write(`event: response.output_text.delta\ndata: ${JSON.stringify({ type: 'response.output_text.delta', delta: responseText.slice(Math.ceil(responseText.length / 2)) })}\n\n`);
-  res.write('data: [DONE]\n\n');
+  await writeFrames(
+    res,
+    [
+      `event: response.reasoning.delta\ndata: ${JSON.stringify({ type: 'response.reasoning.delta', delta: thinking })}\n\n`,
+      `event: response.output_text.delta\ndata: ${JSON.stringify({ type: 'response.output_text.delta', delta: responseText.slice(0, Math.ceil(responseText.length / 2)) })}\n\n`,
+      `event: response.output_text.delta\ndata: ${JSON.stringify({ type: 'response.output_text.delta', delta: responseText.slice(Math.ceil(responseText.length / 2)) })}\n\n`,
+      'data: [DONE]\n\n'
+    ],
+    chunkDelayMs
+  );
   res.end();
 }
 
-function writeAnthropicStream(req, res, responseText, thinking) {
+async function writeAnthropicStream(req, res, responseText, thinking, chunkDelayMs = 0) {
   setCORSHeaders(req, res);
   res.writeHead(200, {
     'Content-Type': 'text/event-stream; charset=utf-8',
@@ -951,16 +980,23 @@ function writeAnthropicStream(req, res, responseText, thinking) {
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Expose-Headers': gatewayExposeHeaders
   });
-  res.write(`event: content_block_start\ndata: ${JSON.stringify({ type: 'content_block_start', content_block: { type: 'thinking', text: thinking } })}\n\n`);
-  res.write(`event: content_block_delta\ndata: ${JSON.stringify({ type: 'content_block_delta', delta: { type: 'text', text: responseText.slice(0, Math.ceil(responseText.length / 2)) } })}\n\n`);
-  res.write(`event: content_block_delta\ndata: ${JSON.stringify({ type: 'content_block_delta', delta: { type: 'text', text: responseText.slice(Math.ceil(responseText.length / 2)) } })}\n\n`);
-  res.write('data: [DONE]\n\n');
+  await writeFrames(
+    res,
+    [
+      `event: content_block_start\ndata: ${JSON.stringify({ type: 'content_block_start', content_block: { type: 'thinking', text: thinking } })}\n\n`,
+      `event: content_block_delta\ndata: ${JSON.stringify({ type: 'content_block_delta', delta: { type: 'text', text: responseText.slice(0, Math.ceil(responseText.length / 2)) } })}\n\n`,
+      `event: content_block_delta\ndata: ${JSON.stringify({ type: 'content_block_delta', delta: { type: 'text', text: responseText.slice(Math.ceil(responseText.length / 2)) } })}\n\n`,
+      'data: [DONE]\n\n'
+    ],
+    chunkDelayMs
+  );
   res.end();
 }
 
-function handleGatewayRequest(protocol, req, res, body) {
+async function handleGatewayRequest(protocol, req, res, body) {
   const stream = body.stream !== false;
   const userText = extractLastUserText(protocol, body);
+  const normalizedUserText = userText.toLowerCase();
   const conversationId = String(req.headers['x-memstation-session'] || `playground-${randomUUID()}`);
   const requestId = `req-${state.next_request_id++}`;
   const memoryPersist = req.headers['x-memstation-memory-persist'] !== 'false';
@@ -973,6 +1009,7 @@ function handleGatewayRequest(protocol, req, res, body) {
   const responseText = `Fixture stream response for: ${userText}`;
   const thinking = 'Reviewing retrieved fixture memory before composing the answer.';
   const usage = { input_tokens: 18, output_tokens: 14, total_tokens: 32 };
+  const chunkDelayMs = normalizedUserText.includes('slow background completion') ? 650 : 0;
   const injection = {
     query: userText.toLowerCase(),
     total: 1,
@@ -991,6 +1028,26 @@ function handleGatewayRequest(protocol, req, res, body) {
       }
     ]
   };
+
+  if (normalizedUserText.includes('recharge required')) {
+    json(
+      req,
+      res,
+      {
+        error: {
+          message: 'Please recharge your balance before continuing this conversation.'
+        }
+      },
+      402,
+      {
+        'X-MemStation-Conversation-ID': conversationId,
+        'X-MemStation-Request-ID': requestId,
+        'X-MemStation-Memory-Persist': String(memoryPersist),
+        'Access-Control-Expose-Headers': gatewayExposeHeaders
+      }
+    );
+    return;
+  }
 
   const assistantMessage = {
     id: `assistant-${requestId}`,
@@ -1095,14 +1152,14 @@ function handleGatewayRequest(protocol, req, res, body) {
   }
 
   if (protocol === 'responses') {
-    writeResponsesStream(req, res, responseText, thinking);
+    await writeResponsesStream(req, res, responseText, thinking, chunkDelayMs);
     return;
   }
   if (protocol === 'anthropic_messages') {
-    writeAnthropicStream(req, res, responseText, thinking);
+    await writeAnthropicStream(req, res, responseText, thinking, chunkDelayMs);
     return;
   }
-  writeChatCompletionStream(req, res, requestId, responseText, thinking, usage);
+  await writeChatCompletionStream(req, res, requestId, responseText, thinking, usage, chunkDelayMs);
 }
 
 function createState() {
@@ -1724,7 +1781,7 @@ const server = http.createServer(async (req, res) => {
     if (!ensureGatewayAuth(req, res)) {
       return;
     }
-    handleGatewayRequest('chat_completions', req, res, await readJSON(req));
+    await handleGatewayRequest('chat_completions', req, res, await readJSON(req));
     return;
   }
 
@@ -1732,7 +1789,7 @@ const server = http.createServer(async (req, res) => {
     if (!ensureGatewayAuth(req, res)) {
       return;
     }
-    handleGatewayRequest('responses', req, res, await readJSON(req));
+    await handleGatewayRequest('responses', req, res, await readJSON(req));
     return;
   }
 
@@ -1740,7 +1797,7 @@ const server = http.createServer(async (req, res) => {
     if (!ensureGatewayAuth(req, res)) {
       return;
     }
-    handleGatewayRequest('anthropic_messages', req, res, await readJSON(req));
+    await handleGatewayRequest('anthropic_messages', req, res, await readJSON(req));
     return;
   }
 

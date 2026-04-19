@@ -1,8 +1,8 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { Collapsible, ScrollArea, Select, Switch, Tabs } from 'bits-ui';
+  import { onMount, tick } from 'svelte';
+  import { Collapsible, ScrollArea, Tabs } from 'bits-ui';
 
   import {
     fetchConversation,
@@ -13,9 +13,21 @@
   import ChatMessageCard from '$lib/components/ChatMessageCard.svelte';
   import JsonView from '$lib/components/JsonView.svelte';
   import MemoryKeywordSignals from '$lib/components/MemoryKeywordSignals.svelte';
+  import SegmentedField from '$lib/components/SegmentedField.svelte';
+  import SelectField from '$lib/components/SelectField.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
+  import SwitchField from '$lib/components/SwitchField.svelte';
+  import TextInputField from '$lib/components/TextInputField.svelte';
   import { matchedKeywordsFromMetadata, recordList, sourceKeywordsFromMetadata, stringList } from '$lib/memory/keyword-signals';
   import { buildMemoryTurnDiff, type MemoryTurnChange, type MemoryTurnDiffResult, type MemoryTurnKind } from '$lib/playground/memory-diff';
+  import {
+    buildSessionDraftKey,
+    draftsEqual,
+    readSessionDraft,
+    useSessionDraftPersistence,
+    useSessionDraftUnloadWarning,
+    writeSessionDraft
+  } from '$lib/stores/session-drafts';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type {
     ChatThreadMessage,
@@ -39,6 +51,72 @@
     { value: 'anthropic', label: 'Anthropic' },
     { value: 'gemini', label: 'Gemini' }
   ];
+  const modeItems = [
+    { value: 'transparent', label: 'Transparent' },
+    { value: 'inject', label: 'Inject' }
+  ];
+  const chatDraftVersion = 1;
+
+  type GatewayHeaderState = {
+    conversationId: string;
+    requestId: string;
+    memoryPersist: boolean;
+  };
+
+  type ChatPlaygroundThreadStatus = 'idle' | 'generating' | 'failed';
+
+  type ChatPlaygroundThreadDraft = {
+    threadId: string;
+    protocol: GatewayProtocol;
+    provider: string;
+    mode: 'transparent' | 'inject';
+    sessionId: string;
+    model: string;
+    apiKey: string;
+    injectContext: boolean;
+    injectTools: boolean;
+    toolWrite: boolean;
+    memoryPersist: boolean;
+    stream: boolean;
+    input: string;
+    error: string;
+    status: ChatPlaygroundThreadStatus;
+    debugTab: string;
+    messages: ChatThreadMessage[];
+    debug: GatewayDebugState;
+    gatewayHeaders: GatewayHeaderState;
+    conversationDetail: ConversationRecord | null;
+    conversationMemory: ConversationMemoryPayload | null;
+    memoryPreview: MemoryPreviewPayload | null;
+    injectedMemory: Record<string, unknown> | null;
+    previousInjectedMemory: Record<string, unknown> | null;
+    previousConversationMemory: ConversationMemoryPayload | null;
+    previousMemoryPreview: MemoryPreviewPayload | null;
+    latestTurnPrompt: string;
+    completedTurns: number;
+    latestTurnPersistMode: boolean;
+    pendingRequestToken: string;
+    latestTurnToken: string;
+  };
+
+  type LegacyChatPlaygroundDraft = Omit<
+    ChatPlaygroundThreadDraft,
+    'threadId' | 'error' | 'status' | 'pendingRequestToken' | 'latestTurnToken'
+  >;
+
+  type ChatPlaygroundDraft = {
+    activeThreadId: string;
+    threads: ChatPlaygroundThreadDraft[];
+  };
+
+  type DebugRefreshOptions = {
+    threadId?: string;
+    attempt?: number;
+    persistMode?: boolean;
+    previewMessages?: ChatThreadMessage[];
+    conversationId?: string;
+    turnToken?: string;
+  };
 
   let protocol: GatewayProtocol = 'chat_completions';
   let provider = '';
@@ -52,12 +130,14 @@
   let memoryPersist = false;
   let stream = true;
   let input = '';
-  let sending = false;
   let error = '';
+  let threadStatus: ChatPlaygroundThreadStatus = 'idle';
+  let pendingRequestToken = '';
+  let latestTurnToken = '';
   let debugTab = 'request';
   let messages: ChatThreadMessage[] = [];
   let debug: GatewayDebugState = { requestHeaders: {}, requestBody: {}, rawEvents: [] };
-  let gatewayHeaders = { conversationId: '', requestId: '', memoryPersist: false };
+  let gatewayHeaders: GatewayHeaderState = { conversationId: '', requestId: '', memoryPersist: false };
   let conversationDetail: ConversationRecord | null = null;
   let conversationMemory: ConversationMemoryPayload | null = null;
   let memoryPreview: MemoryPreviewPayload | null = null;
@@ -70,6 +150,17 @@
   let latestTurnPersistMode = false;
   let debugMemoryPersistMode = false;
   let turnDiff: MemoryTurnDiffResult = { sections: [], changeCount: 0 };
+  let threads: ChatPlaygroundThreadDraft[] = [];
+  let activeThreadId = '';
+  let lastMessageCount = 0;
+  let messageEndAnchor: HTMLDivElement | null = null;
+  let activeDraftKey = '';
+  let hydratingDraft = false;
+  let hydratingActiveThread = false;
+  let draftReady = false;
+  let requestSequence = 0;
+  let activeThreadSyncDeps: unknown[] = [];
+  let chatDraftSnapshot = emptyPlaygroundDraft();
 
   $: debugMemoryPersistMode = completedTurns > 0 ? latestTurnPersistMode : memoryPersist;
   $: turnDiff = buildMemoryTurnDiff({
@@ -81,30 +172,437 @@
     previousMemoryPreview,
     memoryPreview
   });
+  $: if (messages.length !== lastMessageCount) {
+    lastMessageCount = messages.length;
+    void scrollToLatestMessage();
+  }
+  $: chatDraftKey = buildSessionDraftKey('playground.chat', $selectedTarget?.id);
+  $: if (chatDraftKey !== activeDraftKey) {
+    activeDraftKey = chatDraftKey;
+    hydratingDraft = true;
+    applyPlaygroundDraft(readSessionDraft<ChatPlaygroundDraft | LegacyChatPlaygroundDraft>(chatDraftKey, chatDraftVersion));
+    hydratingDraft = false;
+    draftReady = true;
+  }
+  $: activeThreadSyncDeps = [
+    activeThreadId,
+    protocol,
+    provider,
+    mode,
+    sessionId,
+    model,
+    apiKey,
+    injectContext,
+    injectTools,
+    toolWrite,
+    memoryPersist,
+    stream,
+    input,
+    error,
+    threadStatus,
+    pendingRequestToken,
+    latestTurnToken,
+    debugTab,
+    messages,
+    debug,
+    gatewayHeaders,
+    conversationDetail,
+    conversationMemory,
+    memoryPreview,
+    injectedMemory,
+    previousInjectedMemory,
+    previousConversationMemory,
+    previousMemoryPreview,
+    latestTurnPrompt,
+    completedTurns,
+    latestTurnPersistMode
+  ];
+  $: if (draftReady && !hydratingDraft && !hydratingActiveThread) {
+    void activeThreadSyncDeps;
+    syncActiveThreadDraft();
+  }
+  $: chatDraftSnapshot = capturePlaygroundDraft();
+  $: if (draftReady && !hydratingDraft && activeDraftKey) {
+    writeSessionDraft(activeDraftKey, chatDraftVersion, chatDraftSnapshot);
+  }
 
-  onMount(() => {
-    if (!sessionId) {
-      sessionId = `playground-${Date.now()}`;
+  useSessionDraftPersistence(() => {
+    if (activeDraftKey) {
+      writeSessionDraft(activeDraftKey, chatDraftVersion, capturePlaygroundDraft());
     }
   });
 
+  onMount(() => {
+    if (threads.length === 0) {
+      const initial = createThreadDraft();
+      threads = [initial];
+      activateThread(initial.threadId);
+      return;
+    }
+    if (!sessionId) {
+      sessionId = nextSessionId();
+      syncActiveThreadDraft();
+    }
+  });
+
+  useSessionDraftUnloadWarning(
+    () => threads.some((thread) => isDirtyThread(thread)),
+    'This playground thread is only saved in the current tab. Closing or reloading the page will discard it.'
+  );
+
+  function nextSessionId(): string {
+    return `playground-${Date.now()}`;
+  }
+
+  function nextThreadId(): string {
+    return `thread-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function nextRequestToken(): string {
+    requestSequence += 1;
+    return `playground-request-${requestSequence}-${Date.now()}`;
+  }
+
+  function emptyDebugState(): GatewayDebugState {
+    return { requestHeaders: {}, requestBody: {}, rawEvents: [] };
+  }
+
+  function emptyGatewayHeaders(nextConversationId: string): GatewayHeaderState {
+    return { conversationId: nextConversationId, requestId: '', memoryPersist: false };
+  }
+
+  function createThreadDraft(template: Partial<ChatPlaygroundThreadDraft> = {}): ChatPlaygroundThreadDraft {
+    const nextConversationId = template.sessionId?.trim() || nextSessionId();
+    return {
+      threadId: template.threadId || nextThreadId(),
+      protocol: template.protocol ?? 'chat_completions',
+      provider: template.provider ?? '',
+      mode: template.mode ?? 'inject',
+      sessionId: nextConversationId,
+      model: template.model ?? '',
+      apiKey: template.apiKey ?? '',
+      injectContext: template.injectContext ?? true,
+      injectTools: template.injectTools ?? false,
+      toolWrite: template.toolWrite ?? false,
+      memoryPersist: template.memoryPersist ?? false,
+      stream: template.stream ?? true,
+      input: template.input ?? '',
+      error: template.error ?? '',
+      status: template.status ?? 'idle',
+      debugTab: template.debugTab ?? 'request',
+      messages: template.messages ?? [],
+      debug: template.debug ?? emptyDebugState(),
+      gatewayHeaders: template.gatewayHeaders?.conversationId
+        ? template.gatewayHeaders
+        : emptyGatewayHeaders(nextConversationId),
+      conversationDetail: template.conversationDetail ?? null,
+      conversationMemory: template.conversationMemory ?? null,
+      memoryPreview: template.memoryPreview ?? null,
+      injectedMemory: template.injectedMemory ?? null,
+      previousInjectedMemory: template.previousInjectedMemory ?? null,
+      previousConversationMemory: template.previousConversationMemory ?? null,
+      previousMemoryPreview: template.previousMemoryPreview ?? null,
+      latestTurnPrompt: template.latestTurnPrompt ?? '',
+      completedTurns: template.completedTurns ?? 0,
+      latestTurnPersistMode: template.latestTurnPersistMode ?? false,
+      pendingRequestToken: template.pendingRequestToken ?? '',
+      latestTurnToken: template.latestTurnToken ?? ''
+    };
+  }
+
+  function normalizeLoadedThreadDraft(draft: Partial<ChatPlaygroundThreadDraft> | null | undefined): ChatPlaygroundThreadDraft {
+    return createThreadDraft({
+      ...draft,
+      status: draft?.status === 'failed' ? 'failed' : 'idle',
+      pendingRequestToken: ''
+    });
+  }
+
+  function emptyPlaygroundDraft(template?: Partial<ChatPlaygroundThreadDraft>): ChatPlaygroundDraft {
+    const thread = createThreadDraft(template);
+    return {
+      activeThreadId: thread.threadId,
+      threads: [thread]
+    };
+  }
+
+  function normalizePlaygroundDraft(
+    draft: ChatPlaygroundDraft | LegacyChatPlaygroundDraft | null
+  ): ChatPlaygroundDraft {
+    if (draft && typeof draft === 'object' && Array.isArray((draft as ChatPlaygroundDraft).threads)) {
+      const nextThreads = (draft as ChatPlaygroundDraft).threads.map((thread) => normalizeLoadedThreadDraft(thread));
+      const fallback = nextThreads[0] ?? createThreadDraft();
+      return {
+        activeThreadId:
+          nextThreads.find((thread) => thread.threadId === (draft as ChatPlaygroundDraft).activeThreadId)?.threadId ??
+          fallback.threadId,
+        threads: nextThreads.length > 0 ? nextThreads : [fallback]
+      };
+    }
+
+    if (draft && typeof draft === 'object') {
+      const legacyThread = normalizeLoadedThreadDraft(draft as LegacyChatPlaygroundDraft);
+      return {
+        activeThreadId: legacyThread.threadId,
+        threads: [legacyThread]
+      };
+    }
+
+    return emptyPlaygroundDraft();
+  }
+
+  function captureActiveThreadDraft(): ChatPlaygroundThreadDraft | null {
+    if (!activeThreadId) {
+      return null;
+    }
+    return createThreadDraft({
+      threadId: activeThreadId,
+      protocol,
+      provider,
+      mode,
+      sessionId,
+      model,
+      apiKey,
+      injectContext,
+      injectTools,
+      toolWrite,
+      memoryPersist,
+      stream,
+      input,
+      error,
+      status: threadStatus,
+      debugTab,
+      messages,
+      debug,
+      gatewayHeaders,
+      conversationDetail,
+      conversationMemory,
+      memoryPreview,
+      injectedMemory,
+      previousInjectedMemory,
+      previousConversationMemory,
+      previousMemoryPreview,
+      latestTurnPrompt,
+      completedTurns,
+      latestTurnPersistMode,
+      pendingRequestToken,
+      latestTurnToken
+    });
+  }
+
+  function mergedThreadsWithActiveState(source: ChatPlaygroundThreadDraft[] = threads): ChatPlaygroundThreadDraft[] {
+    const captured = captureActiveThreadDraft();
+    if (!captured) {
+      return source;
+    }
+    const index = source.findIndex((thread) => thread.threadId === captured.threadId);
+    if (index < 0) {
+      return [...source, captured];
+    }
+    if (draftsEqual(source[index], captured)) {
+      return source;
+    }
+    const next = [...source];
+    next[index] = captured;
+    return next;
+  }
+
+  function capturePlaygroundDraft(): ChatPlaygroundDraft {
+    const nextThreads = mergedThreadsWithActiveState();
+    if (nextThreads.length === 0) {
+      return emptyPlaygroundDraft();
+    }
+    return {
+      activeThreadId: activeThreadId || nextThreads[0]?.threadId || '',
+      threads: nextThreads
+    };
+  }
+
+  function syncActiveThreadDraft(): void {
+    const next = mergedThreadsWithActiveState();
+    if (next !== threads) {
+      threads = next;
+    }
+  }
+
+  function applyThreadDraft(thread: ChatPlaygroundThreadDraft): void {
+    const next = createThreadDraft(thread);
+    protocol = next.protocol;
+    provider = next.provider;
+    mode = next.mode;
+    sessionId = next.sessionId;
+    model = next.model;
+    apiKey = next.apiKey;
+    injectContext = next.injectContext;
+    injectTools = next.injectTools;
+    toolWrite = next.toolWrite;
+    memoryPersist = next.memoryPersist;
+    stream = next.stream;
+    input = next.input;
+    error = next.error;
+    threadStatus = next.status;
+    pendingRequestToken = next.pendingRequestToken;
+    latestTurnToken = next.latestTurnToken;
+    debugTab = next.debugTab || 'request';
+    messages = next.messages ?? [];
+    debug = next.debug ?? emptyDebugState();
+    gatewayHeaders = next.gatewayHeaders?.conversationId
+      ? next.gatewayHeaders
+      : emptyGatewayHeaders(next.sessionId);
+    conversationDetail = next.conversationDetail ?? null;
+    conversationMemory = next.conversationMemory ?? null;
+    memoryPreview = next.memoryPreview ?? null;
+    injectedMemory = next.injectedMemory ?? null;
+    previousInjectedMemory = next.previousInjectedMemory ?? null;
+    previousConversationMemory = next.previousConversationMemory ?? null;
+    previousMemoryPreview = next.previousMemoryPreview ?? null;
+    latestTurnPrompt = next.latestTurnPrompt ?? '';
+    completedTurns = next.completedTurns ?? 0;
+    latestTurnPersistMode = next.latestTurnPersistMode ?? false;
+    lastMessageCount = messages.length;
+  }
+
+  function applyPlaygroundDraft(draft: ChatPlaygroundDraft | LegacyChatPlaygroundDraft | null): void {
+    const next = normalizePlaygroundDraft(draft);
+    const activeThread =
+      next.threads.find((thread) => thread.threadId === next.activeThreadId) ??
+      next.threads[0] ??
+      createThreadDraft();
+
+    hydratingActiveThread = true;
+    threads = next.threads;
+    activeThreadId = activeThread.threadId;
+    applyThreadDraft(activeThread);
+    hydratingActiveThread = false;
+  }
+
+  function updateThread(
+    threadId: string,
+    updater: (thread: ChatPlaygroundThreadDraft) => ChatPlaygroundThreadDraft
+  ): ChatPlaygroundThreadDraft | null {
+    const index = threads.findIndex((thread) => thread.threadId === threadId);
+    if (index < 0) {
+      return null;
+    }
+    const current = threads[index];
+    const next = createThreadDraft({ ...updater(current), threadId: current.threadId });
+    if (draftsEqual(current, next)) {
+      return current;
+    }
+    const nextThreads = [...threads];
+    nextThreads[index] = next;
+    threads = nextThreads;
+    if (threadId === activeThreadId) {
+      hydratingActiveThread = true;
+      applyThreadDraft(next);
+      hydratingActiveThread = false;
+    }
+    return next;
+  }
+
+  function updateThreadForRequest(
+    threadId: string,
+    requestToken: string,
+    updater: (thread: ChatPlaygroundThreadDraft) => ChatPlaygroundThreadDraft
+  ): ChatPlaygroundThreadDraft | null {
+    return updateThread(threadId, (thread) => {
+      if (thread.pendingRequestToken !== requestToken) {
+        return thread;
+      }
+      return updater(thread);
+    });
+  }
+
+  function activateThread(threadId: string): void {
+    if (!threadId) {
+      return;
+    }
+    const nextThread = threads.find((thread) => thread.threadId === threadId);
+    if (!nextThread) {
+      return;
+    }
+    if (threadId === activeThreadId) {
+      if (!hydratingActiveThread) {
+        hydratingActiveThread = true;
+        applyThreadDraft(nextThread);
+        hydratingActiveThread = false;
+      }
+      return;
+    }
+    syncActiveThreadDraft();
+    hydratingActiveThread = true;
+    activeThreadId = threadId;
+    applyThreadDraft(nextThread);
+    hydratingActiveThread = false;
+  }
+
+  function cloneCurrentThreadSettings(source: ChatPlaygroundThreadDraft): Partial<ChatPlaygroundThreadDraft> {
+    return {
+      protocol: source.protocol,
+      provider: source.provider,
+      mode: source.mode,
+      model: source.model,
+      apiKey: source.apiKey,
+      injectContext: source.injectContext,
+      injectTools: source.injectTools,
+      toolWrite: source.toolWrite,
+      memoryPersist: source.memoryPersist,
+      stream: source.stream
+    };
+  }
+
+  function createNewThread(): void {
+    const current = captureActiveThreadDraft() ?? createThreadDraft();
+    syncActiveThreadDraft();
+    const nextThread = createThreadDraft(cloneCurrentThreadSettings(current));
+    threads = [...threads, nextThread];
+    activateThread(nextThread.threadId);
+  }
+
   function resetThread(): void {
-    messages = [];
-    input = '';
-    error = '';
-    conversationDetail = null;
-    conversationMemory = null;
-    memoryPreview = null;
-    injectedMemory = null;
-    previousInjectedMemory = null;
-    previousConversationMemory = null;
-    previousMemoryPreview = null;
-    latestTurnPrompt = '';
-    completedTurns = 0;
-    latestTurnPersistMode = false;
-    gatewayHeaders = { conversationId: `playground-${Date.now()}`, requestId: '', memoryPersist: false };
-    sessionId = gatewayHeaders.conversationId;
-    debug = { requestHeaders: {}, requestBody: {}, rawEvents: [] };
+    if (threadStatus === 'generating') {
+      return;
+    }
+    const current = captureActiveThreadDraft() ?? createThreadDraft();
+    const nextConversationId = nextSessionId();
+    updateThread(activeThreadId, () =>
+      createThreadDraft({
+        ...cloneCurrentThreadSettings(current),
+        threadId: current.threadId,
+        sessionId: nextConversationId,
+        gatewayHeaders: emptyGatewayHeaders(nextConversationId),
+        input: '',
+        error: '',
+        status: 'idle',
+        debugTab: 'request',
+        messages: [],
+        debug: emptyDebugState(),
+        conversationDetail: null,
+        conversationMemory: null,
+        memoryPreview: null,
+        injectedMemory: null,
+        previousInjectedMemory: null,
+        previousConversationMemory: null,
+        previousMemoryPreview: null,
+        latestTurnPrompt: '',
+        completedTurns: 0,
+        latestTurnPersistMode: false,
+        pendingRequestToken: '',
+        latestTurnToken: ''
+      })
+    );
+  }
+
+  async function scrollToLatestMessage(): Promise<void> {
+    await tick();
+    messageEndAnchor?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+  }
+
+  function handleComposerKeydown(event: KeyboardEvent): void {
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && threadStatus !== 'generating') {
+      event.preventDefault();
+      void submit(false);
+    }
   }
 
   async function submit(endConversation = false): Promise<void> {
@@ -124,22 +622,22 @@
       error = 'Enter a prompt before sending.';
       return;
     }
+    if (threadStatus === 'generating') {
+      return;
+    }
 
-    sending = true;
-    error = '';
+    syncActiveThreadDraft();
+    const currentThreadId = activeThreadId;
+    const requestToken = nextRequestToken();
     const persistForTurn = memoryPersist;
-    previousInjectedMemory = injectedMemory;
-    previousConversationMemory = conversationMemory;
-    previousMemoryPreview = memoryPreview;
-    memoryPreview = null;
-    conversationMemory = null;
-
+    const nextSession = sessionId.trim() || nextSessionId();
+    const pendingInput = input.trim();
     const outboundMessages = [
       ...messages,
       {
         id: `user-${Date.now()}`,
         role: 'user' as const,
-        text: input.trim()
+        text: pendingInput
       }
     ];
     const nextMessages = [...outboundMessages];
@@ -149,9 +647,23 @@
       pendingAssistantId = `assistant-${Date.now()}`;
       nextMessages.push({ id: pendingAssistantId, role: 'assistant', text: '', pending: true });
     }
-    messages = nextMessages;
-    const pendingInput = input.trim();
-    input = '';
+    updateThread(currentThreadId, (thread) =>
+      createThreadDraft({
+        ...thread,
+        sessionId: nextSession,
+        error: '',
+        status: 'generating',
+        pendingRequestToken: requestToken,
+        latestTurnToken: requestToken,
+        previousInjectedMemory: thread.injectedMemory,
+        previousConversationMemory: thread.conversationMemory,
+        previousMemoryPreview: thread.memoryPreview,
+        memoryPreview: null,
+        conversationMemory: null,
+        messages: nextMessages,
+        input: ''
+      })
+    );
 
     try {
       const exchange = await requestGatewayExchange({
@@ -162,7 +674,7 @@
         model: model.trim(),
         stream,
         mode,
-        sessionId,
+        sessionId: nextSession,
         injectContext,
         injectTools,
         toolWrite,
@@ -170,55 +682,96 @@
         endConversation,
         messages: outboundMessages,
         onText: (delta) => {
-          messages = messages.map((message) => {
-            if (message.id !== pendingAssistantId) {
-              return message;
-            }
-            return { ...message, text: `${message.text}${delta}` };
-          });
+          updateThreadForRequest(currentThreadId, requestToken, (thread) =>
+            createThreadDraft({
+              ...thread,
+              messages: thread.messages.map((message) => {
+                if (message.id !== pendingAssistantId) {
+                  return message;
+                }
+                return { ...message, text: `${message.text}${delta}` };
+              })
+            })
+          );
         },
         onUsage: (usage) => {
-          messages = messages.map((message) => {
-            if (message.id !== pendingAssistantId) {
-              return message;
-            }
-            return { ...message, usage };
-          });
+          updateThreadForRequest(currentThreadId, requestToken, (thread) =>
+            createThreadDraft({
+              ...thread,
+              messages: thread.messages.map((message) => {
+                if (message.id !== pendingAssistantId) {
+                  return message;
+                }
+                return { ...message, usage };
+              })
+            })
+          );
         },
         onRawEvent: (event) => {
-          debug = { ...debug, rawEvents: [...debug.rawEvents, event] };
+          updateThreadForRequest(currentThreadId, requestToken, (thread) =>
+            createThreadDraft({
+              ...thread,
+              debug: {
+                ...thread.debug,
+                rawEvents: [...thread.debug.rawEvents, event]
+              }
+            })
+          );
         }
       });
 
-      debug = exchange.debug;
-      gatewayHeaders = exchange.headers;
-      sessionId = exchange.headers.conversationId || sessionId;
+      const nextConversationId = exchange.headers.conversationId || nextSession;
+      const updatedThread = updateThreadForRequest(currentThreadId, requestToken, (thread) =>
+        createThreadDraft({
+          ...thread,
+          debug: exchange.debug,
+          gatewayHeaders: exchange.headers,
+          sessionId: nextConversationId,
+          messages: stream
+            ? thread.messages.map((message) => {
+                if (message.id !== pendingAssistantId) {
+                  return message;
+                }
+                return { ...exchange.assistant, id: pendingAssistantId, pending: false };
+              })
+            : [...outboundMessages, exchange.assistant],
+          latestTurnPrompt: pendingInput,
+          latestTurnPersistMode: persistForTurn,
+          completedTurns: thread.completedTurns + 1,
+          error: '',
+          status: 'idle',
+          pendingRequestToken: ''
+        })
+      );
 
-      if (stream) {
-        messages = messages.map((message) => {
-          if (message.id !== pendingAssistantId) {
-            return message;
-          }
-          return { ...exchange.assistant, id: pendingAssistantId, pending: false };
-        });
-      } else {
-        messages = [...nextMessages, exchange.assistant];
+      if (!updatedThread) {
+        return;
       }
 
-      latestTurnPrompt = pendingInput;
-      latestTurnPersistMode = persistForTurn;
-      completedTurns += 1;
-      await refreshDebugPanels(0, persistForTurn, outboundMessages);
+      await refreshDebugPanels({
+        threadId: currentThreadId,
+        attempt: 0,
+        persistMode: persistForTurn,
+        previewMessages: outboundMessages,
+        conversationId: nextConversationId,
+        turnToken: requestToken
+      });
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Gateway request failed';
-      if (pendingAssistantId) {
-        messages = messages.filter((message) => message.id !== pendingAssistantId);
-      }
-      conversationMemory = previousConversationMemory;
-      memoryPreview = previousMemoryPreview;
-      input = pendingInput;
-    } finally {
-      sending = false;
+      const message = cause instanceof Error ? cause.message : 'Gateway request failed';
+      updateThreadForRequest(currentThreadId, requestToken, (thread) =>
+        createThreadDraft({
+          ...thread,
+          error: message,
+          status: 'failed',
+          pendingRequestToken: '',
+          messages: pendingAssistantId
+            ? thread.messages.filter((item) => item.id !== pendingAssistantId)
+            : thread.messages,
+          conversationMemory: thread.previousConversationMemory,
+          memoryPreview: thread.previousMemoryPreview,
+          input: pendingInput
+        })
+      );
     }
   }
 
@@ -230,38 +783,138 @@
     return next;
   }
 
-  async function refreshDebugPanels(
+  async function refreshDebugPanels({
+    threadId = activeThreadId,
     attempt = 0,
     persistMode = debugMemoryPersistMode,
-    previewMessages: ChatThreadMessage[] = messagesForPreview(messages)
-  ): Promise<void> {
-    if (!$selectedTarget || !$targetState.session.authenticated || !gatewayHeaders.conversationId) {
+    previewMessages = messagesForPreview(messages),
+    conversationId,
+    turnToken = ''
+  }: DebugRefreshOptions = {}): Promise<void> {
+    const targetThread = threads.find((thread) => thread.threadId === threadId);
+    const nextConversationId = conversationId || targetThread?.gatewayHeaders.conversationId || '';
+    if (!$selectedTarget || !$targetState.session.authenticated || !targetThread || !nextConversationId) {
       return;
     }
     try {
-      conversationDetail = await fetchConversation($selectedTarget, gatewayHeaders.conversationId);
-      injectedMemory = (conversationDetail.metadata?.injection as Record<string, unknown>) ?? null;
+      const isCurrentTurn = () => {
+        const current = threads.find((thread) => thread.threadId === threadId);
+        if (!current) {
+          return false;
+        }
+        return !turnToken || current.latestTurnToken === turnToken;
+      };
+
+      if (!isCurrentTurn()) {
+        return;
+      }
+
+      const detail = await fetchConversation($selectedTarget, nextConversationId);
+      if (!isCurrentTurn()) {
+        return;
+      }
+
+      updateThread(threadId, (thread) =>
+        createThreadDraft({
+          ...thread,
+          conversationDetail: detail,
+          injectedMemory: (detail.metadata?.injection as Record<string, unknown>) ?? null
+        })
+      );
 
       if (persistMode) {
-        conversationMemory = await fetchConversationMemory($selectedTarget, gatewayHeaders.conversationId);
-        memoryPreview = null;
+        const memory = await fetchConversationMemory($selectedTarget, nextConversationId);
+        if (!isCurrentTurn()) {
+          return;
+        }
+        updateThread(threadId, (thread) =>
+          createThreadDraft({
+            ...thread,
+            conversationMemory: memory,
+            memoryPreview: null
+          })
+        );
         const pendingStatuses = new Set(['pending', 'queued', 'running']);
         if (
           attempt < 3 &&
-          conversationDetail &&
-          (pendingStatuses.has(conversationDetail.summary_status) || pendingStatuses.has(conversationDetail.analysis_status))
+          detail &&
+          (pendingStatuses.has(detail.summary_status) || pendingStatuses.has(detail.analysis_status))
         ) {
-          setTimeout(() => {
-            void refreshDebugPanels(attempt + 1, persistMode);
+          window.setTimeout(() => {
+            void refreshDebugPanels({
+              threadId,
+              attempt: attempt + 1,
+              persistMode,
+              previewMessages,
+              conversationId: nextConversationId,
+              turnToken
+            });
           }, 1500);
         }
       } else {
-        memoryPreview = await fetchMemoryPreview($selectedTarget, gatewayHeaders.conversationId, previewMessages);
-        conversationMemory = null;
+        const preview = await fetchMemoryPreview($selectedTarget, nextConversationId, previewMessages);
+        if (!isCurrentTurn()) {
+          return;
+        }
+        updateThread(threadId, (thread) =>
+          createThreadDraft({
+            ...thread,
+            memoryPreview: preview,
+            conversationMemory: null
+          })
+        );
       }
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Failed to load debug panels';
+      updateThread(threadId, (thread) =>
+        createThreadDraft({
+          ...thread,
+          error: cause instanceof Error ? cause.message : 'Failed to load debug panels'
+        })
+      );
     }
+  }
+
+  function isDirtyThread(thread: ChatPlaygroundThreadDraft): boolean {
+    return Boolean(
+      thread.input.trim() ||
+        thread.messages.length > 0 ||
+        thread.apiKey.trim() ||
+        thread.model.trim() ||
+        thread.provider.trim() ||
+        thread.protocol !== 'chat_completions' ||
+        thread.mode !== 'inject' ||
+        !thread.injectContext ||
+        thread.injectTools ||
+        thread.toolWrite ||
+        thread.memoryPersist ||
+        !thread.stream ||
+        thread.debugTab !== 'request' ||
+        thread.completedTurns > 0
+    );
+  }
+
+  function isThreadGenerating(thread: ChatPlaygroundThreadDraft): boolean {
+    return thread.status === 'generating';
+  }
+
+  function threadTitle(thread: ChatPlaygroundThreadDraft): string {
+    const latestUserMessage = [...thread.messages].reverse().find((message) => message.role === 'user' && message.text.trim());
+    const source = latestUserMessage?.text?.trim() || thread.sessionId;
+    return source.length > 48 ? `${source.slice(0, 45)}...` : source;
+  }
+
+  function threadSubtitle(thread: ChatPlaygroundThreadDraft): string {
+    const parts = [protocolLabel(thread.protocol)];
+    if (thread.status === 'generating') {
+      parts.push('Generating');
+    } else if (thread.status === 'failed') {
+      parts.push('Needs retry');
+    } else if (thread.completedTurns > 0) {
+      parts.push(`${thread.completedTurns} turn${thread.completedTurns === 1 ? '' : 's'}`);
+    } else {
+      parts.push('Ready');
+    }
+    return parts.join(' · ');
   }
 
   function usageSummary(usage?: UsageRecord): string {
@@ -331,43 +984,114 @@
     const parsed = new Date(value);
     return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
   }
+
+  function protocolLabel(value: GatewayProtocol): string {
+    return protocolItems.find((item) => item.value === value)?.label ?? value;
+  }
+
+  function providerLabel(value: string): string {
+    return providerItems.find((item) => item.value === value)?.label ?? 'Auto select';
+  }
+
+  function modeLabel(value: 'transparent' | 'inject'): string {
+    return value === 'inject' ? 'Memory inject' : 'Transparent';
+  }
+
+  function playgroundStatusLine(): string {
+    const parts = [
+      $selectedTarget?.label ?? 'No Target',
+      pluralize(threads.length, 'thread'),
+      protocolLabel(protocol),
+      modeLabel(mode)
+    ];
+    if ($selectedTarget?.environment) {
+      parts.push($selectedTarget.environment);
+    }
+    return parts.join(' · ');
+  }
+
+  function threadMetaLine(): string {
+    const parts = [model.trim() || 'No model', providerLabel(provider), stream ? 'Streaming' : 'Buffered'];
+    if (threadStatus === 'generating') {
+      parts.push('Generating');
+    } else if (threadStatus === 'failed') {
+      parts.push('Retry needed');
+    }
+    return parts.join(' · ');
+  }
+
+  function runMetaLine(): string {
+    const parts = [$selectedTarget?.label ?? 'No Target', sessionId];
+    if (memoryPersist) {
+      parts.push('Persist');
+    }
+    if (threadStatus === 'generating') {
+      parts.push('Generating');
+    } else if (threadStatus === 'failed') {
+      parts.push('Failed');
+    }
+    return parts.join(' · ');
+  }
 </script>
 
 <section class="page-stack">
   <div class="hero-card">
-    <span class="sidebar-label">Playground / Chat</span>
-    <h1 class="page-title">Drive the gateway directly and inspect memory behavior turn by turn</h1>
-    <p class="page-description">
-      Left side: live chat thread with streaming markdown. Right side: request controls, injected memory, extracted memory preview, and raw protocol diagnostics.
-    </p>
+    <div class="page-stack playground-hero-copy">
+      <h1 class="page-title">Chat Playground</h1>
+      <div class="subtle-text">{playgroundStatusLine()}</div>
+    </div>
   </div>
 
-  <div class="chat-layout">
-    <section class="chat-thread-card card">
-      <div class="page-header">
-        <div>
-          <div class="sidebar-label">Conversation</div>
-          <h2 class="page-title" style="font-size: 1.35rem;">Gateway thread</h2>
-          <p class="page-description">Session id: {sessionId}</p>
+  <div class="chat-studio">
+    <section class="card chat-shell">
+      <div class="chat-shell-header">
+        <div class="chat-shell-title">
+          <h2 class="section-title">Thread</h2>
+          <div class="subtle-text">{threadMetaLine()}</div>
         </div>
-        <div class="toolbar">
-          <StatusBadge tone={memoryPersist ? 'success' : 'warning'} label={memoryPersist ? 'Memory Persist On' : 'Memory Persist Off'} />
-          <StatusBadge tone={stream ? 'brand' : 'muted'} label={stream ? 'Streaming' : 'Buffered'} />
-          <button class="button-secondary" type="button" on:click={resetThread}>Reset thread</button>
+        <div class="inline-group chat-thread-actions" style="justify-content: flex-end; flex-wrap: wrap;">
+          <button class="button-ghost" type="button" on:click={createNewThread}>New thread</button>
+          <button class="button-secondary" type="button" disabled={threadStatus === 'generating'} on:click={resetThread}>Reset</button>
         </div>
       </div>
 
-      <div class="chat-thread panel">
-        <ScrollArea.Root style="height: 58vh;">
-          <ScrollArea.Viewport style="height: 100%; padding: 10px;">
+      <div class="thread-strip" role="tablist" aria-label="Playground conversations">
+        {#each threads as thread}
+          <button
+            class:active-thread-pill={thread.threadId === activeThreadId}
+            class="thread-pill"
+            type="button"
+            role="tab"
+            aria-selected={thread.threadId === activeThreadId}
+            title={thread.sessionId}
+            on:click={() => activateThread(thread.threadId)}
+          >
+            <span class="thread-pill-title">{threadTitle(thread)}</span>
+            <span class="thread-pill-meta">{threadSubtitle(thread)}</span>
+            {#if isThreadGenerating(thread)}
+              <span class="thread-pill-status">Streaming in background</span>
+            {:else if thread.status === 'failed' && thread.error}
+              <span class="thread-pill-status thread-pill-status-danger">{thread.error}</span>
+            {/if}
+          </button>
+        {/each}
+      </div>
+
+      <div class="chat-thread-surface panel">
+        <ScrollArea.Root style="height: 100%;">
+          <ScrollArea.Viewport class="chat-thread-viewport">
             <div class="chat-list">
               {#if messages.length === 0}
-                <div class="empty-state">Send a request to start the playground session.</div>
+                <div class="chat-empty-state">
+                  <div class="chat-empty-title">Start a conversation</div>
+                  <div class="subtle-text">Send a live gateway turn and inspect memory behavior in real time.</div>
+                </div>
               {:else}
                 {#each messages as message}
                   <ChatMessageCard {message} />
                 {/each}
               {/if}
+              <div bind:this={messageEndAnchor}></div>
             </div>
           </ScrollArea.Viewport>
           <ScrollArea.Scrollbar orientation="vertical">
@@ -376,356 +1100,384 @@
         </ScrollArea.Root>
       </div>
 
-      <div class="composer">
-        <label class="field">
-          <span class="field-label">Message</span>
-          <textarea class="textarea" bind:value={input} placeholder="Ask the target to recall memory, test a tool, or verify persistence behavior."></textarea>
-        </label>
+      <form class="chat-composer-card" on:submit|preventDefault={() => submit(false)}>
+        <textarea
+          class="chat-composer-input"
+          bind:value={input}
+          placeholder="Message the target, test memory recall, or inspect persistence."
+          on:keydown={handleComposerKeydown}
+        ></textarea>
         {#if error}
-          <div class="error-state">{error}</div>
+          <div class="field-error">{error}</div>
         {/if}
-        <div class="inline-group" style="justify-content: space-between;">
-          <div class="helper-text">
-            Memory persistence defaults to off for safe experiments. When it is off, tool memory writes are also blocked server-side.
+        <div class="chat-composer-footer">
+          <div class="chat-composer-meta">
+            <span>{messages.length} message{messages.length === 1 ? '' : 's'}</span>
+            <span>Ctrl/Cmd + Enter to send</span>
           </div>
           <div class="inline-group">
-            <button class="button-secondary" type="button" disabled={sending} on:click={() => submit(true)}>Send and End</button>
-            <button class="button" type="button" disabled={sending} on:click={() => submit(false)}>{sending ? 'Sending...' : 'Send'}</button>
+            <button class="button-ghost" type="button" disabled={threadStatus === 'generating'} on:click={() => submit(true)}>
+              Send and End
+            </button>
+            <button class="button" type="submit" disabled={threadStatus === 'generating' || !input.trim()}>
+              {threadStatus === 'generating' ? 'Generating...' : 'Send'}
+            </button>
           </div>
         </div>
-      </div>
+      </form>
     </section>
 
-    <aside class="debug-column">
-      <div class="debug-block">
-        <div class="page-header">
-          <div>
-            <div class="sidebar-label">Request Controls</div>
-            <h2 class="page-title" style="font-size: 1.2rem;">Protocol and session settings</h2>
+    <aside class="chat-inspector-rail">
+      <section class="card inspector-card">
+        <div class="page-header playground-inspector-header">
+          <div class="page-stack playground-heading-stack">
+            <h2 class="section-title">Run</h2>
+            <div class="panel-meta">{runMetaLine()}</div>
           </div>
         </div>
 
-        <div class="toolbar">
-          <label class="field">
-            <span class="field-label">Gateway API key</span>
-            <input class="input" bind:value={apiKey} type="password" autocomplete="off" placeholder="ms-..." />
-          </label>
-          <label class="field">
-            <span class="field-label">Model</span>
-            <input class="input" bind:value={model} placeholder="Configured model name" />
-          </label>
-          <label class="field">
-            <span class="field-label">Protocol</span>
-            <Select.Root type="single" bind:value={protocol} items={protocolItems}>
-              <Select.Trigger class="select-trigger">{protocolItems.find((item) => item.value === protocol)?.label ?? 'Select protocol'}</Select.Trigger>
-              <Select.Portal>
-                <Select.Content class="select-content" sideOffset={8}>
-                  <Select.Viewport>
-                    {#each protocolItems as item}
-                      <Select.Item class="select-item" value={item.value} label={item.label}>{item.label}</Select.Item>
-                    {/each}
-                  </Select.Viewport>
-                </Select.Content>
-              </Select.Portal>
-            </Select.Root>
-          </label>
-          <label class="field">
-            <span class="field-label">Provider override</span>
-            <Select.Root type="single" bind:value={provider} items={providerItems}>
-              <Select.Trigger class="select-trigger">{providerItems.find((item) => item.value === provider)?.label ?? 'Auto select'}</Select.Trigger>
-              <Select.Portal>
-                <Select.Content class="select-content" sideOffset={8}>
-                  <Select.Viewport>
-                    {#each providerItems as item}
-                      <Select.Item class="select-item" value={item.value} label={item.label}>{item.label}</Select.Item>
-                    {/each}
-                  </Select.Viewport>
-                </Select.Content>
-              </Select.Portal>
-            </Select.Root>
-          </label>
-          <label class="field">
-            <span class="field-label">Session id</span>
-            <input class="input" bind:value={sessionId} placeholder="playground-123" />
-          </label>
-          <div class="field">
-            <span class="field-label">Mode</span>
-            <div class="inline-group">
-              <button class={mode === 'transparent' ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (mode = 'transparent')}>Transparent</button>
-              <button class={mode === 'inject' ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (mode = 'inject')}>Inject</button>
+        <div class="playground-form-stack">
+          <div class="compact-field-grid playground-run-grid">
+            <TextInputField label="Gateway API key" bind:value={apiKey} type="password" autocomplete="off" placeholder="ms-..." />
+            <TextInputField label="Model" bind:value={model} placeholder="Configured model name" />
+            <SelectField
+              label="Protocol"
+              items={protocolItems}
+              bind:value={protocol}
+              placeholder="Select protocol"
+            />
+            <SelectField
+              label="Provider override"
+              items={providerItems}
+              bind:value={provider}
+              placeholder="Auto select"
+            />
+            <div class="playground-span-2">
+              <TextInputField label="Session id" bind:value={sessionId} placeholder="playground-123" inputClass="input-mono" />
             </div>
           </div>
-          <div class="switch-row">
-            <div>
-              <div class="field-label">Inject Context</div>
-              <div class="field-help">Add recalled memory into the system prompt.</div>
-            </div>
-            <Switch.Root class="switch-root" bind:checked={injectContext}><Switch.Thumb class="switch-thumb" /></Switch.Root>
-          </div>
-          <div class="switch-row">
-            <div>
-              <div class="field-label">Inject Tools</div>
-              <div class="field-help">Expose memory recall tools to the model.</div>
-            </div>
-            <Switch.Root class="switch-root" bind:checked={injectTools}><Switch.Thumb class="switch-thumb" /></Switch.Root>
-          </div>
-          <div class="switch-row">
-            <div>
-              <div class="field-label">Tool Memory Write</div>
-              <div class="field-help">Server still blocks writes when persistence is off.</div>
-            </div>
-            <Switch.Root class="switch-root" bind:checked={toolWrite}><Switch.Thumb class="switch-thumb" /></Switch.Root>
-          </div>
-          <div class="switch-row">
-            <div>
-              <div class="field-label">Memory Persist</div>
-              <div class="field-help">Default off for safe testing sessions.</div>
-            </div>
-            <Switch.Root class="switch-root" bind:checked={memoryPersist}><Switch.Thumb class="switch-thumb" /></Switch.Root>
-          </div>
-          <div class="switch-row">
-            <div>
-              <div class="field-label">Stream</div>
-              <div class="field-help">Keep markdown rendering live as deltas arrive.</div>
-            </div>
-            <Switch.Root class="switch-root" bind:checked={stream}><Switch.Thumb class="switch-thumb" /></Switch.Root>
+
+          <SegmentedField label="Mode" bind:value={mode} items={modeItems} />
+
+          <div class="playground-switch-grid">
+            <SwitchField bind:checked={injectContext} label="Inject Context" />
+            <SwitchField bind:checked={injectTools} label="Inject Tools" />
+            <SwitchField bind:checked={toolWrite} label="Tool Memory Write" />
+            <SwitchField bind:checked={memoryPersist} label="Memory Persist" />
+            <SwitchField bind:checked={stream} label="Stream" />
           </div>
         </div>
-      </div>
+      </section>
 
-      <div class="debug-block">
-        <Tabs.Root bind:value={debugTab}>
+      <section class="card inspector-card playground-inspect-card">
+        <div class="page-header playground-inspector-header">
+          <div class="page-stack playground-heading-stack">
+            <h2 class="section-title">Inspect</h2>
+            <div class="panel-meta">{usageSummary(messages[messages.length - 1]?.usage)}</div>
+          </div>
+        </div>
+
+        <Tabs.Root bind:value={debugTab} class="playground-tabs">
           <Tabs.List class="tabs-list">
-            <Tabs.Trigger class="tabs-trigger" value="request">Injected</Tabs.Trigger>
-            <Tabs.Trigger class="tabs-trigger" value="extracted">Extracted</Tabs.Trigger>
+            <Tabs.Trigger class="tabs-trigger" value="request">Inject</Tabs.Trigger>
+            <Tabs.Trigger class="tabs-trigger" value="extracted">Recall</Tabs.Trigger>
             <Tabs.Trigger class="tabs-trigger" value="diff">Diff</Tabs.Trigger>
-            <Tabs.Trigger class="tabs-trigger" value="raw">Raw Debug</Tabs.Trigger>
+            <Tabs.Trigger class="tabs-trigger" value="raw">Raw</Tabs.Trigger>
           </Tabs.List>
 
           <Tabs.Content value="request" class="page-stack" style="margin-top: 14px;">
-            {#if !$targetState.session.authenticated}
-              <div class="notice-card">Admin login is required to load injected memory details from the target.</div>
-            {:else if injectedMemory}
-              {#if injectionItems(injectedMemory).length > 0}
-                <div class="toolbar">
-                  {#each injectionItems(injectedMemory) as item, index}
-                    <div class="debug-block" style="background: var(--bg-panel-muted);">
-                      <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
-                        <div class="page-stack" style="gap: 4px;">
-                          <strong>{String(item.type ?? 'memory')}</strong>
-                          <div class="inline-group" style="gap: 8px; flex-wrap: wrap;">
-                            {#if item.injection_bucket}
-                              <StatusBadge tone={String(item.injection_bucket) === 'key_memory_topk' ? 'warning' : 'brand'} label={String(item.injection_bucket)} />
-                            {/if}
-                            {#if item.time_tier}
-                              <StatusBadge tone="muted" label={String(item.time_tier)} />
-                            {/if}
-                          </div>
-                        </div>
-                        <span class="subtle-text">#{index + 1}</span>
-                      </div>
-                      <div class="message-body">{String(item.content ?? '')}</div>
-                      <div class="helper-text" style="margin-top: 10px;">
-                        semantic {numericLabel(item.score)} · effective {numericLabel(item.effective_score)} · importance {numericLabel(item.importance)} · decay {numericLabel(item.decay_factor)}
-                      </div>
-                      <div class="helper-text">
-                        activity {dateTimeLabel(item.activity_at)}{item.score_reason ? ` · ${String(item.score_reason)}` : ''}
-                      </div>
-                      <MemoryKeywordSignals
-                        matchedKeywords={stringList(item.matched_keywords)}
-                        sourceKeywords={stringList(item.keywords)}
-                      />
-                    </div>
-                  {/each}
-                </div>
-                <Collapsible.Root>
-                  <Collapsible.Trigger class="collapsible-trigger">Raw injection payload</Collapsible.Trigger>
-                  <Collapsible.Content>
-                    <div class="toolbar" style="margin-top: 10px;">
-                      <JsonView value={injectedMemory} />
-                    </div>
-                  </Collapsible.Content>
-                </Collapsible.Root>
-              {:else}
-                <JsonView value={injectedMemory} />
-              {/if}
-            {:else}
-              <div class="empty-state">No injected memory has been recorded for this request yet.</div>
-            {/if}
-          </Tabs.Content>
-
-          <Tabs.Content value="extracted" class="page-stack" style="margin-top: 14px;">
-            {#if !$targetState.session.authenticated}
-              <div class="notice-card">Admin login is required to load extracted memory state or preview output.</div>
-            {:else if debugMemoryPersistMode}
-              <div class="toolbar">
-                <div class="inline-group">
-                  <StatusBadge tone={conversationDetail?.summary_status === 'completed' ? 'success' : conversationDetail?.summary_status === 'failed' ? 'danger' : conversationDetail?.summary_status === 'skipped' ? 'muted' : 'warning'} label={`summary ${conversationDetail?.summary_status ?? 'n/a'}`} />
-                  <StatusBadge tone={conversationDetail?.analysis_status === 'completed' ? 'success' : conversationDetail?.analysis_status === 'failed' ? 'danger' : conversationDetail?.analysis_status === 'skipped' ? 'muted' : 'warning'} label={`analysis ${conversationDetail?.analysis_status ?? 'n/a'}`} />
-                </div>
-                <button class="button-secondary" type="button" on:click={() => refreshDebugPanels()}>Refresh memory</button>
-              </div>
-              {#if (conversationMemory?.documents.length ?? 0) > 0 || (conversationMemory?.key_memories.length ?? 0) > 0}
-                <div class="toolbar">
-                  {#each conversationMemory?.documents ?? [] as item}
-                    <div class="debug-block" style="background: var(--bg-panel-muted);">
-                      <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
-                        <div class="page-stack" style="gap: 4px;">
-                          <strong>{item.type}</strong>
-                          <div class="inline-group" style="gap: 8px; flex-wrap: wrap;">
-                            {#if item.time_tier}
-                              <StatusBadge tone="muted" label={item.time_tier} />
-                            {/if}
-                            {#if item.effective_score !== undefined}
-                              <StatusBadge tone="brand" label={`effective ${numericLabel(item.effective_score)}`} />
-                            {/if}
-                          </div>
-                        </div>
-                        <span class="subtle-text">{item.id}</span>
-                      </div>
-                      <div class="message-body">{item.content}</div>
-                      <div class="helper-text">
-                        activity {dateTimeLabel(item.activity_at)} · importance {numericLabel(item.importance)} · decay {numericLabel(item.decay_factor)}
-                      </div>
-                      <MemoryKeywordSignals
-                        matchedKeywords={matchedKeywordsFromMetadata(item.metadata)}
-                        sourceKeywords={sourceKeywordsFromMetadata(item.metadata)}
-                      />
-                    </div>
-                  {/each}
-                  {#each conversationMemory?.key_memories ?? [] as item}
-                    <div class="debug-block" style="background: var(--bg-panel-muted);">
-                      <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
-                        <div class="page-stack" style="gap: 4px;">
-                          <strong>{item.key}</strong>
-                          <div class="inline-group" style="gap: 8px; flex-wrap: wrap;">
-                            {#if item.time_tier}
-                              <StatusBadge tone="muted" label={item.time_tier} />
-                            {/if}
-                            {#if item.effective_score !== undefined}
-                              <StatusBadge tone="warning" label={`effective ${numericLabel(item.effective_score)}`} />
-                            {/if}
-                          </div>
-                        </div>
-                        <span class="subtle-text">{item.id}</span>
-                      </div>
-                      <div class="message-body">{item.value}</div>
-                      <div class="helper-text">
-                        activity {dateTimeLabel(item.activity_at)} · importance {numericLabel(item.importance)} · decay {numericLabel(item.decay_factor)}
-                      </div>
-                    </div>
-                  {/each}
-                </div>
-              {:else}
-                <div class="empty-state">The server has not persisted conversation-linked memory documents yet.</div>
-              {/if}
-            {:else if memoryPreview}
-              <MemoryKeywordSignals matchedKeywords={[]} sourceKeywords={memoryPreview.keywords ?? []} sourceLabel="Preview keyword extraction" />
-              <JsonView value={memoryPreview} />
-            {:else}
-              <div class="empty-state">No extracted memory preview is available yet.</div>
-            {/if}
-          </Tabs.Content>
-
-          <Tabs.Content value="diff" class="page-stack" style="margin-top: 14px;">
-            {#if completedTurns === 0}
-              <div class="empty-state">Send a request to compare this turn against the previous memory state.</div>
-            {:else}
-              <div class="toolbar">
-                <div class="inline-group">
-                  <StatusBadge tone={turnDiff.changeCount > 0 ? 'brand' : 'muted'} label={turnDiff.changeCount > 0 ? pluralize(turnDiff.changeCount, 'change') : 'No change detected'} />
-                  <StatusBadge tone={debugMemoryPersistMode ? 'success' : 'warning'} label={debugMemoryPersistMode ? 'Persisted flow' : 'Preview flow'} />
-                </div>
-                <div class="helper-text">Latest turn #{completedTurns}: {latestTurnPrompt}</div>
-              </div>
-
-              {#if turnDiff.sections.length === 0}
-                <div class="empty-state">No injected or extracted memory changed compared with the previous turn.</div>
-              {:else}
-                {#each turnDiff.sections as section}
-                  <section class="memory-diff-section">
-                    <div class="page-header" style="margin-bottom: 12px;">
-                      <div>
-                        <div class="sidebar-label">{section.title}</div>
-                        <div class="field-help">{section.description}</div>
-                      </div>
-                      <StatusBadge tone="brand" label={pluralize(section.entries.length, 'change')} />
-                    </div>
-
-                    <div class="memory-diff-list">
-                      {#each section.entries as entry}
-                        <article class={`memory-diff-card ${entry.change}`}>
-                          <div class="memory-diff-header">
-                            <div class="page-stack" style="gap: 4px;">
-                              <div class="inline-group" style="gap: 8px;">
-                                <strong>{entry.title}</strong>
-                                <StatusBadge tone={changeTone(entry.change)} label={changeLabel(entry.change)} />
-                                <StatusBadge tone="muted" label={kindLabel(entry.kind)} />
-                              </div>
-                              {#if entry.subtitle}
-                                <span class="subtle-text">{entry.subtitle}</span>
+            <div class="page-stack playground-inspect-panel">
+              {#if !$targetState.session.authenticated}
+                <div class="notice-card">Sign in to inspect injected memory.</div>
+              {:else if injectedMemory}
+                {#if injectionItems(injectedMemory).length > 0}
+                  <div class="toolbar">
+                    {#each injectionItems(injectedMemory) as item, index}
+                      <div class="debug-block" style="background: var(--bg-panel-muted);">
+                        <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
+                          <div class="page-stack" style="gap: 4px;">
+                            <strong>{String(item.type ?? 'memory')}</strong>
+                            <div class="subtle-text">
+                              {#if item.injection_bucket}
+                                {String(item.injection_bucket)}
+                              {/if}
+                              {#if item.time_tier}
+                                {item.injection_bucket ? ' · ' : ''}{String(item.time_tier)}
                               {/if}
                             </div>
                           </div>
-
-                          {#if entry.before && entry.after && entry.before !== entry.after}
-                            <div class="memory-diff-compare">
-                              <div class="memory-diff-pane">
-                                <div class="sidebar-label">Before</div>
-                                <div class="memory-diff-content">{entry.before}</div>
-                              </div>
-                              <div class="memory-diff-pane">
-                                <div class="sidebar-label">After</div>
-                                <div class="memory-diff-content">{entry.after}</div>
-                              </div>
-                            </div>
-                          {:else if entry.after}
-                            <div class="memory-diff-content">{entry.after}</div>
-                          {:else if entry.before}
-                            <div class="memory-diff-content is-muted">{entry.before}</div>
-                          {/if}
-
-                          {#if entry.meta}
-                            <div class="memory-diff-meta">
-                              {#each Object.entries(entry.meta) as [key, value]}
-                                <span class="memory-diff-chip">{key}: {value}</span>
-                              {/each}
-                            </div>
-                          {/if}
-                        </article>
-                      {/each}
-                    </div>
-                  </section>
-                {/each}
+                          <span class="subtle-text">#{index + 1}</span>
+                        </div>
+                        <div class="message-body">{String(item.content ?? '')}</div>
+                        <div class="helper-text" style="margin-top: 10px;">
+                          semantic {numericLabel(item.score)} · effective {numericLabel(item.effective_score)} · importance {numericLabel(item.importance)} · decay {numericLabel(item.decay_factor)}
+                        </div>
+                        <div class="helper-text">
+                          activity {dateTimeLabel(item.activity_at)}{item.score_reason ? ` · ${String(item.score_reason)}` : ''}
+                        </div>
+                        <MemoryKeywordSignals
+                          matchedKeywords={stringList(item.matched_keywords)}
+                          sourceKeywords={stringList(item.keywords)}
+                        />
+                      </div>
+                    {/each}
+                  </div>
+                  <Collapsible.Root>
+                    <Collapsible.Trigger class="collapsible-trigger">Payload</Collapsible.Trigger>
+                    <Collapsible.Content>
+                      <div class="toolbar" style="margin-top: 10px;">
+                        <JsonView value={injectedMemory} />
+                      </div>
+                    </Collapsible.Content>
+                  </Collapsible.Root>
+                {:else}
+                  <JsonView value={injectedMemory} />
+                {/if}
+              {:else}
+                <div class="empty-state">No injected memory yet.</div>
               {/if}
-            {/if}
+            </div>
+          </Tabs.Content>
+
+          <Tabs.Content value="extracted" class="page-stack" style="margin-top: 14px;">
+            <div class="page-stack playground-inspect-panel">
+              {#if !$targetState.session.authenticated}
+                <div class="notice-card">Sign in to inspect extracted memory.</div>
+              {:else if debugMemoryPersistMode}
+                <div class="toolbar">
+                  <div class="inline-group">
+                    <StatusBadge tone={conversationDetail?.summary_status === 'completed' ? 'success' : conversationDetail?.summary_status === 'failed' ? 'danger' : conversationDetail?.summary_status === 'skipped' ? 'muted' : 'warning'} label={`summary ${conversationDetail?.summary_status ?? 'n/a'}`} />
+                    <StatusBadge tone={conversationDetail?.analysis_status === 'completed' ? 'success' : conversationDetail?.analysis_status === 'failed' ? 'danger' : conversationDetail?.analysis_status === 'skipped' ? 'muted' : 'warning'} label={`analysis ${conversationDetail?.analysis_status ?? 'n/a'}`} />
+                  </div>
+                  <button class="button-secondary" type="button" on:click={() => refreshDebugPanels()}>Refresh memory</button>
+                </div>
+                {#if (conversationMemory?.documents.length ?? 0) > 0 || (conversationMemory?.key_memories.length ?? 0) > 0}
+                  <div class="toolbar">
+                    {#each conversationMemory?.documents ?? [] as item}
+                      <div class="debug-block" style="background: var(--bg-panel-muted);">
+                        <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
+                          <div class="page-stack" style="gap: 4px;">
+                            <strong>{item.type}</strong>
+                            <div class="subtle-text">
+                              {#if item.time_tier}
+                                {item.time_tier}
+                              {/if}
+                              {#if item.effective_score !== undefined}
+                                {item.time_tier ? ' · ' : ''}effective {numericLabel(item.effective_score)}
+                              {/if}
+                            </div>
+                          </div>
+                          <span class="subtle-text">{item.id}</span>
+                        </div>
+                        <div class="message-body">{item.content}</div>
+                        <div class="helper-text">
+                          activity {dateTimeLabel(item.activity_at)} · importance {numericLabel(item.importance)} · decay {numericLabel(item.decay_factor)}
+                        </div>
+                        <MemoryKeywordSignals
+                          matchedKeywords={matchedKeywordsFromMetadata(item.metadata)}
+                          sourceKeywords={sourceKeywordsFromMetadata(item.metadata)}
+                        />
+                      </div>
+                    {/each}
+                    {#each conversationMemory?.key_memories ?? [] as item}
+                      <div class="debug-block" style="background: var(--bg-panel-muted);">
+                        <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
+                          <div class="page-stack" style="gap: 4px;">
+                            <strong>{item.key}</strong>
+                            <div class="subtle-text">
+                              {#if item.time_tier}
+                                {item.time_tier}
+                              {/if}
+                              {#if item.effective_score !== undefined}
+                                {item.time_tier ? ' · ' : ''}effective {numericLabel(item.effective_score)}
+                              {/if}
+                            </div>
+                          </div>
+                          <span class="subtle-text">{item.id}</span>
+                        </div>
+                        <div class="message-body">{item.value}</div>
+                        <div class="helper-text">
+                          activity {dateTimeLabel(item.activity_at)} · importance {numericLabel(item.importance)} · decay {numericLabel(item.decay_factor)}
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                {:else}
+                  <div class="empty-state">No persisted memory documents yet.</div>
+                {/if}
+              {:else if memoryPreview}
+                <MemoryKeywordSignals matchedKeywords={[]} sourceKeywords={memoryPreview.keywords ?? []} sourceLabel="Preview keyword extraction" />
+                <JsonView value={memoryPreview} />
+              {:else}
+                <div class="empty-state">No extracted preview yet.</div>
+              {/if}
+            </div>
+          </Tabs.Content>
+
+          <Tabs.Content value="diff" class="page-stack" style="margin-top: 14px;">
+            <div class="page-stack playground-inspect-panel">
+              {#if completedTurns === 0}
+                <div class="empty-state">Send a request to compare memory changes.</div>
+              {:else}
+                <div class="toolbar">
+                  <div class="inline-group">
+                    <StatusBadge tone={turnDiff.changeCount > 0 ? 'brand' : 'muted'} label={turnDiff.changeCount > 0 ? pluralize(turnDiff.changeCount, 'change') : 'No change detected'} />
+                    <StatusBadge tone={debugMemoryPersistMode ? 'success' : 'warning'} label={debugMemoryPersistMode ? 'Persisted flow' : 'Preview flow'} />
+                  </div>
+                  <div class="helper-text">Latest turn #{completedTurns}: {latestTurnPrompt}</div>
+                </div>
+
+                {#if turnDiff.sections.length === 0}
+                  <div class="empty-state">No memory changes detected.</div>
+                {:else}
+                  {#each turnDiff.sections as section}
+                    <section class="memory-diff-section">
+                      <div class="page-header" style="margin-bottom: 12px;">
+                        <div>
+                          <div class="section-title" style="font-size: 1rem;">{section.title}</div>
+                          <div class="field-help">{section.description}</div>
+                        </div>
+                        <StatusBadge tone="brand" label={pluralize(section.entries.length, 'change')} />
+                      </div>
+
+                      <div class="memory-diff-list">
+                        {#each section.entries as entry}
+                          <article class={`memory-diff-card ${entry.change}`}>
+                            <div class="memory-diff-header">
+                              <div class="page-stack" style="gap: 4px;">
+                                <div class="inline-group" style="gap: 8px;">
+                                  <strong>{entry.title}</strong>
+                                  <StatusBadge tone={changeTone(entry.change)} label={changeLabel(entry.change)} />
+                                  <StatusBadge tone="muted" label={kindLabel(entry.kind)} />
+                                </div>
+                                {#if entry.subtitle}
+                                  <span class="subtle-text">{entry.subtitle}</span>
+                                {/if}
+                              </div>
+                            </div>
+
+                            {#if entry.before && entry.after && entry.before !== entry.after}
+                              <div class="memory-diff-compare">
+                                <div class="memory-diff-pane">
+                                  <div class="field-label">Before</div>
+                                  <div class="memory-diff-content">{entry.before}</div>
+                                </div>
+                                <div class="memory-diff-pane">
+                                  <div class="field-label">After</div>
+                                  <div class="memory-diff-content">{entry.after}</div>
+                                </div>
+                              </div>
+                            {:else if entry.after}
+                              <div class="memory-diff-content">{entry.after}</div>
+                            {:else if entry.before}
+                              <div class="memory-diff-content is-muted">{entry.before}</div>
+                            {/if}
+
+                            {#if entry.meta}
+                              <div class="memory-diff-meta">
+                                {#each Object.entries(entry.meta) as [key, value]}
+                                  <span class="memory-diff-chip">{key}: {value}</span>
+                                {/each}
+                              </div>
+                            {/if}
+                          </article>
+                        {/each}
+                      </div>
+                    </section>
+                  {/each}
+                {/if}
+              {/if}
+            </div>
           </Tabs.Content>
 
           <Tabs.Content value="raw" class="page-stack" style="margin-top: 14px;">
-            <div class="debug-block" style="background: var(--bg-panel-muted);">
-              <div class="sidebar-label">Response headers</div>
-              <JsonView value={gatewayHeaders} />
+            <div class="page-stack playground-inspect-panel">
+              <div class="debug-block" style="background: var(--bg-panel-muted);">
+                <div class="field-label">Response headers</div>
+                <JsonView value={gatewayHeaders} />
+              </div>
+              <Collapsible.Root>
+                <Collapsible.Trigger class="collapsible-trigger">Request</Collapsible.Trigger>
+                <Collapsible.Content>
+                  <div class="toolbar" style="margin-top: 10px;">
+                    <JsonView value={{ headers: debug.requestHeaders, body: debug.requestBody }} />
+                  </div>
+                </Collapsible.Content>
+              </Collapsible.Root>
+              <Collapsible.Root>
+                <Collapsible.Trigger class="collapsible-trigger">Raw events ({debug.rawEvents.length})</Collapsible.Trigger>
+                <Collapsible.Content>
+                  <div class="toolbar" style="margin-top: 10px;">
+                    <JsonView value={debug.rawEvents} emptyLabel="No raw protocol events captured." />
+                  </div>
+                </Collapsible.Content>
+              </Collapsible.Root>
             </div>
-            <Collapsible.Root>
-              <Collapsible.Trigger class="collapsible-trigger">Request envelope</Collapsible.Trigger>
-              <Collapsible.Content>
-                <div class="toolbar" style="margin-top: 10px;">
-                  <JsonView value={{ headers: debug.requestHeaders, body: debug.requestBody }} />
-                </div>
-              </Collapsible.Content>
-            </Collapsible.Root>
-            <Collapsible.Root>
-              <Collapsible.Trigger class="collapsible-trigger">Raw stream or protocol events ({debug.rawEvents.length})</Collapsible.Trigger>
-              <Collapsible.Content>
-                <div class="toolbar" style="margin-top: 10px;">
-                  <JsonView value={debug.rawEvents} emptyLabel="No raw protocol events captured." />
-                </div>
-              </Collapsible.Content>
-            </Collapsible.Root>
-            <div class="notice-card">Latest usage: {usageSummary(messages[messages.length - 1]?.usage)}</div>
           </Tabs.Content>
         </Tabs.Root>
-      </div>
+      </section>
     </aside>
   </div>
 </section>
+
+<style>
+  .thread-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .thread-pill {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-height: 88px;
+    padding: 14px 16px;
+    border: 1px solid var(--border-soft);
+    border-radius: 18px;
+    background: var(--bg-panel-muted);
+    color: var(--text-primary);
+    text-align: left;
+    transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+  }
+
+  .thread-pill:hover {
+    transform: translateY(-1px);
+    border-color: rgba(15, 94, 168, 0.22);
+  }
+
+  .thread-pill.active-thread-pill {
+    border-color: rgba(15, 94, 168, 0.28);
+    box-shadow: inset 0 0 0 1px rgba(15, 94, 168, 0.16);
+    background: linear-gradient(180deg, rgba(216, 232, 248, 0.9), rgba(255, 255, 255, 0.95));
+  }
+
+  .thread-pill-title,
+  .thread-pill-meta,
+  .thread-pill-status {
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .thread-pill-title {
+    font-weight: 600;
+  }
+
+  .thread-pill-meta {
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+  }
+
+  .thread-pill-status {
+    color: var(--text-muted);
+    font-size: 0.84rem;
+  }
+
+  .thread-pill-status-danger {
+    color: var(--danger);
+  }
+</style>
