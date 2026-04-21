@@ -13,6 +13,7 @@ build/
 apps/manager/.svelte-kit/
 apps/manager/build/
 apps/manager/node_modules/
+apps/manager/output/playwright/
 apps/manager/playwright-report/
 apps/manager/test-results/
 apps/server/.turbo/
