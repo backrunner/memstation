@@ -8,6 +8,7 @@ package memstationv1
 
 import (
 	context "context"
+
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -181,6 +182,7 @@ type UnimplementedGatewayServiceServer struct{}
 func (UnimplementedGatewayServiceServer) ListModels(context.Context, *emptypb.Empty) (*ListModelsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListModels not implemented")
 }
+
 func (UnimplementedGatewayServiceServer) Complete(context.Context, *CompleteRequest) (*CompleteResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Complete not implemented")
 }
@@ -347,12 +349,15 @@ type UnimplementedMemoryServiceServer struct{}
 func (UnimplementedMemoryServiceServer) Search(context.Context, *SearchRequest) (*SearchResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Search not implemented")
 }
+
 func (UnimplementedMemoryServiceServer) ListKeyMemories(context.Context, *ListKeyMemoriesRequest) (*ListKeyMemoriesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListKeyMemories not implemented")
 }
+
 func (UnimplementedMemoryServiceServer) UpsertKeyMemory(context.Context, *UpsertKeyMemoryRequest) (*KeyMemory, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpsertKeyMemory not implemented")
 }
+
 func (UnimplementedMemoryServiceServer) DeleteKeyMemory(context.Context, *DeleteKeyMemoryRequest) (*DeleteKeyMemoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteKeyMemory not implemented")
 }
@@ -563,12 +568,15 @@ type UnimplementedAdminServiceServer struct{}
 func (UnimplementedAdminServiceServer) Overview(context.Context, *OverviewRequest) (*OverviewResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Overview not implemented")
 }
+
 func (UnimplementedAdminServiceServer) ListConversations(context.Context, *ListConversationsRequest) (*ListConversationsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListConversations not implemented")
 }
+
 func (UnimplementedAdminServiceServer) GetConversation(context.Context, *GetConversationRequest) (*ConversationRecord, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetConversation not implemented")
 }
+
 func (UnimplementedAdminServiceServer) GetConversationMemory(context.Context, *GetConversationMemoryRequest) (*ConversationMemoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetConversationMemory not implemented")
 }

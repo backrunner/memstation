@@ -7,15 +7,16 @@
 package memstationv1
 
 import (
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
+
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	structpb "google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	wrapperspb "google.golang.org/protobuf/types/known/wrapperspb"
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
 )
 
 const (
@@ -3098,49 +3099,51 @@ func file_proto_memstation_v1_api_proto_rawDescGZIP() []byte {
 	return file_proto_memstation_v1_api_proto_rawDescData
 }
 
-var file_proto_memstation_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
-var file_proto_memstation_v1_api_proto_goTypes = []any{
-	(*HealthStatusResponse)(nil),         // 0: memstation.v1.HealthStatusResponse
-	(*HealthComponent)(nil),              // 1: memstation.v1.HealthComponent
-	(*ModelCapability)(nil),              // 2: memstation.v1.ModelCapability
-	(*ListModelsResponse)(nil),           // 3: memstation.v1.ListModelsResponse
-	(*CompleteRequest)(nil),              // 4: memstation.v1.CompleteRequest
-	(*CompleteResponse)(nil),             // 5: memstation.v1.CompleteResponse
-	(*UnifiedRequest)(nil),               // 6: memstation.v1.UnifiedRequest
-	(*UnifiedResponse)(nil),              // 7: memstation.v1.UnifiedResponse
-	(*UnifiedMessage)(nil),               // 8: memstation.v1.UnifiedMessage
-	(*ContentBlock)(nil),                 // 9: memstation.v1.ContentBlock
-	(*ToolDefinition)(nil),               // 10: memstation.v1.ToolDefinition
-	(*ToolCall)(nil),                     // 11: memstation.v1.ToolCall
-	(*ToolResult)(nil),                   // 12: memstation.v1.ToolResult
-	(*UsageRecord)(nil),                  // 13: memstation.v1.UsageRecord
-	(*SearchRequest)(nil),                // 14: memstation.v1.SearchRequest
-	(*SearchResponse)(nil),               // 15: memstation.v1.SearchResponse
-	(*InjectionResult)(nil),              // 16: memstation.v1.InjectionResult
-	(*MemoryDocument)(nil),               // 17: memstation.v1.MemoryDocument
-	(*RelatedMemory)(nil),                // 18: memstation.v1.RelatedMemory
-	(*ListKeyMemoriesRequest)(nil),       // 19: memstation.v1.ListKeyMemoriesRequest
-	(*ListKeyMemoriesResponse)(nil),      // 20: memstation.v1.ListKeyMemoriesResponse
-	(*KeyMemory)(nil),                    // 21: memstation.v1.KeyMemory
-	(*UpsertKeyMemoryRequest)(nil),       // 22: memstation.v1.UpsertKeyMemoryRequest
-	(*DeleteKeyMemoryRequest)(nil),       // 23: memstation.v1.DeleteKeyMemoryRequest
-	(*DeleteKeyMemoryResponse)(nil),      // 24: memstation.v1.DeleteKeyMemoryResponse
-	(*OverviewRequest)(nil),              // 25: memstation.v1.OverviewRequest
-	(*OverviewResponse)(nil),             // 26: memstation.v1.OverviewResponse
-	(*ListConversationsRequest)(nil),     // 27: memstation.v1.ListConversationsRequest
-	(*ListConversationsResponse)(nil),    // 28: memstation.v1.ListConversationsResponse
-	(*ConversationListItem)(nil),         // 29: memstation.v1.ConversationListItem
-	(*GetConversationRequest)(nil),       // 30: memstation.v1.GetConversationRequest
-	(*ConversationRecord)(nil),           // 31: memstation.v1.ConversationRecord
-	(*ConversationSegment)(nil),          // 32: memstation.v1.ConversationSegment
-	(*GetConversationMemoryRequest)(nil), // 33: memstation.v1.GetConversationMemoryRequest
-	(*ConversationMemoryResponse)(nil),   // 34: memstation.v1.ConversationMemoryResponse
-	(*wrapperspb.BoolValue)(nil),         // 35: google.protobuf.BoolValue
-	(*structpb.Struct)(nil),              // 36: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),        // 37: google.protobuf.Timestamp
-	(*structpb.Value)(nil),               // 38: google.protobuf.Value
-	(*emptypb.Empty)(nil),                // 39: google.protobuf.Empty
-}
+var (
+	file_proto_memstation_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
+	file_proto_memstation_v1_api_proto_goTypes  = []any{
+		(*HealthStatusResponse)(nil),         // 0: memstation.v1.HealthStatusResponse
+		(*HealthComponent)(nil),              // 1: memstation.v1.HealthComponent
+		(*ModelCapability)(nil),              // 2: memstation.v1.ModelCapability
+		(*ListModelsResponse)(nil),           // 3: memstation.v1.ListModelsResponse
+		(*CompleteRequest)(nil),              // 4: memstation.v1.CompleteRequest
+		(*CompleteResponse)(nil),             // 5: memstation.v1.CompleteResponse
+		(*UnifiedRequest)(nil),               // 6: memstation.v1.UnifiedRequest
+		(*UnifiedResponse)(nil),              // 7: memstation.v1.UnifiedResponse
+		(*UnifiedMessage)(nil),               // 8: memstation.v1.UnifiedMessage
+		(*ContentBlock)(nil),                 // 9: memstation.v1.ContentBlock
+		(*ToolDefinition)(nil),               // 10: memstation.v1.ToolDefinition
+		(*ToolCall)(nil),                     // 11: memstation.v1.ToolCall
+		(*ToolResult)(nil),                   // 12: memstation.v1.ToolResult
+		(*UsageRecord)(nil),                  // 13: memstation.v1.UsageRecord
+		(*SearchRequest)(nil),                // 14: memstation.v1.SearchRequest
+		(*SearchResponse)(nil),               // 15: memstation.v1.SearchResponse
+		(*InjectionResult)(nil),              // 16: memstation.v1.InjectionResult
+		(*MemoryDocument)(nil),               // 17: memstation.v1.MemoryDocument
+		(*RelatedMemory)(nil),                // 18: memstation.v1.RelatedMemory
+		(*ListKeyMemoriesRequest)(nil),       // 19: memstation.v1.ListKeyMemoriesRequest
+		(*ListKeyMemoriesResponse)(nil),      // 20: memstation.v1.ListKeyMemoriesResponse
+		(*KeyMemory)(nil),                    // 21: memstation.v1.KeyMemory
+		(*UpsertKeyMemoryRequest)(nil),       // 22: memstation.v1.UpsertKeyMemoryRequest
+		(*DeleteKeyMemoryRequest)(nil),       // 23: memstation.v1.DeleteKeyMemoryRequest
+		(*DeleteKeyMemoryResponse)(nil),      // 24: memstation.v1.DeleteKeyMemoryResponse
+		(*OverviewRequest)(nil),              // 25: memstation.v1.OverviewRequest
+		(*OverviewResponse)(nil),             // 26: memstation.v1.OverviewResponse
+		(*ListConversationsRequest)(nil),     // 27: memstation.v1.ListConversationsRequest
+		(*ListConversationsResponse)(nil),    // 28: memstation.v1.ListConversationsResponse
+		(*ConversationListItem)(nil),         // 29: memstation.v1.ConversationListItem
+		(*GetConversationRequest)(nil),       // 30: memstation.v1.GetConversationRequest
+		(*ConversationRecord)(nil),           // 31: memstation.v1.ConversationRecord
+		(*ConversationSegment)(nil),          // 32: memstation.v1.ConversationSegment
+		(*GetConversationMemoryRequest)(nil), // 33: memstation.v1.GetConversationMemoryRequest
+		(*ConversationMemoryResponse)(nil),   // 34: memstation.v1.ConversationMemoryResponse
+		(*wrapperspb.BoolValue)(nil),         // 35: google.protobuf.BoolValue
+		(*structpb.Struct)(nil),              // 36: google.protobuf.Struct
+		(*timestamppb.Timestamp)(nil),        // 37: google.protobuf.Timestamp
+		(*structpb.Value)(nil),               // 38: google.protobuf.Value
+		(*emptypb.Empty)(nil),                // 39: google.protobuf.Empty
+	}
+)
 var file_proto_memstation_v1_api_proto_depIdxs = []int32{
 	1,  // 0: memstation.v1.HealthStatusResponse.components:type_name -> memstation.v1.HealthComponent
 	2,  // 1: memstation.v1.ListModelsResponse.items:type_name -> memstation.v1.ModelCapability
