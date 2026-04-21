@@ -56,9 +56,6 @@
 
   $: totalTokens = users.reduce((sum, user) => sum + user.total_tokens, 0);
   $: pendingTasks = queues.reduce((sum, item) => sum + (item.pending ?? 0), 0);
-  $: retryTasks = queues.reduce((sum, item) => sum + (item.retry ?? 0), 0);
-  $: userCount = users.length;
-
   $: recentConversations = conversations.filter((item) => Date.now() - new Date(item.updated_at).getTime() <= range * 24 * 60 * 60 * 1000);
   $: tokenTrend = buildTrend(recentConversations, range);
   $: tokenTrendOption = {
@@ -161,18 +158,11 @@
       <KpiCard label="Total Tokens" value={totalTokens.toLocaleString()} />
     </div>
 
-    <div class="summary-strip">
-      <div class="summary-chip"><strong>{userCount}</strong> users</div>
-      <div class="summary-chip"><strong>{overview?.key_memory_count ?? 0}</strong> key memories</div>
-      <div class="summary-chip"><strong>{retryTasks}</strong> retries</div>
-    </div>
-
     <div class="grid-2">
       <section class="card">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Traffic</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Recent token pressure</h2>
+            <h2 class="section-title">Recent Token Load</h2>
           </div>
           <div class="inline-group">
             {#each [7, 30] as item}
@@ -186,8 +176,7 @@
       <section class="card">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Footprint</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Top user load</h2>
+            <h2 class="section-title">Top User Load</h2>
           </div>
         </div>
         <EChart option={footprintOption} height={300} />
@@ -198,14 +187,13 @@
       <section class="table-card">
         <div class="card" style="border: none; box-shadow: none; border-radius: 0;">
           <div class="page-header">
-          <div>
-            <div class="sidebar-label">Queues</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Worker lanes</h2>
+            <div>
+              <h2 class="section-title">Worker Queues</h2>
+            </div>
+            <div class="toolbar">
+              <a class="button-secondary" href="/operations/queues">Queue Details</a>
+            </div>
           </div>
-          <div class="toolbar">
-            <a class="button-secondary" href="/operations/queues">Queue details</a>
-          </div>
-        </div>
         </div>
         <div class="table-scroll">
           <table class="data-table">
@@ -241,23 +229,25 @@
       <section class="card">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Recent audit</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Latest sensitive actions</h2>
+            <h2 class="section-title">Latest Sensitive Actions</h2>
           </div>
-          <a class="button-secondary" href="/audit">Open audit</a>
+          <a class="button-secondary" href="/audit">Open Audit</a>
         </div>
         {#if auditItems.length === 0}
           <div class="empty-state">No audit events are available for this target yet.</div>
         {:else}
-          <div class="toolbar">
+          <div class="stack-list">
             {#each auditItems.slice(0, 6) as item}
-              <div class="debug-block">
-                <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
+              <a
+                class="table-row-link"
+                href={`/audit?action=${encodeURIComponent(item.action)}&target_type=${encodeURIComponent(item.target_type)}&target_id=${encodeURIComponent(item.target_id)}`}
+              >
+                <div class="page-stack" style="gap: 4px;">
                   <strong>{item.action}</strong>
-                  <span class="subtle-text">{item.target_type}</span>
+                  <div class="subtle-text">{item.target_type} · {item.created_at ? new Date(item.created_at).toLocaleString() : 'n/a'}</div>
                 </div>
-                <div class="helper-text">{item.target_id}</div>
-              </div>
+                <span class="subtle-text">{item.target_id}</span>
+              </a>
             {/each}
           </div>
         {/if}

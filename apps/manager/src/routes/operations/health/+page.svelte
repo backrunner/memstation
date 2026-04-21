@@ -30,6 +30,7 @@
   let degradedProviders = 0;
   let warningProviders = 0;
   let runtimeDriftEntries: RuntimeDriftEntry[] = [];
+  let healthSummaryLine = '';
 
   onMount(async () => {
     await loadHealth();
@@ -94,12 +95,20 @@
       desired: JSON.stringify(config?.runtime?.[key as keyof NonNullable<typeof config.runtime>]),
       live: JSON.stringify(config?.runtime_live?.[key as keyof NonNullable<typeof config.runtime_live>])
     }));
+
+  $: healthSummaryLine = [
+    ready?.status ?? 'unknown',
+    `${restartPending} restart pending`,
+    `${liveOverrides} live overrides`,
+    `${backlogTotal} queued`,
+    `${degradedProviders + warningProviders} provider issues`
+  ].join(' · ');
 </script>
 
 <section class="page-stack">
   <div class="hero-card">
-    <span class="sidebar-label">Operations</span>
     <h1 class="page-title">Health</h1>
+    <div class="panel-meta">{healthSummaryLine}</div>
   </div>
 
   {#if !$targetState.session.authenticated}
@@ -109,14 +118,6 @@
   {:else if loading}
     <div class="notice-card">Loading target health...</div>
   {:else}
-    <div class="summary-strip">
-      <div class="summary-chip"><strong>{ready?.status ?? 'unknown'}</strong> readiness</div>
-      <div class="summary-chip"><strong>{restartPending}</strong> restart pending</div>
-      <div class="summary-chip"><strong>{liveOverrides}</strong> live overrides</div>
-      <div class="summary-chip"><strong>{backlogTotal}</strong> queued</div>
-      <div class="summary-chip"><strong>{degradedProviders + warningProviders}</strong> provider issues</div>
-    </div>
-
     <div class="grid-2">
       <section class="card">
         <div class="page-header">

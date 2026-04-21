@@ -185,7 +185,7 @@
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">Statistics</span>
-    <h1 class="page-title">Token usage</h1>
+    <h1 class="page-title">Token Usage</h1>
   </div>
 
   {#if !$targetState.session.authenticated}

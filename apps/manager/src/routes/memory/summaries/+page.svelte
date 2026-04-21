@@ -8,8 +8,25 @@
   import MemoryWorkspaceNav from '$lib/components/MemoryWorkspaceNav.svelte';
   import { memoryDetailHref } from '$lib/memory/routes';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
+  import TextInputField from '$lib/components/TextInputField.svelte';
+  import TextareaField from '$lib/components/TextareaField.svelte';
+  import {
+    buildSessionDraftKey,
+    readSessionDraft,
+    useSessionDraftPersistence,
+    useSessionDraftUnloadWarning,
+    writeSessionDraft
+  } from '$lib/stores/session-drafts';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type { MemoryDocument } from '$lib/types';
+
+  type SummaryListDraft = {
+    filter: string;
+    editingId: string;
+    draftContent: string;
+  };
+
+  const summariesDraftVersion = 1;
 
   let loading = true;
   let saving = false;
@@ -23,12 +40,32 @@
   let activeUserId: string | undefined;
   let routeKey = '';
   let visibleSummaries: MemoryDocument[] = [];
+  let activeDraftKey = '';
+  let hydratingDraft = false;
+  let draftReady = false;
+  let currentDraft = emptyDraft();
 
   $: activeUserId = $page.url.searchParams.get('user_id') ?? undefined;
+  $: summariesDraftKey = buildSessionDraftKey('memory.summaries', $selectedTarget?.id, activeUserId ?? 'admin');
   $: routeKey = `${$selectedTarget?.id ?? 'none'}:${activeUserId ?? 'admin'}:${$targetState.session.authenticated ? 'auth' : 'anon'}`;
   $: if (routeKey !== lastTargetKey && !$targetState.session.checking) {
     lastTargetKey = routeKey;
     void loadData();
+  }
+  $: if (summariesDraftKey !== activeDraftKey) {
+    activeDraftKey = summariesDraftKey;
+    hydratingDraft = true;
+    applyDraft(readSessionDraft<SummaryListDraft>(summariesDraftKey, summariesDraftVersion));
+    hydratingDraft = false;
+    draftReady = true;
+  }
+  $: currentDraft = {
+    filter,
+    editingId,
+    draftContent
+  };
+  $: if (draftReady && !hydratingDraft && activeDraftKey) {
+    writeSessionDraft(activeDraftKey, summariesDraftVersion, currentDraft);
   }
 
   onMount(async () => {
@@ -41,23 +78,59 @@
       return true;
     }
     const topic = typeof summary.metadata?.topic_label === 'string' ? summary.metadata.topic_label : '';
-    return [topic, summary.content].join(' ').toLowerCase().includes(needle);
+      return [topic, summary.content].join(' ').toLowerCase().includes(needle);
   });
+
+  useSessionDraftUnloadWarning(
+    () => {
+      const activeSummary = summaries.find((item) => item.id === editingId);
+      return Boolean(activeSummary && draftContent !== activeSummary.content);
+    },
+    'This summary edit has unsaved changes. Closing or reloading the page may discard the draft kept in this tab.'
+  );
+
+  useSessionDraftPersistence(() => {
+    if (activeDraftKey) {
+      writeSessionDraft(activeDraftKey, summariesDraftVersion, currentDraft);
+    }
+  });
+
+  function emptyDraft(): SummaryListDraft {
+    return {
+      filter: '',
+      editingId: '',
+      draftContent: ''
+    };
+  }
+
+  function applyDraft(draft: SummaryListDraft | null, nextSummaries: MemoryDocument[] = summaries): void {
+    filter = draft?.filter ?? '';
+    const requestedId = draft?.editingId ?? '';
+    const activeSummary = requestedId ? nextSummaries.find((item) => item.id === requestedId) : null;
+    editingId = activeSummary?.id ?? '';
+    draftContent = activeSummary ? draft?.draftContent ?? activeSummary.content : '';
+  }
 
   async function loadData(): Promise<void> {
     if (!$selectedTarget || !$targetState.session.authenticated) {
       loading = false;
+      draftReady = false;
       return;
     }
     loading = true;
     error = '';
     success = '';
     try {
-      summaries = await fetchAdminMemoryDocuments($selectedTarget, {
+      const nextSummaries = await fetchAdminMemoryDocuments($selectedTarget, {
         kind: 'summary',
         userId: activeUserId,
         limit: 200
       });
+      summaries = nextSummaries;
+      hydratingDraft = true;
+      applyDraft(readSessionDraft<SummaryListDraft>(summariesDraftKey, summariesDraftVersion), nextSummaries);
+      hydratingDraft = false;
+      draftReady = true;
     } catch (cause) {
       error = cause instanceof Error ? cause.message : 'Failed to load memory summaries';
     } finally {
@@ -101,7 +174,7 @@
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">Memory / Summaries</span>
-    <h1 class="page-title">Review and correct conversation summaries that seed memory recall</h1>
+    <h1 class="page-title">Summaries</h1>
     <p class="page-description">Summaries are the primary rollup layer used to condense conversations into retrievable memory nodes and downstream keyword extraction.</p>
     {#if activeUserId}
       <div class="helper-text">Scoped to user `{activeUserId}`.</div>
@@ -122,10 +195,7 @@
     {/if}
     <section class="card page-stack">
       <div class="filters two-up">
-        <label class="field">
-          <span class="field-label">Filter summaries</span>
-          <input class="input" bind:value={filter} placeholder="topic label, incident, preference, project name..." />
-        </label>
+        <TextInputField label="Filter Summaries" bind:value={filter} placeholder="topic label, incident, preference, project name..." />
         <div class="field" style="align-self: end;">
           <div class="helper-text">{visibleSummaries.length} of {summaries.length} summaries visible</div>
         </div>
@@ -153,7 +223,7 @@
                 </div>
               </div>
               {#if editingId === summary.id}
-                <textarea class="textarea" rows="7" bind:value={draftContent}></textarea>
+                <TextareaField label="Summary Content" bind:value={draftContent} rows={7} />
               {:else}
                 <div class="message-body">{summary.content}</div>
               {/if}

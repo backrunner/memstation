@@ -2,8 +2,11 @@
 
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { Dialog, Select } from 'bits-ui';
+  import { Dialog } from 'bits-ui';
 
+  import SelectField from '$lib/components/SelectField.svelte';
+  import TextInputField from '$lib/components/TextInputField.svelte';
+  import { isHTTPURL } from '$lib/forms/validation';
   import type { MemStationTarget, TargetKind } from '$lib/types';
   import { parseTargetLocator } from '$lib/targets/uri';
 
@@ -36,6 +39,7 @@
   let region = defaultRegion;
   let kind: TargetKind = defaultKind;
   let saveError = '';
+  let formErrors: Record<string, string> = {};
 
   $: locatorPreview = inspectLocator(connectionInput);
 
@@ -50,6 +54,7 @@
       region = current.region;
       kind = current.kind;
       saveError = '';
+      formErrors = {};
     }
   }
 
@@ -87,6 +92,7 @@
     region = defaultRegion;
     kind = defaultKind;
     saveError = '';
+    formErrors = {};
   }
 
   function applyLocatorPreview(): void {
@@ -101,6 +107,7 @@
   }
 
   function saveTarget(): void {
+    const nextErrors: Record<string, string> = {};
     if (locatorPreview.error) {
       saveError = locatorPreview.error;
       return;
@@ -109,7 +116,16 @@
     const parsed = locatorPreview.target ?? {};
     const baseUrl = parsed.baseUrl ?? connectionInput.trim();
     if (!baseUrl) {
-      saveError = 'Enter a target base URL or connection URI.';
+      nextErrors.connection = 'Enter a target base URL or connection URI.';
+    } else if (!isHTTPURL(baseUrl)) {
+      nextErrors.connection = 'Target URL must resolve to http:// or https://.';
+    }
+    if (!label.trim() && !parsed.label?.trim()) {
+      nextErrors.label = 'Give this target a short label so it is easy to recognize.';
+    }
+    formErrors = nextErrors;
+    if (Object.keys(nextErrors).length > 0) {
+      saveError = 'Please fix the highlighted target fields.';
       return;
     }
 
@@ -135,38 +151,47 @@
     <Dialog.Overlay class="dialog-overlay" />
     <Dialog.Content class="dialog-card">
       <div class="page-header">
-        <div>
-          <Dialog.Title class="page-title" level={3}>Targets</Dialog.Title>
-          <Dialog.Description class="page-description">Paste a base URL or the URI printed by `memstation serve`.</Dialog.Description>
-        </div>
+        <Dialog.Title class="page-title" level={3}>Target Connections</Dialog.Title>
         <Dialog.Close class="button-ghost">Done</Dialog.Close>
       </div>
 
-      <div class="grid-2">
-        <section class="card">
+      <div class="page-columns">
+        <section class="card page-stack">
           <div class="inline-group" style="justify-content: space-between; margin-bottom: 12px;">
             <strong>Saved Targets</strong>
             <button class="button-secondary" type="button" on:click={resetForm}>New</button>
           </div>
-          <div class="toolbar">
-            {#each targets as target}
-              <button class={`nav-link ${target.id === editingId ? 'is-active' : ''}`} type="button" on:click={() => loadTarget(target)}>
-                <span>{target.label}</span>
-                <span class="subtle-text">{target.environment}</span>
-              </button>
-            {/each}
-          </div>
+          {#if targets.length === 0}
+            <div class="empty-state">No saved targets yet.</div>
+          {:else}
+            <div class="target-list">
+              {#each targets as target}
+                <button class={`target-row ${target.id === editingId ? 'is-active' : ''}`} type="button" on:click={() => loadTarget(target)}>
+                  <div>
+                    <strong>{target.label}</strong>
+                    <div class="subtle-text">{target.environment} · {target.region}</div>
+                  </div>
+                  <span class="subtle-text">{target.kind}</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
         </section>
 
-        <section class="card">
+        <section class="card page-stack">
           <div class="toolbar">
-            <label class="field">
-              <span class="field-label">Connection URI or Base URL</span>
-              <div class="inline-group" style="align-items: stretch;">
-                <input class="input" bind:value={connectionInput} placeholder="memstation://127.0.0.1:8080?key=..." />
-                <button class="button-secondary" type="button" disabled={!locatorPreview.target} on:click={applyLocatorPreview}>Apply URI</button>
-              </div>
-            </label>
+            <TextInputField
+              label="Connection URI Or Base URL"
+              bind:value={connectionInput}
+              placeholder="memstation://127.0.0.1:8080?key=..."
+              help="URI parameters can prefill label, env, cluster, region, kind, and a temporary admin key."
+              error={formErrors.connection}
+              fieldClass="field-span-2"
+            />
+
+            <div class="inline-group target-editor-actions">
+              <button class="button-secondary" type="button" disabled={!locatorPreview.target} on:click={applyLocatorPreview}>Apply URI</button>
+            </div>
 
             {#if locatorPreview.error}
               <div class="error-state">{locatorPreview.error}</div>
@@ -191,37 +216,11 @@
           </div>
 
           <div class="form-grid two-up" style="margin-top: 16px;">
-            <label class="field">
-              <span class="field-label">Label</span>
-              <input class="input" bind:value={label} placeholder="Shanghai Primary" />
-            </label>
-            <label class="field">
-              <span class="field-label">Environment</span>
-              <input class="input" bind:value={environment} placeholder="production" />
-            </label>
-            <label class="field">
-              <span class="field-label">Cluster</span>
-              <input class="input" bind:value={clusterName} placeholder="cluster-a" />
-            </label>
-            <label class="field">
-              <span class="field-label">Region</span>
-              <input class="input" bind:value={region} placeholder="ap-east-1" />
-            </label>
-            <div class="field">
-              <span class="field-label">Kind</span>
-              <Select.Root type="single" bind:value={kind} items={kindItems}>
-                <Select.Trigger class="select-trigger">{kindItems.find((item) => item.value === kind)?.label ?? 'Select kind'}</Select.Trigger>
-                <Select.Portal>
-                  <Select.Content class="select-content" sideOffset={8}>
-                    <Select.Viewport>
-                      {#each kindItems as item}
-                        <Select.Item class="select-item" value={item.value} label={item.label}>{item.label}</Select.Item>
-                      {/each}
-                    </Select.Viewport>
-                  </Select.Content>
-                </Select.Portal>
-              </Select.Root>
-            </div>
+            <TextInputField label="Label" bind:value={label} placeholder="Shanghai Primary" error={formErrors.label} />
+            <TextInputField label="Environment" bind:value={environment} placeholder="production" />
+            <TextInputField label="Cluster" bind:value={clusterName} placeholder="cluster-a" />
+            <TextInputField label="Region" bind:value={region} placeholder="ap-east-1" />
+            <SelectField label="Kind" bind:value={kind} items={kindItems} />
           </div>
 
           <div class="toolbar" style="margin-top: 16px;">
@@ -251,5 +250,32 @@
 
   .target-preview-primary {
     font-weight: 600;
+  }
+
+  .target-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .target-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 16px;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.82);
+    color: var(--text-primary);
+    text-align: left;
+  }
+
+  .target-row.is-active {
+    border-color: rgba(15, 94, 168, 0.22);
+    background: rgba(18, 94, 168, 0.08);
+  }
+
+  .target-editor-actions {
+    justify-content: flex-end;
   }
 </style>

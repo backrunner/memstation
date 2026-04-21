@@ -5,6 +5,7 @@
 
   import { fetchUsers } from '$lib/api/client';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
+  import TextInputField from '$lib/components/TextInputField.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type { UserSummary } from '$lib/types';
 
@@ -52,7 +53,7 @@
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">Users</span>
-    <h1 class="page-title">Track every user footprint across keys, conversations, memory, and token usage</h1>
+    <h1 class="page-title">Users</h1>
     <p class="page-description">
       Use this view to find active users quickly, identify which accounts carry the most memory or token load, and jump into per-user operational detail.
     </p>
@@ -62,14 +63,14 @@
     <div class="notice-card">Admin login is required to inspect users on the selected target.</div>
   {:else}
     <section class="card">
-      <div class="filters two-up">
-        <label class="field">
-          <span class="field-label">Search</span>
-          <input class="input" bind:value={search} placeholder="user id or display name" />
-        </label>
-        <div class="field" style="align-self: end;">
-          <button class="button-secondary" type="button" on:click={loadUsers}>Refresh users</button>
-        </div>
+      <div class="page-header">
+        <TextInputField
+          label="Search"
+          bind:value={search}
+          placeholder="user id or display name"
+          fieldClass="field-span-2"
+        />
+        <button class="button-secondary" type="button" on:click={loadUsers}>Refresh Users</button>
       </div>
     </section>
 

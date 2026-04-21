@@ -13,9 +13,36 @@
   import JsonView from '$lib/components/JsonView.svelte';
   import MemoryWorkspaceNav from '$lib/components/MemoryWorkspaceNav.svelte';
   import { memoryDetailHref } from '$lib/memory/routes';
+  import SelectField from '$lib/components/SelectField.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
+  import TextInputField from '$lib/components/TextInputField.svelte';
+  import TextareaField from '$lib/components/TextareaField.svelte';
+  import {
+    buildSessionDraftKey,
+    readSessionDraft,
+    useSessionDraftPersistence,
+    useSessionDraftUnloadWarning,
+    writeSessionDraft
+  } from '$lib/stores/session-drafts';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type { KeyMemoryRecord } from '$lib/types';
+
+  type KeyMemoriesDraft = {
+    filter: string;
+    dateFrom: string;
+    dateTo: string;
+    selectedTiers: string[];
+    editingId: string;
+    draftValue: string;
+    draftCategory: string;
+    draftReviewStatus: string;
+    createKey: string;
+    createValue: string;
+    createCategory: string;
+    createReviewStatus: string;
+  };
+
+  const keyMemoriesDraftVersion = 1;
 
   let loading = true;
   let saving = false;
@@ -40,18 +67,52 @@
   let activeUserId: string | undefined;
   let routeKey = '';
   let visibleKeyMemories: KeyMemoryRecord[] = [];
+  let activeDraftKey = '';
+  let hydratingDraft = false;
+  let draftReady = false;
+  let currentDraft = emptyDraft();
   const timeTierOptions = [
     { value: 'active', label: 'Active' },
     { value: 'short_term', label: 'Short term' },
     { value: 'long_term', label: 'Long term' },
     { value: 'archived', label: 'Archived' }
   ];
+  const reviewStatusItems = [
+    { value: 'pending', label: 'pending' },
+    { value: 'approved', label: 'approved' },
+    { value: 'rejected', label: 'rejected' }
+  ];
 
   $: activeUserId = $page.url.searchParams.get('user_id') ?? undefined;
+  $: keyMemoriesDraftKey = buildSessionDraftKey('memory.keys', $selectedTarget?.id, activeUserId ?? 'admin');
+  $: if (keyMemoriesDraftKey !== activeDraftKey) {
+    activeDraftKey = keyMemoriesDraftKey;
+    hydratingDraft = true;
+    applyDraft(readSessionDraft<KeyMemoriesDraft>(keyMemoriesDraftKey, keyMemoriesDraftVersion));
+    hydratingDraft = false;
+    draftReady = true;
+  }
   $: routeKey = `${$selectedTarget?.id ?? 'none'}:${activeUserId ?? 'admin'}:${$targetState.session.authenticated ? 'auth' : 'anon'}`;
   $: if (routeKey !== lastTargetKey && !$targetState.session.checking) {
     lastTargetKey = routeKey;
     void loadData();
+  }
+  $: currentDraft = {
+    filter,
+    dateFrom,
+    dateTo,
+    selectedTiers,
+    editingId,
+    draftValue,
+    draftCategory,
+    draftReviewStatus,
+    createKey,
+    createValue,
+    createCategory,
+    createReviewStatus
+  };
+  $: if (draftReady && !hydratingDraft && activeDraftKey) {
+    writeSessionDraft(activeDraftKey, keyMemoriesDraftVersion, currentDraft);
   }
 
   onMount(async () => {
@@ -60,16 +121,76 @@
 
   $: visibleKeyMemories = keyMemories;
 
+  useSessionDraftUnloadWarning(
+    () => {
+      const activeKeyMemory = keyMemories.find((item) => item.id === editingId);
+      const editingDirty = Boolean(
+        activeKeyMemory && (
+          draftValue !== activeKeyMemory.value ||
+          draftCategory !== (activeKeyMemory.category ?? '') ||
+          draftReviewStatus !== (activeKeyMemory.review_status ?? 'pending')
+        )
+      );
+      const creatingDirty = Boolean(createKey.trim() || createValue.trim() || createCategory.trim() || createReviewStatus !== 'pending');
+      return editingDirty || creatingDirty;
+    },
+    'This key memory workspace has unsaved edits. Closing or reloading the page may discard the draft kept in this tab.'
+  );
+
+  useSessionDraftPersistence(() => {
+    if (activeDraftKey) {
+      writeSessionDraft(activeDraftKey, keyMemoriesDraftVersion, currentDraft);
+    }
+  });
+
+  function emptyDraft(): KeyMemoriesDraft {
+    return {
+      filter: '',
+      dateFrom: '',
+      dateTo: '',
+      selectedTiers: [],
+      editingId: '',
+      draftValue: '',
+      draftCategory: '',
+      draftReviewStatus: 'pending',
+      createKey: '',
+      createValue: '',
+      createCategory: '',
+      createReviewStatus: 'pending'
+    };
+  }
+
+  function applyDraft(draft: KeyMemoriesDraft | null, nextKeyMemories: KeyMemoryRecord[] = keyMemories): void {
+    filter = draft?.filter ?? '';
+    dateFrom = draft?.dateFrom ?? '';
+    dateTo = draft?.dateTo ?? '';
+    const allowedTiers = new Set(timeTierOptions.map((item) => item.value));
+    selectedTiers = (draft?.selectedTiers ?? []).filter((item) => allowedTiers.has(item));
+
+    const requestedId = draft?.editingId ?? '';
+    const activeKeyMemory = requestedId ? nextKeyMemories.find((item) => item.id === requestedId) : null;
+    editingId = activeKeyMemory?.id ?? '';
+    draftValue = activeKeyMemory ? draft?.draftValue ?? activeKeyMemory.value : '';
+    draftCategory = activeKeyMemory ? draft?.draftCategory ?? activeKeyMemory.category ?? '' : '';
+    draftReviewStatus = activeKeyMemory ? draft?.draftReviewStatus ?? activeKeyMemory.review_status ?? 'pending' : 'pending';
+
+    createKey = draft?.createKey ?? '';
+    createValue = draft?.createValue ?? '';
+    createCategory = draft?.createCategory ?? '';
+    createReviewStatus = draft?.createReviewStatus ?? 'pending';
+  }
+
   async function loadData(): Promise<void> {
     if (!$selectedTarget || !$targetState.session.authenticated) {
       loading = false;
+      draftReady = false;
       return;
     }
     loading = true;
     error = '';
     success = '';
     try {
-      keyMemories = await fetchAdminKeyMemories($selectedTarget, {
+      const nextKeyMemories = await fetchAdminKeyMemories($selectedTarget, {
         userId: activeUserId,
         limit: 200,
         query: filter.trim(),
@@ -77,6 +198,11 @@
         dateTo: endOfDayISO(dateTo),
         timeTiers: selectedTiers
       });
+      keyMemories = nextKeyMemories;
+      hydratingDraft = true;
+      applyDraft(readSessionDraft<KeyMemoriesDraft>(keyMemoriesDraftKey, keyMemoriesDraftVersion), nextKeyMemories);
+      hydratingDraft = false;
+      draftReady = true;
     } catch (cause) {
       error = cause instanceof Error ? cause.message : 'Failed to load key memories';
     } finally {
@@ -206,7 +332,7 @@
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">Memory / Key Memories</span>
-    <h1 class="page-title">Manage stable key-value memory slots and tool-facing state</h1>
+    <h1 class="page-title">Key Memories</h1>
     <p class="page-description">These records back whitelisted memory tools and admin workflows for durable slots such as preferences, recent conversation markers, and operator-curated notes.</p>
     {#if activeUserId}
       <div class="helper-text">Scoped to user `{activeUserId}`.</div>
@@ -228,60 +354,32 @@
 
     <section class="card page-stack">
       <div class="page-header">
-        <div>
-          <div class="sidebar-label">Create key memory</div>
-          <h2 class="page-title" style="font-size: 1.35rem;">Write an operator-managed stable memory slot</h2>
-        </div>
+        <h2 class="section-title">Create Key Memory</h2>
       </div>
       <div class="form-grid two-up">
-        <label class="field">
-          <span class="field-label">Key</span>
-          <input class="input" bind:value={createKey} placeholder="preferred_name or recent_conversation" />
-        </label>
-        <label class="field">
-          <span class="field-label">Category</span>
-          <input class="input" bind:value={createCategory} placeholder="profile, workflow, system" />
-        </label>
-        <label class="field" style="grid-column: 1 / -1;">
-          <span class="field-label">Value</span>
-          <textarea class="textarea" rows="4" bind:value={createValue}></textarea>
-        </label>
-        <label class="field">
-          <span class="field-label">Review status</span>
-          <select class="input" bind:value={createReviewStatus}>
-            <option value="pending">pending</option>
-            <option value="approved">approved</option>
-            <option value="rejected">rejected</option>
-          </select>
-        </label>
+        <TextInputField label="Key" bind:value={createKey} placeholder="preferred_name or recent_conversation" />
+        <TextInputField label="Category" bind:value={createCategory} placeholder="profile, workflow, system" />
+        <TextareaField label="Value" bind:value={createValue} rows={4} fieldClass="field-span-2" />
+        <SelectField label="Review status" items={reviewStatusItems} bind:value={createReviewStatus} />
       </div>
       <div class="inline-group" style="justify-content: flex-end;">
-        <button class="button" type="button" disabled={creating || !createKey.trim() || !createValue.trim()} on:click={createItem}>{creating ? 'Creating...' : 'Create key memory'}</button>
+        <button class="button" type="button" disabled={creating || !createKey.trim() || !createValue.trim()} on:click={createItem}>{creating ? 'Creating...' : 'Create Key Memory'}</button>
       </div>
     </section>
 
     <section class="card page-stack">
       <div class="filters two-up">
-        <label class="field">
-          <span class="field-label">Filter key memories</span>
-          <input class="input" bind:value={filter} placeholder="key, category, value, review status..." />
-        </label>
+        <TextInputField label="Filter Key Memories" bind:value={filter} placeholder="key, category, value, review status..." />
         <div class="field" style="align-self: end;">
           <div class="inline-group" style="justify-content: flex-end;">
             <div class="helper-text">{visibleKeyMemories.length} key memories returned</div>
-            <button class="button-secondary" type="button" on:click={loadData}>Apply filters</button>
+            <button class="button-secondary" type="button" on:click={loadData}>Apply Filters</button>
           </div>
         </div>
       </div>
       <div class="filters two-up">
-        <label class="field">
-          <span class="field-label">Date from</span>
-          <input class="input" type="date" bind:value={dateFrom} />
-        </label>
-        <label class="field">
-          <span class="field-label">Date to</span>
-          <input class="input" type="date" bind:value={dateTo} />
-        </label>
+        <TextInputField label="Date From" bind:value={dateFrom} type="date" />
+        <TextInputField label="Date To" bind:value={dateTo} type="date" />
       </div>
       <div class="inline-group" style="flex-wrap: wrap;">
         {#each timeTierOptions as option}
@@ -327,22 +425,9 @@
 
               {#if editingId === keyMemory.id}
                 <div class="form-grid two-up">
-                  <label class="field" style="grid-column: 1 / -1;">
-                    <span class="field-label">Value</span>
-                    <textarea class="textarea" rows="4" bind:value={draftValue}></textarea>
-                  </label>
-                  <label class="field">
-                    <span class="field-label">Category</span>
-                    <input class="input" bind:value={draftCategory} />
-                  </label>
-                  <label class="field">
-                    <span class="field-label">Review status</span>
-                    <select class="input" bind:value={draftReviewStatus}>
-                      <option value="pending">pending</option>
-                      <option value="approved">approved</option>
-                      <option value="rejected">rejected</option>
-                    </select>
-                  </label>
+                  <TextareaField label="Value" bind:value={draftValue} rows={4} fieldClass="field-span-2" />
+                  <TextInputField label="Category" bind:value={draftCategory} />
+                  <SelectField label="Review status" items={reviewStatusItems} bind:value={draftReviewStatus} />
                 </div>
               {:else}
                 <div class="helper-text" style="margin-bottom: 10px;">

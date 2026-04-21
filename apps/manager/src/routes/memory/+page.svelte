@@ -9,6 +9,7 @@
   import { memoryDetailHref } from '$lib/memory/routes';
   import { matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '$lib/memory/keyword-signals';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
+  import TextInputField from '$lib/components/TextInputField.svelte';
   import { fetchMemoryWorkspace, searchMemories, type MemoryWorkspaceData } from '$lib/memory/workspace';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type { SearchMemoriesResult } from '$lib/types';
@@ -114,7 +115,7 @@
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">Memory Workspace</span>
-    <h1 class="page-title">Inspect retrieval quality, structured memory output, and stable key slots</h1>
+    <h1 class="page-title">Memory Workspace</h1>
     <p class="page-description">
       Use the workspace as the operator hub for semantic recall checks, summary QA, fact review, and long-lived key memory management.
     </p>
@@ -167,25 +168,16 @@
       </div>
 
       <div class="filters two-up">
-        <label class="field">
-          <span class="field-label">Search query</span>
-          <input class="input" bind:value={query} placeholder="project roadmap, preferences, recent incident, family details..." />
-        </label>
+        <TextInputField label="Search Query" bind:value={query} placeholder="project roadmap, preferences, recent incident, family details..." />
         <div class="field" style="align-self: end;">
           <button class="button" type="button" disabled={searchLoading || !query.trim()} on:click={runSearch}>
-            {searchLoading ? 'Searching...' : 'Run semantic search'}
+            {searchLoading ? 'Searching...' : 'Run Semantic Search'}
           </button>
         </div>
       </div>
       <div class="filters two-up">
-        <label class="field">
-          <span class="field-label">Date from</span>
-          <input class="input" type="date" bind:value={dateFrom} />
-        </label>
-        <label class="field">
-          <span class="field-label">Date to</span>
-          <input class="input" type="date" bind:value={dateTo} />
-        </label>
+        <TextInputField label="Date From" bind:value={dateFrom} type="date" />
+        <TextInputField label="Date To" bind:value={dateTo} type="date" />
       </div>
       <div class="inline-group" style="flex-wrap: wrap;">
         {#each timeTierOptions as option}

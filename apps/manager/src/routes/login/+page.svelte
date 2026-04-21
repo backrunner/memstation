@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
 
   import { loginAdmin } from '$lib/api/client';
+  import TextInputField from '$lib/components/TextInputField.svelte';
   import { selectedTarget, stageTargetAdminKey, targetState, updateSession } from '$lib/stores/targets';
 
   let token = '';
@@ -36,13 +37,13 @@
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">Admin Access</span>
-    <h1 class="page-title">Sign in</h1>
+    <h1 class="page-title">Sign In</h1>
   </div>
 
   <section class="card login-card">
     <div class="page-header">
       <div>
-        <h2 class="page-title" style="font-size: 1.2rem;">{$selectedTarget?.label ?? 'None selected'}</h2>
+        <h2 class="section-title">{$selectedTarget?.label ?? 'None Selected'}</h2>
         <div class="helper-text" style="margin-top: 4px;">{$selectedTarget?.baseUrl ?? 'Select a target first.'}</div>
       </div>
       {#if $targetState.session.authenticated}
@@ -51,10 +52,13 @@
     </div>
 
     <div class="toolbar">
-      <label class="field">
-        <span class="field-label">Admin token</span>
-        <input class="input" bind:value={token} type="password" autocomplete="off" placeholder="MEMSTATION_ADMIN_TOKEN" />
-      </label>
+      <TextInputField
+        label="Admin Token"
+        bind:value={token}
+        type="password"
+        autocomplete="off"
+        placeholder="MEMSTATION_ADMIN_TOKEN"
+      />
       <div class="helper-text">Token stays in memory for the current tab only.</div>
       {#if error}
         <div class="error-state">{error}</div>

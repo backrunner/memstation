@@ -44,7 +44,7 @@
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">Operations / Cache</span>
-    <h1 class="page-title">L1/L2 cache posture and invalidation topology</h1>
+    <h1 class="page-title">Cache</h1>
     <p class="page-description">
       Review how process-local and Redis-backed caches behave on the current target, including TTL boundaries and best-effort invalidation fan-out.
     </p>

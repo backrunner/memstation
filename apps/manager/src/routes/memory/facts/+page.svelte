@@ -8,8 +8,25 @@
   import MemoryWorkspaceNav from '$lib/components/MemoryWorkspaceNav.svelte';
   import { memoryDetailHref } from '$lib/memory/routes';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
+  import TextInputField from '$lib/components/TextInputField.svelte';
+  import TextareaField from '$lib/components/TextareaField.svelte';
+  import {
+    buildSessionDraftKey,
+    readSessionDraft,
+    useSessionDraftPersistence,
+    useSessionDraftUnloadWarning,
+    writeSessionDraft
+  } from '$lib/stores/session-drafts';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type { MemoryDocument } from '$lib/types';
+
+  type FactsListDraft = {
+    filter: string;
+    editingId: string;
+    draftContent: string;
+  };
+
+  const factsDraftVersion = 1;
 
   let loading = true;
   let saving = false;
@@ -23,12 +40,32 @@
   let activeUserId: string | undefined;
   let routeKey = '';
   let visibleFacts: MemoryDocument[] = [];
+  let activeDraftKey = '';
+  let hydratingDraft = false;
+  let draftReady = false;
+  let currentDraft = emptyDraft();
 
   $: activeUserId = $page.url.searchParams.get('user_id') ?? undefined;
+  $: factsDraftKey = buildSessionDraftKey('memory.facts', $selectedTarget?.id, activeUserId ?? 'admin');
   $: routeKey = `${$selectedTarget?.id ?? 'none'}:${activeUserId ?? 'admin'}:${$targetState.session.authenticated ? 'auth' : 'anon'}`;
   $: if (routeKey !== lastTargetKey && !$targetState.session.checking) {
     lastTargetKey = routeKey;
     void loadData();
+  }
+  $: if (factsDraftKey !== activeDraftKey) {
+    activeDraftKey = factsDraftKey;
+    hydratingDraft = true;
+    applyDraft(readSessionDraft<FactsListDraft>(factsDraftKey, factsDraftVersion));
+    hydratingDraft = false;
+    draftReady = true;
+  }
+  $: currentDraft = {
+    filter,
+    editingId,
+    draftContent
+  };
+  $: if (draftReady && !hydratingDraft && activeDraftKey) {
+    writeSessionDraft(activeDraftKey, factsDraftVersion, currentDraft);
   }
 
   onMount(async () => {
@@ -43,20 +80,56 @@
     return fact.content.toLowerCase().includes(needle);
   });
 
+  useSessionDraftUnloadWarning(
+    () => {
+      const activeFact = facts.find((item) => item.id === editingId);
+      return Boolean(activeFact && draftContent !== activeFact.content);
+    },
+    'This fact edit has unsaved changes. Closing or reloading the page may discard the draft kept in this tab.'
+  );
+
+  useSessionDraftPersistence(() => {
+    if (activeDraftKey) {
+      writeSessionDraft(activeDraftKey, factsDraftVersion, currentDraft);
+    }
+  });
+
+  function emptyDraft(): FactsListDraft {
+    return {
+      filter: '',
+      editingId: '',
+      draftContent: ''
+    };
+  }
+
+  function applyDraft(draft: FactsListDraft | null, nextFacts: MemoryDocument[] = facts): void {
+    filter = draft?.filter ?? '';
+    const requestedId = draft?.editingId ?? '';
+    const activeFact = requestedId ? nextFacts.find((item) => item.id === requestedId) : null;
+    editingId = activeFact?.id ?? '';
+    draftContent = activeFact ? draft?.draftContent ?? activeFact.content : '';
+  }
+
   async function loadData(): Promise<void> {
     if (!$selectedTarget || !$targetState.session.authenticated) {
       loading = false;
+      draftReady = false;
       return;
     }
     loading = true;
     error = '';
     success = '';
     try {
-      facts = await fetchAdminMemoryDocuments($selectedTarget, {
+      const nextFacts = await fetchAdminMemoryDocuments($selectedTarget, {
         kind: 'fact',
         userId: activeUserId,
         limit: 200
       });
+      facts = nextFacts;
+      hydratingDraft = true;
+      applyDraft(readSessionDraft<FactsListDraft>(factsDraftKey, factsDraftVersion), nextFacts);
+      hydratingDraft = false;
+      draftReady = true;
     } catch (cause) {
       error = cause instanceof Error ? cause.message : 'Failed to load facts';
     } finally {
@@ -100,7 +173,7 @@
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">Memory / Facts</span>
-    <h1 class="page-title">Browse and correct factual memory statements</h1>
+    <h1 class="page-title">Facts</h1>
     <p class="page-description">Facts are structured statements that can supersede earlier information and feed both memory injection and admin correction workflows.</p>
     {#if activeUserId}
       <div class="helper-text">Scoped to user `{activeUserId}`.</div>
@@ -121,10 +194,7 @@
     {/if}
     <section class="card page-stack">
       <div class="filters two-up">
-        <label class="field">
-          <span class="field-label">Filter facts</span>
-          <input class="input" bind:value={filter} placeholder="location, preference, schedule, identity, status..." />
-        </label>
+        <TextInputField label="Filter Facts" bind:value={filter} placeholder="location, preference, schedule, identity, status..." />
         <div class="field" style="align-self: end;">
           <div class="helper-text">{visibleFacts.length} of {facts.length} facts visible</div>
         </div>
@@ -152,7 +222,7 @@
                 </div>
               </div>
               {#if editingId === fact.id}
-                <textarea class="textarea" rows="6" bind:value={draftContent}></textarea>
+                <TextareaField label="Fact Content" bind:value={draftContent} rows={6} />
               {:else}
                 <div class="message-body">{fact.content}</div>
               {/if}

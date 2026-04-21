@@ -4,7 +4,20 @@
   import { onMount } from 'svelte';
 
   import { fetchConfig, fetchHealth, saveConfig } from '$lib/api/client';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
+  import SelectField from '$lib/components/SelectField.svelte';
+  import SwitchField from '$lib/components/SwitchField.svelte';
+  import TextInputField from '$lib/components/TextInputField.svelte';
+  import TextareaField from '$lib/components/TextareaField.svelte';
+  import { isMimeType, isNonNegativeInteger, isNumberInRange, isOriginValue, isPositiveInteger, isPostgresURL, parseLineList } from '$lib/forms/validation';
+  import {
+    buildSessionDraftKey,
+    clearSessionDraft,
+    draftsEqual,
+    readSessionDraft,
+    useSessionDraftPersistence,
+    useSessionDraftUnloadWarning,
+    writeSessionDraft
+  } from '$lib/stores/session-drafts';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type {
     AdminConfigPayload,
@@ -15,52 +28,23 @@
   } from '$lib/types';
 
   type RuntimeKey = keyof SystemRuntimeConfig;
-  type StatusTone = 'brand' | 'success' | 'warning' | 'danger' | 'muted';
+  type SystemSettingsDraft = {
+    runtime: SystemRuntimeConfig;
+    databaseInput: string;
+    corsAllowedOriginsText: string;
+    allowedMimeTypesText: string;
+  };
 
-  const trafficFields: RuntimeKey[] = [
-    'default_provider',
-    'internal_default_provider',
-    'conversation_timeout_seconds',
-    'provider_timeout_seconds',
-    'message_threshold',
-    'token_threshold'
+  const llmProviderItems = [
+    { value: 'openai_compatible', label: 'openai_compatible' },
+    { value: 'openai_responses', label: 'openai_responses' },
+    { value: 'anthropic', label: 'anthropic' },
+    { value: 'gemini', label: 'gemini' }
   ];
-  const memoryFields: RuntimeKey[] = [
-    'vector_store_backend',
-    'max_context_tokens',
-    'max_injection_tokens',
-    'memory_relation_max_hops',
-    'memory_relation_hop_decay_lambda',
-    'memory_relation_hop_decay_exponent',
-    'cache_ttl_seconds'
-  ];
-  const rerankFields: RuntimeKey[] = [
-    'rerank_model',
-    'rerank_candidate_multiplier',
-    'rerank_min_candidates',
-    'rerank_max_candidates',
-    'rerank_blend_weight'
-  ];
-  const webFields: RuntimeKey[] = [
-    'rate_limit_rps',
-    'rate_limit_burst',
-    'session_cookie_cross_site',
-    'cors_allowed_origins'
-  ];
-  const multimodalFields: RuntimeKey[] = [
-    'multimodal_enabled',
-    'multimodal_storage_backend',
-    'multimodal_storage_local_root',
-    'multimodal_storage_bucket',
-    'multimodal_extract_image_model',
-    'multimodal_extract_audio_model',
-    'multimodal_extract_video_model',
-    'multimodal_extract_file_model',
-    'multimodal_audio_transcription_enabled',
-    'multimodal_video_frame_sampling_enabled',
-    'multimodal_max_asset_bytes',
-    'multimodal_allowed_mime_types'
-  ];
+
+  const vectorStoreItems = [{ value: 'pgvector', label: 'pgvector' }];
+  const storageBackendItems = [{ value: 'local', label: 'local' }];
+  const systemDraftVersion = 1;
 
   let loading = true;
   let saving = false;
@@ -78,30 +62,53 @@
   let runtimeMeta: Record<string, RuntimeFieldMeta> = {};
   let corsAllowedOriginsText = '';
   let allowedMimeTypesText = '';
-  let liveAppliedCount = 0;
-  let dirtyCount = 0;
-  let overrideCount = 0;
+  let fieldErrors: Record<string, string> = {};
+  let activeDraftKey = '';
+  let draftReady = false;
+  let hydratingDraft = false;
+  let savedDraft = emptySystemDraft();
+  let currentDraft = emptySystemDraft();
 
   onMount(async () => {
     await loadData();
   });
 
   $: loadKey = `${$selectedTarget?.id ?? 'none'}:${$targetState.session.authenticated ? 'auth' : 'anon'}`;
+  $: systemDraftKey = buildSessionDraftKey('settings.system', $selectedTarget?.id);
   $: if (loadKey !== lastLoadKey && !$targetState.session.checking) {
     lastLoadKey = loadKey;
     void loadData();
   }
-
-  $: {
-    runtimeSaved;
-    runtimeLive;
-    runtimeDefaults;
-    runtimeMeta;
-    runtime;
-    liveAppliedCount = allRuntimeKeys().filter((key) => syncStateFor(key) === 'live_active').length;
-    dirtyCount = allRuntimeKeys().filter((key) => draftDiffers(key)).length;
-    overrideCount = allRuntimeKeys().filter((key) => isCustomized(key)).length;
+  $: currentDraft = {
+    runtime: normalizeRuntime(runtime),
+    databaseInput,
+    corsAllowedOriginsText,
+    allowedMimeTypesText
+  };
+  $: if (draftReady && activeDraftKey && !hydratingDraft) {
+    if (draftsEqual(currentDraft, savedDraft)) {
+      clearSessionDraft(activeDraftKey);
+    } else {
+      writeSessionDraft(activeDraftKey, systemDraftVersion, currentDraft);
+    }
   }
+
+  useSessionDraftUnloadWarning(
+    () => draftReady && !draftsEqual(currentDraft, savedDraft),
+    'These system settings have unsaved changes. Closing or reloading the page will discard the draft kept in this tab.'
+  );
+
+  useSessionDraftPersistence(() => {
+    if (!activeDraftKey) {
+      return;
+    }
+    const snapshot = captureDraft();
+    if (draftsEqual(snapshot, savedDraft)) {
+      clearSessionDraft(activeDraftKey);
+      return;
+    }
+    writeSessionDraft(activeDraftKey, systemDraftVersion, snapshot);
+  });
 
   function emptyRuntime(): SystemRuntimeConfig {
     return {
@@ -148,6 +155,34 @@
       source: 'unset',
       status: 'inactive'
     };
+  }
+
+  function emptySystemDraft(): SystemSettingsDraft {
+    return {
+      runtime: emptyRuntime(),
+      databaseInput: '',
+      corsAllowedOriginsText: '',
+      allowedMimeTypesText: ''
+    };
+  }
+
+  function captureDraft(): SystemSettingsDraft {
+    return {
+      runtime: normalizeRuntime(runtime),
+      databaseInput,
+      corsAllowedOriginsText,
+      allowedMimeTypesText
+    };
+  }
+
+  function applyDraft(draft: SystemSettingsDraft | null): void {
+    if (!draft) {
+      return;
+    }
+    runtime = normalizeRuntime(draft.runtime);
+    databaseInput = draft.databaseInput ?? '';
+    corsAllowedOriginsText = draft.corsAllowedOriginsText ?? runtime.cors_allowed_origins.join('\n');
+    allowedMimeTypesText = draft.allowedMimeTypesText ?? runtime.multimodal_allowed_mime_types.join('\n');
   }
 
   function allRuntimeKeys(): RuntimeKey[] {
@@ -255,15 +290,15 @@
     runtimeMeta = payload.runtime_meta ?? {};
     corsAllowedOriginsText = runtime.cors_allowed_origins.join('\n');
     allowedMimeTypesText = runtime.multimodal_allowed_mime_types.join('\n');
+    fieldErrors = {};
   }
 
-  function metaFor(key: RuntimeKey): RuntimeFieldMeta {
-    return runtimeMeta[key] ?? {
-      apply_mode: 'live',
-      source: 'default',
-      category: 'runtime',
-      description: ''
-    };
+  function runtimeFieldError(key: RuntimeKey): string {
+    return fieldErrors[`runtime.${key}`] ?? '';
+  }
+
+  function databaseFieldError(key: string): string {
+    return fieldErrors[`database.${key}`] ?? '';
   }
 
   function valuesEqual(left: SystemRuntimeConfig[RuntimeKey], right: SystemRuntimeConfig[RuntimeKey]): boolean {
@@ -285,16 +320,33 @@
     return !valuesEqual(runtimeSaved[key], runtimeDefaults[key]);
   }
 
-  function syncStateFor(key: RuntimeKey): 'restart_pending' | 'restart_active' | 'live_active' | 'live_drift' | 'default' {
-    const meta = metaFor(key);
-    const differs = runtimeDiffers(key);
-    if (!isCustomized(key)) {
-      return differs && meta.apply_mode === 'live' ? 'live_drift' : 'default';
-    }
-    if (meta.apply_mode === 'restart') {
-      return differs ? 'restart_pending' : 'restart_active';
-    }
-    return differs ? 'live_drift' : 'live_active';
+  function countLiveApplied(
+    current: SystemRuntimeConfig,
+    saved: SystemRuntimeConfig,
+    defaults: SystemRuntimeConfig,
+    live: SystemRuntimeConfig,
+    meta: Record<string, RuntimeFieldMeta>
+  ): number {
+    return allRuntimeKeys().filter((key) => {
+      const fieldMeta = meta[key] ?? { apply_mode: 'live', source: 'default', category: 'runtime', description: '' };
+      const customized = !valuesEqual(saved[key], defaults[key]);
+      const differs = !valuesEqual(saved[key], live[key]);
+      if (!customized) {
+        return false;
+      }
+      if (fieldMeta.apply_mode === 'restart') {
+        return !differs;
+      }
+      return !differs && valuesEqual(current[key], saved[key]);
+    }).length;
+  }
+
+  function countDirty(current: SystemRuntimeConfig, saved: SystemRuntimeConfig): number {
+    return allRuntimeKeys().filter((key) => !valuesEqual(current[key], saved[key])).length;
+  }
+
+  function countOverrides(saved: SystemRuntimeConfig, defaults: SystemRuntimeConfig): number {
+    return allRuntimeKeys().filter((key) => !valuesEqual(saved[key], defaults[key])).length;
   }
 
   function formatRuntimeValue(key: RuntimeKey, value: SystemRuntimeConfig[RuntimeKey]): string {
@@ -305,10 +357,6 @@
       return value ? 'enabled' : 'disabled';
     }
     return String(value);
-  }
-
-  function defaultValueFor(key: RuntimeKey): SystemRuntimeConfig[RuntimeKey] {
-    return runtimeDefaults[key];
   }
 
   function revertDraft(key: RuntimeKey): void {
@@ -325,23 +373,10 @@
     runtime = { ...runtime, [key]: runtimeSaved[key] } as SystemRuntimeConfig;
   }
 
-  function setLocalDefault(key: RuntimeKey): void {
-    if (key === 'cors_allowed_origins' || key === 'multimodal_allowed_mime_types') {
-      if (key === 'cors_allowed_origins') {
-        runtime = { ...runtime, cors_allowed_origins: [...runtimeDefaults.cors_allowed_origins] };
-        corsAllowedOriginsText = runtimeDefaults.cors_allowed_origins.join('\n');
-      } else {
-        runtime = { ...runtime, multimodal_allowed_mime_types: [...runtimeDefaults.multimodal_allowed_mime_types] };
-        allowedMimeTypesText = runtimeDefaults.multimodal_allowed_mime_types.join('\n');
-      }
-      return;
-    }
-    runtime = { ...runtime, [key]: runtimeDefaults[key] } as SystemRuntimeConfig;
-  }
-
   async function loadData(): Promise<void> {
     if (!$selectedTarget || !$targetState.session.authenticated) {
       loading = false;
+      draftReady = false;
       return;
     }
     loading = true;
@@ -353,6 +388,12 @@
         fetchHealth($selectedTarget, '/health/ready')
       ]);
       applyConfig(configPayload);
+      savedDraft = captureDraft();
+      activeDraftKey = systemDraftKey;
+      hydratingDraft = true;
+      applyDraft(readSessionDraft<SystemSettingsDraft>(systemDraftKey, systemDraftVersion));
+      hydratingDraft = false;
+      draftReady = true;
       ready = readyPayload;
     } catch (cause) {
       error = cause instanceof Error ? cause.message : 'Failed to load system settings';
@@ -365,6 +406,89 @@
     if (!$selectedTarget) {
       return;
     }
+    const nextErrors: Record<string, string> = {};
+    const corsOrigins = parseLineList(corsAllowedOriginsText);
+    const allowedMimeTypes = parseLineList(allowedMimeTypesText);
+
+    if (!runtime.default_provider.trim()) {
+      nextErrors['runtime.default_provider'] = 'Select a gateway provider.';
+    }
+    if (!runtime.internal_default_provider.trim()) {
+      nextErrors['runtime.internal_default_provider'] = 'Select an internal provider.';
+    }
+    if (!isPositiveInteger(runtime.conversation_timeout_seconds)) {
+      nextErrors['runtime.conversation_timeout_seconds'] = 'Use a positive integer.';
+    }
+    if (!isPositiveInteger(runtime.provider_timeout_seconds)) {
+      nextErrors['runtime.provider_timeout_seconds'] = 'Use a positive integer.';
+    }
+    if (!isNonNegativeInteger(runtime.message_threshold)) {
+      nextErrors['runtime.message_threshold'] = 'Use a non-negative integer.';
+    }
+    if (!isNonNegativeInteger(runtime.token_threshold)) {
+      nextErrors['runtime.token_threshold'] = 'Use a non-negative integer.';
+    }
+    if (!isPositiveInteger(runtime.max_context_tokens)) {
+      nextErrors['runtime.max_context_tokens'] = 'Use a positive integer.';
+    }
+    if (!isPositiveInteger(runtime.max_injection_tokens)) {
+      nextErrors['runtime.max_injection_tokens'] = 'Use a positive integer.';
+    }
+    if (!isPositiveInteger(runtime.rerank_candidate_multiplier)) {
+      nextErrors['runtime.rerank_candidate_multiplier'] = 'Use a positive integer.';
+    }
+    if (!isPositiveInteger(runtime.rerank_min_candidates)) {
+      nextErrors['runtime.rerank_min_candidates'] = 'Use a positive integer.';
+    }
+    if (!isPositiveInteger(runtime.rerank_max_candidates)) {
+      nextErrors['runtime.rerank_max_candidates'] = 'Use a positive integer.';
+    }
+    if (runtime.rerank_max_candidates < runtime.rerank_min_candidates) {
+      nextErrors['runtime.rerank_max_candidates'] = 'Max candidates must be greater than or equal to min candidates.';
+    }
+    if (!isNumberInRange(runtime.rerank_blend_weight, 0, 1)) {
+      nextErrors['runtime.rerank_blend_weight'] = 'Use a value between 0 and 1.';
+    }
+    if (!isPositiveInteger(runtime.memory_relation_max_hops)) {
+      nextErrors['runtime.memory_relation_max_hops'] = 'Use a positive integer.';
+    }
+    if (!isNumberInRange(runtime.memory_relation_hop_decay_lambda, 0, 2)) {
+      nextErrors['runtime.memory_relation_hop_decay_lambda'] = 'Use a value between 0 and 2.';
+    }
+    if (!isNumberInRange(runtime.memory_relation_hop_decay_exponent, 0.5, 3)) {
+      nextErrors['runtime.memory_relation_hop_decay_exponent'] = 'Use a value between 0.5 and 3.';
+    }
+    if (!isNonNegativeInteger(runtime.rate_limit_rps)) {
+      nextErrors['runtime.rate_limit_rps'] = 'Use a non-negative integer.';
+    }
+    if (!isNonNegativeInteger(runtime.rate_limit_burst)) {
+      nextErrors['runtime.rate_limit_burst'] = 'Use a non-negative integer.';
+    }
+    if (!isNonNegativeInteger(runtime.cache_ttl_seconds)) {
+      nextErrors['runtime.cache_ttl_seconds'] = 'Use a non-negative integer.';
+    }
+    if (corsOrigins.some((origin) => !isOriginValue(origin))) {
+      nextErrors['runtime.cors_allowed_origins'] = 'Each origin must be a full http(s) origin or *.';
+    }
+    if (!runtime.multimodal_storage_backend.trim()) {
+      nextErrors['runtime.multimodal_storage_backend'] = 'Choose a storage backend.';
+    }
+    if (runtime.multimodal_storage_backend === 'local' && !runtime.multimodal_storage_local_root.trim()) {
+      nextErrors['runtime.multimodal_storage_local_root'] = 'Local storage needs a blob root path.';
+    }
+    if (!isPositiveInteger(runtime.multimodal_max_asset_bytes)) {
+      nextErrors['runtime.multimodal_max_asset_bytes'] = 'Use a positive integer.';
+    }
+    if (allowedMimeTypes.some((mime) => !isMimeType(mime))) {
+      nextErrors['runtime.multimodal_allowed_mime_types'] = 'Each value must be a valid MIME type like image/png.';
+    }
+
+    fieldErrors = nextErrors;
+    if (Object.keys(nextErrors).length > 0) {
+      error = 'Please fix the highlighted runtime fields.';
+      success = '';
+      return;
+    }
     saving = true;
     error = '';
     success = '';
@@ -372,17 +496,15 @@
       const payload = await saveConfig($selectedTarget, {
         runtime: {
           ...runtime,
-          cors_allowed_origins: corsAllowedOriginsText
-            .split(/\n|,/)
-            .map((item) => item.trim())
-            .filter(Boolean),
-          multimodal_allowed_mime_types: allowedMimeTypesText
-            .split(/\n|,/)
-            .map((item) => item.trim())
-            .filter(Boolean)
+          cors_allowed_origins: corsOrigins,
+          multimodal_allowed_mime_types: allowedMimeTypes
         }
       });
       applyConfig(payload);
+      savedDraft = captureDraft();
+      if (activeDraftKey) {
+        clearSessionDraft(activeDraftKey);
+      }
       success = 'System settings applied to the target.';
     } catch (cause) {
       error = cause instanceof Error ? cause.message : 'Failed to save system settings';
@@ -395,6 +517,13 @@
     if (!$selectedTarget || !databaseInput.trim()) {
       return;
     }
+    fieldErrors = {};
+    if (!isPostgresURL(databaseInput.trim())) {
+      fieldErrors = { 'database.url': 'Database URL must use postgres:// or postgresql://.' };
+      error = 'Please fix the database connection URL.';
+      success = '';
+      return;
+    }
     databaseSaving = true;
     error = '';
     success = '';
@@ -405,6 +534,10 @@
         }
       });
       applyConfig(payload);
+      savedDraft = captureDraft();
+      if (activeDraftKey) {
+        clearSessionDraft(activeDraftKey);
+      }
       success = 'Database connection updated and applied to the target.';
     } catch (cause) {
       error = cause instanceof Error ? cause.message : 'Failed to update database connection';
@@ -427,6 +560,10 @@
         }
       });
       applyConfig(payload);
+      savedDraft = captureDraft();
+      if (activeDraftKey) {
+        clearSessionDraft(activeDraftKey);
+      }
       success = 'Database override cleared. The target is now using the deployment default, if one exists.';
     } catch (cause) {
       error = cause instanceof Error ? cause.message : 'Failed to clear database connection override';
@@ -539,19 +676,6 @@
     return `Draft ${draftValue}`;
   }
 
-  function databaseTone(status: string): StatusTone {
-    switch (status) {
-      case 'ready':
-        return 'success';
-      case 'degraded':
-        return 'danger';
-      case 'inactive':
-        return 'muted';
-      default:
-        return 'warning';
-    }
-  }
-
   function databaseSourceLabel(source: string): string {
     switch (source) {
       case 'override':
@@ -564,12 +688,39 @@
         return source;
     }
   }
+
+  function systemStatusLine(): string {
+    const overrideCount = countOverrides(runtimeSaved, runtimeDefaults);
+    const dirtyCount = countDirty(runtime, runtimeSaved);
+    const liveAppliedCount = countLiveApplied(runtime, runtimeSaved, runtimeDefaults, runtimeLive, runtimeMeta);
+    const parts = [overrideCount > 0 ? `${overrideCount} overrides` : 'Runtime defaults active'];
+    if (dirtyCount > 0) {
+      parts.push(`${dirtyCount} draft`);
+    }
+    if (liveAppliedCount > 0) {
+      parts.push(`${liveAppliedCount} live`);
+    }
+    if (ready?.status && ready.status !== 'unknown') {
+      parts.push(`Health ${ready.status}`);
+    }
+    return parts.join(' · ');
+  }
 </script>
 
 <section class="page-stack">
   <div class="hero-card">
-    <span class="sidebar-label">Settings / System</span>
-    <h1 class="page-title">System runtime</h1>
+    <div class="page-header system-page-header">
+      <div class="page-stack system-header-copy">
+        <h1 class="page-title">System</h1>
+        <div class="subtle-text">{systemStatusLine()}</div>
+      </div>
+      {#if $targetState.session.authenticated && !loading}
+        <div class="inline-group system-actions" style="justify-content: flex-end;">
+          <button class="button-ghost" type="button" disabled={saving} on:click={resetAll}>Reset All Overrides</button>
+          <button class="button" type="button" disabled={saving} on:click={persist}>{saving ? 'Saving...' : 'Save System Settings'}</button>
+        </div>
+      {/if}
+    </div>
   </div>
 
   {#if !$targetState.session.authenticated}
@@ -579,332 +730,255 @@
   {:else if loading}
     <div class="notice-card">Loading system settings...</div>
   {:else}
-    <section class="card page-stack">
-      <div class="page-header">
-        <div>
-          <h2 class="page-title" style="font-size: 1.35rem;">Database connection</h2>
-        </div>
-        <StatusBadge tone={databaseTone(database.status)} label={database.status} />
-      </div>
-
-      <div class="grid-2 system-layout-grid">
-        <div class="page-stack" style="gap: 10px;">
-          <div class="debug-block">
-            <strong>{database.display ?? 'No database connection is configured.'}</strong>
-            <div class="helper-text">{databaseSourceLabel(database.source)}</div>
-            {#if database.updated_at}
-              <div class="helper-text">Updated {new Date(database.updated_at).toLocaleString()}</div>
-            {/if}
-          </div>
-          {#if database.last_error}
-            <div class="error-state" style="margin: 0;">{database.last_error}</div>
-          {/if}
-        </div>
-
-        <div class="page-stack" style="gap: 12px;">
-          <label class="field">
-            <span class="field-label">Connection URI</span>
-            <input
-              class="input"
-              bind:value={databaseInput}
-              placeholder="postgres://user:password@127.0.0.1:5432/memstation?sslmode=disable"
-            />
-          </label>
-          <div class="inline-group system-actions" style="justify-content: flex-end;">
-            <button
-              class="button-ghost"
-              type="button"
-              disabled={databaseSaving || database.source !== 'override'}
-              on:click={clearDatabase}
-            >
-              Clear override
-            </button>
-            <button class="button" type="button" disabled={databaseSaving || !databaseInput.trim()} on:click={persistDatabase}>
-              {databaseSaving ? 'Applying...' : 'Apply database'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <div class="summary-strip">
-      <div class="summary-chip"><strong>{overrideCount}</strong> overrides</div>
-      <div class="summary-chip"><strong>{dirtyCount}</strong> unsaved</div>
-      <div class="summary-chip"><strong>{liveAppliedCount}</strong> live</div>
-      <div class="summary-chip"><strong>{ready?.status ?? 'unknown'}</strong> readiness</div>
-    </div>
-
     {#if success}
       <div class="notice-card">{success}</div>
     {/if}
 
-    <div class="inline-group system-actions" style="justify-content: flex-end;">
-      <button class="button-ghost" type="button" disabled={saving} on:click={resetAll}>Reset all overrides</button>
-      <button class="button" type="button" disabled={saving} on:click={persist}>{saving ? 'Saving...' : 'Save system settings'}</button>
-    </div>
-
-    <div class="grid-2 system-layout-grid">
+    <div class="page-stack system-layout">
       <section class="card page-stack">
         <div class="page-header">
-          <div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Traffic</h2>
+          <div class="page-stack system-card-title">
+            <h2 class="section-title">Database Connection</h2>
+            <div class="subtle-text">{database.status} · {databaseSourceLabel(database.source)}</div>
           </div>
         </div>
 
-        <div class="form-grid two-up">
-          <label class="field">
-            <span class="field-label">Gateway default provider</span>
-            <select class="input" bind:value={runtime.default_provider}>
-              <option value="openai_compatible">openai_compatible</option>
-              <option value="openai_responses">openai_responses</option>
-              <option value="anthropic">anthropic</option>
-              <option value="gemini">gemini</option>
-            </select>
-          </label>
-          <label class="field">
-            <span class="field-label">Internal default provider</span>
-            <select class="input" bind:value={runtime.internal_default_provider}>
-              <option value="openai_compatible">openai_compatible</option>
-              <option value="openai_responses">openai_responses</option>
-              <option value="anthropic">anthropic</option>
-              <option value="gemini">gemini</option>
-            </select>
-          </label>
-          <label class="field">
-            <span class="field-label">Conversation timeout</span>
-            <input class="input" type="number" min="0" bind:value={runtime.conversation_timeout_seconds} />
-          </label>
-          <label class="field">
-            <span class="field-label">Provider timeout</span>
-            <input class="input" type="number" min="0" bind:value={runtime.provider_timeout_seconds} />
-          </label>
-          <label class="field">
-            <span class="field-label">Message threshold</span>
-            <input class="input" type="number" min="0" bind:value={runtime.message_threshold} />
-          </label>
-          <label class="field">
-            <span class="field-label">Token threshold</span>
-            <input class="input" type="number" min="0" bind:value={runtime.token_threshold} />
-          </label>
+        <div class="debug-block database-summary-block">
+          <strong>{database.display ?? 'No database connection is configured.'}</strong>
+          {#if database.updated_at}
+            <div class="helper-text">Updated {new Date(database.updated_at).toLocaleString()}</div>
+          {/if}
+        </div>
+        {#if database.last_error}
+          <div class="error-state" style="margin: 0;">{database.last_error}</div>
+        {/if}
+
+        <TextInputField
+          label="Connection URI"
+          bind:value={databaseInput}
+          placeholder="postgres://user:password@127.0.0.1:5432/memstation?sslmode=disable"
+          error={databaseFieldError('url')}
+        />
+        <div class="inline-group system-actions" style="justify-content: flex-end;">
+          <button class="button-ghost" type="button" disabled={databaseSaving || database.source !== 'override'} on:click={clearDatabase}>
+            Clear Override
+          </button>
+          <button class="button" type="button" disabled={databaseSaving || !databaseInput.trim()} on:click={persistDatabase}>
+            {databaseSaving ? 'Applying...' : 'Apply Database'}
+          </button>
         </div>
       </section>
 
-      <section class="card page-stack">
-        <div class="page-header">
-          <div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Memory and web</h2>
+      <div class="grid-2 system-compact-grid">
+        <section class="card page-stack">
+          <div class="page-header">
+            <h2 class="section-title">Traffic</h2>
           </div>
-        </div>
 
-        <div class="form-grid two-up">
-          <div class="settings-subsection">
-            <div class="sidebar-label">Recall budgets</div>
+          <div class="form-grid two-up">
+            <SelectField
+              label="Gateway Default Provider"
+              items={llmProviderItems}
+              bind:value={runtime.default_provider}
+              error={runtimeFieldError('default_provider')}
+            />
+            <SelectField
+              label="Internal Default Provider"
+              items={llmProviderItems}
+              bind:value={runtime.internal_default_provider}
+              error={runtimeFieldError('internal_default_provider')}
+            />
+            <TextInputField label="Conversation Timeout" bind:value={runtime.conversation_timeout_seconds} type="number" min="0" error={runtimeFieldError('conversation_timeout_seconds')} />
+            <TextInputField label="Provider Timeout" bind:value={runtime.provider_timeout_seconds} type="number" min="0" error={runtimeFieldError('provider_timeout_seconds')} />
+            <TextInputField label="Message Threshold" bind:value={runtime.message_threshold} type="number" min="0" error={runtimeFieldError('message_threshold')} />
+            <TextInputField label="Token Threshold" bind:value={runtime.token_threshold} type="number" min="0" error={runtimeFieldError('token_threshold')} />
           </div>
-          <label class="field">
-            <span class="field-label">Vector store backend</span>
-            <select class="input" bind:value={runtime.vector_store_backend}>
-              <option value="pgvector">pgvector</option>
-            </select>
-          </label>
-          <label class="field">
-            <span class="field-label">Max context tokens</span>
-            <input class="input" type="number" min="0" bind:value={runtime.max_context_tokens} />
-          </label>
-          <label class="field">
-            <span class="field-label">Max injection tokens</span>
-            <input class="input" type="number" min="0" bind:value={runtime.max_injection_tokens} />
-          </label>
-          <label class="field">
-            <span class="field-label">Cache TTL</span>
-            <input class="input" type="number" min="0" bind:value={runtime.cache_ttl_seconds} />
-          </label>
-          <div class="settings-subsection">
-            <div class="sidebar-label">Reranking</div>
-          </div>
-          <label class="field">
-            <span class="field-label">Rerank model</span>
-            <input class="input" bind:value={runtime.rerank_model} placeholder="cohere:rerank-v3.5" />
-          </label>
-          <label class="field">
-            <span class="field-label">Candidate multiplier</span>
-            <input class="input" type="number" min="1" max="16" bind:value={runtime.rerank_candidate_multiplier} />
-          </label>
-          <label class="field">
-            <span class="field-label">Min rerank candidates</span>
-            <input class="input" type="number" min="1" bind:value={runtime.rerank_min_candidates} />
-          </label>
-          <label class="field">
-            <span class="field-label">Max rerank candidates</span>
-            <input class="input" type="number" min="1" bind:value={runtime.rerank_max_candidates} />
-          </label>
-          <label class="field">
-            <span class="field-label">Rerank blend weight</span>
-            <input class="input" type="number" min="0" max="1" step="0.05" bind:value={runtime.rerank_blend_weight} />
-          </label>
-          <div class="settings-subsection">
-            <div class="sidebar-label">Relation expansion</div>
-          </div>
-          <label class="field">
-            <span class="field-label">Relation max hops</span>
-            <input class="input" type="number" min="1" max="4" bind:value={runtime.memory_relation_max_hops} />
-          </label>
-          <label class="field">
-            <span class="field-label">Hop decay lambda</span>
-            <input class="input" type="number" min="0" max="2" step="0.05" bind:value={runtime.memory_relation_hop_decay_lambda} />
-          </label>
-          <label class="field">
-            <span class="field-label">Hop decay exponent</span>
-            <input class="input" type="number" min="0.5" max="3" step="0.05" bind:value={runtime.memory_relation_hop_decay_exponent} />
-          </label>
-          <div class="settings-subsection">
-            <div class="sidebar-label">Web controls</div>
-          </div>
-          <label class="field">
-            <span class="field-label">Rate limit RPS</span>
-            <input class="input" type="number" min="0" bind:value={runtime.rate_limit_rps} />
-          </label>
-          <label class="field">
-            <span class="field-label">Rate limit burst</span>
-            <input class="input" type="number" min="0" bind:value={runtime.rate_limit_burst} />
-          </label>
-          <label class="field">
-            <span class="field-label">Cross-site admin cookie</span>
-            <div class="inline-group">
-              <button class={runtime.session_cookie_cross_site ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (runtime.session_cookie_cross_site = true)}>Enabled</button>
-              <button class={!runtime.session_cookie_cross_site ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (runtime.session_cookie_cross_site = false)}>Disabled</button>
-            </div>
-          </label>
-          <label class="field" style="grid-column: 1 / -1;">
-            <span class="field-label">CORS allowed origins</span>
-            <textarea class="textarea" rows="5" bind:value={corsAllowedOriginsText} placeholder="https://manager.example.com\nhttp://localhost:5173"></textarea>
-          </label>
-        </div>
-      </section>
-    </div>
+        </section>
 
-    <section class="card page-stack">
-        <div class="page-header">
-          <div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Multimodal</h2>
+        <section class="card page-stack">
+          <div class="page-header">
+            <h2 class="section-title">Recall</h2>
           </div>
-        </div>
 
-      <div class="form-grid two-up">
-        <label class="field">
-          <span class="field-label">Multimodal ingestion</span>
-          <div class="inline-group">
-            <button class={runtime.multimodal_enabled ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (runtime.multimodal_enabled = true)}>Enabled</button>
-            <button class={!runtime.multimodal_enabled ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (runtime.multimodal_enabled = false)}>Disabled</button>
+          <div class="form-grid two-up">
+            <SelectField label="Vector Store Backend" items={vectorStoreItems} bind:value={runtime.vector_store_backend} />
+            <TextInputField label="Max Context Tokens" bind:value={runtime.max_context_tokens} type="number" min="0" error={runtimeFieldError('max_context_tokens')} />
+            <TextInputField label="Max Injection Tokens" bind:value={runtime.max_injection_tokens} type="number" min="0" error={runtimeFieldError('max_injection_tokens')} />
           </div>
-        </label>
-        <label class="field">
-          <span class="field-label">Blob storage backend</span>
-          <select class="input" bind:value={runtime.multimodal_storage_backend}>
-            <option value="local">local</option>
-          </select>
-        </label>
-        <label class="field">
-          <span class="field-label">Local blob root</span>
-          <input class="input" bind:value={runtime.multimodal_storage_local_root} />
-        </label>
-        <label class="field">
-          <span class="field-label">Remote bucket</span>
-          <input class="input" bind:value={runtime.multimodal_storage_bucket} placeholder="memstation-assets" />
-        </label>
-        <label class="field">
-          <span class="field-label">Image extractor model</span>
-          <input class="input" bind:value={runtime.multimodal_extract_image_model} placeholder="configured vision model" />
-        </label>
-        <label class="field">
-          <span class="field-label">Audio extractor model</span>
-          <input class="input" bind:value={runtime.multimodal_extract_audio_model} placeholder="configured ASR model" />
-        </label>
-        <label class="field">
-          <span class="field-label">Video extractor model</span>
-          <input class="input" bind:value={runtime.multimodal_extract_video_model} placeholder="configured video model" />
-        </label>
-        <label class="field">
-          <span class="field-label">File extractor model</span>
-          <input class="input" bind:value={runtime.multimodal_extract_file_model} placeholder="configured document model" />
-        </label>
-        <label class="field">
-          <span class="field-label">Max asset bytes</span>
-          <input class="input" type="number" min="0" bind:value={runtime.multimodal_max_asset_bytes} />
-        </label>
-        <label class="field">
-          <span class="field-label">Audio transcription</span>
-          <div class="inline-group">
-            <button class={runtime.multimodal_audio_transcription_enabled ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (runtime.multimodal_audio_transcription_enabled = true)}>Enabled</button>
-            <button class={!runtime.multimodal_audio_transcription_enabled ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (runtime.multimodal_audio_transcription_enabled = false)}>Disabled</button>
+        </section>
+
+        <section class="card page-stack">
+          <div class="page-header">
+            <h2 class="section-title">Rerank</h2>
           </div>
-        </label>
-        <label class="field">
-          <span class="field-label">Video frame sampling</span>
-          <div class="inline-group">
-            <button class={runtime.multimodal_video_frame_sampling_enabled ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (runtime.multimodal_video_frame_sampling_enabled = true)}>Enabled</button>
-            <button class={!runtime.multimodal_video_frame_sampling_enabled ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (runtime.multimodal_video_frame_sampling_enabled = false)}>Disabled</button>
+
+          <div class="form-grid two-up">
+            <TextInputField label="Cache TTL" bind:value={runtime.cache_ttl_seconds} type="number" min="0" error={runtimeFieldError('cache_ttl_seconds')} />
+            <TextInputField label="Rerank Model" bind:value={runtime.rerank_model} placeholder="cohere:rerank-v3.5" />
+            <TextInputField label="Candidate Multiplier" bind:value={runtime.rerank_candidate_multiplier} type="number" min="1" max="16" error={runtimeFieldError('rerank_candidate_multiplier')} />
+            <TextInputField label="Min Rerank Candidates" bind:value={runtime.rerank_min_candidates} type="number" min="1" error={runtimeFieldError('rerank_min_candidates')} />
+            <TextInputField label="Max Rerank Candidates" bind:value={runtime.rerank_max_candidates} type="number" min="1" error={runtimeFieldError('rerank_max_candidates')} />
+            <TextInputField label="Rerank Blend Weight" bind:value={runtime.rerank_blend_weight} type="number" min="0" max="1" step="0.05" error={runtimeFieldError('rerank_blend_weight')} />
           </div>
-        </label>
-        <label class="field" style="grid-column: 1 / -1;">
-          <span class="field-label">Allowed MIME types</span>
-          <textarea class="textarea" rows="6" bind:value={allowedMimeTypesText} placeholder="image/png&#10;application/pdf&#10;audio/mpeg"></textarea>
-        </label>
+        </section>
+
+        <section class="card page-stack">
+          <div class="page-header">
+            <h2 class="section-title">Relations</h2>
+          </div>
+
+          <div class="form-grid two-up">
+            <TextInputField label="Relation Max Hops" bind:value={runtime.memory_relation_max_hops} type="number" min="1" max="4" error={runtimeFieldError('memory_relation_max_hops')} />
+            <TextInputField label="Hop Decay Lambda" bind:value={runtime.memory_relation_hop_decay_lambda} type="number" min="0" max="2" step="0.05" error={runtimeFieldError('memory_relation_hop_decay_lambda')} />
+            <TextInputField label="Hop Decay Exponent" bind:value={runtime.memory_relation_hop_decay_exponent} type="number" min="0.5" max="3" step="0.05" error={runtimeFieldError('memory_relation_hop_decay_exponent')} />
+          </div>
+        </section>
       </div>
-    </section>
 
-    <section class="card page-stack">
+      <section class="card page-stack">
         <div class="page-header">
-          <div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Changes</h2>
+          <h2 class="section-title">Web</h2>
+        </div>
+
+        <div class="form-grid two-up">
+          <TextInputField label="Rate Limit RPS" bind:value={runtime.rate_limit_rps} type="number" min="0" error={runtimeFieldError('rate_limit_rps')} />
+          <TextInputField label="Rate Limit Burst" bind:value={runtime.rate_limit_burst} type="number" min="0" error={runtimeFieldError('rate_limit_burst')} />
+          <SwitchField
+            label="Cross-Site Admin Cookie"
+            bind:checked={runtime.session_cookie_cross_site}
+          />
+          <TextareaField
+            label="CORS Allowed Origins"
+            bind:value={corsAllowedOriginsText}
+            rows={4}
+            placeholder="https://manager.example.com\nhttp://localhost:5173"
+            error={runtimeFieldError('cors_allowed_origins')}
+            fieldClass="field-span-2"
+          />
+        </div>
+      </section>
+
+      <section class="card page-stack">
+        <div class="page-header">
+          <h2 class="section-title">Multimodal</h2>
+        </div>
+
+        <div class="system-subsection-grid">
+          <div class="system-subsection">
+            <h3 class="system-subtitle">Storage</h3>
+            <div class="form-grid two-up">
+              <SwitchField label="Multimodal Ingestion" bind:checked={runtime.multimodal_enabled} />
+              <SelectField
+                label="Blob Storage Backend"
+                items={storageBackendItems}
+                bind:value={runtime.multimodal_storage_backend}
+                error={runtimeFieldError('multimodal_storage_backend')}
+              />
+              <TextInputField label="Local Blob Root" bind:value={runtime.multimodal_storage_local_root} error={runtimeFieldError('multimodal_storage_local_root')} />
+              <TextInputField label="Remote Bucket" bind:value={runtime.multimodal_storage_bucket} placeholder="memstation-assets" />
+            </div>
+          </div>
+
+          <div class="system-subsection">
+            <h3 class="system-subtitle">Extractors</h3>
+            <div class="form-grid two-up">
+              <TextInputField label="Image Extractor Model" bind:value={runtime.multimodal_extract_image_model} placeholder="configured vision model" />
+              <TextInputField label="Audio Extractor Model" bind:value={runtime.multimodal_extract_audio_model} placeholder="configured ASR model" />
+              <TextInputField label="Video Extractor Model" bind:value={runtime.multimodal_extract_video_model} placeholder="configured video model" />
+              <TextInputField label="File Extractor Model" bind:value={runtime.multimodal_extract_file_model} placeholder="configured document model" />
+            </div>
           </div>
         </div>
 
-      {#if trackedRuntimeKeys().length === 0}
-        <div class="empty-state">Everything is using deployment defaults.</div>
-      {:else}
-        <div class="runtime-field-list compact-runtime-list">
-          {#each trackedRuntimeKeys() as key}
-            <div class="runtime-field-row compact-runtime-row">
-              <div>
-                <strong>{displayKeyName(key)}</strong>
-                <div class="helper-text">{summaryTextFor(key)}</div>
-              </div>
-              <div class="runtime-field-status">
-                {#if draftDiffers(key)}
-                  <button class="button-ghost" type="button" disabled={saving} on:click={() => revertDraft(key)}>Revert</button>
-                {/if}
-                {#if isCustomized(key)}
-                  <button class="button-ghost" type="button" disabled={saving} on:click={() => resetField(key)}>Clear</button>
-                {/if}
-              </div>
-            </div>
-          {/each}
+        <div class="system-subsection">
+          <h3 class="system-subtitle">Policies</h3>
+          <div class="form-grid two-up">
+            <TextInputField label="Max Asset Bytes" bind:value={runtime.multimodal_max_asset_bytes} type="number" min="0" error={runtimeFieldError('multimodal_max_asset_bytes')} />
+            <SwitchField label="Audio Transcription" bind:checked={runtime.multimodal_audio_transcription_enabled} />
+            <SwitchField label="Video Frame Sampling" bind:checked={runtime.multimodal_video_frame_sampling_enabled} />
+            <TextareaField
+              label="Allowed MIME Types"
+              bind:value={allowedMimeTypesText}
+              rows={5}
+              placeholder="image/png&#10;application/pdf&#10;audio/mpeg"
+              error={runtimeFieldError('multimodal_allowed_mime_types')}
+              fieldClass="field-span-2"
+            />
+          </div>
         </div>
-      {/if}
-    </section>
+      </section>
+
+      <section class="card page-stack">
+        <div class="page-header">
+          <h2 class="section-title">Overrides</h2>
+        </div>
+
+        {#if trackedRuntimeKeys().length === 0}
+          <div class="empty-state">Using deployment defaults.</div>
+        {:else}
+          <div class="runtime-field-list compact-runtime-list">
+            {#each trackedRuntimeKeys() as key}
+              <div class="runtime-field-row compact-runtime-row">
+                <div>
+                  <strong>{displayKeyName(key)}</strong>
+                  <div class="helper-text">{summaryTextFor(key)}</div>
+                </div>
+                <div class="runtime-field-status">
+                  {#if draftDiffers(key)}
+                    <button class="button-ghost" type="button" disabled={saving} on:click={() => revertDraft(key)}>Revert</button>
+                  {/if}
+                  {#if isCustomized(key)}
+                    <button class="button-ghost" type="button" disabled={saving} on:click={() => resetField(key)}>Clear</button>
+                  {/if}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </section>
+    </div>
   {/if}
 </section>
 
 <style>
+  .system-layout {
+    gap: 16px;
+  }
+
+  .system-compact-grid,
+  .system-subsection-grid {
+    align-items: start;
+  }
+
+  .system-page-header {
+    align-items: center;
+  }
+
+  .system-header-copy,
+  .system-card-title {
+    gap: 4px;
+  }
+
   .system-actions {
     flex-wrap: wrap;
   }
 
-  .system-layout-grid {
-    align-items: start;
+  .system-subsection {
+    display: grid;
+    gap: 12px;
   }
 
-  .settings-subsection {
-    grid-column: 1 / -1;
-    margin-top: 8px;
-    padding-top: 10px;
-    border-top: 1px solid var(--border-soft);
+  .system-subtitle {
+    margin: 0;
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-muted);
   }
 
-  .settings-subsection:first-child {
-    margin-top: 0;
-    padding-top: 0;
-    border-top: 0;
+  .database-summary-block {
+    gap: 6px;
   }
 
   .compact-runtime-list {
@@ -914,5 +988,12 @@
   .compact-runtime-row {
     align-items: center;
     padding-block: 12px;
+  }
+
+  @media (max-width: 1100px) {
+    .system-compact-grid,
+    .system-subsection-grid {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

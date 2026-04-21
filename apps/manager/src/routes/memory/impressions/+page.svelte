@@ -8,8 +8,25 @@
   import MemoryWorkspaceNav from '$lib/components/MemoryWorkspaceNav.svelte';
   import { memoryDetailHref } from '$lib/memory/routes';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
+  import TextInputField from '$lib/components/TextInputField.svelte';
+  import TextareaField from '$lib/components/TextareaField.svelte';
+  import {
+    buildSessionDraftKey,
+    readSessionDraft,
+    useSessionDraftPersistence,
+    useSessionDraftUnloadWarning,
+    writeSessionDraft
+  } from '$lib/stores/session-drafts';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type { MemoryDocument } from '$lib/types';
+
+  type ImpressionsListDraft = {
+    filter: string;
+    editingId: string;
+    draftContent: string;
+  };
+
+  const impressionsDraftVersion = 1;
 
   let loading = true;
   let saving = false;
@@ -23,12 +40,32 @@
   let activeUserId: string | undefined;
   let routeKey = '';
   let visibleImpressions: MemoryDocument[] = [];
+  let activeDraftKey = '';
+  let hydratingDraft = false;
+  let draftReady = false;
+  let currentDraft = emptyDraft();
 
   $: activeUserId = $page.url.searchParams.get('user_id') ?? undefined;
+  $: impressionsDraftKey = buildSessionDraftKey('memory.impressions', $selectedTarget?.id, activeUserId ?? 'admin');
   $: routeKey = `${$selectedTarget?.id ?? 'none'}:${activeUserId ?? 'admin'}:${$targetState.session.authenticated ? 'auth' : 'anon'}`;
   $: if (routeKey !== lastTargetKey && !$targetState.session.checking) {
     lastTargetKey = routeKey;
     void loadData();
+  }
+  $: if (impressionsDraftKey !== activeDraftKey) {
+    activeDraftKey = impressionsDraftKey;
+    hydratingDraft = true;
+    applyDraft(readSessionDraft<ImpressionsListDraft>(impressionsDraftKey, impressionsDraftVersion));
+    hydratingDraft = false;
+    draftReady = true;
+  }
+  $: currentDraft = {
+    filter,
+    editingId,
+    draftContent
+  };
+  $: if (draftReady && !hydratingDraft && activeDraftKey) {
+    writeSessionDraft(activeDraftKey, impressionsDraftVersion, currentDraft);
   }
 
   onMount(async () => {
@@ -43,20 +80,56 @@
     return impression.content.toLowerCase().includes(needle);
   });
 
+  useSessionDraftUnloadWarning(
+    () => {
+      const activeImpression = impressions.find((item) => item.id === editingId);
+      return Boolean(activeImpression && draftContent !== activeImpression.content);
+    },
+    'This impression edit has unsaved changes. Closing or reloading the page may discard the draft kept in this tab.'
+  );
+
+  useSessionDraftPersistence(() => {
+    if (activeDraftKey) {
+      writeSessionDraft(activeDraftKey, impressionsDraftVersion, currentDraft);
+    }
+  });
+
+  function emptyDraft(): ImpressionsListDraft {
+    return {
+      filter: '',
+      editingId: '',
+      draftContent: ''
+    };
+  }
+
+  function applyDraft(draft: ImpressionsListDraft | null, nextImpressions: MemoryDocument[] = impressions): void {
+    filter = draft?.filter ?? '';
+    const requestedId = draft?.editingId ?? '';
+    const activeImpression = requestedId ? nextImpressions.find((item) => item.id === requestedId) : null;
+    editingId = activeImpression?.id ?? '';
+    draftContent = activeImpression ? draft?.draftContent ?? activeImpression.content : '';
+  }
+
   async function loadData(): Promise<void> {
     if (!$selectedTarget || !$targetState.session.authenticated) {
       loading = false;
+      draftReady = false;
       return;
     }
     loading = true;
     error = '';
     success = '';
     try {
-      impressions = await fetchAdminMemoryDocuments($selectedTarget, {
+      const nextImpressions = await fetchAdminMemoryDocuments($selectedTarget, {
         kind: 'impression',
         userId: activeUserId,
         limit: 200
       });
+      impressions = nextImpressions;
+      hydratingDraft = true;
+      applyDraft(readSessionDraft<ImpressionsListDraft>(impressionsDraftKey, impressionsDraftVersion), nextImpressions);
+      hydratingDraft = false;
+      draftReady = true;
     } catch (cause) {
       error = cause instanceof Error ? cause.message : 'Failed to load impressions';
     } finally {
@@ -100,7 +173,7 @@
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">Memory / Impressions</span>
-    <h1 class="page-title">Inspect and correct soft-signal impressions from analysis</h1>
+    <h1 class="page-title">Impressions</h1>
     <p class="page-description">Impressions capture preference hints, attitudes, and familiarity signals that are useful for style adaptation and operator review.</p>
     {#if activeUserId}
       <div class="helper-text">Scoped to user `{activeUserId}`.</div>
@@ -121,10 +194,7 @@
     {/if}
     <section class="card page-stack">
       <div class="filters two-up">
-        <label class="field">
-          <span class="field-label">Filter impressions</span>
-          <input class="input" bind:value={filter} placeholder="tone, preference, attitude, repeated behavior..." />
-        </label>
+        <TextInputField label="Filter Impressions" bind:value={filter} placeholder="tone, preference, attitude, repeated behavior..." />
         <div class="field" style="align-self: end;">
           <div class="helper-text">{visibleImpressions.length} of {impressions.length} impressions visible</div>
         </div>
@@ -152,7 +222,7 @@
                 </div>
               </div>
               {#if editingId === impression.id}
-                <textarea class="textarea" rows="6" bind:value={draftContent}></textarea>
+                <TextareaField label="Impression Content" bind:value={draftContent} rows={6} />
               {:else}
                 <div class="message-body">{impression.content}</div>
               {/if}

@@ -43,7 +43,7 @@
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">Operations / Queues</span>
-    <h1 class="page-title">Queue backlog and worker lane visibility</h1>
+    <h1 class="page-title">Queues</h1>
     <p class="page-description">
       Watch pending, active, scheduled, and retry counts by queue so you can spot buildup before it impacts summary, analysis, or embedding latency.
     </p>

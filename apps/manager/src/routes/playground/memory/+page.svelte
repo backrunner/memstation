@@ -1,13 +1,33 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import { Collapsible } from 'bits-ui';
+
   import { fetchConversation, fetchConversationMemory, searchAdminMemories } from '$lib/api/client';
   import JsonView from '$lib/components/JsonView.svelte';
   import MemoryKeywordSignals from '$lib/components/MemoryKeywordSignals.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
+  import TextInputField from '$lib/components/TextInputField.svelte';
   import { matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '$lib/memory/keyword-signals';
+  import {
+    buildSessionDraftKey,
+    readSessionDraft,
+    useSessionDraftPersistence,
+    useSessionDraftUnloadWarning,
+    writeSessionDraft
+  } from '$lib/stores/session-drafts';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type { ConversationMemoryPayload, ConversationRecord, SearchMemoriesResult } from '$lib/types';
+
+  type MemoryPlaygroundDraft = {
+    conversationId: string;
+    searchQuery: string;
+    detail: ConversationRecord | null;
+    memory: ConversationMemoryPayload | null;
+    searchResult: SearchMemoriesResult | null;
+  };
+
+  const memoryDraftVersion = 1;
 
   let conversationId = '';
   let searchQuery = '';
@@ -17,6 +37,61 @@
   let detail: ConversationRecord | null = null;
   let memory: ConversationMemoryPayload | null = null;
   let searchResult: SearchMemoriesResult | null = null;
+  let activeDraftKey = '';
+  let hydratingDraft = false;
+  let draftReady = false;
+  let memoryDraftSnapshot: MemoryPlaygroundDraft = captureDraft();
+
+  $: memoryDraftKey = buildSessionDraftKey('playground.memory', $selectedTarget?.id);
+  $: if (memoryDraftKey !== activeDraftKey) {
+    activeDraftKey = memoryDraftKey;
+    hydratingDraft = true;
+    applyDraft(readSessionDraft<MemoryPlaygroundDraft>(memoryDraftKey, memoryDraftVersion));
+    hydratingDraft = false;
+    draftReady = true;
+  }
+  $: memoryDraftSnapshot = {
+    conversationId,
+    searchQuery,
+    detail,
+    memory,
+    searchResult
+  };
+  $: if (draftReady && !hydratingDraft && activeDraftKey) {
+    writeSessionDraft(activeDraftKey, memoryDraftVersion, memoryDraftSnapshot);
+  }
+
+  useSessionDraftUnloadWarning(
+    () => Boolean(conversationId.trim() || searchQuery.trim() || detail || memory || searchResult),
+    'This memory playground session is only saved in the current tab. Closing or reloading the page will discard it.'
+  );
+
+  useSessionDraftPersistence(() => {
+    if (activeDraftKey) {
+      writeSessionDraft(activeDraftKey, memoryDraftVersion, captureDraft());
+    }
+  });
+
+  function applyDraft(draft: MemoryPlaygroundDraft | null): void {
+    conversationId = draft?.conversationId ?? '';
+    searchQuery = draft?.searchQuery ?? '';
+    detail = draft?.detail ?? null;
+    memory = draft?.memory ?? null;
+    searchResult = draft?.searchResult ?? null;
+    error = '';
+    loading = false;
+    searchLoading = false;
+  }
+
+  function captureDraft(): MemoryPlaygroundDraft {
+    return {
+      conversationId,
+      searchQuery,
+      detail,
+      memory,
+      searchResult
+    };
+  }
 
   async function inspectConversation(): Promise<void> {
     if (!$selectedTarget || !$targetState.session.authenticated || !conversationId.trim()) {
@@ -69,34 +144,36 @@
 
 <section class="page-stack">
   <div class="hero-card">
-    <span class="sidebar-label">Playground / Memory</span>
-    <h1 class="page-title">Validate extraction output and recall ranking around a conversation</h1>
-    <p class="page-description">
-      Inspect a conversation's persisted memory products, check current worker statuses, and run live recall queries against the selected target's memory engine.
-    </p>
+    <div class="page-stack" style="gap: 4px;">
+      <h1 class="page-title">Memory Playground</h1>
+      <div class="panel-meta">Inspect persisted extraction and run direct recall queries against the selected target.</div>
+    </div>
   </div>
 
   {#if !$targetState.session.authenticated}
     <div class="notice-card">Admin login is required to inspect memory extraction details.</div>
   {:else}
-    <section class="card">
-      <div class="filters two-up">
-        <label class="field">
-          <span class="field-label">Conversation ID</span>
-          <input class="input" bind:value={conversationId} placeholder="conv-..." />
-        </label>
-        <div class="field" style="align-self: end;">
-          <button class="button-secondary" type="button" disabled={loading || !conversationId.trim()} on:click={inspectConversation}>{loading ? 'Loading...' : 'Inspect conversation'}</button>
+    <div class="page-columns">
+      <section class="card page-stack">
+        <div class="page-header">
+          <h2 class="section-title">Inspect Conversation</h2>
+          <button class="button-secondary" type="button" disabled={loading || !conversationId.trim()} on:click={inspectConversation}>{loading ? 'Loading...' : 'Inspect'}</button>
         </div>
-        <label class="field">
-          <span class="field-label">Memory search query</span>
-          <input class="input" bind:value={searchQuery} placeholder="recent preference, travel plan, project status" />
-        </label>
-        <div class="field" style="align-self: end;">
-          <button class="button" type="button" disabled={searchLoading || !searchQuery.trim()} on:click={runSearch}>{searchLoading ? 'Searching...' : 'Run recall search'}</button>
+        <TextInputField label="Conversation ID" bind:value={conversationId} placeholder="conv-..." inputClass="input-mono" />
+      </section>
+
+      <section class="card page-stack">
+        <div class="page-header">
+          <h2 class="section-title">Recall Search</h2>
+          <button class="button" type="button" disabled={searchLoading || !searchQuery.trim()} on:click={runSearch}>{searchLoading ? 'Searching...' : 'Search'}</button>
         </div>
-      </div>
-    </section>
+        <TextInputField
+          label="Memory search query"
+          bind:value={searchQuery}
+          placeholder="recent preference, travel plan, project status"
+        />
+      </section>
+    </div>
 
     {#if error}
       <div class="error-state">{error}</div>
@@ -106,8 +183,7 @@
       <section class="card">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Extraction status</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Conversation-linked memory output</h2>
+            <h2 class="section-title">Extraction</h2>
           </div>
           <div class="toolbar">
             <StatusBadge tone={detail?.summary_status === 'completed' ? 'success' : detail?.summary_status === 'failed' ? 'danger' : detail?.summary_status === 'skipped' ? 'muted' : 'warning'} label={`summary ${detail?.summary_status ?? 'n/a'}`} />
@@ -116,13 +192,17 @@
         </div>
 
         {#if !detail}
-          <div class="empty-state">Inspect a conversation to see its memory chain.</div>
+          <div class="empty-state">Inspect a conversation to load memory.</div>
         {:else}
           <div class="toolbar">
-            <div class="debug-block">
-              <div class="sidebar-label">Conversation metadata</div>
-              <JsonView value={detail.metadata ?? {}} />
-            </div>
+            <Collapsible.Root>
+              <Collapsible.Trigger class="collapsible-trigger">Metadata</Collapsible.Trigger>
+              <Collapsible.Content>
+                <div class="debug-block" style="margin-top: 10px;">
+                  <JsonView value={detail.metadata ?? {}} />
+                </div>
+              </Collapsible.Content>
+            </Collapsible.Root>
             {#if (memory?.documents.length ?? 0) === 0}
               <div class="empty-state">No persisted memory documents are linked to this conversation yet.</div>
             {:else}
@@ -152,8 +232,7 @@
       <section class="card">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Recall search</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Current semantic ranking</h2>
+            <h2 class="section-title">Recall</h2>
           </div>
           {#if searchResult}
             <StatusBadge tone="brand" label={`${searchResult.total} matches`} />
@@ -161,7 +240,7 @@
         </div>
 
         {#if !searchResult}
-          <div class="empty-state">Run a search to inspect scored memory recall and effective ranking order.</div>
+          <div class="empty-state">Run a search to load recall results.</div>
         {:else}
           <div class="helper-text" style="margin-bottom: 12px;">Query embedding tokens: {searchResult.queryEmbeddingTokens}</div>
           <div class="toolbar">

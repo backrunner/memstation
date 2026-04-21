@@ -4,8 +4,8 @@
   import { Collapsible } from 'bits-ui';
 
   import JsonView from '$lib/components/JsonView.svelte';
+  import MarkdownContent from '$lib/components/MarkdownContent.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import { renderMarkdown } from '$lib/utils/markdown';
   import type { ChatThreadMessage, ContentBlock, JSONValue } from '$lib/types';
 
   export let message: ChatThreadMessage;
@@ -16,11 +16,15 @@
     block: ContentBlock;
   }
 
-  let html = '';
   let roleTone: 'warning' | 'brand' | 'success' | 'danger' | 'muted' = 'muted';
+  let showRoleBadge = false;
+  let showMeta = false;
+  let showStateMeta = false;
 
-  $: html = renderMarkdown(message.text);
   $: roleTone = message.role === 'assistant' ? 'brand' : message.role === 'user' ? 'success' : message.role === 'tool' ? 'warning' : 'muted';
+  $: showRoleBadge = message.role === 'system' || message.role === 'tool';
+  $: showStateMeta = Boolean(message.pending || message.error || message.usage?.total_tokens);
+  $: showMeta = showRoleBadge || showStateMeta;
 
   function blockText(block: ContentBlock): string {
     return block.text ?? block.raw ?? '';
@@ -225,31 +229,35 @@
 </script>
 
 <article class={`message-card ${message.role}`}>
-  <div class="message-meta">
-    <StatusBadge tone={roleTone} label={message.role.toUpperCase()} />
-    {#if message.usage?.total_tokens}
-      <span class="subtle-text">{message.usage.total_tokens} total tokens</span>
-    {/if}
-    {#if message.pending}
-      <StatusBadge tone="warning" label="Streaming" />
-    {/if}
-    {#if message.error}
-      <StatusBadge tone="danger" label="Error" />
-    {/if}
-  </div>
+  {#if showMeta}
+    <div class="message-meta">
+      {#if showRoleBadge}
+        <StatusBadge tone={roleTone} label={message.role.toUpperCase()} />
+      {/if}
+      {#if message.usage?.total_tokens}
+        <span class="subtle-text">{message.usage.total_tokens} total tokens</span>
+      {/if}
+      {#if message.pending}
+        <StatusBadge tone="warning" label="Streaming" />
+      {/if}
+      {#if message.error}
+        <StatusBadge tone="danger" label="Error" />
+      {/if}
+    </div>
+  {/if}
 
   {#if message.thinking}
     <Collapsible.Root>
       <Collapsible.Trigger class="collapsible-trigger">Thinking trace</Collapsible.Trigger>
       <Collapsible.Content>
         <div class="debug-block" style="margin-top: 10px;">
-          <div class="message-body">{@html renderMarkdown(message.thinking)}</div>
+          <MarkdownContent value={message.thinking} />
         </div>
       </Collapsible.Content>
     </Collapsible.Root>
   {/if}
 
-  <div class="message-body">{@html html}</div>
+  <MarkdownContent value={message.text} />
 
   {#if message.blocks?.length}
     <div class="toolbar" style="display: grid; gap: 10px; margin-top: 14px;">
@@ -295,7 +303,7 @@
               <strong>{block.type}</strong>
               <span class="subtle-text">{block.mime_type ?? 'derived text'}</span>
             </div>
-            <div class="message-body">{@html renderMarkdown(blockText(block))}</div>
+            <MarkdownContent value={blockText(block)} />
           </div>
         {/if}
       {/each}

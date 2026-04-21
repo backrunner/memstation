@@ -5,6 +5,7 @@
 
   import { fetchConversations } from '$lib/api/client';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
+  import TextInputField from '$lib/components/TextInputField.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type { ConversationListItem } from '$lib/types';
 
@@ -55,7 +56,7 @@
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">Conversations</span>
-    <h1 class="page-title">Trace each request chain from protocol ingress to memory extraction</h1>
+    <h1 class="page-title">Conversations</h1>
     <p class="page-description">
       Browse persisted conversations, inspect finalize and worker states, and open a single session to debug tool round-trips or post-conversation extraction outcomes.
     </p>
@@ -65,14 +66,14 @@
     <div class="notice-card">Admin login is required to inspect conversation history.</div>
   {:else}
     <section class="card">
-      <div class="filters two-up">
-        <label class="field">
-          <span class="field-label">Search</span>
-          <input class="input" bind:value={search} placeholder="conversation id, provider, protocol, mode..." />
-        </label>
-        <div class="field" style="align-self: end;">
-          <button class="button-secondary" type="button" on:click={loadConversations}>Refresh list</button>
-        </div>
+      <div class="page-header">
+        <TextInputField
+          label="Search"
+          bind:value={search}
+          placeholder="conversation id, provider, protocol, mode..."
+          fieldClass="field-span-2"
+        />
+        <button class="button-secondary" type="button" on:click={loadConversations}>Refresh List</button>
       </div>
     </section>
 

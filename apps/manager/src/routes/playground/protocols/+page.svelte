@@ -2,10 +2,22 @@
 
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Select, Switch } from 'bits-ui';
+  import { Tabs } from 'bits-ui';
 
   import JsonView from '$lib/components/JsonView.svelte';
+  import SegmentedField from '$lib/components/SegmentedField.svelte';
+  import SelectField from '$lib/components/SelectField.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
+  import SwitchField from '$lib/components/SwitchField.svelte';
+  import TextInputField from '$lib/components/TextInputField.svelte';
+  import TextareaField from '$lib/components/TextareaField.svelte';
+  import {
+    buildSessionDraftKey,
+    readSessionDraft,
+    useSessionDraftPersistence,
+    useSessionDraftUnloadWarning,
+    writeSessionDraft
+  } from '$lib/stores/session-drafts';
   import { selectedTarget } from '$lib/stores/targets';
   import type { GatewayProtocol } from '$lib/types';
 
@@ -14,35 +26,64 @@
     { value: 'responses', label: 'OpenAI Responses' },
     { value: 'anthropic_messages', label: 'Anthropic Messages' }
   ];
+  const modeItems = [
+    { value: 'transparent', label: 'Transparent' },
+    { value: 'inject', label: 'Inject' }
+  ];
+  const protocolDraftVersion = 1;
+
+  type ProtocolPlaygroundDraft = {
+    protocol: GatewayProtocol;
+    apiKey: string;
+    provider: string;
+    mode: 'transparent' | 'inject';
+    sessionId: string;
+    memoryPersist: boolean;
+    injectContext: boolean;
+    injectTools: boolean;
+    toolWrite: boolean;
+    requestBody: string;
+    responseStatus: number;
+    responseHeaders: Record<string, string>;
+    responseBody: Record<string, unknown> | string | null;
+    rawEvents: Array<Record<string, unknown> | string>;
+    responseTab: string;
+  };
 
   const templates: Record<GatewayProtocol, string> = {
-    chat_completions: JSON.stringify({
-      model: 'configured-chat-model',
-      stream: true,
-      messages: [
-        { role: 'user', content: 'Say hello, then describe whether you recall any personal preferences.' }
-      ]
-    }, null, 2),
-    responses: JSON.stringify({
-      model: 'configured-chat-model',
-      stream: true,
-      input: [
-        {
-          type: 'message',
-          role: 'user',
-          content: [
-            { type: 'input_text', text: 'Summarize what this gateway request is testing.' }
-          ]
-        }
-      ]
-    }, null, 2),
-    anthropic_messages: JSON.stringify({
-      model: 'configured-anthropic-model',
-      stream: true,
-      messages: [
-        { role: 'user', content: 'Explain what protocol compatibility this request is checking.' }
-      ]
-    }, null, 2)
+    chat_completions: JSON.stringify(
+      {
+        model: 'configured-chat-model',
+        stream: true,
+        messages: [{ role: 'user', content: 'Say hello, then describe whether you recall any personal preferences.' }]
+      },
+      null,
+      2
+    ),
+    responses: JSON.stringify(
+      {
+        model: 'configured-chat-model',
+        stream: true,
+        input: [
+          {
+            type: 'message',
+            role: 'user',
+            content: [{ type: 'input_text', text: 'Summarize what this gateway request is testing.' }]
+          }
+        ]
+      },
+      null,
+      2
+    ),
+    anthropic_messages: JSON.stringify(
+      {
+        model: 'configured-anthropic-model',
+        stream: true,
+        messages: [{ role: 'user', content: 'Explain what protocol compatibility this request is checking.' }]
+      },
+      null,
+      2
+    )
   };
 
   let protocol: GatewayProtocol = 'chat_completions';
@@ -61,13 +102,124 @@
   let responseHeaders: Record<string, string> = {};
   let responseBody: Record<string, unknown> | string | null = null;
   let rawEvents: Array<Record<string, unknown> | string> = [];
+  let responseTab = 'payload';
+  let templateProtocol: GatewayProtocol = protocol;
+  let activeDraftKey = '';
+  let hydratingDraft = false;
+  let draftReady = false;
+  let protocolDraftSnapshot = emptyProtocolDraft();
+
+  $: protocolDraftKey = buildSessionDraftKey('playground.protocols', $selectedTarget?.id);
+  $: if (protocolDraftKey !== activeDraftKey) {
+    activeDraftKey = protocolDraftKey;
+    hydratingDraft = true;
+    applyDraft(readSessionDraft<ProtocolPlaygroundDraft>(protocolDraftKey, protocolDraftVersion));
+    hydratingDraft = false;
+    draftReady = true;
+  }
+  $: protocolDraftSnapshot = {
+    protocol,
+    apiKey,
+    provider,
+    mode,
+    sessionId,
+    memoryPersist,
+    injectContext,
+    injectTools,
+    toolWrite,
+    requestBody,
+    responseStatus,
+    responseHeaders,
+    responseBody,
+    rawEvents,
+    responseTab
+  };
+  $: if (draftReady && !hydratingDraft && activeDraftKey) {
+    writeSessionDraft(activeDraftKey, protocolDraftVersion, protocolDraftSnapshot);
+  }
 
   onMount(() => {
-    sessionId = `protocol-${Date.now()}`;
+    if (!sessionId) {
+      sessionId = nextSessionId();
+    }
   });
+
+  useSessionDraftUnloadWarning(
+    () =>
+      Boolean(
+        apiKey.trim() ||
+          provider.trim() ||
+          protocol !== 'chat_completions' ||
+          mode !== 'transparent' ||
+          memoryPersist ||
+          injectContext ||
+          injectTools ||
+          toolWrite ||
+          responseStatus > 0 ||
+          rawEvents.length > 0 ||
+          requestBody.trim() !== templates[protocol].trim()
+      ),
+    'This protocol playground request is only saved in the current tab. Closing or reloading the page will discard it.'
+  );
+
+  useSessionDraftPersistence(() => {
+    if (activeDraftKey) {
+      writeSessionDraft(activeDraftKey, protocolDraftVersion, protocolDraftSnapshot);
+    }
+  });
+
+  function nextSessionId(): string {
+    return `protocol-${Date.now()}`;
+  }
+
+  function emptyProtocolDraft(): ProtocolPlaygroundDraft {
+    return {
+      protocol: 'chat_completions',
+      apiKey: '',
+      provider: '',
+      mode: 'transparent',
+      sessionId: nextSessionId(),
+      memoryPersist: false,
+      injectContext: false,
+      injectTools: false,
+      toolWrite: false,
+      requestBody: templates.chat_completions,
+      responseStatus: 0,
+      responseHeaders: {},
+      responseBody: null,
+      rawEvents: [],
+      responseTab: 'payload'
+    };
+  }
+
+  function applyDraft(draft: ProtocolPlaygroundDraft | null): void {
+    const next = draft ?? emptyProtocolDraft();
+    protocol = next.protocol;
+    apiKey = next.apiKey;
+    provider = next.provider;
+    mode = next.mode;
+    sessionId = next.sessionId || nextSessionId();
+    memoryPersist = next.memoryPersist;
+    injectContext = next.injectContext;
+    injectTools = next.injectTools;
+    toolWrite = next.toolWrite;
+    requestBody = next.requestBody || templates[next.protocol];
+    responseStatus = next.responseStatus ?? 0;
+    responseHeaders = next.responseHeaders ?? {};
+    responseBody = next.responseBody ?? null;
+    rawEvents = next.rawEvents ?? [];
+    responseTab = next.responseTab || 'payload';
+    templateProtocol = next.protocol;
+    error = '';
+    sending = false;
+  }
 
   $: if (!requestBody.trim()) {
     requestBody = templates[protocol];
+  }
+  $: if (templateProtocol !== protocol) {
+    templateProtocol = protocol;
+    applyTemplate(protocol);
   }
 
   function applyTemplate(nextProtocol: GatewayProtocol): void {
@@ -75,6 +227,9 @@
     requestBody = templates[nextProtocol];
     responseBody = null;
     rawEvents = [];
+    responseHeaders = {};
+    responseStatus = 0;
+    responseTab = 'payload';
     error = '';
   }
 
@@ -113,6 +268,7 @@
     rawEvents = [];
     responseHeaders = {};
     responseStatus = 0;
+    responseTab = 'payload';
 
     try {
       const response = await fetch(`${$selectedTarget.baseUrl}${gatewayPath(protocol)}`, {
@@ -181,6 +337,9 @@
 
       if (!response.ok) {
         error = typeof responseBody === 'string' ? responseBody : JSON.stringify(responseBody, null, 2);
+        responseTab = 'payload';
+      } else if (rawEvents.length > 0) {
+        responseTab = 'raw';
       }
     } catch (cause) {
       error = cause instanceof Error ? cause.message : 'Protocol request failed';
@@ -188,127 +347,116 @@
       sending = false;
     }
   }
+
+  function protocolLabel(value: GatewayProtocol): string {
+    return protocolItems.find((item) => item.value === value)?.label ?? value;
+  }
+
+  function headerLine(): string {
+    const parts = [$selectedTarget?.label ?? 'No Target', protocolLabel(protocol), mode === 'inject' ? 'Inject' : 'Transparent'];
+    if (sessionId) {
+      parts.push(sessionId);
+    }
+    return parts.join(' · ');
+  }
+
+  function responseMeta(): string {
+    if (!responseStatus) {
+      return 'Send a raw gateway request to inspect headers, payload, and SSE frames.';
+    }
+    const pieces = [`HTTP ${responseStatus}`];
+    if (rawEvents.length > 0) {
+      pieces.push(`${rawEvents.length} raw frame${rawEvents.length === 1 ? '' : 's'}`);
+    }
+    return pieces.join(' · ');
+  }
 </script>
 
 <section class="page-stack">
   <div class="hero-card">
-    <span class="sidebar-label">Playground / Protocols</span>
-    <h1 class="page-title">Inspect raw protocol compatibility and SSE wire behavior</h1>
-    <p class="page-description">
-      Edit the exact request payload, send it straight to the gateway, and compare raw JSON or SSE events without any higher-level manager parsing.
-    </p>
+    <div class="page-stack" style="gap: 4px;">
+      <h1 class="page-title">Protocol Playground</h1>
+      <div class="panel-meta">{headerLine()}</div>
+    </div>
   </div>
 
-  <div class="grid-2" style="align-items: start;">
-    <section class="card">
-      <div class="page-header">
-        <div>
-          <div class="sidebar-label">Request editor</div>
-          <h2 class="page-title" style="font-size: 1.35rem;">Protocol template and headers</h2>
+  <div class="page-columns">
+    <div class="page-column">
+      <section class="card page-stack">
+        <div class="page-header">
+          <div class="page-stack" style="gap: 4px;">
+            <h2 class="section-title">Request</h2>
+            <div class="panel-meta">{headerLine()}</div>
+          </div>
+          <div class="inline-group" style="justify-content: flex-end; flex-wrap: wrap;">
+            <button class="button-secondary" type="button" on:click={() => applyTemplate(protocol)}>Reset Template</button>
+            <button class="button" type="button" disabled={sending} on:click={sendRequest}>{sending ? 'Sending...' : 'Send Request'}</button>
+          </div>
         </div>
-        <button class="button-secondary" type="button" on:click={() => applyTemplate(protocol)}>Reset template</button>
-      </div>
 
-      <div class="toolbar">
-        <label class="field">
-          <span class="field-label">API key</span>
-          <input class="input" bind:value={apiKey} type="password" autocomplete="off" placeholder="ms-..." />
-        </label>
-        <label class="field">
-          <span class="field-label">Protocol</span>
-          <Select.Root type="single" bind:value={protocol} items={protocolItems} onValueChange={(value) => applyTemplate(value as GatewayProtocol)}>
-            <Select.Trigger class="select-trigger">{protocolItems.find((item) => item.value === protocol)?.label ?? 'Select protocol'}</Select.Trigger>
-            <Select.Portal>
-              <Select.Content class="select-content" sideOffset={8}>
-                <Select.Viewport>
-                  {#each protocolItems as item}
-                    <Select.Item class="select-item" value={item.value} label={item.label}>{item.label}</Select.Item>
-                  {/each}
-                </Select.Viewport>
-              </Select.Content>
-            </Select.Portal>
-          </Select.Root>
-        </label>
-        <label class="field">
-          <span class="field-label">Provider override</span>
-          <input class="input" bind:value={provider} placeholder="openai / anthropic / gemini" />
-        </label>
-        <label class="field">
-          <span class="field-label">Session id</span>
-          <input class="input" bind:value={sessionId} placeholder="protocol-123" />
-        </label>
-        <div class="field">
-          <span class="field-label">Mode</span>
-          <div class="inline-group">
-            <button class={mode === 'transparent' ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (mode = 'transparent')}>Transparent</button>
-            <button class={mode === 'inject' ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (mode = 'inject')}>Inject</button>
-          </div>
-        </div>
-        <div class="switch-row">
-          <div>
-            <div class="field-label">Memory Persist</div>
-            <div class="field-help">Server disables persistence when off.</div>
-          </div>
-          <Switch.Root class="switch-root" bind:checked={memoryPersist}><Switch.Thumb class="switch-thumb" /></Switch.Root>
-        </div>
-        <div class="switch-row">
-          <div>
-            <div class="field-label">Inject Context</div>
-            <div class="field-help">Apply memory context headers.</div>
-          </div>
-          <Switch.Root class="switch-root" bind:checked={injectContext}><Switch.Thumb class="switch-thumb" /></Switch.Root>
-        </div>
-        <div class="switch-row">
-          <div>
-            <div class="field-label">Inject Tools</div>
-            <div class="field-help">Expose recall tools to the model.</div>
-          </div>
-          <Switch.Root class="switch-root" bind:checked={injectTools}><Switch.Thumb class="switch-thumb" /></Switch.Root>
-        </div>
-        <div class="switch-row">
-          <div>
-            <div class="field-label">Tool Memory Write</div>
-            <div class="field-help">Still blocked if memory persistence is off.</div>
-          </div>
-          <Switch.Root class="switch-root" bind:checked={toolWrite}><Switch.Thumb class="switch-thumb" /></Switch.Root>
-        </div>
-        <label class="field">
-          <span class="field-label">Request body</span>
-          <textarea class="textarea" bind:value={requestBody} spellcheck="false"></textarea>
-        </label>
-        <button class="button" type="button" disabled={sending} on:click={sendRequest}>{sending ? 'Sending...' : 'Send raw request'}</button>
-      </div>
-    </section>
-
-    <section class="card">
-      <div class="page-header">
-        <div>
-          <div class="sidebar-label">Response viewer</div>
-          <h2 class="page-title" style="font-size: 1.35rem;">Status, headers, body, and SSE events</h2>
-        </div>
-        {#if responseStatus > 0}
-          <StatusBadge tone={responseStatus >= 200 && responseStatus < 300 ? 'success' : 'danger'} label={`HTTP ${responseStatus}`} />
+        {#if error}
+          <div class="error-state">{error}</div>
         {/if}
-      </div>
 
-      {#if error}
-        <div class="error-state">{error}</div>
-      {/if}
+        <div class="playground-form-stack">
+          <div class="form-grid two-up">
+            <TextInputField label="Gateway API Key" bind:value={apiKey} type="password" autocomplete="off" placeholder="ms-..." />
+            <SelectField
+              label="Protocol"
+              items={protocolItems}
+              bind:value={protocol}
+              placeholder="Select protocol"
+            />
+            <TextInputField label="Provider Override" bind:value={provider} placeholder="openai / anthropic / gemini" />
+            <TextInputField label="Session ID" bind:value={sessionId} placeholder="protocol-123" inputClass="input-mono" />
+          </div>
 
-      <div class="toolbar">
-        <div class="debug-block">
-          <div class="sidebar-label">Response headers</div>
-          <JsonView value={responseHeaders} />
+          <SegmentedField label="Mode" bind:value={mode} items={modeItems} />
+
+          <div class="grid-2 playground-switch-grid">
+            <SwitchField bind:checked={memoryPersist} label="Memory Persist" />
+            <SwitchField bind:checked={injectContext} label="Inject Context" />
+            <SwitchField bind:checked={injectTools} label="Inject Tools" />
+            <SwitchField bind:checked={toolWrite} label="Tool Memory Write" />
+          </div>
+
+          <TextareaField label="Request Body" bind:value={requestBody} textareaClass="playground-json-textarea" spellcheck={false} />
         </div>
-        <div class="debug-block">
-          <div class="sidebar-label">Response payload</div>
-          <JsonView value={responseBody ?? {}} emptyLabel="No response yet" />
+      </section>
+    </div>
+
+    <div class="page-column">
+      <section class="card page-stack">
+        <div class="page-header">
+          <div class="page-stack" style="gap: 4px;">
+            <h2 class="section-title">Response</h2>
+            <div class="panel-meta">{responseMeta()}</div>
+          </div>
+          {#if responseStatus > 0}
+            <StatusBadge tone={responseStatus >= 200 && responseStatus < 300 ? 'success' : 'danger'} label={`HTTP ${responseStatus}`} />
+          {/if}
         </div>
-        <div class="debug-block">
-          <div class="sidebar-label">SSE / raw events</div>
-          <JsonView value={rawEvents} emptyLabel="No raw events captured yet" />
-        </div>
-      </div>
-    </section>
+
+        <Tabs.Root bind:value={responseTab}>
+          <Tabs.List class="tabs-list">
+            <Tabs.Trigger class="tabs-trigger" value="payload">Payload</Tabs.Trigger>
+            <Tabs.Trigger class="tabs-trigger" value="headers">Headers</Tabs.Trigger>
+            <Tabs.Trigger class="tabs-trigger" value="raw">Raw</Tabs.Trigger>
+          </Tabs.List>
+
+          <Tabs.Content value="payload" class="page-stack" style="margin-top: 14px;">
+            <JsonView value={responseBody ?? {}} emptyLabel="No response payload yet" />
+          </Tabs.Content>
+
+          <Tabs.Content value="headers" class="page-stack" style="margin-top: 14px;">
+            <JsonView value={responseHeaders} emptyLabel="No response headers yet" />
+          </Tabs.Content>
+
+          <Tabs.Content value="raw" class="page-stack" style="margin-top: 14px;">
+            <JsonView value={rawEvents} emptyLabel="No raw SSE frames captured yet" />
+          </Tabs.Content>
+        </Tabs.Root>
+      </section>
+    </div>
   </div>
 </section>

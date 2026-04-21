@@ -6,6 +6,7 @@
 
   import { fetchAudit } from '$lib/api/client';
   import JsonView from '$lib/components/JsonView.svelte';
+  import TextInputField from '$lib/components/TextInputField.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type { AuditEventRecord } from '$lib/types';
 
@@ -73,7 +74,7 @@
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">Audit</span>
-    <h1 class="page-title">Sensitive action history</h1>
+    <h1 class="page-title">Audit</h1>
     <p class="page-description">
       Track API key changes, memory edits, configuration updates, and tool-driven writes with their associated payloads.
     </p>
@@ -87,30 +88,16 @@
     <div class="notice-card">Loading audit events...</div>
   {:else}
     <section class="card">
+      <div class="page-header">
+        <h2 class="section-title">Filters</h2>
+        <button class="button-secondary" type="button" on:click={loadAudit}>Refresh Audit</button>
+      </div>
       <div class="filters three-up">
-        <label class="field">
-          <span class="field-label">Action</span>
-          <input class="input" bind:value={action} placeholder="update_memory_document" />
-        </label>
-        <label class="field">
-          <span class="field-label">Target type</span>
-          <input class="input" bind:value={targetType} placeholder="summary, key_memory, api_key..." />
-        </label>
-        <label class="field">
-          <span class="field-label">Target id</span>
-          <input class="input" bind:value={targetId} placeholder="memory id, task id, api key id..." />
-        </label>
-        <label class="field">
-          <span class="field-label">Actor type</span>
-          <input class="input" bind:value={actorType} placeholder="admin, tool, system..." />
-        </label>
-        <label class="field">
-          <span class="field-label">Limit</span>
-          <input class="input" type="number" min="1" max="500" bind:value={limit} />
-        </label>
-        <div class="field" style="align-self: end;">
-          <button class="button-secondary" type="button" on:click={loadAudit}>Refresh audit</button>
-        </div>
+        <TextInputField label="Action" bind:value={action} placeholder="update_memory_document" />
+        <TextInputField label="Target Type" bind:value={targetType} placeholder="summary, key_memory, api_key..." />
+        <TextInputField label="Target ID" bind:value={targetId} placeholder="memory id, task id, api key id..." />
+        <TextInputField label="Actor Type" bind:value={actorType} placeholder="admin, tool, system..." />
+        <TextInputField label="Limit" bind:value={limit} type="number" min="1" max="500" />
       </div>
     </section>
 
@@ -144,8 +131,7 @@
       <section class="debug-block">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Payload</div>
-            <h2 class="page-title" style="font-size: 1.2rem;">Selected event detail</h2>
+            <h2 class="section-title">Selected Event Detail</h2>
           </div>
         </div>
         {#if selected}

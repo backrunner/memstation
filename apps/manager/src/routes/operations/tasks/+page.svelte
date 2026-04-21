@@ -3,10 +3,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
-  import { Select } from 'bits-ui';
 
   import { activateMemoryRebuild, fetchMemoryRebuilds, fetchQueues, fetchTasks, requeueTask } from '$lib/api/client';
+  import CodeBlock from '$lib/components/CodeBlock.svelte';
+  import SelectField from '$lib/components/SelectField.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
+  import TextInputField from '$lib/components/TextInputField.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type { MemoryGeneration, QueueInfo, QueueTaskRecord } from '$lib/types';
 
@@ -32,6 +34,9 @@
   let manualUserId = 'admin';
   let manualTaskType = 'analysis.extract';
   let rebuildUserId = 'admin';
+  let queueItems: Array<{ value: string; label: string }> = [{ value: '', label: 'All queues' }];
+
+  $: queueItems = [{ value: '', label: 'All queues' }, ...queues.map((queue) => ({ value: queue.name, label: queue.name }))];
 
   onMount(async () => {
     await loadTasks();
@@ -61,7 +66,9 @@
       [queues, tasks, rebuilds] = await Promise.all([
         fetchQueues($selectedTarget),
         fetchTasks($selectedTarget, { limit: 20, states: selectedStates, queue: selectedQueue }),
-        rebuildUserId.trim() ? fetchMemoryRebuilds($selectedTarget, rebuildUserId.trim(), 12) : Promise.resolve([])
+        rebuildUserId.trim()
+          ? fetchMemoryRebuilds($selectedTarget, rebuildUserId.trim(), 12).catch(() => [])
+          : Promise.resolve([])
       ]);
       selectedTask = tasks[0] ?? null;
     } catch (cause) {
@@ -145,7 +152,7 @@
 <section class="page-stack">
   <div class="hero-card">
     <span class="sidebar-label">Operations / Tasks</span>
-    <h1 class="page-title">Inspect failed or delayed tasks and trigger safe requeues</h1>
+    <h1 class="page-title">Tasks</h1>
     <p class="page-description">
       Review archived, retry, scheduled, and active work items, then re-run a task by queue identity or publish a manual follow-up task by conversation id.
     </p>
@@ -162,23 +169,16 @@
           {/each}
         </div>
         <div class="inline-group" style="flex-wrap: wrap;">
-          <label class="field" style="min-width: 220px;">
-            <span class="field-label">Queue filter</span>
-            <select class="input" bind:value={selectedQueue} on:change={() => void loadTasks()}>
-              <option value="">All queues</option>
-              {#each queues as queue}
-                <option value={queue.name}>{queue.name}</option>
-              {/each}
-            </select>
-          </label>
+          <div style="min-width: 220px;">
+            <SelectField label="Queue filter" items={queueItems} bind:value={selectedQueue} />
+          </div>
           <button class="button-secondary" type="button" on:click={loadTasks}>Refresh tasks</button>
         </div>
       </div>
       <div class="inline-group" style="margin-top: 12px;">
-        <label class="field" style="min-width: 260px;">
-          <span class="field-label">Rebuild user filter</span>
-          <input class="input" bind:value={rebuildUserId} placeholder="user id for generation status" />
-        </label>
+        <div style="min-width: 260px;">
+          <TextInputField label="Rebuild User Filter" bind:value={rebuildUserId} placeholder="user id for generation status" />
+        </div>
       </div>
     </section>
 
@@ -237,8 +237,7 @@
           <div class="debug-block">
             <div class="page-header">
               <div>
-                <div class="sidebar-label">Memory rebuilds</div>
-                <h2 class="page-title" style="font-size: 1.2rem;">Generation lifecycle</h2>
+                <h2 class="section-title">Generation Lifecycle</h2>
               </div>
             </div>
             {#if rebuilds.length === 0}
@@ -279,8 +278,7 @@
           <div class="debug-block">
             <div class="page-header">
               <div>
-                <div class="sidebar-label">Selected task</div>
-                <h2 class="page-title" style="font-size: 1.2rem;">Payload and retry context</h2>
+                <h2 class="section-title">Payload And Retry Context</h2>
               </div>
             </div>
             {#if selectedTask}
@@ -288,7 +286,7 @@
                 <div class="inline-group"><strong>Type</strong><span>{selectedTask.type}</span></div>
                 <div class="inline-group"><strong>Queue</strong><span>{selectedTask.queue}</span></div>
                 <div class="inline-group"><strong>Retries</strong><span>{selectedTask.retried ?? 0} / {selectedTask.max_retry ?? 0}</span></div>
-                <pre class="json-block">{JSON.stringify(selectedTask.payload ?? {}, null, 2)}</pre>
+                <CodeBlock code={JSON.stringify(selectedTask.payload ?? {}, null, 2)} language="json" />
                 <button class="button" type="button" disabled={actionLoading} on:click={runSelectedTask}>{actionLoading ? 'Requeueing...' : 'Run selected task now'}</button>
               </div>
             {:else}
@@ -299,35 +297,18 @@
           <div class="debug-block">
             <div class="page-header">
               <div>
-                <div class="sidebar-label">Manual requeue</div>
-                <h2 class="page-title" style="font-size: 1.2rem;">Publish a fresh task</h2>
+                <h2 class="section-title">Publish A Fresh Task</h2>
               </div>
             </div>
             <div class="toolbar">
-              <label class="field">
-                <span class="field-label">Task type</span>
-                <Select.Root type="single" bind:value={manualTaskType} items={taskTypeItems}>
-                  <Select.Trigger class="select-trigger">{manualTaskType}</Select.Trigger>
-                  <Select.Portal>
-                    <Select.Content class="select-content" sideOffset={8}>
-                      <Select.Viewport>
-                        {#each taskTypeItems as item}
-                          <Select.Item class="select-item" value={item.value} label={item.label}>{item.label}</Select.Item>
-                        {/each}
-                      </Select.Viewport>
-                    </Select.Content>
-                  </Select.Portal>
-                </Select.Root>
-              </label>
-              <label class="field">
-                <span class="field-label">Conversation ID</span>
-                <input class="input" bind:value={manualConversationId} placeholder="conv-..." />
-              </label>
-              <label class="field">
-                <span class="field-label">User ID</span>
-                <input class="input" bind:value={manualUserId} />
-              </label>
-              <button class="button-secondary" type="button" disabled={actionLoading} on:click={runManualRequeue}>Publish manual task</button>
+              <div class="form-grid two-up">
+                <SelectField label="Task Type" bind:value={manualTaskType} items={taskTypeItems} />
+                <TextInputField label="Conversation ID" bind:value={manualConversationId} placeholder="conv-..." />
+                <TextInputField label="User ID" bind:value={manualUserId} />
+              </div>
+              <div class="inline-group" style="justify-content: flex-end;">
+                <button class="button-secondary" type="button" disabled={actionLoading} on:click={runManualRequeue}>Publish Manual Task</button>
+              </div>
             </div>
           </div>
         </section>

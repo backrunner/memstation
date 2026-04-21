@@ -18,7 +18,10 @@
   import JsonView from '$lib/components/JsonView.svelte';
   import MemoryKeywordSignals from '$lib/components/MemoryKeywordSignals.svelte';
   import MemoryRelationGraph from '$lib/components/MemoryRelationGraph.svelte';
+  import SelectField from '$lib/components/SelectField.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
+  import TextInputField from '$lib/components/TextInputField.svelte';
+  import TextareaField from '$lib/components/TextareaField.svelte';
   import { matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '$lib/memory/keyword-signals';
   import {
     documentKindFromRoute,
@@ -28,6 +31,15 @@
     normalizeMemoryRouteKind,
     type MemoryRouteKind
   } from '$lib/memory/routes';
+  import {
+    buildSessionDraftKey,
+    clearSessionDraft,
+    draftsEqual,
+    readSessionDraft,
+    useSessionDraftPersistence,
+    useSessionDraftUnloadWarning,
+    writeSessionDraft
+  } from '$lib/stores/session-drafts';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type {
     AuditEventRecord,
@@ -38,6 +50,15 @@
     MessagePart,
     MessagePartArtifact
   } from '$lib/types';
+
+  type MemoryDetailDraft = {
+    draftContent: string;
+    draftValue: string;
+    draftCategory: string;
+    draftReviewStatus: string;
+  };
+
+  const memoryDetailDraftVersion = 1;
 
   let loading = true;
   let saving = false;
@@ -63,9 +84,24 @@
   let sourcePreview: ConversationRecord['messages'] = [];
   let sourcePartsByID = new Map<string, MessagePart>();
   let sourceArtifactsByID = new Map<string, MessagePartArtifact>();
+  let activeDraftKey = '';
+  let hydratingDraft = false;
+  let draftReady = false;
+  let savedDraft = emptyDraft();
+  let currentDraft = emptyDraft();
+  const reviewStatusItems = [
+    { value: 'pending', label: 'pending' },
+    { value: 'approved', label: 'approved' },
+    { value: 'rejected', label: 'rejected' }
+  ];
 
   $: activeUserId = $page.url.searchParams.get('user_id') ?? undefined;
   $: routeKind = normalizeMemoryRouteKind($page.params.kind ?? '');
+  $: memoryDetailDraftKey = buildSessionDraftKey(
+    'memory.detail',
+    $selectedTarget?.id,
+    `${$page.params.kind ?? 'unknown'}:${$page.params.id ?? 'unknown'}:${activeUserId ?? 'admin'}`
+  );
   $: routeKey = `${$selectedTarget?.id ?? 'none'}:${$page.params.kind}:${$page.params.id}:${activeUserId ?? 'admin'}:${$targetState.session.authenticated ? 'auth' : 'anon'}`;
 
   onMount(async () => {
@@ -84,10 +120,67 @@
   $: sourcePreview = sourceConversation?.messages?.slice(-4) ?? [];
   $: sourcePartsByID = new Map((sourceConversation?.parts ?? []).map((part) => [part.part_id, part]));
   $: sourceArtifactsByID = new Map((sourceConversation?.artifacts ?? []).map((artifact) => [artifact.artifact_id, artifact]));
+  $: currentDraft = captureDraft();
+  $: if (draftReady && activeDraftKey && !hydratingDraft) {
+    if (draftsEqual(currentDraft, savedDraft)) {
+      clearSessionDraft(activeDraftKey);
+    } else {
+      writeSessionDraft(activeDraftKey, memoryDetailDraftVersion, currentDraft);
+    }
+  }
+
+  useSessionDraftUnloadWarning(
+    () => draftReady && !draftsEqual(currentDraft, savedDraft),
+    'This memory detail page has unsaved edits. Closing or reloading the page may discard the draft kept in this tab.'
+  );
+
+  useSessionDraftPersistence(() => {
+    if (!activeDraftKey) {
+      return;
+    }
+    const snapshot = captureDraft();
+    if (draftsEqual(snapshot, savedDraft)) {
+      clearSessionDraft(activeDraftKey);
+      return;
+    }
+    writeSessionDraft(activeDraftKey, memoryDetailDraftVersion, snapshot);
+  });
+
+  function emptyDraft(): MemoryDetailDraft {
+    return {
+      draftContent: '',
+      draftValue: '',
+      draftCategory: '',
+      draftReviewStatus: 'pending'
+    };
+  }
+
+  function captureDraft(): MemoryDetailDraft {
+    return {
+      draftContent,
+      draftValue,
+      draftCategory,
+      draftReviewStatus
+    };
+  }
+
+  function applyDraft(draft: MemoryDetailDraft | null): void {
+    if (!draft) {
+      return;
+    }
+    if (routeKind === 'keys') {
+      draftValue = draft.draftValue ?? draftValue;
+      draftCategory = draft.draftCategory ?? draftCategory;
+      draftReviewStatus = draft.draftReviewStatus ?? draftReviewStatus;
+      return;
+    }
+    draftContent = draft.draftContent ?? draftContent;
+  }
 
   async function loadDetail(): Promise<void> {
     if (!$selectedTarget || !$targetState.session.authenticated || !routeKind || !$page.params.id) {
       loading = false;
+      draftReady = false;
       return;
     }
     loading = true;
@@ -132,6 +225,12 @@
           sourceConversation = await fetchConversation($selectedTarget, item.conversation_id, item.user_id).catch(() => null);
         }
       }
+      savedDraft = captureDraft();
+      activeDraftKey = memoryDetailDraftKey;
+      hydratingDraft = true;
+      applyDraft(readSessionDraft<MemoryDetailDraft>(memoryDetailDraftKey, memoryDetailDraftVersion));
+      hydratingDraft = false;
+      draftReady = true;
     } catch (cause) {
       error = cause instanceof Error ? cause.message : 'Failed to load memory detail';
     } finally {
@@ -413,10 +512,7 @@
               </div>
             </div>
 
-            <label class="field">
-              <span class="field-label">Content</span>
-              <textarea class="textarea" rows="10" bind:value={draftContent}></textarea>
-            </label>
+            <TextareaField label="Content" bind:value={draftContent} rows={10} />
 
             <div class="debug-block">
               <div class="page-header">
@@ -480,24 +576,11 @@
               </div>
             </div>
 
-            <label class="field">
-              <span class="field-label">Value</span>
-              <textarea class="textarea" rows="8" bind:value={draftValue}></textarea>
-            </label>
+            <TextareaField label="Value" bind:value={draftValue} rows={8} />
 
             <div class="form-grid two-up">
-              <label class="field">
-                <span class="field-label">Category</span>
-                <input class="input" bind:value={draftCategory} />
-              </label>
-              <label class="field">
-                <span class="field-label">Review status</span>
-                <select class="input" bind:value={draftReviewStatus}>
-                  <option value="pending">pending</option>
-                  <option value="approved">approved</option>
-                  <option value="rejected">rejected</option>
-                </select>
-              </label>
+              <TextInputField label="Category" bind:value={draftCategory} />
+              <SelectField label="Review status" items={reviewStatusItems} bind:value={draftReviewStatus} />
             </div>
 
             <div class="debug-block">

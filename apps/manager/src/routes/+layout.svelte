@@ -48,18 +48,18 @@
       label: 'Operate',
       items: [
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { href: '/playground/chat', label: 'Playground Chat', icon: Bot },
-        { href: '/playground/memory', label: 'Playground Memory', icon: Search },
-        { href: '/playground/protocols', label: 'Playground Protocols', icon: Braces },
+        { href: '/playground/chat', label: 'Chat', icon: Bot },
+        { href: '/playground/memory', label: 'Recall', icon: Search },
+        { href: '/playground/protocols', label: 'Protocols', icon: Braces },
         { href: '/conversations', label: 'Conversations', icon: MessageSquareText },
-        { href: '/memory', label: 'Memory Workspace', icon: Brain }
+        { href: '/memory', label: 'Memory', icon: Brain }
       ]
     },
     {
       label: 'Manage',
       items: [
         { href: '/users', label: 'Users', icon: Users },
-        { href: '/statistics/tokens', label: 'Statistics', icon: BarChart3 },
+        { href: '/statistics/tokens', label: 'Usage', icon: BarChart3 },
         { href: '/settings/system', label: 'System', icon: Settings2 },
         { href: '/settings/models', label: 'Models', icon: Boxes },
         { href: '/settings/providers', label: 'Providers', icon: PlugZap }
@@ -79,13 +79,16 @@
 
   let targetDialogOpen = false;
   let lastTargetId = '';
-  let targetItems: Array<{ value: string; label: string }> = [];
+  let targetItems: Array<{ value: string; label: string; meta: string }> = [];
+  let activeTargetItem: { value: string; label: string; meta: string } | undefined;
   let mounted = false;
 
   $: targetItems = $targetState.targets.map((target) => ({
     value: target.id,
-    label: `${target.label} · ${target.environment}`
+    label: target.label,
+    meta: `${target.environment} · ${target.region}`
   }));
+  $: activeTargetItem = targetItems.find((item) => item.value === $targetState.selectedId);
 
   onMount(async () => {
     mounted = true;
@@ -146,8 +149,6 @@
     void refreshSession(savedTarget);
   }
 
-  $: sessionTone = $targetState.session.authenticated ? 'success' : $targetState.session.error ? 'danger' : 'warning';
-  $: sessionLabel = $targetState.session.checking ? 'Checking Session' : $targetState.session.authenticated ? 'Admin Session Active' : 'Login Required';
   $: isLoginRoute = $page.url.pathname === '/login';
 </script>
 
@@ -161,9 +162,6 @@
     <div class="brand-block">
       <span class="sidebar-label">MemStation</span>
       <span class="brand-title">Manager</span>
-      <div class={`shell-status ${sessionTone}`}>
-        <span>{sessionLabel}</span>
-      </div>
       {#if $targetState.session.error}
         <div class="helper-text">{$targetState.session.error}</div>
       {/if}
@@ -188,47 +186,52 @@
 
   <main class="shell-main">
     <div class="topbar">
-      {#if !isLoginRoute}
-        <div class="topbar-meta">
-          <span class="sidebar-label">Target</span>
-          <div class="topbar-title">{$selectedTarget?.label ?? 'No target selected'}</div>
-          <div class="helper-text">
-            {$selectedTarget?.environment ?? 'unknown'}{#if $selectedTarget?.baseUrl} · {$selectedTarget.baseUrl}{/if}
-          </div>
-        </div>
-      {/if}
-
       <div class="topbar-group">
-        <div style="min-width: 280px;">
+        <div class="target-selector-shell">
           <Select.Root type="single" value={$targetState.selectedId} items={targetItems} onValueChange={(value) => selectTarget(value)}>
-            <Select.Trigger class="select-trigger">
-              {targetItems.find((item) => item.value === $targetState.selectedId)?.label ?? 'Select target'}
+            <Select.Trigger class="select-trigger target-select-trigger">
+              {#if activeTargetItem}
+                <span class="target-trigger-label">{activeTargetItem.label}</span>
+                <span class="target-trigger-meta">{activeTargetItem.meta}</span>
+              {:else}
+                <span class="target-trigger-label">Select Target</span>
+              {/if}
             </Select.Trigger>
             <Select.Portal>
               <Select.Content class="select-content" sideOffset={8}>
                 <Select.Viewport>
                   {#each targetItems as item}
-                    <Select.Item class="select-item" value={item.value} label={item.label}>{item.label}</Select.Item>
+                    <Select.Item class="select-item" value={item.value} label={item.label}>
+                      <div class="target-select-item">
+                        <span class="target-trigger-label">{item.label}</span>
+                        <span class="target-trigger-meta">{item.meta}</span>
+                      </div>
+                    </Select.Item>
                   {/each}
                 </Select.Viewport>
               </Select.Content>
             </Select.Portal>
           </Select.Root>
         </div>
+      </div>
+
+      <div class="topbar-actions">
         <button class="button-secondary" type="button" on:click={refreshSelectedSession} title="Refresh target session and health">
           <RefreshCw size={16} />
           Refresh
         </button>
         <button class="button-secondary" type="button" on:click={() => (targetDialogOpen = true)}>
-          Manage Targets
+          Targets
         </button>
         {#if $targetState.session.authenticated}
           <button class="button-ghost" type="button" on:click={handleLogout}>Logout</button>
         {/if}
-        <a class="button" href={$targetState.session.authenticated ? '/dashboard' : '/login'}>
-          <LogIn size={16} />
-          {$targetState.session.authenticated ? 'Workspace' : 'Login'}
-        </a>
+        {#if $targetState.session.authenticated || !isLoginRoute}
+          <a class="button" href={$targetState.session.authenticated ? '/dashboard' : '/login'}>
+            <LogIn size={16} />
+            {$targetState.session.authenticated ? 'Dashboard' : 'Login'}
+          </a>
+        {/if}
       </div>
     </div>
 
