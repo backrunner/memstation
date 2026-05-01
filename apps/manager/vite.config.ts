@@ -1,4 +1,6 @@
 import { sveltekit } from '@sveltejs/kit/vite';
+import type { ClientRequest } from 'node:http';
+import type { ProxyOptions } from 'vite';
 import { defineConfig } from 'vitest/config';
 
 const devProxyTarget = process.env.MEMSTATION_MANAGER_DEV_PROXY_TARGET?.trim();
@@ -14,7 +16,12 @@ function managerDevProxy() {
       {
         target: devProxyTarget,
         changeOrigin: true,
-        secure: false
+        secure: false,
+        configure(proxy: Parameters<NonNullable<ProxyOptions['configure']>>[0]) {
+          proxy.on('proxyReq', (proxyReq: ClientRequest) => {
+            proxyReq.removeHeader('origin');
+          });
+        }
       }
     ])
   );

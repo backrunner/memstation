@@ -7,6 +7,7 @@
     "dev:container": "bash ./scripts/devcontainer/start-workspace.sh",
     "dev:workspace": "bash ./scripts/dev/run-fullstack-workspace.sh",
     "dev:server": "bash ./scripts/dev/run-server-watch.sh",
+    "dev:manager:portless": "bash ./scripts/dev/run-manager-portless.sh",
     "dev:reset": "bash ./scripts/dev/reset-compose-stack.sh",
     "build": "turbo run build",
     "lint": "turbo run lint",
@@ -25,6 +26,7 @@
     "format": "turbo run format"
   },
   "devDependencies": {
+    "portless": "0.12.0",
     "turbo": "2.8.16"
   }
 }

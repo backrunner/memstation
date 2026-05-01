@@ -629,6 +629,7 @@ v1.x 后续路线：
 - backup/export/restore drill、Compose 恢复校验文档、CI dry-run 与 nightly 实际演练入口已落地
 - fresh dev baseline migration 已折叠为单一 init migration，本地可通过 `./scripts/dev/reset-compose-stack.sh` 一键重置 Compose 栈、重放 migration 与 seed
 - `pnpm dev` 已切换为 devcontainer-first 联调入口：先启动 `workspace` devcontainer，再在容器内并发运行后端 watch 热重启与 manager 调试服务
+- 本地 Manager 可选通过 `pnpm dev:manager:portless` 走 Portless，以 `https://memstation-manager.localhost` 调试，并继续由 Vite dev proxy 转发 `/api`、`/health`、`/graphql`、`/v1`
 - LOCOMO benchmark 默认会从 Snap Research 官方公开地址下载 `locomo10.json`，仍允许通过环境变量覆盖数据源
 - CI 已补齐 `golangci-lint`、严格 generated diff 校验、Atlas migration lint/dry-run、benchmark smoke、manager Playwright、coverage gate
 - K8s baseline 已补齐 server / worker / scheduler deployment，以及 ConfigMap / Secret 示例清单
