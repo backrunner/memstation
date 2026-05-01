@@ -700,7 +700,7 @@ func metadataForOverrides(overrides Overrides) map[string]FieldMeta {
 			ApplyMode:   "live",
 			Source:      sourceFor(overrides.CORSAllowedOrigins != nil),
 			Category:    "web",
-			Description: "Cross-origin origins allowed to use the admin session and direct target API requests.",
+			Description: "Optional cross-origin whitelist for admin and public APIs. Empty reflects the incoming Origin.",
 		},
 		"session_cookie_cross_site": {
 			ApplyMode:   "live",

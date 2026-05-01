@@ -6,7 +6,7 @@ Devcontainer debug flow
 - `pnpm dev`: starts the `workspace` devcontainer, applies server migrations inside the container, runs backend watch restart on `:8080`, and starts the manager Vite debug server on `:5173`.
 - `pnpm dev:container`: only boots the devcontainer workspace plus PostgreSQL and Redis.
 - `pnpm dev:workspace`: runs the in-container full-stack debug command directly when you are already inside the devcontainer.
-- In this flow, `DATABASE_URL`, `REDIS_URL`, `MEMSTATION_ADMIN_TOKEN`, `MEMSTATION_MASTER_KEY`, and local cookie/CORS defaults are injected automatically from the devcontainer Compose baseline so local debug stays close to zero-config.
+- In this flow, `DATABASE_URL`, `REDIS_URL`, `MEMSTATION_ADMIN_TOKEN`, `MEMSTATION_MASTER_KEY`, and local cookie defaults are injected automatically from the devcontainer Compose baseline so local debug stays close to zero-config.
 
 Portless full-stack flow
 - `pnpm dev:portless`: starts local PostgreSQL and Redis from Compose, applies server migrations, runs the MemStation server with source-watch hot restart on `:8080`, and starts the manager through Portless at `https://memstation-manager.localhost`.
@@ -35,4 +35,5 @@ Services
 
 Notes
 - `deploy/compose/docker-compose.yml` keeps local-development defaults only. Rotate secrets before sharing or deploying.
+- Empty `MEMSTATION_CORS_ALLOWED_ORIGINS` is intentional: the server reflects the incoming `Origin` for both manager/admin APIs and public APIs. Set a comma-separated whitelist to restrict browser callers.
 - The reset flow is destructive for the selected Compose project because it removes the development Postgres and Redis volumes.

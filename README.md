@@ -326,6 +326,7 @@ go run ./cmd/memstation seed
 - Provider 凭据：`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`
 - Provider 端点：`OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL`, `GEMINI_BASE_URL`
 - 运行阈值：`CONVERSATION_TIMEOUT_MINUTES`, `MAX_CONTEXT_TOKENS`, `MAX_INJECTION_TOKENS`, `MESSAGE_THRESHOLD`, `TOKEN_THRESHOLD`
+- CORS：`MEMSTATION_CORS_ALLOWED_ORIGINS` 为空时会对 manager/admin API 和普通 API 反射当前请求的 `Origin`；配置逗号分隔 origin 后会作为白名单限制浏览器调用
 - OTel：`OTEL_EXPORTER_OTLP_ENDPOINT`
 
 Embedding 已接入真实 provider 调用，采用 OpenAI-compatible embedding 接口；模型与端点通过配置注入，不在代码中写死。

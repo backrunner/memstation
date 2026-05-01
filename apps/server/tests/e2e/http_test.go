@@ -322,10 +322,62 @@ func TestCORSPreflightAllowsConfiguredManagerOrigin(t *testing.T) {
 	}
 }
 
-func TestAdminOriginPolicyRejectsUnconfiguredOrigins(t *testing.T) {
+func TestCORSDefaultsReflectIncomingOrigins(t *testing.T) {
 	t.Parallel()
 
 	router := newTestRouter()
+
+	adminPreflight := httptest.NewRequest(http.MethodOptions, "/api/admin/session", nil)
+	adminPreflight.Header.Set("Origin", "https://manager.example")
+	adminPreflight.Header.Set("Access-Control-Request-Method", "GET")
+	adminPreflight.Header.Set("Access-Control-Request-Headers", "X-MemStation-Admin-Token, Content-Type")
+	adminRecorder := httptest.NewRecorder()
+	router.ServeHTTP(adminRecorder, adminPreflight)
+
+	if adminRecorder.Code != http.StatusNoContent {
+		t.Fatalf("expected admin preflight 204, got %d", adminRecorder.Code)
+	}
+	if got := adminRecorder.Header().Get("Access-Control-Allow-Origin"); got != "https://manager.example" {
+		t.Fatalf("expected reflected admin origin, got %q", got)
+	}
+	if got := adminRecorder.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
+		t.Fatalf("expected credentials header, got %q", got)
+	}
+	if got := adminRecorder.Header().Get("Access-Control-Allow-Headers"); got != "X-MemStation-Admin-Token, Content-Type" {
+		t.Fatalf("expected requested headers to be reflected, got %q", got)
+	}
+
+	proxyPreflight := httptest.NewRequest(http.MethodOptions, "/v1/models", nil)
+	proxyPreflight.Header.Set("Origin", "https://client.example")
+	proxyPreflight.Header.Set("Access-Control-Request-Method", "GET")
+	proxyRecorder := httptest.NewRecorder()
+	router.ServeHTTP(proxyRecorder, proxyPreflight)
+
+	if proxyRecorder.Code != http.StatusNoContent {
+		t.Fatalf("expected proxy preflight 204, got %d", proxyRecorder.Code)
+	}
+	if got := proxyRecorder.Header().Get("Access-Control-Allow-Origin"); got != "https://client.example" {
+		t.Fatalf("expected reflected proxy origin, got %q", got)
+	}
+	if got := proxyRecorder.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
+		t.Fatalf("expected credentials header, got %q", got)
+	}
+}
+
+func TestAdminOriginPolicyRejectsOriginsOutsideConfiguredWhitelist(t *testing.T) {
+	t.Parallel()
+
+	session := security.NewAdminSessionManager(e2eTestAdminToken, time.Hour)
+	router := httptransport.NewRouter(httptransport.Dependencies{
+		Config: bootstrap.Config{
+			Version:             "0.1.0",
+			SessionCookieSecure: false,
+			CORSAllowedOrigins:  []string{"https://manager.example"},
+		},
+		Health:  observability.NewRegistry(),
+		Auth:    security.Authenticator{AdminToken: e2eTestAdminToken, SessionManager: session},
+		Session: session,
+	})
 	request := httptest.NewRequest(http.MethodPost, "/api/admin/login", bytes.NewBufferString(`{"token":"`+e2eTestAdminToken+`"}`))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Origin", "https://evil.example")

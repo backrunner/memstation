@@ -192,7 +192,7 @@ func adminOriginMiddleware(cfg bootstrap.Config, systemConfig *systemconfigservi
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := strings.TrimSpace(r.Header.Get("Origin"))
-			if origin != "" && !originAllowed(currentCORSAllowedOriginSet(cfg, systemConfig), origin) {
+			if origin != "" && !currentCORSOriginPolicy(cfg, systemConfig).Allows(origin) {
 				writeError(w, http.StatusForbidden, "forbidden_origin", "admin request origin is not allowed")
 				return
 			}
@@ -2148,10 +2148,12 @@ func firstNonEmptyString(values ...string) string {
 }
 
 func corsMiddleware(cfg bootstrap.Config, systemConfig *systemconfigservice.Service) func(http.Handler) http.Handler {
-	allowedHeaders := strings.Join([]string{
+	defaultAllowedHeaders := strings.Join([]string{
 		"Accept",
 		"Authorization",
 		"Content-Type",
+		"X-Admin-Token",
+		"X-MemStation-Admin-Token",
 		"X-MemStation-End-Conversation",
 		"X-MemStation-Inject-Context",
 		"X-MemStation-Inject-Tools",
@@ -2170,15 +2172,16 @@ func corsMiddleware(cfg bootstrap.Config, systemConfig *systemconfigservice.Serv
 	}, ", ")
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			allowedOrigins := currentCORSAllowedOriginSet(cfg, systemConfig)
+			policy := currentCORSOriginPolicy(cfg, systemConfig)
 			origin := strings.TrimSpace(r.Header.Get("Origin"))
-			if origin != "" && originAllowed(allowedOrigins, origin) {
+			if origin != "" && policy.Allows(origin) {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Access-Control-Allow-Credentials", "true")
-				w.Header().Set("Access-Control-Allow-Headers", allowedHeaders)
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", corsAllowedHeaders(r, defaultAllowedHeaders))
+				w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS")
 				w.Header().Set("Access-Control-Expose-Headers", exposedHeaders)
 				w.Header().Add("Vary", "Origin")
+				w.Header().Add("Vary", "Access-Control-Request-Headers")
 			}
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
@@ -2189,24 +2192,49 @@ func corsMiddleware(cfg bootstrap.Config, systemConfig *systemconfigservice.Serv
 	}
 }
 
-func currentCORSAllowedOriginSet(cfg bootstrap.Config, systemConfig *systemconfigservice.Service) map[string]struct{} {
+type corsOriginPolicy struct {
+	allowAny bool
+	allowed  map[string]struct{}
+}
+
+func currentCORSOriginPolicy(cfg bootstrap.Config, systemConfig *systemconfigservice.Service) corsOriginPolicy {
 	allowedOrigins := map[string]struct{}{}
+	hasConfiguredOrigins := false
 	for _, origin := range currentCORSAllowedOrigins(cfg, systemConfig) {
 		origin = strings.TrimSpace(origin)
-		if origin == "" || origin == "*" {
+		if origin == "" {
+			continue
+		}
+		hasConfiguredOrigins = true
+		if origin == "*" {
 			continue
 		}
 		allowedOrigins[origin] = struct{}{}
 	}
-	return allowedOrigins
+	return corsOriginPolicy{
+		allowAny: !hasConfiguredOrigins,
+		allowed:  allowedOrigins,
+	}
 }
 
-func originAllowed(allowed map[string]struct{}, origin string) bool {
-	if len(allowed) == 0 {
+func (p corsOriginPolicy) Allows(origin string) bool {
+	origin = strings.TrimSpace(origin)
+	if origin == "" {
 		return false
 	}
-	_, ok := allowed[origin]
+	if p.allowAny {
+		return true
+	}
+	_, ok := p.allowed[origin]
 	return ok
+}
+
+func corsAllowedHeaders(r *http.Request, fallback string) string {
+	requestedHeaders := strings.TrimSpace(r.Header.Get("Access-Control-Request-Headers"))
+	if requestedHeaders != "" {
+		return requestedHeaders
+	}
+	return fallback
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

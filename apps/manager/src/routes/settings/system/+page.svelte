@@ -870,7 +870,7 @@
             label="CORS allowed origins"
             bind:value={corsAllowedOriginsText}
             rows={4}
-            placeholder="https://manager.example.com&#10;http://localhost:5173"
+            placeholder="Leave empty to reflect any incoming Origin&#10;https://manager.example.com"
             error={runtimeFieldError('cors_allowed_origins')}
             fieldClass="field-span-2"
           />
