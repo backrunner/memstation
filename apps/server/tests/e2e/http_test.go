@@ -93,6 +93,38 @@ func TestAdminLoginCreatesSession(t *testing.T) {
 	}
 }
 
+func TestAdminHTTPRoutesRequireSessionCookieNotBearerToken(t *testing.T) {
+	t.Parallel()
+	router := newTestRouter()
+
+	bearerRequest := httptest.NewRequest(http.MethodGet, "/api/admin/overview", nil)
+	bearerRequest.Header.Set("Authorization", "Bearer "+e2eTestAdminToken)
+	bearerRecorder := httptest.NewRecorder()
+	router.ServeHTTP(bearerRecorder, bearerRequest)
+	if bearerRecorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected bearer admin token to be rejected, got %d body=%s", bearerRecorder.Code, bearerRecorder.Body.String())
+	}
+
+	headerRequest := httptest.NewRequest(http.MethodGet, "/api/admin/overview", nil)
+	headerRequest.Header.Set("X-MemStation-Admin-Token", e2eTestAdminToken)
+	headerRecorder := httptest.NewRecorder()
+	router.ServeHTTP(headerRecorder, headerRequest)
+	if headerRecorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected header admin token to be rejected, got %d body=%s", headerRecorder.Code, headerRecorder.Body.String())
+	}
+
+	cookies := loginCookies(t, router)
+	sessionRequest := httptest.NewRequest(http.MethodGet, "/api/admin/overview", nil)
+	for _, cookie := range cookies {
+		sessionRequest.AddCookie(cookie)
+	}
+	sessionRecorder := httptest.NewRecorder()
+	router.ServeHTTP(sessionRecorder, sessionRequest)
+	if sessionRecorder.Code != http.StatusOK {
+		t.Fatalf("expected session cookie to be accepted, got %d body=%s", sessionRecorder.Code, sessionRecorder.Body.String())
+	}
+}
+
 func TestChatCompletionStreamingEndpoint(t *testing.T) {
 	t.Parallel()
 	router := newProxyRouter()
@@ -287,6 +319,53 @@ func TestCORSPreflightAllowsConfiguredManagerOrigin(t *testing.T) {
 	}
 	if got := recorder.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
 		t.Fatalf("expected credentials header, got %q", got)
+	}
+}
+
+func TestAdminOriginPolicyRejectsUnconfiguredOrigins(t *testing.T) {
+	t.Parallel()
+
+	router := newTestRouter()
+	request := httptest.NewRequest(http.MethodPost, "/api/admin/login", bytes.NewBufferString(`{"token":"`+e2eTestAdminToken+`"}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Origin", "https://evil.example")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden origin, got %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	if len(recorder.Result().Cookies()) != 0 {
+		t.Fatal("expected rejected login not to set cookies")
+	}
+}
+
+func TestCORSWildcardDoesNotEnableCredentialedOrigins(t *testing.T) {
+	t.Parallel()
+
+	session := security.NewAdminSessionManager(e2eTestAdminToken, time.Hour)
+	router := httptransport.NewRouter(httptransport.Dependencies{
+		Config: bootstrap.Config{
+			Version:             "0.1.0",
+			SessionCookieSecure: false,
+			CORSAllowedOrigins:  []string{"*"},
+		},
+		Health:  observability.NewRegistry(),
+		Auth:    security.Authenticator{AdminToken: e2eTestAdminToken, SessionManager: session},
+		Session: session,
+	})
+
+	request := httptest.NewRequest(http.MethodOptions, "/api/admin/session", nil)
+	request.Header.Set("Origin", "http://localhost:3000")
+	request.Header.Set("Access-Control-Request-Method", "GET")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+
+	if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("expected wildcard not to grant credentialed origin, got %q", got)
+	}
+	if got := recorder.Header().Get("Access-Control-Allow-Credentials"); got != "" {
+		t.Fatalf("expected wildcard not to grant credentials, got %q", got)
 	}
 }
 

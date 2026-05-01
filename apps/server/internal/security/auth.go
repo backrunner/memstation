@@ -44,16 +44,16 @@ func (a Authenticator) AuthenticateAPIKeyToken(ctx context.Context, token string
 }
 
 func (a Authenticator) AuthenticateAdmin(r *http.Request) bool {
-	if a.AuthenticateAdminToken(bearerToken(r.Header.Get("Authorization"))) {
-		return true
-	}
+	return a.AuthenticateAdminSession(r)
+}
+
+func (a Authenticator) AuthenticateAdminSession(r *http.Request) bool {
 	cookie, err := r.Cookie(AdminSessionCookieName)
 	return err == nil && a.SessionManager != nil && a.SessionManager.Verify(cookie.Value)
 }
 
 func (a Authenticator) AuthenticateAdminToken(token string) bool {
-	token = strings.TrimSpace(token)
-	return token != "" && token == a.AdminToken
+	return VerifyAdminToken(a.AdminToken, token)
 }
 
 func bearerToken(header string) string {

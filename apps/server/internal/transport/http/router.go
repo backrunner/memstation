@@ -83,9 +83,10 @@ func NewRouter(deps Dependencies) http.Handler {
 
 	router.Get("/health/live", liveHandler(deps.Config))
 	router.Get("/health/ready", readyHandler(deps.Config, deps.Health))
-	router.Post("/api/admin/login", adminLoginHandler(deps.Config, deps.SystemConfig, deps.Auth, deps.Session, deps.Audit))
-	router.Post("/api/admin/logout", adminLogoutHandler(deps.Config, deps.SystemConfig, deps.Auth, deps.Audit))
-	router.Get("/api/admin/session", adminSessionHandler(deps.Auth))
+	adminOrigin := adminOriginMiddleware(deps.Config, deps.SystemConfig)
+	router.With(adminOrigin).Post("/api/admin/login", adminLoginHandler(deps.Config, deps.SystemConfig, deps.Auth, deps.Session, deps.Audit))
+	router.With(adminOrigin).Post("/api/admin/logout", adminLogoutHandler(deps.Config, deps.SystemConfig, deps.Auth, deps.Audit))
+	router.With(adminOrigin).Get("/api/admin/session", adminSessionHandler(deps.Auth))
 
 	router.Group(func(r chi.Router) {
 		r.Use(proxyAuthMiddleware(deps.Auth, deps.RateLimiter))
@@ -103,6 +104,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	})
 
 	router.Group(func(r chi.Router) {
+		r.Use(adminOrigin)
 		r.Use(adminAuthMiddleware(deps.Auth))
 		r.Method(http.MethodGet, "/graphql/playground", graphql.Playground())
 		r.Method(http.MethodPost, "/graphql", graphql.Handler(deps.GraphQL))
@@ -186,6 +188,19 @@ func adminAuthMiddleware(auth security.Authenticator) func(http.Handler) http.Ha
 	}
 }
 
+func adminOriginMiddleware(cfg bootstrap.Config, systemConfig *systemconfigservice.Service) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := strings.TrimSpace(r.Header.Get("Origin"))
+			if origin != "" && !originAllowed(currentCORSAllowedOriginSet(cfg, systemConfig), origin) {
+				writeError(w, http.StatusForbidden, "forbidden_origin", "admin request origin is not allowed")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func adminLoginHandler(cfg bootstrap.Config, systemConfig *systemconfigservice.Service, auth security.Authenticator, session *security.AdminSessionManager, audit *auditsvc.Service) http.HandlerFunc {
 	type requestBody struct {
 		Token string `json:"token"`
@@ -202,7 +217,7 @@ func adminLoginHandler(cfg bootstrap.Config, systemConfig *systemconfigservice.S
 				token = body.Token
 			}
 		}
-		if token != auth.AdminToken {
+		if !auth.AuthenticateAdminToken(token) {
 			writeError(w, http.StatusUnauthorized, "unauthorized", "invalid admin token")
 			return
 		}
@@ -2137,7 +2152,6 @@ func corsMiddleware(cfg bootstrap.Config, systemConfig *systemconfigservice.Serv
 		"Accept",
 		"Authorization",
 		"Content-Type",
-		"X-MemStation-Admin-Token",
 		"X-MemStation-End-Conversation",
 		"X-MemStation-Inject-Context",
 		"X-MemStation-Inject-Tools",
@@ -2156,10 +2170,7 @@ func corsMiddleware(cfg bootstrap.Config, systemConfig *systemconfigservice.Serv
 	}, ", ")
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			allowedOrigins := map[string]struct{}{}
-			for _, origin := range currentCORSAllowedOrigins(cfg, systemConfig) {
-				allowedOrigins[strings.TrimSpace(origin)] = struct{}{}
-			}
+			allowedOrigins := currentCORSAllowedOriginSet(cfg, systemConfig)
 			origin := strings.TrimSpace(r.Header.Get("Origin"))
 			if origin != "" && originAllowed(allowedOrigins, origin) {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
@@ -2178,12 +2189,21 @@ func corsMiddleware(cfg bootstrap.Config, systemConfig *systemconfigservice.Serv
 	}
 }
 
+func currentCORSAllowedOriginSet(cfg bootstrap.Config, systemConfig *systemconfigservice.Service) map[string]struct{} {
+	allowedOrigins := map[string]struct{}{}
+	for _, origin := range currentCORSAllowedOrigins(cfg, systemConfig) {
+		origin = strings.TrimSpace(origin)
+		if origin == "" || origin == "*" {
+			continue
+		}
+		allowedOrigins[origin] = struct{}{}
+	}
+	return allowedOrigins
+}
+
 func originAllowed(allowed map[string]struct{}, origin string) bool {
 	if len(allowed) == 0 {
 		return false
-	}
-	if _, ok := allowed["*"]; ok {
-		return true
 	}
 	_, ok := allowed[origin]
 	return ok
@@ -2205,9 +2225,6 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 }
 
 func readAdminToken(r *http.Request) (string, error) {
-	if token := r.Header.Get("X-MemStation-Admin-Token"); token != "" {
-		return token, nil
-	}
 	contentType := r.Header.Get("Content-Type")
 	if strings.HasPrefix(contentType, "application/x-www-form-urlencoded") || strings.HasPrefix(contentType, "multipart/form-data") {
 		if err := r.ParseForm(); err != nil {

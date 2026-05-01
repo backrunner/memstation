@@ -696,6 +696,11 @@ func managerConnectionURI(cfg bootstrap.Config) string {
 		Host:   parsed.Host,
 		Path:   parsed.EscapedPath(),
 	}
+	if tokenHash, err := security.HashAdminToken(cfg.AdminToken); err == nil {
+		values := target.Query()
+		values.Set("key", tokenHash)
+		target.RawQuery = values.Encode()
+	}
 	return target.String()
 }
 

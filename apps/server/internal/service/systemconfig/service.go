@@ -36,6 +36,7 @@ type Snapshot struct {
 	RateLimitBurst                      int             `json:"rate_limit_burst"`
 	CacheTTLSeconds                     int             `json:"cache_ttl_seconds"`
 	CORSAllowedOrigins                  []string        `json:"cors_allowed_origins"`
+	SessionCookieSecure                 bool            `json:"-"`
 	SessionCookieCrossSite              bool            `json:"session_cookie_cross_site"`
 	MultimodalEnabled                   bool            `json:"multimodal_enabled"`
 	MultimodalStorageBackend            string          `json:"multimodal_storage_backend"`
@@ -145,6 +146,7 @@ func DefaultsFromConfig(cfg bootstrap.Config) Snapshot {
 		RateLimitBurst:                      cfg.RateLimitBurst,
 		CacheTTLSeconds:                     int(cfg.CacheTTL.Seconds()),
 		CORSAllowedOrigins:                  append([]string(nil), cfg.CORSAllowedOrigins...),
+		SessionCookieSecure:                 cfg.SessionCookieSecure,
 		SessionCookieCrossSite:              cfg.SessionCookieCrossSite,
 		MultimodalEnabled:                   cfg.Multimodal.Enabled,
 		MultimodalStorageBackend:            cfg.Multimodal.StorageBackend,
@@ -397,6 +399,7 @@ func (s Snapshot) ApplyConfig(cfg bootstrap.Config) bootstrap.Config {
 	cfg.RateLimitBurst = s.RateLimitBurst
 	cfg.CacheTTL = time.Duration(s.CacheTTLSeconds) * time.Second
 	cfg.CORSAllowedOrigins = append([]string(nil), s.CORSAllowedOrigins...)
+	cfg.SessionCookieSecure = s.SessionCookieSecure
 	cfg.SessionCookieCrossSite = s.SessionCookieCrossSite
 	cfg.Multimodal = bootstrap.MultimodalConfig{
 		Enabled:                   s.MultimodalEnabled,
@@ -934,6 +937,9 @@ func applyFieldOverrides(base Overrides, fields map[string]any) (Overrides, erro
 			if err != nil {
 				return Overrides{}, err
 			}
+			if err := validateCORSAllowedOrigins(value); err != nil {
+				return Overrides{}, err
+			}
 			next.CORSAllowedOrigins = value
 		case "session_cookie_cross_site":
 			value, err := boolOverride(raw)
@@ -1179,6 +1185,18 @@ func stringSliceOverride(raw any) (*[]string, error) {
 	return &out, nil
 }
 
+func validateCORSAllowedOrigins(origins *[]string) error {
+	if origins == nil {
+		return nil
+	}
+	for _, origin := range *origins {
+		if strings.TrimSpace(origin) == "*" {
+			return errors.New("cors_allowed_origins must list explicit origins when admin sessions use cookies")
+		}
+	}
+	return nil
+}
+
 func stringValue(value any) string {
 	switch typed := value.(type) {
 	case string:
@@ -1263,6 +1281,12 @@ func validateSnapshot(snapshot Snapshot) error {
 	}
 	if snapshot.RerankBlendWeight < 0 || snapshot.RerankBlendWeight > 1 {
 		return errors.New("rerank_blend_weight must be between 0 and 1")
+	}
+	if err := validateCORSAllowedOrigins(&snapshot.CORSAllowedOrigins); err != nil {
+		return err
+	}
+	if snapshot.SessionCookieCrossSite && !snapshot.SessionCookieSecure {
+		return errors.New("session_cookie_secure must be true when session_cookie_cross_site is true")
 	}
 	return validateRerankModelReference(snapshot.RerankModel)
 }

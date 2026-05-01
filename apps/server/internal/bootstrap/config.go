@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -224,7 +225,7 @@ func LoadConfig() (Config, error) {
 		"video/quicktime",
 	}, ","))
 
-	return Config{
+	cfg := Config{
 		AppName:                        v.GetString("app_name"),
 		Version:                        v.GetString("version"),
 		Port:                           v.GetInt("port"),
@@ -293,7 +294,23 @@ func LoadConfig() (Config, error) {
 			MaxAssetBytes:             v.GetInt64("multimodal_max_asset_bytes"),
 			AllowedMIMETypes:          csvList(v.GetString("multimodal_allowed_mime_types")),
 		},
-	}, nil
+	}
+	if err := validateCredentialedCORSOrigins(cfg.CORSAllowedOrigins); err != nil {
+		return Config{}, err
+	}
+	if cfg.SessionCookieCrossSite && !cfg.SessionCookieSecure {
+		return Config{}, fmt.Errorf("session_cookie_secure must be true when session_cookie_cross_site is true")
+	}
+	return cfg, nil
+}
+
+func validateCredentialedCORSOrigins(origins []string) error {
+	for _, origin := range origins {
+		if strings.TrimSpace(origin) == "*" {
+			return fmt.Errorf("cors_allowed_origins must list explicit origins when admin sessions use cookies")
+		}
+	}
+	return nil
 }
 
 func csvList(value string) []string {
