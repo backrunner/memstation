@@ -615,7 +615,7 @@ v1.x 后续路线：
 
 ---
 
-## 14. 当前实现状态（as of 2026-04-11）
+## 14. 当前实现状态（as of 2026-04-25）
 
 本节用于重启时快速恢复上下文；如后续实现进度发生变化，必须同步更新本节，而不能只改代码不改状态。
 
@@ -636,7 +636,11 @@ v1.x 后续路线：
 - `serve` 已并行暴露 HTTP/GraphQL 与独立 gRPC 端口，`apps/server/proto/memstation/v1/api.proto` 已落地 Gateway、Memory、Admin、Health 的正式 proto 定义与生成代码
 - Go 代码质量门禁已统一为 `scripts/go/format.sh` + `scripts/go/lint.sh`，并接入 `apps/server` 本地脚本与 CI 的 format check / golangci-lint
 - 记忆切片 rewrite 的 stale segment 清理链路已补强，能够按 `conversation_id + keep set` 删除残留 segment graph node、relation 与 vector，避免重试或侧表已覆盖后的脏数据残留
-- 当前已确认通过的本地门禁包括：`pnpm lint`、`pnpm --filter @memstation/server format:check`、`pnpm --filter @memstation/server lint`、`go test ./...`
+- 记忆注入已补强为结构化 User Profile / Relevant Memories / Relevant Facts / Relevant Impressions 格式，并按 Key Memory、Summary、Fact、Impression 的固定优先级装包
+- Fact fallback extraction 已使用规范化 category taxonomy，并通过 `fact_key + supersedes_fact_ids` 在写入侧同步旧 fact 的 `is_superseded / superseded_by_id` 与 `supersedes` relation
+- Summary worker 已加入 `summary_chunk_max_tokens=6000`、`summary_chunk_overlap=600` 的长上下文 chunking 入口，并写入 chunk metadata
+- Gateway / Memory / Worker 热路径已补充 Go `Benchmark*` 函数，`go test -bench=.` 可发现并执行非流式代理、流式代理、注入、记忆检索、outbox relay 等基准
+- 此前已确认通过的本地门禁包括：`pnpm lint`、`pnpm --filter @memstation/server format:check`、`pnpm --filter @memstation/server lint`、`go test ./...`
 
 ### 14.2 未完成
 
@@ -644,6 +648,7 @@ v1.x 后续路线：
 - 原始 LOCOMO 数据仍然不会提交进仓库；默认 benchmark 会从上游公开地址拉取，夜间和本地运行仍受外部网络与许可证约束
 - backup/restore 实际演练仍要求运行环境具备 Docker Compose 与镜像拉取能力；在无 Docker 环境下只能执行 dry-run 形态校验
 - 压测与覆盖率门禁已具备基线实现，但后续仍应随着功能扩展逐步提高阈值，而不是长期停留在当前数值
+- 2026-04-25 本地复核中，`go test ./...` 与新增 benchmark smoke 已通过；`scripts/go/format.sh --check` 和 `scripts/go/lint.sh` 当前在未触及文件报告既有格式 / lint 问题，需要后续独立收敛后恢复门禁全绿
 - 当前主要剩余工作已从“补功能”转为“持续提高工程门禁和运维阈值”，而不是继续扩写新的 v1 范围
 
 ### 14.3 重启检查点
@@ -656,7 +661,7 @@ v1.x 后续路线：
 4. 如果新增 manager 核心模块，同步补 Vitest、Playwright 和 coverage gate
 5. 如果后续引入集群化或多节点恢复方案，把现有单实例 drill 扩展为跨节点恢复演练，而不是另起一套脚本
 
-### 14.4 当前开发计划（as of 2026-04-11）
+### 14.4 当前开发计划（as of 2026-04-25）
 
 当前开发计划不再以“补齐 v1 基础功能”为主，而是固定按以下顺序推进：
 

@@ -50,6 +50,9 @@ memstation/
 - 会话切片：对用户/助手对话做 segment 化写入，并建立 `follows_segment`、`summarized_into` 等图关系
 - 时间能力：`importance * time_decay` 排序、`activity_at`、`time_tier`、temporal graph
 - 记忆检索：向量候选 + SQL hydrate + 1-2 hop relation expansion + 混合 key memory 注入
+- 记忆注入：结构化 User Profile / Relevant Memories / Relevant Facts / Relevant Impressions，上下文装包按 Key Memory、Summary、Fact、Impression 优先级执行
+- Fact 写入：fallback extraction 使用规范化 category taxonomy，并在新 fact 显式 supersede 旧 fact 时同步 `is_superseded`、`superseded_by_id` 与 `supersedes` 图边
+- Summary 写入：长上下文按 `summary_chunk_max_tokens=6000`、`summary_chunk_overlap=600` 进行 chunking，并保留 chunk metadata
 - Memory REST：
   - `POST /api/v1/memory/search`
   - `GET /api/v1/memory/keys`
@@ -314,8 +317,8 @@ Embedding 已接入真实 provider 调用，采用 OpenAI-compatible embedding �
 - Manager 是独立前端，不承载业务核心
 - 所有实际管理能力都由 MemStation server 暴露
 - Manager 可以保存多个 target，并在不同 MemStation 实例之间切换
-- Manager 支持直接粘贴 `memstation://host:port?key=...` / `memstations://...` 形式的连接 URI；`memstation serve` 启动时也会输出一条 target URI 模板，避免在日志里暴露原始 admin token
-- 这为后续集群化、多环境和远程运维预留了空间
+- Manager 支持直接粘贴 `memstation://host:port?key=...` / `memstations://...` 形式的连接 URI；`key=` 必须是服务端生成的 Argon2id admin token hash，不应放入原始明文 admin token
+- 一套 MemStation 服务视为一个运行环境，Manager target 只暴露 label、endpoint 和 admin token 连接信息
 
 ## 测试与评测
 
@@ -328,6 +331,7 @@ Embedding 已接入真实 provider 调用，采用 OpenAI-compatible embedding �
 - Manager Vitest + Playwright E2E
 - Retrieval / ranking benchmark smoke
 - LOCOMO external benchmark runner
+- Gateway / Memory / Worker hot-path `Benchmark*`
 - Performance smoke
 - Worker backlog recovery drill
 - Backup / restore drill
@@ -351,3 +355,5 @@ Embedding 已接入真实 provider 调用，采用 OpenAI-compatible embedding �
 ## 当前状态
 
 按当前仓库实现，R1-R6 与 R5.5 的代码范围均已落地，适合作为 v1.0 的开发和迭代基线继续推进。
+
+2026-04-25 本地复核：`go test ./...` 与新增 hot-path benchmark smoke 已通过；`scripts/go/format.sh --check` 和 `scripts/go/lint.sh` 当前在未触及文件报告既有格式 / lint 问题，需后续单独收敛后恢复门禁全绿。
