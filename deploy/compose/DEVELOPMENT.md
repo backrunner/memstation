@@ -5,6 +5,7 @@ MemStation keeps a resettable local Docker Compose stack for development.
 Devcontainer debug flow
 - `pnpm dev`: starts the `workspace` devcontainer, applies server migrations inside the container, runs backend watch restart on `:8080`, and starts the manager Vite debug server on `:5173`.
 - `pnpm dev:container`: only boots the devcontainer workspace plus PostgreSQL and Redis.
+- `pnpm dev:container:portless`: runs the same in-container full-stack flow, then registers a Portless alias so the manager is available at `https://memstation-manager.localhost`.
 - `pnpm dev:workspace`: runs the in-container full-stack debug command directly when you are already inside the devcontainer.
 - In this flow, `DATABASE_URL`, `REDIS_URL`, `MEMSTATION_ADMIN_TOKEN`, `MEMSTATION_MASTER_KEY`, and local cookie defaults are injected automatically from the devcontainer Compose baseline so local debug stays close to zero-config.
 

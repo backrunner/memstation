@@ -129,6 +129,14 @@ pnpm dev
 - 不需要手动准备本地 admin token / master key
 - 启动后只需要去 Manager 里补 Provider 密钥和模型配置
 
+如果希望整套开发仍然运行在 devcontainer 内，但 Manager 通过稳定 HTTPS 本地域名暴露出来：
+
+```bash
+pnpm dev:container:portless
+```
+
+这个入口会启动同一套 `workspace + postgres + redis` devcontainer，并把容器内 Manager 调试服务通过 Portless alias 暴露为 `https://memstation-manager.localhost`。浏览器请求 `/api`、`/health`、`/graphql`、`/v1` 时仍由容器内 Vite proxy 转发到容器内 MemStation server。
+
 默认地址：
 
 - Gateway / Admin API: `http://127.0.0.1:8080`
@@ -238,6 +246,7 @@ pnpm dev:manager:portless
 ```bash
 pnpm dev
 pnpm dev:container
+pnpm dev:container:portless
 pnpm dev:workspace
 pnpm dev:server
 pnpm dev:portless

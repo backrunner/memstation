@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR=$(cd "$(dirname "$0")/../.." && pwd)
 MANAGER_PORT=${MEMSTATION_MANAGER_DEV_PORT:-5173}
+MANAGER_PROXY_TARGET=${MEMSTATION_MANAGER_DEV_PROXY_TARGET:-http://127.0.0.1:8080}
 SKIP_INSTALL=${MEMSTATION_SKIP_PNPM_INSTALL:-0}
 SKIP_MIGRATE=${MEMSTATION_SKIP_DEV_MIGRATE:-0}
 SERVER_SCRIPT="$ROOT_DIR/scripts/dev/run-server-watch.sh"
@@ -64,6 +65,7 @@ SERVER_PID=$!
 echo "Starting MemStation manager debug server on port ${MANAGER_PORT}..."
 (
   cd "$ROOT_DIR"
+  export MEMSTATION_MANAGER_DEV_PROXY_TARGET="$MANAGER_PROXY_TARGET"
   pnpm --filter @memstation/manager dev -- --host 0.0.0.0 --port "$MANAGER_PORT"
 ) &
 MANAGER_PID=$!
@@ -71,6 +73,7 @@ MANAGER_PID=$!
 echo "Full-stack debug is running."
 echo "- Server:  http://127.0.0.1:8080"
 echo "- Manager: http://127.0.0.1:${MANAGER_PORT}"
+echo "- API proxy target: ${MANAGER_PROXY_TARGET}"
 
 set +e
 wait -n "$SERVER_PID" "$MANAGER_PID"

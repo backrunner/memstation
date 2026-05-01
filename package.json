@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "bash ./scripts/devcontainer/start-fullstack-debug.sh",
     "dev:container": "bash ./scripts/devcontainer/start-workspace.sh",
+    "dev:container:portless": "bash ./scripts/devcontainer/start-portless-fullstack.sh",
     "dev:workspace": "bash ./scripts/dev/run-fullstack-workspace.sh",
     "dev:server": "bash ./scripts/dev/run-server-watch.sh",
     "dev:portless": "bash ./scripts/dev/run-fullstack-portless.sh",
