@@ -8,6 +8,7 @@
 
   import { fetchHealth, loginAdmin } from '$lib/api/client';
   import TextInputField from '$lib/components/TextInputField.svelte';
+  import { rememberTargetCredential } from '$lib/targets/credentials';
   import { parseTargetLocator } from '$lib/targets/uri';
   import type { ParsedTargetLocator } from '$lib/targets/uri';
   import { markTargetSessionConnected, updateSession, upsertTarget } from '$lib/stores/targets';
@@ -81,6 +82,7 @@
         ...resolvedTarget,
         label: label.trim() || resolvedTarget.label
       });
+      rememberTargetCredential(savedTarget.id, resolvedAdminKey);
       markTargetSessionConnected(savedTarget.id, connection.checkedAt);
       updateSession({ authenticated: true, checking: false, checkedAt: connection.checkedAt });
       await goto('/dashboard');

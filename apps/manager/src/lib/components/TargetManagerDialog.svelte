@@ -8,6 +8,7 @@
   import TextInputField from '$lib/components/TextInputField.svelte';
   import { isHTTPURL } from '$lib/forms/validation';
   import type { MemStationTarget } from '$lib/types';
+  import { readTargetCredential } from '$lib/targets/credentials';
   import { parseTargetLocator } from '$lib/targets/uri';
 
   export let open = false;
@@ -48,7 +49,7 @@
       editingId = current.id;
       label = current.label;
       connectionInput = current.baseUrl;
-      adminKey = '';
+      adminKey = readTargetCredential(current.id);
       saveError = '';
       formErrors = {};
     }
@@ -75,6 +76,7 @@
     editingId = target.id;
     label = target.label;
     connectionInput = target.baseUrl;
+    adminKey = readTargetCredential(target.id);
     saveError = '';
   }
 
@@ -308,18 +310,19 @@
 <style>
   .target-dialog-body {
     display: grid;
-    grid-template-columns: 260px minmax(0, 1fr);
-    gap: 20px;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 16px;
     align-items: start;
   }
 
   .target-dialog-list {
     display: grid;
-    gap: 10px;
-    padding: 14px;
+    gap: 8px;
+    padding: 0;
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    background: var(--surface-muted);
+    background: var(--surface);
+    overflow: hidden;
   }
 
   .target-dialog-list-header {
@@ -327,6 +330,10 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    min-height: 40px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--surface-muted);
   }
 
   .target-dialog-form {
@@ -336,9 +343,11 @@
 
   .target-list {
     display: grid;
-    gap: 6px;
+    gap: 1px;
     max-height: 320px;
     overflow-y: auto;
+    padding: 0;
+    background: var(--border-subtle);
   }
 
   :global(.target-context-trigger) {
@@ -352,9 +361,10 @@
     justify-content: space-between;
     gap: 12px;
     width: 100%;
-    padding: 10px 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    min-height: 44px;
+    padding: 7px 10px;
+    border: 0;
+    border-radius: 0;
     background: var(--surface);
     color: var(--text);
     text-align: left;
@@ -363,17 +373,16 @@
   }
 
   .target-row:hover {
-    border-color: var(--border-strong);
     background: var(--surface-hover);
   }
 
   .target-row.is-active {
-    border-color: var(--brand);
-    background: var(--brand-soft);
+    background: var(--brand-softer);
+    box-shadow: inset 3px 0 0 var(--brand);
   }
 
   .target-row.is-draft {
-    border-style: dashed;
+    background: var(--warning-soft);
   }
 
   :global(.target-context-menu) {
@@ -393,12 +402,20 @@
 
   .target-row-primary {
     display: grid;
-    gap: 2px;
+    gap: 1px;
     min-width: 0;
   }
 
   .target-row-primary strong {
-    font-size: var(--font-size-md);
+    overflow: hidden;
+    color: var(--text);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .target-row.is-active .target-row-primary strong {
     color: var(--text);
   }
 
@@ -408,7 +425,7 @@
     white-space: nowrap;
     font-family: var(--font-mono);
     font-size: 11px;
-    max-width: 180px;
+    max-width: 160px;
   }
 
   .target-dialog-footer {

@@ -33,6 +33,7 @@
 
   import TargetManagerDialog from '$lib/components/TargetManagerDialog.svelte';
   import { fetchAdminSession, fetchHealth, loginAdmin, logoutAdmin } from '$lib/api/client';
+  import { forgetTargetCredential, rememberTargetCredential } from '$lib/targets/credentials';
   import {
     clearAllTargets,
     initializeTargets,
@@ -275,6 +276,7 @@
     const savedTarget = upsertTarget(event.detail.target);
     lastTargetId = savedTarget.id;
     if (event.detail.adminKey?.trim()) {
+      rememberTargetCredential(savedTarget.id, event.detail.adminKey);
       void connectSavedTarget(savedTarget, event.detail.adminKey);
     } else {
       void refreshSelectedTarget(savedTarget);
@@ -284,6 +286,7 @@
   async function connectSavedTarget(savedTarget: ReturnType<typeof upsertTarget>, adminKey: string): Promise<void> {
     try {
       const payload = await loginAdmin(savedTarget, adminKey);
+      rememberTargetCredential(savedTarget.id, adminKey);
       markTargetSessionConnected(savedTarget.id, payload.checkedAt);
       targetVersions = {
         ...targetVersions,
@@ -488,5 +491,8 @@
   targets={$targetState.targets}
   selectedId={$targetState.selectedId}
   on:save={handleTargetSave}
-  on:remove={(event) => removeTarget(event.detail.id)}
+  on:remove={(event) => {
+    forgetTargetCredential(event.detail.id);
+    removeTarget(event.detail.id);
+  }}
 />
