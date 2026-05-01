@@ -18,9 +18,9 @@ services:
       MEMSTATION_SESSION_COOKIE_SECURE: "false"
       MEMSTATION_SESSION_COOKIE_CROSS_SITE: "false"
     ports:
-      - "8080:8080"
-      - "9090:9090"
-      - "5173:5173"
+      - "${MEMSTATION_HTTP_BIND:-127.0.0.1}:8080:8080"
+      - "${MEMSTATION_GRPC_BIND:-127.0.0.1}:9090:9090"
+      - "127.0.0.1:5173:5173"
     volumes:
       - ../..:/workspace/memstation
     depends_on:
@@ -39,6 +39,7 @@ services:
       DATABASE_URL: postgres://memstation:memstation_dev@postgres:5432/memstation?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       VECTOR_STORE_BACKEND: pgvector
+      MEMSTATION_PUBLIC_BASE_URL: ${MEMSTATION_PUBLIC_BASE_URL:-http://127.0.0.1:8080}
       CHAT_MODEL: ${CHAT_MODEL:-}
       SUMMARY_MODEL: ${SUMMARY_MODEL:-}
       ANALYSIS_MODEL: ${ANALYSIS_MODEL:-}
@@ -46,9 +47,12 @@ services:
       MEMSTATION_ADMIN_TOKEN: ${MEMSTATION_ADMIN_TOKEN:-memstation-local-admin-token}
       MEMSTATION_MASTER_KEY: ${MEMSTATION_MASTER_KEY:-memstation-local-master-key}
       MEMSTATION_DEV_API_KEY: ${MEMSTATION_DEV_API_KEY:-ms-local-dev}
+      MEMSTATION_CORS_ALLOWED_ORIGINS: ${MEMSTATION_CORS_ALLOWED_ORIGINS:-http://127.0.0.1:4173,http://localhost:4173,http://127.0.0.1:5173,http://localhost:5173}
+      MEMSTATION_SESSION_COOKIE_SECURE: "false"
+      MEMSTATION_SESSION_COOKIE_CROSS_SITE: "false"
     ports:
-      - "8080:8080"
-      - "9090:9090"
+      - "${MEMSTATION_HTTP_BIND:-127.0.0.1}:8080:8080"
+      - "${MEMSTATION_GRPC_BIND:-127.0.0.1}:9090:9090"
     depends_on:
       postgres:
         condition: service_healthy
@@ -96,10 +100,12 @@ services:
     build:
       context: ../..
       dockerfile: apps/manager/Dockerfile
+      args:
+        PUBLIC_MEMSTATION_DEFAULT_TARGET: ${PUBLIC_MEMSTATION_DEFAULT_TARGET:-}
     environment:
       PUBLIC_MEMSTATION_URL: http://memstation:8080
     ports:
-      - "4173:3000"
+      - "${MEMSTATION_MANAGER_BIND:-127.0.0.1}:4173:3000"
     depends_on:
       memstation:
         condition: service_started
@@ -111,7 +117,7 @@ services:
       POSTGRES_PASSWORD: memstation_dev
       POSTGRES_DB: memstation
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -124,7 +130,7 @@ services:
     image: redis:7
     command: ["redis-server", "--save", "60", "1", "--appendonly", "yes"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -139,8 +145,8 @@ services:
     volumes:
       - ../otel/otel-collector.yaml:/etc/otelcol/config.yaml:ro
     ports:
-      - "4317:4317"
-      - "4318:4318"
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
 
 volumes:
   postgres-data:
