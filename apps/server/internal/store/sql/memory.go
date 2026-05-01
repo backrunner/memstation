@@ -327,8 +327,11 @@ func (r *InMemoryMemoryRepository) StoreDocument(_ context.Context, doc domain.M
 	if doc.GenerationID != "" {
 		doc.Metadata["generation_id"] = doc.GenerationID
 	}
-	if existing, ok := r.documents[key(doc.UserID, doc.ID)]; ok && shouldKeepExistingSnapshot(existing.Metadata, doc.Metadata) {
-		return nil
+	if existing, ok := r.documents[key(doc.UserID, doc.ID)]; ok {
+		if shouldKeepExistingSnapshot(existing.Metadata, doc.Metadata) {
+			return nil
+		}
+		doc = preserveFactSupersessionMetadata(doc, existing)
 	}
 	r.documents[key(doc.UserID, doc.ID)] = doc
 	if doc.Type == domain.MemoryTypeFact {
@@ -858,14 +861,18 @@ func (r *InMemoryMemoryRepository) ListEvidences(_ context.Context, userID, node
 func (r *InMemoryMemoryRepository) syncFactSupersedesLocked(doc domain.MemoryDocument) {
 	filtered := r.relations[:0]
 	for _, relation := range r.relations {
-		if relation.UserID == doc.UserID && relation.RelationType == "supersedes" && relation.DstNodeID == doc.NodeID {
+		if relation.UserID == doc.UserID && relation.RelationType == "supersedes" && (relation.DstNodeID == doc.NodeID || relation.SrcNodeID == doc.NodeID) {
 			continue
 		}
 		filtered = append(filtered, relation)
 	}
 	r.relations = filtered
 
-	if supersedingNodeID := r.resolveFactNodeIDLocked(doc.UserID, stringMetadataValue(doc.Metadata, "superseded_by_id")); supersedingNodeID != "" {
+	supersededByID := stringMetadataValue(doc.Metadata, "superseded_by_id")
+	doc.Metadata["is_superseded"] = supersededByID != "" || boolMetadataValue(doc.Metadata, "is_superseded")
+	r.documents[key(doc.UserID, doc.ID)] = doc
+
+	if supersedingNodeID := r.resolveFactNodeIDLocked(doc.UserID, supersededByID); supersedingNodeID != "" {
 		r.upsertRelationLocked(domain.MemoryRelation{
 			GenerationID: doc.GenerationID,
 			UserID:       doc.UserID,
@@ -876,7 +883,38 @@ func (r *InMemoryMemoryRepository) syncFactSupersedesLocked(doc domain.MemoryDoc
 			Source:       "fact_supersession",
 			Metadata: map[string]any{
 				"superseded_fact_id":  doc.ID,
-				"superseding_fact_id": stringMetadataValue(doc.Metadata, "superseded_by_id"),
+				"superseding_fact_id": supersededByID,
+			},
+		})
+	}
+
+	for _, supersededID := range supersededFactIDsFromMetadata(doc.Metadata) {
+		if supersededID == "" || supersededID == doc.ID {
+			continue
+		}
+		candidate, ok := r.documents[key(doc.UserID, supersededID)]
+		if !ok || candidate.Type != domain.MemoryTypeFact || candidate.GenerationID != doc.GenerationID {
+			continue
+		}
+		candidate.Metadata = cloneMetadata(candidate.Metadata)
+		candidate.Metadata["superseded_by_id"] = doc.ID
+		candidate.Metadata["is_superseded"] = true
+		if _, ok := candidate.Metadata["valid_to"]; !ok && !doc.ActivityAt.IsZero() {
+			candidate.Metadata["valid_to"] = doc.ActivityAt.Format(time.RFC3339)
+		}
+		candidate.UpdatedAt = doc.UpdatedAt
+		r.documents[key(candidate.UserID, candidate.ID)] = candidate
+		r.upsertRelationLocked(domain.MemoryRelation{
+			GenerationID: doc.GenerationID,
+			UserID:       doc.UserID,
+			SrcNodeID:    doc.NodeID,
+			DstNodeID:    candidate.NodeID,
+			RelationType: "supersedes",
+			Weight:       1,
+			Source:       "fact_supersession",
+			Metadata: map[string]any{
+				"superseded_fact_id":  candidate.ID,
+				"superseding_fact_id": doc.ID,
 			},
 		})
 	}
@@ -905,6 +943,61 @@ func (r *InMemoryMemoryRepository) syncFactSupersedesLocked(doc domain.MemoryDoc
 			},
 		})
 	}
+}
+
+func supersededFactIDsFromMetadata(metadata map[string]any) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0)
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		if _, ok := seen[value]; ok {
+			return
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	add(stringMetadataValue(metadata, "supersedes_fact_id"))
+	for _, value := range stringSliceMetadataValue(metadata, "supersedes_fact_ids") {
+		add(value)
+	}
+	return out
+}
+
+func preserveFactSupersessionMetadata(doc, existing domain.MemoryDocument) domain.MemoryDocument {
+	if doc.Type != domain.MemoryTypeFact || existing.Type != domain.MemoryTypeFact {
+		return doc
+	}
+	if doc.Metadata == nil {
+		doc.Metadata = map[string]any{}
+	}
+	supersessionStateSpecified := metadataContainsKey(doc.Metadata, "superseded_by_id") || metadataContainsKey(doc.Metadata, "is_superseded")
+	if !supersessionStateSpecified {
+		for _, field := range []string{"is_superseded", "superseded_by_id"} {
+			if value, ok := existing.Metadata[field]; ok {
+				doc.Metadata[field] = value
+			}
+		}
+	}
+	for _, field := range []string{"valid_from", "valid_to"} {
+		if _, ok := doc.Metadata[field]; ok {
+			continue
+		}
+		if value, ok := existing.Metadata[field]; ok {
+			doc.Metadata[field] = value
+		}
+	}
+	return doc
+}
+
+func metadataContainsKey(metadata map[string]any, key string) bool {
+	if metadata == nil {
+		return false
+	}
+	_, ok := metadata[key]
+	return ok
 }
 
 func (r *InMemoryMemoryRepository) resolveFactNodeIDLocked(userID, factID string) string {
@@ -1225,6 +1318,24 @@ func stringMetadataValue(metadata map[string]any, field string) string {
 		return ""
 	}
 	return typed
+}
+
+func boolMetadataValue(metadata map[string]any, field string) bool {
+	if metadata == nil {
+		return false
+	}
+	value, ok := metadata[field]
+	if !ok || value == nil {
+		return false
+	}
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		return strings.EqualFold(strings.TrimSpace(typed), "true")
+	default:
+		return false
+	}
 }
 
 func stringSliceMetadataValue(metadata map[string]any, key string) []string {

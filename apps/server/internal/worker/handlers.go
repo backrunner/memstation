@@ -20,6 +20,11 @@ import (
 	multimodalservice "memstation/apps/server/internal/service/multimodal"
 )
 
+const (
+	summaryChunkMaxTokens     = 6000
+	summaryChunkOverlapTokens = 600
+)
+
 type Services struct {
 	Conversations        ports.ConversationRepository
 	MediaStore           ports.MediaRepository
@@ -303,6 +308,7 @@ func handleSummaryGenerate(logger *slog.Logger, services Services) func(context.
 		if summaryText == "" {
 			summaryText = conversationservice.SummarizeSegments(segments)
 		}
+		chunkCount := summaryChunkCount(conversation.Messages, parts, artifacts)
 		summaryEvidences := buildNodeEvidences(payload.UserID, payload.GenerationID, "", payload.ConversationID, parts, artifacts, nil, nil)
 		doc := domain.MemoryDocument{
 			ID:             summaryDocumentID(payload.ConversationID, payload.SummaryVersion),
@@ -321,6 +327,9 @@ func handleSummaryGenerate(logger *slog.Logger, services Services) func(context.
 				"segment_count":            len(segments),
 				"segment_strategy":         "dialogue_window_v1",
 				"segment_overlap_messages": conversationservice.DefaultSegmentOptions().Overlap,
+				"summary_chunk_count":      chunkCount,
+				"summary_chunk_max_tokens": summaryChunkMaxTokens,
+				"summary_chunk_overlap":    summaryChunkOverlapTokens,
 				"modalities":               modalitiesFromParts(parts),
 				"evidence_count":           len(summaryEvidences),
 				"source_part_count":        len(parts),
@@ -478,6 +487,11 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 			return err
 		}
 		summaryDoc := selectSummaryDocument(docs, payload.SummaryIDs)
+		existingFacts, err := services.Memories.ListDocumentsInGeneration(ctx, payload.UserID, payload.GenerationID, []domain.MemoryType{domain.MemoryTypeFact}, 500)
+		if err != nil {
+			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
+			return err
+		}
 		analyzer := services.Analysis
 		if analyzer == nil {
 			analyzer = analysisservice.NewService()
@@ -488,6 +502,7 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 			ConversationID: payload.ConversationID,
 			Conversation:   conversation,
 			Summary:        summaryDoc,
+			ExistingFacts:  existingFacts,
 		})
 		if err != nil {
 			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
@@ -692,6 +707,9 @@ func syncConversationKeyMemoryRelations(ctx context.Context, repo ports.MemoryRe
 }
 
 func buildSummary(messages []domain.UnifiedMessage, parts []domain.MessagePart, artifacts []domain.MessagePartArtifact) string {
+	if chunks := summaryChunks(messages, parts, artifacts); len(chunks) > 1 {
+		return summarizeChunks(chunks)
+	}
 	promptSummary := strings.TrimSpace(conversationservice.BuildMemoryPromptInput(messages))
 	timelineSummary := strings.TrimSpace(conversationservice.SummarizeMessagesWithTimeline(messages, parts, artifacts))
 	switch {
@@ -706,6 +724,202 @@ func buildSummary(messages []domain.UnifiedMessage, parts []domain.MessagePart, 
 		return promptSummary
 	}
 	return ""
+}
+
+func summaryChunkCount(messages []domain.UnifiedMessage, parts []domain.MessagePart, artifacts []domain.MessagePartArtifact) int {
+	chunks := summaryChunks(messages, parts, artifacts)
+	if len(chunks) == 0 {
+		return 1
+	}
+	return len(chunks)
+}
+
+func summaryChunks(messages []domain.UnifiedMessage, parts []domain.MessagePart, artifacts []domain.MessagePartArtifact) []string {
+	source := buildSummaryChunkSource(messages, parts, artifacts)
+	if estimateSummaryTokens(source) <= summaryChunkMaxTokens {
+		if strings.TrimSpace(source) == "" {
+			return nil
+		}
+		return []string{source}
+	}
+	return chunkTextByTokens(source, summaryChunkMaxTokens, summaryChunkOverlapTokens)
+}
+
+func buildSummaryChunkSource(messages []domain.UnifiedMessage, parts []domain.MessagePart, artifacts []domain.MessagePartArtifact) string {
+	if len(parts) > 0 {
+		artifactIndex := make(map[string][]domain.MessagePartArtifact, len(parts))
+		for _, artifact := range artifacts {
+			artifactIndex[artifact.PartID] = append(artifactIndex[artifact.PartID], artifact)
+		}
+		lines := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if part.Role == domain.RoleSystem {
+				continue
+			}
+			textParts := make([]string, 0, 1+len(artifactIndex[part.PartID]))
+			for _, artifact := range artifactIndex[part.PartID] {
+				if text := strings.TrimSpace(artifact.TextContent); text != "" {
+					textParts = append(textParts, text)
+				}
+			}
+			if len(textParts) == 0 {
+				if text := strings.TrimSpace(firstNonEmptyWorkerString(part.TextContent, part.RawPayload)); text != "" {
+					textParts = append(textParts, text)
+				}
+			}
+			if len(textParts) == 0 {
+				continue
+			}
+			lines = append(lines, fmt.Sprintf("%s: %s", part.Role, strings.Join(textParts, " | ")))
+		}
+		return strings.Join(lines, "\n")
+	}
+
+	lines := make([]string, 0, len(messages))
+	for _, message := range messages {
+		if message.Role == domain.RoleSystem {
+			continue
+		}
+		text := messageTextForSummaryChunk(message)
+		if text == "" {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("%s: %s", message.Role, text))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func messageTextForSummaryChunk(message domain.UnifiedMessage) string {
+	parts := make([]string, 0, 1+len(message.Blocks))
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		for _, existing := range parts {
+			if existing == value {
+				return
+			}
+		}
+		parts = append(parts, value)
+	}
+	add(message.Text)
+	for _, block := range message.Blocks {
+		if block.Type == domain.ContentBlockText {
+			add(block.Text)
+		}
+	}
+	if len(message.ToolCalls) > 0 {
+		names := make([]string, 0, len(message.ToolCalls))
+		for _, call := range message.ToolCalls {
+			if name := strings.TrimSpace(firstNonEmptyWorkerString(call.Name, call.ID)); name != "" {
+				names = append(names, name)
+			}
+		}
+		if len(names) > 0 {
+			add("tool calls: " + strings.Join(names, ", "))
+		}
+	}
+	if len(message.ToolResults) > 0 {
+		names := make([]string, 0, len(message.ToolResults))
+		for _, result := range message.ToolResults {
+			if name := strings.TrimSpace(firstNonEmptyWorkerString(result.Name, result.ToolCallID)); name != "" {
+				names = append(names, name)
+			}
+		}
+		if len(names) > 0 {
+			add("tool results: " + strings.Join(names, ", "))
+		}
+	}
+	return strings.Join(parts, " | ")
+}
+
+func chunkTextByTokens(source string, maxTokens int, overlapTokens int) []string {
+	words := strings.Fields(source)
+	if len(words) == 0 {
+		return nil
+	}
+	if maxTokens <= 0 {
+		maxTokens = summaryChunkMaxTokens
+	}
+	if len(words) <= maxTokens && estimateSummaryTokens(source) <= maxTokens {
+		return []string{strings.Join(words, " ")}
+	}
+	if len(words) <= 1 {
+		return chunkTextByChars(source, maxTokens*4, overlapTokens*4)
+	}
+	if overlapTokens < 0 {
+		overlapTokens = 0
+	}
+	if overlapTokens >= maxTokens {
+		overlapTokens = maxTokens / 10
+	}
+	stride := maxTokens - overlapTokens
+	chunks := make([]string, 0, len(words)/stride+1)
+	for start := 0; start < len(words); start += stride {
+		end := min(start+maxTokens, len(words))
+		chunks = append(chunks, strings.Join(words[start:end], " "))
+		if end == len(words) {
+			break
+		}
+	}
+	return chunks
+}
+
+func chunkTextByChars(source string, maxChars int, overlapChars int) []string {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return nil
+	}
+	if maxChars <= 0 {
+		maxChars = summaryChunkMaxTokens * 4
+	}
+	if len(source) <= maxChars {
+		return []string{source}
+	}
+	if overlapChars < 0 {
+		overlapChars = 0
+	}
+	if overlapChars >= maxChars {
+		overlapChars = maxChars / 10
+	}
+	stride := maxChars - overlapChars
+	chunks := make([]string, 0, len(source)/stride+1)
+	for start := 0; start < len(source); start += stride {
+		end := min(start+maxChars, len(source))
+		chunks = append(chunks, source[start:end])
+		if end == len(source) {
+			break
+		}
+	}
+	return chunks
+}
+
+func summarizeChunks(chunks []string) string {
+	if len(chunks) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(chunks))
+	for idx, chunk := range chunks {
+		parts = append(parts, fmt.Sprintf("Chunk %d/%d: %s", idx+1, len(chunks), compactSummaryChunk(chunk)))
+	}
+	return strings.Join(parts, " | ")
+}
+
+func compactSummaryChunk(chunk string) string {
+	chunk = normalizeWhitespace(chunk)
+	if len(chunk) <= 1400 {
+		return chunk
+	}
+	return chunk[:900] + " ... " + chunk[len(chunk)-400:]
+}
+
+func normalizeWhitespace(value string) string {
+	return strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
+}
+
+func estimateSummaryTokens(value string) int {
+	return max(len(strings.Fields(value)), len(value)/4)
 }
 
 func embeddingContentForDocument(doc domain.MemoryDocument) string {

@@ -673,12 +673,19 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
                 updated_at = EXCLUDED.updated_at
         `, doc.ID, doc.GenerationID, doc.UserID, doc.ConversationID, doc.NodeID, stringValue(doc.Metadata, "subject"), stringValue(doc.Metadata, "subject_type"), stringValue(doc.Metadata, "evaluation"), stringValue(doc.Metadata, "sentiment"), stringValue(doc.Metadata, "familiarity"), doc.Content, doc.CreatedAt, doc.UpdatedAt)
 	case domain.MemoryTypeFact:
-		supersededByIDValue := stringValue(doc.Metadata, "superseded_by_id")
+		supersededByIDValue := strings.TrimSpace(stringValue(doc.Metadata, "superseded_by_id"))
+		supersessionStateSpecified := metadataHasKey(doc.Metadata, "superseded_by_id") || metadataHasKey(doc.Metadata, "is_superseded")
+		incomingIsSuperseded := supersededByIDValue != "" || boolValue(doc.Metadata, "is_superseded")
 		var supersededByID any
 		if supersededByIDValue != "" {
 			supersededByID = supersededByIDValue
 		}
-		_, err = tx.ExecContext(ctx, `
+		validFromSpecified := metadataHasKey(doc.Metadata, "valid_from")
+		validToSpecified := metadataHasKey(doc.Metadata, "valid_to")
+		validFrom := nullableTimeValue(doc.Metadata, "valid_from")
+		validTo := nullableTimeValue(doc.Metadata, "valid_to")
+		var effectiveSupersededByID string
+		err = tx.QueryRowContext(ctx, `
             INSERT INTO facts (id, generation_id, user_id, conversation_id, node_id, category, subject, content, confidence, is_superseded, superseded_by_id, valid_from, valid_to, created_at, updated_at)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
             ON CONFLICT (id) DO UPDATE SET
@@ -687,21 +694,44 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
                 category = EXCLUDED.category,
                 subject = EXCLUDED.subject,
                 confidence = EXCLUDED.confidence,
+                is_superseded = CASE WHEN $16 THEN EXCLUDED.is_superseded ELSE facts.is_superseded OR EXCLUDED.is_superseded END,
+                superseded_by_id = CASE WHEN $16 THEN EXCLUDED.superseded_by_id ELSE COALESCE(facts.superseded_by_id, EXCLUDED.superseded_by_id) END,
+                valid_from = CASE WHEN $17 THEN EXCLUDED.valid_from ELSE COALESCE(EXCLUDED.valid_from, facts.valid_from) END,
+                valid_to = CASE WHEN $18 THEN EXCLUDED.valid_to ELSE COALESCE(EXCLUDED.valid_to, facts.valid_to) END,
                 updated_at = EXCLUDED.updated_at
-		`, doc.ID, doc.GenerationID, doc.UserID, doc.ConversationID, doc.NodeID, stringValue(doc.Metadata, "category"), stringValue(doc.Metadata, "subject"), doc.Content, floatValue(doc.Metadata, "confidence", 0.8), supersededByID != nil, supersededByID, nil, nil, doc.CreatedAt, doc.UpdatedAt)
+            RETURNING COALESCE(superseded_by_id, '')
+		`, doc.ID, doc.GenerationID, doc.UserID, doc.ConversationID, doc.NodeID, stringValue(doc.Metadata, "category"), stringValue(doc.Metadata, "subject"), doc.Content, floatValue(doc.Metadata, "confidence", 0.8), incomingIsSuperseded, supersededByID, validFrom, validTo, doc.CreatedAt, doc.UpdatedAt, supersessionStateSpecified, validFromSpecified, validToSpecified).Scan(&effectiveSupersededByID)
 		if err == nil {
+			for _, supersededFactID := range supersededFactIDsFromMetadata(doc.Metadata) {
+				if supersededFactID == "" || supersededFactID == doc.ID {
+					continue
+				}
+				if _, err = tx.ExecContext(ctx, `
+                    UPDATE facts
+                    SET is_superseded = TRUE,
+                        superseded_by_id = $4,
+                        valid_to = COALESCE(valid_to, $5),
+                        updated_at = $6
+                    WHERE user_id = $1
+                      AND generation_id = $2
+                      AND id = $3
+                      AND id <> $4
+                `, doc.UserID, doc.GenerationID, supersededFactID, doc.ID, doc.ActivityAt, doc.UpdatedAt); err != nil {
+					return err
+				}
+			}
 			if _, err = tx.ExecContext(ctx, `
                 DELETE FROM memory_relations
-                WHERE user_id = $1 AND relation_type = 'supersedes' AND dst_node_id = $2
+                WHERE user_id = $1 AND relation_type = 'supersedes' AND (dst_node_id = $2 OR src_node_id = $2)
             `, doc.UserID, doc.NodeID); err != nil {
 				return err
 			}
 
-			if supersededByIDValue != "" {
+			if effectiveSupersededByID != "" {
 				var supersedingNodeID string
 				switch scanErr := tx.QueryRowContext(ctx, `
                     SELECT node_id FROM facts WHERE user_id = $1 AND generation_id = $2 AND id = $3
-                `, doc.UserID, doc.GenerationID, supersededByIDValue).Scan(&supersedingNodeID); scanErr {
+                `, doc.UserID, doc.GenerationID, effectiveSupersededByID).Scan(&supersedingNodeID); scanErr {
 				case nil:
 					if _, err = tx.ExecContext(ctx, `
                         INSERT INTO memory_relations (id, generation_id, user_id, src_node_id, dst_node_id, relation_type, weight, source, metadata, created_at, updated_at)
@@ -714,7 +744,7 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
                             updated_at = EXCLUDED.updated_at
 					`, uuid.NewString(), doc.GenerationID, doc.UserID, supersedingNodeID, doc.NodeID, marshalJSON(map[string]any{
 						"superseded_fact_id":  doc.ID,
-						"superseding_fact_id": supersededByIDValue,
+						"superseding_fact_id": effectiveSupersededByID,
 					}), doc.UpdatedAt); err != nil {
 						return err
 					}
@@ -1072,7 +1102,7 @@ func (r *PostgresMemoryRepository) listConversationByType(ctx context.Context, u
 	case domain.MemoryTypeFact:
 		query = `
 	            SELECT f.id, f.node_id, f.generation_id, f.conversation_id, f.content, COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, f.updated_at), COALESCE(n.time_tier, ''), f.created_at, f.updated_at,
-	                   json_build_object('category', f.category, 'confidence', f.confidence, 'valid_from', f.valid_from, 'valid_to', f.valid_to, 'superseded_by_id', f.superseded_by_id)
+	                   json_build_object('category', f.category, 'confidence', f.confidence, 'is_superseded', f.is_superseded, 'valid_from', f.valid_from, 'valid_to', f.valid_to, 'superseded_by_id', f.superseded_by_id)
             FROM facts f
             LEFT JOIN memory_nodes n ON n.id = f.node_id
             WHERE f.user_id = $1 AND f.conversation_id = $2` + generationFilterClause("f.generation_id", 4, userID, generationID, false) + `
@@ -1641,7 +1671,7 @@ func (r *PostgresMemoryRepository) listByType(ctx context.Context, userID, gener
 	case domain.MemoryTypeFact:
 		query = `
 	            SELECT f.id, f.node_id, f.generation_id, f.conversation_id, f.content, COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, f.updated_at), COALESCE(n.time_tier, ''), f.created_at, f.updated_at,
-	                   json_build_object('category', f.category, 'confidence', f.confidence, 'valid_from', f.valid_from, 'valid_to', f.valid_to, 'superseded_by_id', f.superseded_by_id)
+	                   json_build_object('category', f.category, 'confidence', f.confidence, 'is_superseded', f.is_superseded, 'valid_from', f.valid_from, 'valid_to', f.valid_to, 'superseded_by_id', f.superseded_by_id)
             FROM facts f
             LEFT JOIN memory_nodes n ON n.id = f.node_id
             WHERE f.user_id = $1` + generationFilterClause("f.generation_id", 3, userID, generationID, false) + `
@@ -2107,6 +2137,61 @@ func stringValue(metadata map[string]any, key string) string {
 	default:
 		return fmt.Sprintf("%v", value)
 	}
+}
+
+func metadataHasKey(metadata map[string]any, key string) bool {
+	if metadata == nil {
+		return false
+	}
+	_, ok := metadata[key]
+	return ok
+}
+
+func boolValue(metadata map[string]any, key string) bool {
+	if metadata == nil {
+		return false
+	}
+	value, ok := metadata[key]
+	if !ok || value == nil {
+		return false
+	}
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		return strings.EqualFold(strings.TrimSpace(typed), "true")
+	default:
+		return false
+	}
+}
+
+func nullableTimeValue(metadata map[string]any, key string) any {
+	if metadata == nil {
+		return nil
+	}
+	value, ok := metadata[key]
+	if !ok || value == nil {
+		return nil
+	}
+	switch typed := value.(type) {
+	case time.Time:
+		if typed.IsZero() {
+			return nil
+		}
+		return typed.UTC()
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		if trimmed == "" {
+			return nil
+		}
+		if parsed, err := time.Parse(time.RFC3339Nano, trimmed); err == nil {
+			return parsed.UTC()
+		}
+		if parsed, err := time.Parse(time.RFC3339, trimmed); err == nil {
+			return parsed.UTC()
+		}
+	}
+	return nil
 }
 
 func floatValue(metadata map[string]any, key string, fallback float64) float64 {

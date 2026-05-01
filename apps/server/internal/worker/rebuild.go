@@ -117,6 +117,7 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 	if summaryText == "" {
 		summaryText = conversationservice.SummarizeSegments(segments)
 	}
+	chunkCount := summaryChunkCount(snapshot.Messages, nil, nil)
 	summaryDoc := applyGenerationToDocument(snapshot.UserID, generation.GenerationID, domain.MemoryDocument{
 		ID:             summaryDocumentID(snapshot.ConversationID, 1),
 		NodeID:         summaryNodeID(snapshot.ConversationID, 1),
@@ -134,6 +135,9 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 			"segment_count":            len(segments),
 			"segment_strategy":         "dialogue_window_v1",
 			"segment_overlap_messages": conversationservice.DefaultSegmentOptions().Overlap,
+			"summary_chunk_count":      chunkCount,
+			"summary_chunk_max_tokens": summaryChunkMaxTokens,
+			"summary_chunk_overlap":    summaryChunkOverlapTokens,
 		}),
 	})
 	applyDocumentScore(ctx, services.Scorer, &summaryDoc, conversation.UpdatedAt)
@@ -152,11 +156,16 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 	if analyzer == nil {
 		analyzer = analysisservice.NewService()
 	}
+	existingFacts, err := services.Memories.ListDocumentsInGeneration(ctx, snapshot.UserID, generation.GenerationID, []domain.MemoryType{domain.MemoryTypeFact}, 500)
+	if err != nil {
+		return 0, err
+	}
 	result, err := analyzer.AnalyzeConversation(ctx, analysisservice.Input{
 		UserID:         snapshot.UserID,
 		ConversationID: snapshot.ConversationID,
 		Conversation:   conversation,
 		Summary:        summaryDoc,
+		ExistingFacts:  existingFacts,
 	})
 	if err != nil {
 		return 0, err

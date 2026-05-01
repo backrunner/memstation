@@ -1344,6 +1344,24 @@ func TestEmbeddingHandlersAndHelpers(t *testing.T) {
 	}
 }
 
+func TestBuildSummaryChunksLongInputs(t *testing.T) {
+	t.Parallel()
+
+	longText := strings.Repeat("alpha ", summaryChunkMaxTokens+100) + "tail_marker"
+	messages := []domain.UnifiedMessage{{Role: domain.RoleUser, Text: longText}}
+
+	summary := buildSummary(messages, nil, nil)
+	if !strings.Contains(summary, "Chunk 1/2") || !strings.Contains(summary, "Chunk 2/2") {
+		t.Fatalf("expected chunked summary labels, got %q", summary)
+	}
+	if !strings.Contains(summary, "tail_marker") {
+		t.Fatalf("expected chunk compaction to retain tail content, got %q", summary)
+	}
+	if got := summaryChunkCount(messages, nil, nil); got != 2 {
+		t.Fatalf("expected 2 chunks, got %d", got)
+	}
+}
+
 func TestEmbeddingGenerateUsesCurrentStoredDocumentContent(t *testing.T) {
 	t.Parallel()
 

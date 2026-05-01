@@ -19,6 +19,7 @@ type Input struct {
 	ConversationID string
 	Conversation   domain.ConversationRecord
 	Summary        domain.MemoryDocument
+	ExistingFacts  []domain.MemoryDocument
 }
 
 type FallbackExtraction struct {
@@ -72,6 +73,9 @@ func (s *Service) AnalyzeConversation(ctx context.Context, input Input) (Result,
 		Importance:     1.05,
 		DecayFactor:    0.98,
 		Metadata:       cloneMap(extracted.FactMetadata),
+	}
+	if supersededIDs := conflictingFactIDs(fact, input.ExistingFacts); len(supersededIDs) > 0 {
+		fact.Metadata["supersedes_fact_ids"] = supersededIDs
 	}
 	impression := domain.MemoryDocument{
 		ID:             ImpressionDocumentID(conversationID),
@@ -163,13 +167,127 @@ func (s *Service) RunFallbackExtraction(ctx context.Context, summary string) (Fa
 	return FallbackExtraction{
 		FactContent: factContent,
 		FactMetadata: map[string]any{
-			"category":   "recent_topic",
+			"category":   classifyFactCategory(summary, keywords),
 			"subject":    "user",
+			"fact_key":   classifyFactKey(summary, keywords),
 			"confidence": inferConfidence(summary),
 		},
 		ImpressionContent:  impressionContent,
 		ImpressionMetadata: impressionMetadata,
 	}, nil
+}
+
+// classifyFactCategory maps summary text to the planned category taxonomy.
+// Uses keyword heuristics as a pragmatic v1.0 fallback; a richer LLM-driven
+// classifier can swap in later without changing downstream consumers.
+func classifyFactCategory(summary string, keywords []string) string {
+	haystack := strings.ToLower(summary)
+	for _, kw := range keywords {
+		haystack += " " + strings.ToLower(kw)
+	}
+	switch {
+	case containsAny(haystack, "mother", "father", "wife", "husband", "sister", "brother", "child", "son", "daughter", "parent", "family"):
+		return "family"
+	case containsAny(haystack, "friend", "colleague", "teammate", "partner", "boss", "manager", "neighbor", "relationship"):
+		return "relationship"
+	case containsAny(haystack, "anxious", "anxiety", "depression", "feel ", "feeling", "mood", "stress", "therapy", "psych"):
+		return "psychology"
+	case containsAny(haystack, "salary", "stock", "income", "budget", "invest", "mortgage", "loan", "tax", "finance"):
+		return "finance"
+	case containsAny(haystack, "doctor", "clinic", "hospital", "medication", "diet", "exercise", "workout", "health", "sleep"):
+		return "health"
+	case containsAny(haystack, "office", "manager", "deadline", "standup", "meeting", "project", "work", "oncall", "release"):
+		return "work"
+	case containsAny(haystack, "exam", "course", "university", "college", "thesis", "research", "student", "study"):
+		return "study"
+	case containsAny(haystack, "shanghai", "beijing", "tokyo", "new york", "london", "city", "country", "timezone", "location", "commute", "address"):
+		return "location"
+	default:
+		return "other"
+	}
+}
+
+func classifyFactKey(summary string, keywords []string) string {
+	haystack := strings.ToLower(summary)
+	for _, kw := range keywords {
+		haystack += " " + strings.ToLower(kw)
+	}
+	switch classifyFactCategory(summary, keywords) {
+	case "location":
+		if containsAny(haystack, "live", "lives", "living", "home", "moved", "relocat", "city", "address") {
+			return "home_location"
+		}
+		return "location"
+	case "work":
+		if containsAny(haystack, "approver", "owner", "responsible", "manager", "boss") {
+			return "work_owner"
+		}
+		if containsAny(haystack, "deadline", "due", "release", "oncall", "rotation") {
+			return "work_schedule"
+		}
+	case "family":
+		if containsAny(haystack, "mother", "father", "wife", "husband", "sister", "brother", "child", "son", "daughter", "parent") {
+			return "family_relationship"
+		}
+	case "health":
+		if containsAny(haystack, "doctor", "clinic", "hospital", "medication", "sleep", "diet", "exercise", "workout") {
+			return "health_status"
+		}
+	}
+	return ""
+}
+
+func conflictingFactIDs(candidate domain.MemoryDocument, existing []domain.MemoryDocument) []string {
+	category := metadataString(candidate.Metadata, "category")
+	subject := metadataString(candidate.Metadata, "subject")
+	factKey := factKeyFor(candidate)
+	if category == "" || subject == "" || factKey == "" {
+		return nil
+	}
+
+	out := make([]string, 0)
+	for _, item := range existing {
+		if item.ID == "" || item.ID == candidate.ID || item.Type != domain.MemoryTypeFact {
+			continue
+		}
+		if item.UserID != "" && candidate.UserID != "" && item.UserID != candidate.UserID {
+			continue
+		}
+		if metadataString(item.Metadata, "superseded_by_id") != "" {
+			continue
+		}
+		if metadataString(item.Metadata, "category") != category || metadataString(item.Metadata, "subject") != subject {
+			continue
+		}
+		if factKeyFor(item) != factKey {
+			continue
+		}
+		out = append(out, item.ID)
+	}
+	return out
+}
+
+func factKeyFor(doc domain.MemoryDocument) string {
+	if key := metadataString(doc.Metadata, "fact_key"); key != "" {
+		return key
+	}
+	return classifyFactKey(doc.Content, extractKeywords(doc.Content))
+}
+
+func metadataString(metadata map[string]any, key string) string {
+	if metadata == nil {
+		return ""
+	}
+	value, ok := metadata[key]
+	if !ok || value == nil {
+		return ""
+	}
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	default:
+		return strings.TrimSpace(fmt.Sprintf("%v", typed))
+	}
 }
 
 func FactDocumentID(conversationID string) string {

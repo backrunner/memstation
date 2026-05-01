@@ -138,6 +138,9 @@ func IsStaleMemory(doc MemoryDocument, now time.Time) bool {
 		now = time.Now().UTC()
 	}
 	if doc.Type == MemoryTypeFact {
+		if metadataBool(doc.Metadata, "is_superseded") {
+			return true
+		}
 		if metadataString(doc.Metadata, "superseded_by_id") != "" {
 			return true
 		}
@@ -146,6 +149,21 @@ func IsStaleMemory(doc MemoryDocument, now time.Time) bool {
 		}
 	}
 	return false
+}
+
+func metadataBool(metadata map[string]any, key string) bool {
+	value, ok := metadata[key]
+	if !ok || value == nil {
+		return false
+	}
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		return strings.EqualFold(strings.TrimSpace(typed), "true")
+	default:
+		return false
+	}
 }
 
 func StalePenalty(doc MemoryDocument, now time.Time) float64 {

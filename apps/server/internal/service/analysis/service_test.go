@@ -71,6 +71,44 @@ func TestRunFallbackExtractionHandlesEmptySummary(t *testing.T) {
 	}
 }
 
+func TestAnalyzeConversationMarksConflictingLocationFact(t *testing.T) {
+	t.Parallel()
+
+	service := NewService()
+	result, err := service.AnalyzeConversation(context.Background(), Input{
+		UserID:         "user-1",
+		ConversationID: "conv-new",
+		Summary: domain.MemoryDocument{
+			ID:      "summary:conv-new:v1",
+			NodeID:  "node:summary:conv-new:v1",
+			UserID:  "user-1",
+			Type:    domain.MemoryTypeSummary,
+			Content: "The user moved and now lives in Shanghai.",
+		},
+		ExistingFacts: []domain.MemoryDocument{{
+			ID:      "fact-old-location",
+			UserID:  "user-1",
+			Type:    domain.MemoryTypeFact,
+			Content: "The user lives in Hangzhou.",
+			Metadata: map[string]any{
+				"category": "location",
+				"subject":  "user",
+				"fact_key": "home_location",
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("analyze conversation: %v", err)
+	}
+	if result.Fact.Metadata["category"] != "location" {
+		t.Fatalf("expected location category, got %+v", result.Fact.Metadata)
+	}
+	ids, ok := result.Fact.Metadata["supersedes_fact_ids"].([]string)
+	if !ok || len(ids) != 1 || ids[0] != "fact-old-location" {
+		t.Fatalf("expected old location fact to be superseded, got %+v", result.Fact.Metadata)
+	}
+}
+
 func TestSummarizeConversationAndHelpers(t *testing.T) {
 	t.Parallel()
 

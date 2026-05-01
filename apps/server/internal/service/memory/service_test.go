@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -286,7 +287,32 @@ func TestStoreDocumentSyncsFactSupersedesRelations(t *testing.T) {
 
 	older.Metadata = map[string]any{}
 	if err := repo.StoreDocument(ctx, older); err != nil {
-		t.Fatalf("clear superseded state: %v", err)
+		t.Fatalf("retry older fact without supersession metadata: %v", err)
+	}
+	relations, err = repo.ListRelations(ctx, "user-1", "", []string{newer.NodeID}, 1)
+	if err != nil {
+		t.Fatalf("list supersedes relations after retry: %v", err)
+	}
+	supersedes = supersedes[:0]
+	for _, relation := range relations {
+		if relation.RelationType == "supersedes" {
+			supersedes = append(supersedes, relation)
+		}
+	}
+	if len(supersedes) != 1 {
+		t.Fatalf("expected supersedes relation to survive retry, got %+v", relations)
+	}
+	updatedOlder, err := repo.GetDocument(ctx, "user-1", older.ID, domain.MemoryTypeFact)
+	if err != nil {
+		t.Fatalf("get older fact after retry: %v", err)
+	}
+	if updatedOlder.Metadata["superseded_by_id"] != newer.ID {
+		t.Fatalf("expected older fact retry to preserve superseded_by_id, got %+v", updatedOlder.Metadata)
+	}
+
+	older.Metadata = map[string]any{"superseded_by_id": ""}
+	if err := repo.StoreDocument(ctx, older); err != nil {
+		t.Fatalf("explicitly clear superseded state: %v", err)
 	}
 	relations, err = repo.ListRelations(ctx, "user-1", "", []string{newer.NodeID}, 1)
 	if err != nil {
@@ -297,6 +323,80 @@ func TestStoreDocumentSyncsFactSupersedesRelations(t *testing.T) {
 			t.Fatalf("expected supersedes relation to be removed, got %+v", relations)
 		}
 	}
+}
+
+func TestStoreDocumentMarksExplicitlySupersededFacts(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := sqlstore.NewInMemoryMemoryRepository()
+
+	older := domain.MemoryDocument{
+		ID:      "fact-location-old",
+		NodeID:  "node-fact-location-old",
+		UserID:  "user-1",
+		Type:    domain.MemoryTypeFact,
+		Content: "The user lives in Hangzhou.",
+		Metadata: map[string]any{
+			"category": "location",
+			"subject":  "user",
+			"fact_key": "home_location",
+		},
+	}
+	newer := domain.MemoryDocument{
+		ID:      "fact-location-new",
+		NodeID:  "node-fact-location-new",
+		UserID:  "user-1",
+		Type:    domain.MemoryTypeFact,
+		Content: "The user now lives in Shanghai.",
+		Metadata: map[string]any{
+			"category":             "location",
+			"subject":              "user",
+			"fact_key":             "home_location",
+			"supersedes_fact_ids":  []string{"fact-location-old"},
+			"supersession_source":  "analysis",
+			"supersession_trigger": "conflicting_fact",
+		},
+	}
+
+	if err := repo.StoreDocument(ctx, older); err != nil {
+		t.Fatalf("store older fact: %v", err)
+	}
+	if err := repo.StoreDocument(ctx, newer); err != nil {
+		t.Fatalf("store newer fact: %v", err)
+	}
+	updatedOlder, err := repo.GetDocument(ctx, "user-1", older.ID, domain.MemoryTypeFact)
+	if err != nil {
+		t.Fatalf("get older fact: %v", err)
+	}
+	if updatedOlder.Metadata["superseded_by_id"] != newer.ID {
+		t.Fatalf("expected older fact to point at superseding fact, got %+v", updatedOlder.Metadata)
+	}
+	if !domain.IsStaleMemory(updatedOlder, time.Now().UTC()) {
+		t.Fatalf("expected older fact to be stale after supersession, got %+v", updatedOlder.Metadata)
+	}
+	older.Metadata = map[string]any{}
+	if err := repo.StoreDocument(ctx, older); err != nil {
+		t.Fatalf("retry older fact: %v", err)
+	}
+	updatedOlder, err = repo.GetDocument(ctx, "user-1", older.ID, domain.MemoryTypeFact)
+	if err != nil {
+		t.Fatalf("get older fact after retry: %v", err)
+	}
+	if updatedOlder.Metadata["superseded_by_id"] != newer.ID || !domain.IsStaleMemory(updatedOlder, time.Now().UTC()) {
+		t.Fatalf("expected retry to preserve supersession state, got %+v", updatedOlder.Metadata)
+	}
+
+	relations, err := repo.ListRelations(ctx, "user-1", "", []string{newer.NodeID}, 1)
+	if err != nil {
+		t.Fatalf("list supersedes relations: %v", err)
+	}
+	for _, relation := range relations {
+		if relation.RelationType == "supersedes" && relation.SrcNodeID == newer.NodeID && relation.DstNodeID == older.NodeID {
+			return
+		}
+	}
+	t.Fatalf("expected write-time supersedes relation, got %+v", relations)
 }
 
 func TestServiceGetDocumentHydratesRelatedAndSupportsUpdateDelete(t *testing.T) {
@@ -498,6 +598,30 @@ func TestPackInjectionMemoriesHonorsTokenBudget(t *testing.T) {
 	}
 	if selected[0].ID != "km-1" || selected[1].ID != "fact-1" {
 		t.Fatalf("expected packer to keep high-signal items within budget, got %+v", selected)
+	}
+}
+
+func TestMergeInjectionMemoriesUsesTypePriority(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	merged := mergeInjectionMemories([]domain.MemoryDocument{
+		{ID: "impression-1", NodeID: "node-impression-1", Type: domain.MemoryTypeImpression, Content: "Prefers direct answers.", EffectiveScore: 0.99, ActivityAt: now},
+		{ID: "summary-1", NodeID: "node-summary-1", Type: domain.MemoryTypeSummary, Content: "Discussed rollout planning.", EffectiveScore: 0.4, ActivityAt: now},
+		{ID: "fact-1", NodeID: "node-fact-1", Type: domain.MemoryTypeFact, Content: "Rollback owner is Alice.", EffectiveScore: 0.9, ActivityAt: now},
+	}, []domain.MemoryDocument{
+		{ID: "km-1", NodeID: "node-km-1", Type: domain.MemoryTypeKeyMemory, Content: "timezone: UTC+8", EffectiveScore: 0.1, ActivityAt: now},
+	})
+
+	if got := []string{merged[0].ID, merged[1].ID, merged[2].ID, merged[3].ID}; strings.Join(got, ",") != "km-1,summary-1,fact-1,impression-1" {
+		t.Fatalf("unexpected injection priority order: %+v", got)
+	}
+
+	prompt := buildInjectionSystemPrompt(merged)
+	for _, section := range []string{"User Profile:", "Relevant Memories:", "Relevant Facts:", "Relevant Impressions:"} {
+		if !strings.Contains(prompt, section) {
+			t.Fatalf("expected prompt section %q in %q", section, prompt)
+		}
 	}
 }
 

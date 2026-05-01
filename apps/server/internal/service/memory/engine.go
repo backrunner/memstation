@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sort"
 	"strings"
@@ -158,23 +159,13 @@ func (e *Engine) Inject(ctx context.Context, req domain.UnifiedRequest) (domain.
 	}
 
 	if req.InjectContext && len(result.Memories) > 0 {
-		summaryLines := make([]string, 0, len(result.Memories))
-		for _, memory := range result.Memories {
-			prefix := string(memory.Type)
-			if memory.Type == domain.MemoryTypeKeyMemory {
-				if memory.Metadata == nil {
-					memory.Metadata = map[string]any{}
-				}
-				memory.Metadata["injection_bucket"] = "key_memory_topk"
-			}
-			summaryLines = append(summaryLines, "- ["+prefix+"] "+memory.Content)
-		}
+		systemPrompt := buildInjectionSystemPrompt(result.Memories)
 		req.Messages = append([]domain.UnifiedMessage{{
 			Role: domain.RoleSystem,
-			Text: "MemStation injected memory context:\n" + strings.Join(summaryLines, "\n"),
+			Text: systemPrompt,
 			Blocks: []domain.ContentBlock{{
 				Type: domain.ContentBlockText,
-				Text: "MemStation injected memory context",
+				Text: systemPrompt,
 			}},
 		}}, req.Messages...)
 	}
@@ -1193,6 +1184,7 @@ func mergeInjectionMemories(primary, keyMemories []domain.MemoryDocument) []doma
 		item.Metadata["injection_bucket"] = bucket
 		if index, ok := seen[item.NodeID]; ok {
 			if item.EffectiveScore > merged[index].EffectiveScore {
+				item.Metadata["injection_bucket"] = merged[index].Metadata["injection_bucket"]
 				merged[index] = item
 			}
 			return
@@ -1200,19 +1192,41 @@ func mergeInjectionMemories(primary, keyMemories []domain.MemoryDocument) []doma
 		seen[item.NodeID] = len(merged)
 		merged = append(merged, item)
 	}
-	for _, item := range primary {
-		appendItem(item, "semantic_recall")
-	}
 	for _, item := range keyMemories {
 		appendItem(item, "key_memory_topk")
 	}
-	sort.Slice(merged, func(i, j int) bool {
-		if merged[i].EffectiveScore == merged[j].EffectiveScore {
-			return merged[i].ActivityAt.After(merged[j].ActivityAt)
+	for _, item := range primary {
+		appendItem(item, "semantic_recall")
+	}
+	// Stable ordering: injection priority (Key Memory, Summary, Fact,
+	// Impression, then others), then by effective score and recency.
+	sort.SliceStable(merged, func(i, j int) bool {
+		if lp, rp := injectionPriority(merged[i]), injectionPriority(merged[j]); lp != rp {
+			return lp < rp
 		}
-		return merged[i].EffectiveScore > merged[j].EffectiveScore
+		if merged[i].EffectiveScore != merged[j].EffectiveScore {
+			return merged[i].EffectiveScore > merged[j].EffectiveScore
+		}
+		return merged[i].ActivityAt.After(merged[j].ActivityAt)
 	})
 	return merged
+}
+
+func injectionPriority(doc domain.MemoryDocument) int {
+	switch doc.Type {
+	case domain.MemoryTypeKeyMemory:
+		return 0
+	case domain.MemoryTypeSummary:
+		return 1
+	case domain.MemoryTypeFact:
+		return 2
+	case domain.MemoryTypeImpression:
+		return 3
+	case domain.MemoryTypeSegment:
+		return 4
+	default:
+		return 5
+	}
 }
 
 func packInjectionMemories(memories []domain.MemoryDocument, maxTokens int) []domain.MemoryDocument {
@@ -1222,6 +1236,11 @@ func packInjectionMemories(memories []domain.MemoryDocument, maxTokens int) []do
 	if maxTokens <= 0 {
 		maxTokens = 2048
 	}
+	// Input is already sorted by injection priority (key memory, summary, fact,
+	// impression) then by effective score (see mergeInjectionMemories). A
+	// single greedy pass preserves that ordering so high-priority items win a
+	// tight budget, while smaller low-priority items can still slip in after a
+	// too-large earlier candidate is skipped.
 	remaining := maxTokens
 	selected := make([]domain.MemoryDocument, 0, len(memories))
 	for _, item := range memories {
@@ -1260,4 +1279,100 @@ func isTemporalRelationType(relationType string) bool {
 	default:
 		return false
 	}
+}
+
+// buildInjectionSystemPrompt formats retrieved memories into the structured
+// system-prompt layout. Key memories render as a
+// profile bullet list, summaries/facts/impressions render as labelled sections.
+// Only non-empty sections are emitted so the prompt stays tight.
+func buildInjectionSystemPrompt(memories []domain.MemoryDocument) string {
+	var (
+		keyMemories []domain.MemoryDocument
+		summaries   []domain.MemoryDocument
+		facts       []domain.MemoryDocument
+		impressions []domain.MemoryDocument
+		other       []domain.MemoryDocument
+	)
+	for _, item := range memories {
+		switch item.Type {
+		case domain.MemoryTypeKeyMemory:
+			keyMemories = append(keyMemories, item)
+		case domain.MemoryTypeSummary, domain.MemoryTypeSegment:
+			summaries = append(summaries, item)
+		case domain.MemoryTypeFact:
+			facts = append(facts, item)
+		case domain.MemoryTypeImpression:
+			impressions = append(impressions, item)
+		default:
+			other = append(other, item)
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString("[Memory Context]\n")
+
+	if len(keyMemories) > 0 {
+		b.WriteString("User Profile:\n")
+		for _, item := range keyMemories {
+			key := keyMemoryLabel(item)
+			value := strings.TrimSpace(item.Content)
+			if key != "" {
+				b.WriteString("- ")
+				b.WriteString(key)
+				b.WriteString(": ")
+				b.WriteString(value)
+			} else {
+				b.WriteString("- ")
+				b.WriteString(value)
+			}
+			b.WriteString("\n")
+		}
+	}
+
+	if len(summaries) > 0 {
+		b.WriteString("\nRelevant Memories:\n")
+		for i, item := range summaries {
+			fmt.Fprintf(&b, "%d. %s\n", i+1, strings.TrimSpace(item.Content))
+		}
+	}
+
+	if len(facts) > 0 {
+		b.WriteString("\nRelevant Facts:\n")
+		for _, item := range facts {
+			b.WriteString("- ")
+			b.WriteString(strings.TrimSpace(item.Content))
+			b.WriteString("\n")
+		}
+	}
+
+	if len(impressions) > 0 {
+		b.WriteString("\nRelevant Impressions:\n")
+		for _, item := range impressions {
+			b.WriteString("- ")
+			b.WriteString(strings.TrimSpace(item.Content))
+			b.WriteString("\n")
+		}
+	}
+
+	if len(other) > 0 {
+		b.WriteString("\nAdditional Context:\n")
+		for _, item := range other {
+			b.WriteString("- ")
+			b.WriteString(strings.TrimSpace(item.Content))
+			b.WriteString("\n")
+		}
+	}
+
+	b.WriteString("\nUse these naturally. Do not explicitly say you remembered them unless asked.\n")
+	b.WriteString("[/Memory Context]")
+	return b.String()
+}
+
+func keyMemoryLabel(item domain.MemoryDocument) string {
+	if item.Metadata != nil {
+		if key, ok := item.Metadata["key"].(string); ok && strings.TrimSpace(key) != "" {
+			return strings.TrimSpace(key)
+		}
+	}
+	return ""
 }
