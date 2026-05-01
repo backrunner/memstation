@@ -8,6 +8,13 @@ Devcontainer debug flow
 - `pnpm dev:workspace`: runs the in-container full-stack debug command directly when you are already inside the devcontainer.
 - In this flow, `DATABASE_URL`, `REDIS_URL`, `MEMSTATION_ADMIN_TOKEN`, `MEMSTATION_MASTER_KEY`, and local cookie/CORS defaults are injected automatically from the devcontainer Compose baseline so local debug stays close to zero-config.
 
+Portless full-stack flow
+- `pnpm dev:portless`: starts local PostgreSQL and Redis from Compose, applies server migrations, runs the MemStation server with source-watch hot restart on `:8080`, and starts the manager through Portless at `https://memstation-manager.localhost`.
+- `pnpm dev:manager:portless`: starts only the Portless manager proxy. Use this when a backend is already running at `MEMSTATION_MANAGER_DEV_PROXY_TARGET`, which defaults to `http://127.0.0.1:8080`.
+- `MEMSTATION_DEV_INFRA=0 pnpm dev:portless`: skips Docker infra startup and assumes PostgreSQL and Redis are already reachable through `DATABASE_URL` and `REDIS_URL`.
+- `MEMSTATION_SKIP_DEV_MIGRATE=1 pnpm dev:portless`: skips the migration step for quick restarts.
+- A `502 Bad Gateway` from `https://memstation-manager.localhost/api/...` usually means the manager proxy cannot reach the configured backend target.
+
 Reset flow
 - `./scripts/dev/reset-compose-stack.sh`: tears down the current stack, removes Postgres and Redis volumes, recreates the baseline database, runs `memstation migrate`, runs `memstation seed`, and starts server, worker, scheduler, and manager.
 - `./scripts/dev/reset-compose-stack.sh --no-seed`: same reset flow without reseeding.

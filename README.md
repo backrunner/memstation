@@ -218,10 +218,18 @@ pnpm dev
 如需用稳定的本地 HTTPS 域名调试 Manager，可使用 Portless 入口：
 
 ```bash
+pnpm dev:portless
+```
+
+这个入口会启动 PostgreSQL / Redis 开发依赖、执行 migration、启动支持热重载的 MemStation server，并通过 Portless 启动 Manager。默认地址为 `https://memstation-manager.localhost`，Vite dev proxy 会将 `/api`、`/health`、`/graphql`、`/v1` 转发到 `http://127.0.0.1:8080`。首次使用 Portless 可能需要执行本地 CA 信任流程。
+
+如果只想启动 Manager 的 Portless 代理，并复用已经运行的后端：
+
+```bash
 pnpm dev:manager:portless
 ```
 
-默认地址为 `https://memstation-manager.localhost`，并通过 manager Vite dev proxy 将 `/api`、`/health`、`/graphql`、`/v1` 转发到 `MEMSTATION_MANAGER_DEV_PROXY_TARGET`，默认 `http://127.0.0.1:8080`。首次使用 Portless 可能需要执行本地 CA 信任流程。
+`pnpm dev:manager:portless` 只启动 Manager，要求 `MEMSTATION_MANAGER_DEV_PROXY_TARGET` 指向一个可用的 MemStation server，默认 `http://127.0.0.1:8080`。
 
 ## 常用命令
 
@@ -232,6 +240,7 @@ pnpm dev
 pnpm dev:container
 pnpm dev:workspace
 pnpm dev:server
+pnpm dev:portless
 pnpm dev:manager:portless
 pnpm dev:reset
 pnpm build
@@ -328,7 +337,7 @@ Embedding 已接入真实 provider 调用，采用 OpenAI-compatible embedding �
 - Manager 可以保存多个 target，并在不同 MemStation 实例之间切换
 - Manager 支持直接粘贴 `memstation://host:port?key=...` / `memstations://...` 形式的连接 URI；`key=` 必须是服务端生成的 Argon2id admin token hash，不应放入原始明文 admin token
 - 一套 MemStation 服务视为一个运行环境，Manager target 只暴露 label、endpoint 和 admin token 连接信息
-- 本地 Manager 可通过 `pnpm dev:manager:portless` 走 Portless，以 `https://memstation-manager.localhost` 形式调试，并继续由 Vite dev proxy 转发 `/api`、`/health`、`/graphql`、`/v1`
+- 本地 full-stack 调试可通过 `pnpm dev:portless` 启动热重载 MemStation server 与 Portless Manager；如后端已单独运行，也可通过 `pnpm dev:manager:portless` 只启动 Manager 代理
 
 ## 测试与评测
 
