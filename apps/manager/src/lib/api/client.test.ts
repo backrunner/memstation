@@ -26,6 +26,10 @@ function gatewayBody(fetchMock: ReturnType<typeof vi.fn>) {
   return JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
 }
 
+function firstFetchInit(fetchMock: ReturnType<typeof vi.fn>): RequestInit {
+  return (fetchMock.mock.calls[0]?.[1] ?? {}) as RequestInit;
+}
+
 async function requestExchange(protocol: GatewayProtocol, messages: ChatThreadMessage[], payload: unknown) {
   const fetchMock = gatewayFetchMock(payload);
   vi.stubGlobal('fetch', fetchMock);
@@ -59,6 +63,9 @@ describe('api client delete flows', () => {
       'http://127.0.0.1:18080/api/admin/memory/keys/key-1?user_id=admin',
       expect.objectContaining({ method: 'DELETE' })
     );
+    const init = firstFetchInit(fetchMock);
+    expect(init.credentials).toBe('include');
+    expect(new Headers(init.headers).get('Authorization')).toBeNull();
   });
 
   it('treats 204 API key revoke responses as success', async () => {
@@ -70,6 +77,9 @@ describe('api client delete flows', () => {
       'http://127.0.0.1:18080/api/admin/users/admin/api-keys/api-key-1',
       expect.objectContaining({ method: 'DELETE' })
     );
+    const init = firstFetchInit(fetchMock);
+    expect(init.credentials).toBe('include');
+    expect(new Headers(init.headers).get('Authorization')).toBeNull();
   });
 });
 

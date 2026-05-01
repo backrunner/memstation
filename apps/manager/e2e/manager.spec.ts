@@ -2,14 +2,16 @@ import { expect, test, type Page } from '@playwright/test';
 
 const fixtureBaseUrl = 'http://127.0.0.1:18080';
 const adminToken = 'memstation-e2e-admin-token';
+const adminTokenHash =
+  '$memstation-admin-argon2id$v=19$m=65536,t=1,p=4$bWVtc3RhdGlvbi1zYWx0MQ$ITiBXhJ8JgTOQi90bJjQHFgRrs+aA9nOPRW9yfT31N4';
 const gatewayAPIKey = 'ms-e2e';
 const targetConfig = {
   id: 'fixture-target',
   label: 'Fixture Target',
   baseUrl: fixtureBaseUrl,
-  environment: 'e2e',
+  environment: 'custom',
   clusterName: 'standalone',
-  region: 'local',
+  region: 'global',
   kind: 'single'
 };
 
@@ -27,13 +29,13 @@ async function configureTarget(page: Page): Promise<void> {
 
 async function login(page: Page): Promise<void> {
   await page.goto('/login');
-  await expect(page.getByRole('heading', { name: /^Sign in$/i })).toBeVisible();
-  await expect(page.getByRole('heading', { name: targetConfig.label })).toBeVisible();
-  await expect(page.getByText(targetConfig.baseUrl)).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Connect an instance$/i })).toBeVisible();
+  await page.getByLabel('Connection URI or base URL').fill(targetConfig.baseUrl);
+  await page.getByLabel('Label').fill(targetConfig.label);
   await page.getByPlaceholder('MEMSTATION_ADMIN_TOKEN').fill(adminToken);
-  await page.getByRole('button', { name: 'Start admin session' }).click();
+  await page.getByRole('button', { name: 'Connect target' }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByRole('heading', { name: /^Overview$/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Dashboard$/i })).toBeVisible();
 }
 
 async function expectRouteHealthy(page: Page, path: string, heading: RegExp): Promise<void> {
@@ -78,27 +80,92 @@ test.beforeEach(async ({ page }) => {
   await login(page);
 });
 
-test('target manager imports connection URIs and keeps admin keys in memory for cross-origin fallback', async ({ page }) => {
+test('target manager accepts URI tokens without storing them with targets', async ({ page }) => {
   await page.context().clearCookies();
   await page.goto('/login');
-  await expect(page.getByRole('heading', { name: /^Sign in$/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Connect an instance$/i })).toBeVisible();
+  await expect(page.getByText('The admin token is exchanged once for a secure server session.')).toBeVisible();
+  await expect(page.getByText('Target initialization')).toHaveCount(0);
+  await expect(page.locator('.target-preview')).toHaveCount(0);
+
+  await page.getByLabel('Connection URI or base URL').fill(
+    `memstation://127.0.0.1:18080?key=${encodeURIComponent(adminTokenHash)}&label=URI%20Target`
+  );
+  await expect(page.getByLabel('Admin token')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Connect target' }).click();
+
+  await expect(page.getByRole('button', { name: 'Switch target' })).toContainText('127.0.0.1:18080');
+  await page.getByRole('button', { name: 'Switch target' }).click();
+  await expect(page.locator('.target-selector-item').filter({ hasText: '127.0.0.1:18080' })).toBeVisible();
+  await expect(page.locator('.target-selector-item').filter({ hasText: 'fixture' })).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  const savedTargets = await page.evaluate(() => window.localStorage.getItem('memstation.manager.targets') ?? '');
+  expect(savedTargets).toContain('URI Target');
+  expect(savedTargets).not.toContain(adminToken);
+  expect(savedTargets).not.toContain(adminTokenHash);
+
+  const session = await page.evaluate(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/admin/session`, { credentials: 'include' });
+    return (await response.json()) as { authenticated: boolean };
+  }, fixtureBaseUrl);
+  expect(session.authenticated).toBe(true);
+});
+
+test('connect page requires an admin token before saving the first target', async ({ page }) => {
+  await page.evaluate(() => {
+    window.localStorage.removeItem('memstation.manager.targets');
+    window.localStorage.removeItem('memstation.manager.selected-target');
+  });
+  await page.goto('/login');
+  await page.getByLabel('Connection URI or base URL').fill(fixtureBaseUrl);
+  await page.getByLabel('Label').fill('No Token Target');
+  await page.getByRole('button', { name: 'Connect target' }).click();
+  await expect(page.getByText('Admin token is required. A target cannot be connected without it.')).toBeVisible();
+
+  const savedTargets = await page.evaluate(() => window.localStorage.getItem('memstation.manager.targets'));
+  expect(savedTargets).toBeNull();
+});
+
+test('target manager removes saved targets from the row context menu after confirmation', async ({ page }) => {
+  const removableTargetLabel = 'Removable Target';
+  const removableTargetUrl = 'http://127.0.0.1:18081';
 
   await page.getByRole('button', { name: 'Targets' }).click();
-  await page.getByRole('button', { name: 'New' }).click();
-  await page.getByPlaceholder('memstation://127.0.0.1:8080?key=...').fill(
-    `memstation://127.0.0.1:18080?key=${adminToken}&label=URI%20Target&env=e2e&cluster=standalone&region=local`
-  );
-  await expect(page.locator('.target-preview').getByText(/temporary admin key/i)).toBeVisible();
-  await page.getByRole('button', { name: 'Apply URI' }).click();
-  await page.getByRole('button', { name: 'Save Target' }).click();
+  const targetDialog = page.getByRole('dialog', { name: 'Target connections' });
+  await expect(targetDialog).toBeVisible();
+  await expect(targetDialog.getByRole('button', { name: /^Remove$/i })).toHaveCount(0);
 
-  await expect(page.getByText('URI Target').first()).toBeVisible();
-  await expect(page.getByText(fixtureBaseUrl).first()).toBeVisible();
-  await expect(page.getByText('An admin session is already active for this target.')).toBeVisible();
+  await targetDialog.getByRole('button', { name: 'New target' }).click();
+  const draftRow = targetDialog.locator('.target-row.is-draft').first();
+  await expect(draftRow).toBeVisible();
+  await expect(draftRow).toContainText('New target');
+  await targetDialog.getByLabel('Connection URI or base URL').fill(removableTargetUrl);
+  await targetDialog.getByLabel('Label').fill(removableTargetLabel);
+  await expect(draftRow).toContainText(removableTargetLabel);
+  await expect(draftRow).toContainText(removableTargetUrl);
+  await targetDialog.getByRole('button', { name: 'Save target' }).click();
+  await expect(targetDialog).toBeHidden();
 
-  await page.context().clearCookies();
-  await page.getByRole('button', { name: 'Refresh' }).click();
-  await expect(page.getByText('An admin session is already active for this target.')).toBeVisible();
+  await page.getByRole('button', { name: 'Targets' }).click();
+  await expect(targetDialog).toBeVisible();
+  const removableRow = targetDialog.locator('.target-row').filter({ hasText: removableTargetLabel }).first();
+  await expect(removableRow).toBeVisible();
+  await removableRow.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Delete target' }).click();
+
+  const removeDialog = page.getByRole('alertdialog', { name: 'Delete target?' });
+  await expect(removeDialog).toBeVisible();
+  await expect(removeDialog.getByText(removableTargetUrl)).toBeVisible();
+  await removeDialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(removeDialog).toBeHidden();
+  await expect(removableRow).toBeVisible();
+
+  await removableRow.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Delete target' }).click();
+  await removeDialog.getByRole('button', { name: 'Delete target' }).click();
+  await expect(targetDialog.locator('.target-row').filter({ hasText: removableTargetLabel })).toHaveCount(0);
+  await expect(targetDialog.locator('.target-row').filter({ hasText: targetConfig.label })).toBeVisible();
 });
 
 test('dashboard and major workspaces load live target data', async ({ page }) => {
@@ -136,9 +203,9 @@ test('dashboard and major workspaces load live target data', async ({ page }) =>
   await expectRouteHealthy(page, '/settings/providers', /^Providers$/i);
   await expect(page.getByText('openai_compatible').first()).toBeVisible();
 
-  await expectRouteHealthy(page, '/playground/protocols', /^Protocol Playground$/i);
+  await expectRouteHealthy(page, '/playground/protocols', /^Protocols$/i);
   await page.getByPlaceholder('ms-...').fill(gatewayAPIKey);
-  await page.getByRole('button', { name: 'Send Request' }).click();
+  await page.getByRole('button', { name: 'Send request' }).click();
   await expect(page.getByText('streamed').first()).toBeVisible();
 });
 
@@ -249,8 +316,8 @@ test('playground persisted flow writes memory and is inspectable in admin views'
   await page.getByPlaceholder('Configured model name').fill('gpt-4.1-mini');
   const sessionId = await page.getByPlaceholder('playground-123').inputValue();
 
-  await toggleSwitch(page, 'Memory Persist');
-  await expect(page.locator('.switch-row').filter({ hasText: 'Memory Persist' }).locator('[role="switch"]').first()).toHaveAttribute('data-state', 'checked');
+  await toggleSwitch(page, 'Memory persist');
+  await expect(page.locator('.switch-row').filter({ hasText: 'Memory persist' }).locator('[role="switch"]').first()).toHaveAttribute('data-state', 'checked');
 
   await page.getByPlaceholder('Message the target, test memory recall, or inspect persistence.').fill(prompt);
   await page.getByRole('button', { name: 'Send and End' }).click();
@@ -303,7 +370,7 @@ test('playground and settings drafts survive internal route changes', async ({ p
   await expect(page.getByRole('heading', { name: /^Chat Playground$/i })).toBeVisible();
   await page.getByPlaceholder('ms-...').fill(gatewayAPIKey);
   await page.getByPlaceholder('Configured model name').fill('gpt-4.1-mini');
-  await toggleSwitch(page, 'Memory Persist');
+  await toggleSwitch(page, 'Memory persist');
   await page.getByPlaceholder('Message the target, test memory recall, or inspect persistence.').fill('Draft preservation turn');
   await page.getByRole('button', { name: /^Send$/ }).click();
   await expect(page.getByText('Fixture stream response for: Draft preservation turn')).toBeVisible();
@@ -312,17 +379,17 @@ test('playground and settings drafts survive internal route changes', async ({ p
   await page.goto('/playground/chat');
   await expect(page.getByText('Fixture stream response for: Draft preservation turn')).toBeVisible();
   await expect(page.getByPlaceholder('Configured model name')).toHaveValue('gpt-4.1-mini');
-  await expect(page.locator('.switch-row').filter({ hasText: 'Memory Persist' }).locator('[role="switch"]').first()).toHaveAttribute('data-state', 'checked');
+  await expect(page.locator('.switch-row').filter({ hasText: 'Memory persist' }).locator('[role="switch"]').first()).toHaveAttribute('data-state', 'checked');
 
   await page.goto('/playground/protocols');
-  await expect(page.getByRole('heading', { name: /^Protocol Playground$/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Protocols$/i })).toBeVisible();
   await page.getByPlaceholder('ms-...').fill(gatewayAPIKey);
-  await page.locator('.field').filter({ hasText: 'Provider Override' }).first().locator('input').fill('openai');
+  await page.locator('.field').filter({ hasText: 'Provider override' }).first().locator('input').fill('openai');
   await page.locator('textarea').first().fill(JSON.stringify({ model: 'draft-model', stream: false, messages: [{ role: 'user', content: 'Draft route retention' }] }, null, 2));
 
   await page.goto('/dashboard');
   await page.goto('/playground/protocols');
-  await expect(page.locator('.field').filter({ hasText: 'Provider Override' }).first().locator('input')).toHaveValue('openai');
+  await expect(page.locator('.field').filter({ hasText: 'Provider override' }).first().locator('input')).toHaveValue('openai');
   await expect(page.locator('textarea').first()).toHaveValue(/Draft route retention/);
 
   await page.goto('/playground/memory');
@@ -586,12 +653,12 @@ test('user settings writes are visible in audit filters', async ({ page }) => {
 
 test('protocol playground handles responses streaming and anthropic message payloads', async ({ page }) => {
   await page.goto('/playground/protocols');
-  await expect(page.getByRole('heading', { name: /^Protocol Playground$/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Protocols$/i })).toBeVisible();
 
   await page.getByLabel('API key').fill(gatewayAPIKey);
 
   await chooseBitsSelectOption(page, 'Protocol', 'OpenAI Responses');
-  await page.getByRole('button', { name: 'Send Request' }).click();
+  await page.getByRole('button', { name: 'Send request' }).click();
   await expect(page.getByText('HTTP 200').first()).toBeVisible();
   await expect(page.getByText('response.reasoning.delta').first()).toBeVisible();
   await expect(page.getByText('response.output_text.delta').first()).toBeVisible();
@@ -608,7 +675,7 @@ test('protocol playground handles responses streaming and anthropic message payl
       2
     )
   );
-  await page.getByRole('button', { name: 'Send Request' }).click();
+  await page.getByRole('button', { name: 'Send request' }).click();
   await expect(page.getByText('HTTP 200').first()).toBeVisible();
   await expect(page.getByText('"type": "message"').first()).toBeVisible();
   await expect(page.getByText('Fixture stream response for: Explain anthropic response rendering.')).toBeVisible();

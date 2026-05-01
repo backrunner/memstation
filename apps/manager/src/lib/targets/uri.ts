@@ -1,11 +1,11 @@
-import type { MemStationTarget, TargetKind } from '$lib/types';
+import type { MemStationTarget } from '$lib/types';
 
 export interface ParsedTargetLocator {
   target: Partial<MemStationTarget>;
   adminKey?: string;
 }
 
-const validKinds: TargetKind[] = ['single', 'cluster-entry', 'node'];
+export const adminTokenHashPrefix = '$memstation-admin-argon2id$';
 
 function trimTrailingSlash(value: string): string {
   return value.trim().replace(/\/$/, '');
@@ -23,13 +23,6 @@ function defaultLabel(hostname: string, port: string): string {
     return 'Local Dev';
   }
   return port ? `${hostname}:${port}` : hostname;
-}
-
-function normalizeKind(value: string | null): TargetKind | undefined {
-  if (!value) {
-    return undefined;
-  }
-  return validKinds.includes(value as TargetKind) ? (value as TargetKind) : undefined;
 }
 
 function inferredHTTPURL(raw: string): URL {
@@ -60,20 +53,15 @@ export function parseTargetLocator(input: string): ParsedTargetLocator {
   const value = inferredHTTPURL(trimmed);
   const baseUrl = resolveBaseURL(value);
   const label = value.searchParams.get('label')?.trim() || defaultLabel(value.hostname, value.port);
-  const environment = value.searchParams.get('env')?.trim() || value.searchParams.get('environment')?.trim() || undefined;
-  const clusterName = value.searchParams.get('cluster')?.trim() || undefined;
-  const region = value.searchParams.get('region')?.trim() || undefined;
-  const kind = normalizeKind(value.searchParams.get('kind'));
   const adminKey = value.searchParams.get('key')?.trim() || undefined;
+  if (adminKey && !adminKey.startsWith(adminTokenHashPrefix)) {
+    throw new Error('Connection URI key= must contain a MemStation admin token hash, not a raw admin token.');
+  }
 
   return {
     target: {
       label,
-      baseUrl,
-      environment,
-      clusterName,
-      region,
-      kind
+      baseUrl
     },
     adminKey
   };

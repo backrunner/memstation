@@ -2,12 +2,12 @@
 
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { Dialog } from 'bits-ui';
+  import { AlertDialog, ContextMenu, Dialog } from 'bits-ui';
+  import { Trash2 } from 'lucide-svelte';
 
-  import SelectField from '$lib/components/SelectField.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
   import { isHTTPURL } from '$lib/forms/validation';
-  import type { MemStationTarget, TargetKind } from '$lib/types';
+  import type { MemStationTarget } from '$lib/types';
   import { parseTargetLocator } from '$lib/targets/uri';
 
   export let open = false;
@@ -19,29 +19,28 @@
     remove: { id: string };
   }>();
 
-  const kindItems = [
-    { value: 'single', label: 'Single' },
-    { value: 'cluster-entry', label: 'Cluster Entry' },
-    { value: 'node', label: 'Node' }
-  ];
-
   const defaultBaseUrl = 'http://localhost:8080';
   const defaultEnvironment = 'custom';
   const defaultCluster = 'standalone';
   const defaultRegion = 'global';
-  const defaultKind: TargetKind = 'single';
+  const draftTargetId = '__new-target-draft__';
 
   let editingId = '';
   let label = '';
   let connectionInput = '';
-  let environment = defaultEnvironment;
-  let clusterName = defaultCluster;
-  let region = defaultRegion;
-  let kind: TargetKind = defaultKind;
+  let adminKey = '';
   let saveError = '';
   let formErrors: Record<string, string> = {};
+  let removeConfirmOpen = false;
+  let removeTargetCandidate: MemStationTarget | undefined;
 
   $: locatorPreview = inspectLocator(connectionInput);
+  $: resolvedAdminKey = locatorPreview.adminKey ?? adminKey.trim();
+  $: draftTargetRow =
+    editingId === draftTargetId
+      ? buildDraftTargetRow(label, connectionInput, locatorPreview)
+      : undefined;
+  $: targetRows = draftTargetRow ? [draftTargetRow, ...targets] : targets;
 
   $: if (open) {
     const current = targets.find((item) => item.id === selectedId) ?? targets[0];
@@ -49,10 +48,7 @@
       editingId = current.id;
       label = current.label;
       connectionInput = current.baseUrl;
-      environment = current.environment;
-      clusterName = current.clusterName;
-      region = current.region;
-      kind = current.kind;
+      adminKey = '';
       saveError = '';
       formErrors = {};
     }
@@ -73,37 +69,22 @@
   }
 
   function loadTarget(target: MemStationTarget): void {
+    if (isDraftTarget(target)) {
+      return;
+    }
     editingId = target.id;
     label = target.label;
     connectionInput = target.baseUrl;
-    environment = target.environment;
-    clusterName = target.clusterName;
-    region = target.region;
-    kind = target.kind;
     saveError = '';
   }
 
   function resetForm(): void {
-    editingId = '';
+    editingId = draftTargetId;
     label = '';
     connectionInput = defaultBaseUrl;
-    environment = defaultEnvironment;
-    clusterName = defaultCluster;
-    region = defaultRegion;
-    kind = defaultKind;
+    adminKey = '';
     saveError = '';
     formErrors = {};
-  }
-
-  function applyLocatorPreview(): void {
-    if (!locatorPreview.target) {
-      return;
-    }
-    label = locatorPreview.target.label ?? label;
-    environment = locatorPreview.target.environment ?? environment;
-    clusterName = locatorPreview.target.clusterName ?? clusterName;
-    region = locatorPreview.target.region ?? region;
-    kind = locatorPreview.target.kind ?? kind;
   }
 
   function saveTarget(): void {
@@ -123,6 +104,9 @@
     if (!label.trim() && !parsed.label?.trim()) {
       nextErrors.label = 'Give this target a short label so it is easy to recognize.';
     }
+    if (editingId === draftTargetId && !resolvedAdminKey) {
+      nextErrors.adminKey = 'Admin token is required to connect a new target.';
+    }
     formErrors = nextErrors;
     if (Object.keys(nextErrors).length > 0) {
       saveError = 'Please fix the highlighted target fields.';
@@ -130,19 +114,64 @@
     }
 
     saveError = '';
+    const isDraft = editingId === draftTargetId;
     dispatch('save', {
       target: {
-        id: editingId || undefined,
+        id: isDraft ? undefined : editingId || undefined,
         label: label.trim() || parsed.label,
         baseUrl,
-        environment: environment.trim() === defaultEnvironment ? (parsed.environment ?? defaultEnvironment) : environment.trim(),
-        clusterName: clusterName.trim() === defaultCluster ? (parsed.clusterName ?? defaultCluster) : clusterName.trim(),
-        region: region.trim() === defaultRegion ? (parsed.region ?? defaultRegion) : region.trim(),
-        kind: kind === defaultKind ? (parsed.kind ?? defaultKind) : kind
+        environment: defaultEnvironment,
+        clusterName: defaultCluster,
+        region: defaultRegion,
+        kind: 'single'
       },
-      adminKey: locatorPreview.adminKey
+      adminKey: resolvedAdminKey || undefined
     });
     open = false;
+  }
+
+  function isDraftTarget(target: MemStationTarget): boolean {
+    return target.id === draftTargetId;
+  }
+
+  function buildDraftTargetRow(
+    draftLabel: string,
+    draftConnectionInput: string,
+    preview: { target?: Partial<MemStationTarget> }
+  ): MemStationTarget {
+    const hasDraftInput = Boolean(
+      draftLabel.trim() || draftConnectionInput.trim() !== defaultBaseUrl
+    );
+    const parsed = hasDraftInput ? (preview.target ?? {}) : {};
+    const rawConnection = draftConnectionInput.trim();
+    return {
+      id: draftTargetId,
+      label: draftLabel.trim() || parsed.label?.trim() || 'New target',
+      baseUrl: parsed.baseUrl ?? (rawConnection || defaultBaseUrl),
+      environment: defaultEnvironment,
+      clusterName: defaultCluster,
+      region: defaultRegion,
+      kind: 'single'
+    };
+  }
+
+  function requestRemoveTarget(target: MemStationTarget): void {
+    removeTargetCandidate = target;
+    removeConfirmOpen = true;
+  }
+
+  function cancelRemoveTarget(): void {
+    removeTargetCandidate = undefined;
+    removeConfirmOpen = false;
+  }
+
+  function confirmRemoveTarget(): void {
+    if (!removeTargetCandidate) {
+      return;
+    }
+    dispatch('remove', { id: removeTargetCandidate.id });
+    removeTargetCandidate = undefined;
+    removeConfirmOpen = false;
   }
 </script>
 
@@ -151,85 +180,101 @@
     <Dialog.Overlay class="dialog-overlay" />
     <Dialog.Content class="dialog-card">
       <div class="page-header">
-        <Dialog.Title class="page-title" level={3}>Target Connections</Dialog.Title>
-        <Dialog.Close class="button-ghost">Done</Dialog.Close>
+        <div class="page-header-meta">
+          <Dialog.Title class="page-title" level={3}>Target connections</Dialog.Title>
+          <p class="panel-meta">Manage MemStation endpoints this manager can connect to.</p>
+        </div>
+        <Dialog.Close class="btn-ghost btn-sm">Close</Dialog.Close>
       </div>
 
-      <div class="page-columns">
-        <section class="card page-stack">
-          <div class="inline-group" style="justify-content: space-between; margin-bottom: 12px;">
-            <strong>Saved Targets</strong>
-            <button class="button-secondary" type="button" on:click={resetForm}>New</button>
+      <div class="target-dialog-body">
+        <section class="target-dialog-list">
+          <div class="target-dialog-list-header">
+            <span class="sidebar-label">Saved targets</span>
+            <button class="btn-secondary btn-sm" type="button" on:click={resetForm}>New target</button>
           </div>
-          {#if targets.length === 0}
-            <div class="empty-state">No saved targets yet.</div>
+          {#if targetRows.length === 0}
+            <div class="empty-state">No saved targets yet. Add one to connect.</div>
           {:else}
             <div class="target-list">
-              {#each targets as target}
-                <button class={`target-row ${target.id === editingId ? 'is-active' : ''}`} type="button" on:click={() => loadTarget(target)}>
-                  <div>
-                    <strong>{target.label}</strong>
-                    <div class="subtle-text">{target.environment} · {target.region}</div>
-                  </div>
-                  <span class="subtle-text">{target.kind}</span>
-                </button>
+              {#each targetRows as target}
+                {#if isDraftTarget(target)}
+                  <button class="target-row is-active is-draft" type="button">
+                    <div class="target-row-primary">
+                      <strong>{target.label}</strong>
+                      <span class="helper-text">{target.baseUrl}</span>
+                    </div>
+                    <span class="status-badge warning">draft</span>
+                  </button>
+                {:else}
+                  <ContextMenu.Root>
+                    <ContextMenu.Trigger class="target-context-trigger">
+                      <button
+                        class="target-row"
+                        class:is-active={target.id === editingId}
+                        type="button"
+                        on:click={() => loadTarget(target)}
+                      >
+                        <div class="target-row-primary">
+                          <strong>{target.label}</strong>
+                          <span class="helper-text">{target.baseUrl}</span>
+                        </div>
+                      </button>
+                    </ContextMenu.Trigger>
+                    <ContextMenu.Portal>
+                      <ContextMenu.Content class="select-content target-context-menu" sideOffset={6}>
+                        <ContextMenu.Item
+                          class="select-item target-context-menu-danger"
+                          onSelect={() => requestRemoveTarget(target)}
+                        >
+                          <Trash2 size={13} strokeWidth={1.85} />
+                          <span>Delete target</span>
+                        </ContextMenu.Item>
+                      </ContextMenu.Content>
+                    </ContextMenu.Portal>
+                  </ContextMenu.Root>
+                {/if}
               {/each}
             </div>
           {/if}
         </section>
 
-        <section class="card page-stack">
-          <div class="toolbar">
+        <section class="target-dialog-form">
+          <div class="field">
             <TextInputField
-              label="Connection URI Or Base URL"
+              label="Connection URI or base URL"
               bind:value={connectionInput}
               placeholder="memstation://127.0.0.1:8080?key=..."
-              help="URI parameters can prefill label, env, cluster, region, kind, and a temporary admin key."
-              error={formErrors.connection}
-              fieldClass="field-span-2"
+              help="URI parameters can prefill label and key=. New targets exchange the token once for a session."
+              error={locatorPreview.error ?? formErrors.connection}
             />
-
-            <div class="inline-group target-editor-actions">
-              <button class="button-secondary" type="button" disabled={!locatorPreview.target} on:click={applyLocatorPreview}>Apply URI</button>
-            </div>
-
-            {#if locatorPreview.error}
-              <div class="error-state">{locatorPreview.error}</div>
-            {:else if locatorPreview.target}
-              <div class="target-preview">
-                <div>
-                  <div class="sidebar-label">Resolved target</div>
-                  <div class="target-preview-primary">{locatorPreview.target.baseUrl}</div>
-                </div>
-                <div class="helper-text">
-                  {locatorPreview.target.label ?? 'Custom target'} · {locatorPreview.target.environment ?? defaultEnvironment}
-                  {#if locatorPreview.adminKey}
-                    · temporary admin key
-                  {/if}
-                </div>
-              </div>
-            {/if}
-
-            {#if saveError}
-              <div class="error-state">{saveError}</div>
-            {/if}
           </div>
 
-          <div class="form-grid two-up" style="margin-top: 16px;">
-            <TextInputField label="Label" bind:value={label} placeholder="Shanghai Primary" error={formErrors.label} />
-            <TextInputField label="Environment" bind:value={environment} placeholder="production" />
-            <TextInputField label="Cluster" bind:value={clusterName} placeholder="cluster-a" />
-            <TextInputField label="Region" bind:value={region} placeholder="ap-east-1" />
-            <SelectField label="Kind" bind:value={kind} items={kindItems} />
-          </div>
+          <TextInputField label="Label" bind:value={label} placeholder={locatorPreview.target?.label ?? 'Shanghai Primary'} error={formErrors.label} />
 
-          <div class="toolbar" style="margin-top: 16px;">
-            <div class="helper-text">`key=` stays in memory for this tab and is never written to browser storage.</div>
-            <div class="inline-group" style="justify-content: flex-end;">
-              {#if editingId}
-                <button class="button-danger" type="button" on:click={() => dispatch('remove', { id: editingId })}>Remove</button>
-              {/if}
-              <button class="button" type="button" on:click={saveTarget}>Save Target</button>
+          {#if !locatorPreview.adminKey}
+            <TextInputField
+              label="Admin token"
+              bind:value={adminKey}
+              type="password"
+              autocomplete="off"
+              placeholder="MEMSTATION_ADMIN_TOKEN"
+              help="Required when adding a new target unless the URI includes key=. The token is not saved in browser storage."
+              error={formErrors.adminKey}
+              inputClass="input-mono"
+            />
+          {/if}
+
+          {#if saveError}
+            <div class="error-state">{saveError}</div>
+          {/if}
+
+          <div class="target-dialog-footer">
+            <p class="helper-text">
+              Target metadata is saved locally; admin tokens are only exchanged for HttpOnly sessions.
+            </p>
+            <div class="inline-group">
+              <button class="btn-primary" type="button" on:click={saveTarget}>Save target</button>
             </div>
           </div>
         </section>
@@ -238,44 +283,192 @@
   </Dialog.Portal>
 </Dialog.Root>
 
+<AlertDialog.Root bind:open={removeConfirmOpen}>
+  <AlertDialog.Portal>
+    <AlertDialog.Overlay class="dialog-overlay target-remove-overlay" />
+    <AlertDialog.Content class="dialog-card target-remove-dialog">
+      <div class="target-remove-copy">
+        <AlertDialog.Title class="section-title" level={3}>Delete target?</AlertDialog.Title>
+        <AlertDialog.Description class="panel-meta">
+          Remove {removeTargetCandidate?.label ?? 'this target'} from this manager. The MemStation server and its data are not changed.
+        </AlertDialog.Description>
+      </div>
+      <div class="target-remove-summary">
+        <strong>{removeTargetCandidate?.label ?? 'Target'}</strong>
+        <span class="helper-text mono">{removeTargetCandidate?.baseUrl ?? ''}</span>
+      </div>
+      <div class="target-remove-actions">
+        <button class="btn-secondary" type="button" on:click={cancelRemoveTarget}>Cancel</button>
+        <button class="btn-danger" type="button" on:click={confirmRemoveTarget}>Delete target</button>
+      </div>
+    </AlertDialog.Content>
+  </AlertDialog.Portal>
+</AlertDialog.Root>
+
 <style>
-  .target-preview {
+  .target-dialog-body {
     display: grid;
-    gap: 6px;
-    padding: 14px 16px;
-    border: 1px solid var(--border-soft);
-    border-radius: var(--radius-md);
-    background: var(--bg-panel-muted);
+    grid-template-columns: 260px minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
   }
 
-  .target-preview-primary {
-    font-weight: 600;
+  .target-dialog-list {
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-muted);
+  }
+
+  .target-dialog-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .target-dialog-form {
+    display: grid;
+    gap: 12px;
   }
 
   .target-list {
     display: grid;
-    gap: 10px;
+    gap: 6px;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  :global(.target-context-trigger) {
+    display: block;
+    min-width: 0;
   }
 
   .target-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    padding: 14px 16px;
-    border: 1px solid var(--border-soft);
-    border-radius: var(--radius-md);
-    background: rgba(255, 255, 255, 0.82);
-    color: var(--text-primary);
+    gap: 12px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
     text-align: left;
+    cursor: pointer;
+    transition: border-color 120ms ease, background-color 120ms ease;
+  }
+
+  .target-row:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-hover);
   }
 
   .target-row.is-active {
-    border-color: rgba(15, 94, 168, 0.22);
-    background: rgba(18, 94, 168, 0.08);
+    border-color: var(--brand);
+    background: var(--brand-soft);
   }
 
-  .target-editor-actions {
+  .target-row.is-draft {
+    border-style: dashed;
+  }
+
+  :global(.target-context-menu) {
+    min-width: 170px;
+  }
+
+  :global(.target-context-menu-danger) {
+    gap: 8px;
+    color: var(--danger);
+  }
+
+  :global(.target-context-menu-danger[data-highlighted]),
+  :global(.target-context-menu-danger:hover) {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+
+  .target-row-primary {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .target-row-primary strong {
+    font-size: var(--font-size-md);
+    color: var(--text);
+  }
+
+  .target-row-primary .helper-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    max-width: 180px;
+  }
+
+  .target-dialog-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-top: 12px;
+    margin-top: 4px;
+    border-top: 1px solid var(--border);
+  }
+
+  .target-dialog-footer .helper-text {
+    max-width: 320px;
+  }
+
+
+  :global(.target-remove-overlay) {
+    z-index: 110;
+  }
+
+  :global(.target-remove-dialog) {
+    z-index: 120;
+    max-width: 420px;
+  }
+
+  .target-remove-copy {
+    display: grid;
+    gap: 4px;
+  }
+
+  .target-remove-summary {
+    display: grid;
+    gap: 4px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-muted);
+  }
+
+  .target-remove-summary .helper-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .target-remove-actions {
+    display: flex;
     justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  @media (max-width: 720px) {
+    .target-dialog-body {
+      grid-template-columns: 1fr;
+    }
+    .target-dialog-footer {
+      flex-direction: column;
+      align-items: stretch;
+    }
   }
 </style>

@@ -1,7 +1,7 @@
 import { browser } from '$app/environment';
+import { env } from '$env/dynamic/public';
 import { derived, get, writable } from 'svelte/store';
 
-import { forgetAdminKey, getAdminKey, rememberAdminKey } from '$lib/targets/admin-keys';
 import { parseTargetLocator } from '$lib/targets/uri';
 import type { AdminSessionState, MemStationTarget } from '$lib/types';
 
@@ -27,9 +27,6 @@ function stageInitialTarget(input: string | undefined): Partial<MemStationTarget
 
   try {
     const parsed = parseTargetLocator(value);
-    if (parsed.adminKey) {
-      rememberAdminKey('local-default', parsed.adminKey);
-    }
     return parsed.target;
   } catch (error) {
     console.warn('failed to parse PUBLIC_MEMSTATION_DEFAULT_TARGET', error);
@@ -37,17 +34,48 @@ function stageInitialTarget(input: string | undefined): Partial<MemStationTarget
   }
 }
 
+function disconnectedSession(targetId?: string): AdminSessionState {
+  return {
+    authenticated: false,
+    checking: false,
+    checkedAt: new Date().toISOString(),
+    error: targetId ? 'Connect this target.' : undefined
+  };
+}
+
+function sessionForTarget(targetId?: string): AdminSessionState {
+  if (!targetId) {
+    return { authenticated: false, checking: false };
+  }
+  return { authenticated: false, checking: true };
+}
+
 function defaultTarget(): MemStationTarget {
-  const staged = stageInitialTarget(import.meta.env.PUBLIC_MEMSTATION_DEFAULT_TARGET);
+  const staged = stageInitialTarget(env.PUBLIC_MEMSTATION_DEFAULT_TARGET);
+  if (!staged) {
+    return emptyTarget();
+  }
   const baseUrl = normalizeBaseUrl(staged?.baseUrl ?? 'http://localhost:8080');
   return {
     id: 'local-default',
     label: staged?.label?.trim() || 'Local Dev',
     baseUrl,
-    environment: staged?.environment?.trim() || 'local',
-    clusterName: staged?.clusterName?.trim() || 'standalone',
-    region: staged?.region?.trim() || 'local',
-    kind: staged?.kind ?? 'single'
+    environment: 'custom',
+    clusterName: 'standalone',
+    region: 'global',
+    kind: 'single'
+  };
+}
+
+function emptyTarget(): MemStationTarget {
+  return {
+    id: '',
+    label: '',
+    baseUrl: '',
+    environment: '',
+    clusterName: '',
+    region: '',
+    kind: 'single'
   };
 }
 
@@ -56,18 +84,19 @@ function initialState(): TargetState {
     return restoreStateFromStorage();
   }
   const target = defaultTarget();
+  const targets = target.id ? [target] : [];
   return {
     loaded: false,
-    targets: [target],
+    targets,
     selectedId: target.id,
-    session: { authenticated: false, checking: false }
+    session: sessionForTarget(target.id)
   };
 }
 
 export const targetState = writable<TargetState>(initialState());
 
 export const selectedTarget = derived(targetState, ($state) => {
-  return $state.targets.find((item) => item.id === $state.selectedId) ?? $state.targets[0] ?? defaultTarget();
+  return $state.targets.find((item) => item.id === $state.selectedId) ?? $state.targets[0] ?? emptyTarget();
 });
 
 function restoreStateFromStorage(): TargetState {
@@ -75,12 +104,14 @@ function restoreStateFromStorage(): TargetState {
   const rawTargets = window.localStorage.getItem(TARGETS_STORAGE_KEY);
   const rawSelected = window.localStorage.getItem(SELECTED_STORAGE_KEY);
 
-  let targets = [fallback];
+  let targets = fallback.id ? [fallback] : [];
   if (rawTargets) {
     try {
       const parsed = JSON.parse(rawTargets) as MemStationTarget[];
       if (Array.isArray(parsed) && parsed.length > 0) {
-        targets = parsed.map((item) => ({ ...item, baseUrl: normalizeBaseUrl(item.baseUrl) }));
+        targets = parsed
+          .filter((item) => item.id && item.baseUrl)
+          .map((item) => ({ ...item, baseUrl: normalizeBaseUrl(item.baseUrl) }));
       }
     } catch (error) {
       console.warn('failed to restore saved targets', error);
@@ -92,7 +123,7 @@ function restoreStateFromStorage(): TargetState {
     loaded: true,
     targets,
     selectedId,
-    session: { authenticated: false, checking: false }
+    session: sessionForTarget(selectedId)
   };
 }
 
@@ -113,10 +144,11 @@ function persistState(state: TargetState): void {
 
 export function selectTarget(targetId: string): void {
   targetState.update((state) => {
+    const selectedId = state.targets.some((item) => item.id === targetId) ? targetId : state.selectedId;
     const next = {
       ...state,
-      selectedId: state.targets.some((item) => item.id === targetId) ? targetId : state.selectedId,
-      session: { authenticated: false, checking: true }
+      selectedId,
+      session: sessionForTarget(selectedId)
     };
     persistState(next);
     return next;
@@ -131,10 +163,10 @@ export function upsertTarget(input: Partial<MemStationTarget>): MemStationTarget
       id: input.id ?? crypto.randomUUID(),
       label: input.label?.trim() || current?.label || 'Custom Target',
       baseUrl: normalizeBaseUrl(input.baseUrl ?? current?.baseUrl ?? defaultTarget().baseUrl),
-      environment: input.environment?.trim() || current?.environment || 'custom',
-      clusterName: input.clusterName?.trim() || current?.clusterName || 'standalone',
-      region: input.region?.trim() || current?.region || 'global',
-      kind: input.kind ?? current?.kind ?? 'single'
+      environment: 'custom',
+      clusterName: 'standalone',
+      region: 'global',
+      kind: 'single'
     };
 
     const targets = current
@@ -145,7 +177,7 @@ export function upsertTarget(input: Partial<MemStationTarget>): MemStationTarget
       ...state,
       targets,
       selectedId: nextTarget.id,
-      session: { authenticated: false, checking: true }
+      session: sessionForTarget(nextTarget.id)
     };
     persistState(next);
     savedTarget = nextTarget;
@@ -158,35 +190,59 @@ export function removeTarget(targetId: string): void {
   targetState.update((state) => {
     const fallback = defaultTarget();
     let targets = state.targets.filter((item) => item.id !== targetId);
-    if (targets.length === 0) {
+    if (targets.length === 0 && fallback.id) {
       targets = [fallback];
     }
-    const selectedId = targets.some((item) => item.id === state.selectedId) ? state.selectedId : targets[0].id;
+    const selectedId = targets.some((item) => item.id === state.selectedId) ? state.selectedId : (targets[0]?.id ?? '');
     const next = {
       ...state,
       targets,
-      selectedId
+      selectedId,
+      session: sessionForTarget(selectedId)
     };
     persistState(next);
     return next;
   });
-  forgetAdminKey(targetId);
+}
+
+export function clearAllTargets(): void {
+  const existing = get(targetState);
+  const next = {
+    ...existing,
+    targets: [],
+    selectedId: '',
+    session: { authenticated: false, checking: false }
+  };
+  targetState.set(next);
+  persistState(next);
 }
 
 export function updateSession(session: AdminSessionState): void {
   targetState.update((state) => ({ ...state, session }));
 }
 
-export function stageTargetAdminKey(targetId: string, adminKey: string | undefined): void {
-  rememberAdminKey(targetId, adminKey);
+export function markTargetSessionConnected(targetId: string, checkedAt = new Date().toISOString()): void {
+  targetState.update((state) => {
+    if (state.selectedId !== targetId) {
+      return state;
+    }
+    return {
+      ...state,
+      session: { authenticated: true, checking: false, checkedAt }
+    };
+  });
 }
 
-export function peekTargetAdminKey(targetId: string): string | undefined {
-  return getAdminKey(targetId);
-}
-
-export function clearTargetAdminKey(targetId: string): void {
-  forgetAdminKey(targetId);
+export function markTargetSessionDisconnected(targetId: string): void {
+  targetState.update((state) => {
+    if (state.selectedId !== targetId) {
+      return state;
+    }
+    return {
+      ...state,
+      session: disconnectedSession(targetId)
+    };
+  });
 }
 
 export function currentTarget(): MemStationTarget {

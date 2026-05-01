@@ -39,7 +39,6 @@ import type {
   UpdateUserSettingsResponse,
   UsageRecord
 } from '$lib/types';
-import { getAdminKey } from '$lib/targets/admin-keys';
 
 export interface GatewayRequestOptions {
   target: MemStationTarget;
@@ -65,6 +64,20 @@ export interface GatewayExchange {
   headers: GatewayHeaders;
   assistant: ChatThreadMessage;
   debug: GatewayDebugState;
+}
+
+export interface RawGatewayRequestOptions {
+  target: MemStationTarget;
+  apiKey: string;
+  protocol: GatewayProtocol;
+  provider?: string;
+  mode: GatewayMode;
+  sessionId: string;
+  memoryPersist: boolean;
+  injectContext: boolean;
+  injectTools: boolean;
+  toolWrite: boolean;
+  body: Record<string, unknown>;
 }
 
 interface GraphQLResponse<T> {
@@ -122,43 +135,55 @@ async function requestJSON<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 async function adminRequest<T>(target: MemStationTarget, path: string, init?: RequestInit): Promise<T> {
-  const adminKey = getAdminKey(target.id);
+  const headers = new Headers(init?.headers);
+  if (init?.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  headers.delete('Authorization');
   return requestJSON<T>(`${normalizeBaseUrl(target.baseUrl)}${path}`, {
-    credentials: 'include',
     ...init,
+    credentials: 'include',
+    headers
+  });
+}
+
+export async function loginAdmin(target: Pick<MemStationTarget, 'baseUrl'>, token: string): Promise<{ authenticated: boolean; checkedAt: string }> {
+  const payload = await requestJSON<{ authenticated: boolean; checkedAt?: string }>(`${normalizeBaseUrl(target.baseUrl)}/api/admin/login`, {
+    method: 'POST',
+    credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
-      ...(adminKey && !new Headers(init?.headers).has('Authorization')
-        ? { Authorization: `Bearer ${adminKey}` }
-        : {}),
-      ...(init?.headers ?? {})
-    }
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ token: token.trim() })
   });
-}
-
-export async function loginAdmin(target: MemStationTarget, token: string): Promise<void> {
-  await adminRequest(target, '/api/admin/login', {
-    method: 'POST',
-    body: JSON.stringify({ token })
-  });
-}
-
-export async function logoutAdmin(target: MemStationTarget): Promise<void> {
-  await adminRequest(target, '/api/admin/logout', {
-    method: 'POST',
-    body: JSON.stringify({})
-  });
+  if (!payload.authenticated) {
+    throw new Error('Admin token was rejected by the target.');
+  }
+  return {
+    authenticated: payload.authenticated,
+    checkedAt: new Date().toISOString()
+  };
 }
 
 export async function fetchAdminSession(target: MemStationTarget): Promise<AdminSessionState> {
+  if (!target.id || !target.baseUrl) {
+    return {
+      authenticated: false,
+      checking: false,
+      checkedAt: new Date().toISOString(),
+      error: target.id ? 'Connect this target.' : undefined
+    };
+  }
   try {
-    const payload = await adminRequest<{ authenticated: boolean }>(target, '/api/admin/session', {
+    const payload = await requestJSON<{ authenticated: boolean; error?: string; checkedAt?: string }>(`${normalizeBaseUrl(target.baseUrl)}/api/admin/session`, {
+      credentials: 'include',
       method: 'GET'
     });
     return {
       authenticated: payload.authenticated,
       checking: false,
-      checkedAt: new Date().toISOString()
+      checkedAt: payload.checkedAt ?? new Date().toISOString(),
+      error: payload.error
     };
   } catch (error) {
     return {
@@ -168,6 +193,13 @@ export async function fetchAdminSession(target: MemStationTarget): Promise<Admin
       error: error instanceof Error ? error.message : 'session check failed'
     };
   }
+}
+
+export function logoutAdmin(target: Pick<MemStationTarget, 'baseUrl'>): Promise<{ authenticated: boolean }> {
+  return requestJSON<{ authenticated: boolean }>(`${normalizeBaseUrl(target.baseUrl)}/api/admin/logout`, {
+    method: 'POST',
+    credentials: 'include'
+  });
 }
 
 export function fetchOverview(target: MemStationTarget): Promise<DashboardOverview> {
@@ -309,9 +341,9 @@ export function fetchMemoryPreview(
   });
 }
 
-export function fetchHealth(target: MemStationTarget, path: '/health/live' | '/health/ready'): Promise<HealthPayload> {
+export function fetchHealth(target: Pick<MemStationTarget, 'baseUrl'>, path: '/health/live' | '/health/ready'): Promise<HealthPayload> {
   return requestJSON<HealthPayload>(`${normalizeBaseUrl(target.baseUrl)}${path}`, {
-    credentials: 'include'
+    credentials: 'omit'
   });
 }
 
@@ -667,6 +699,7 @@ export async function requestGatewayExchange(options: GatewayRequestOptions): Pr
 
   const response = await fetch(`${normalizeBaseUrl(target.baseUrl)}${gatewayPath(protocol)}`, {
     method: 'POST',
+    credentials: 'omit',
     headers,
     body: JSON.stringify(body)
   });
@@ -691,6 +724,15 @@ export async function requestGatewayExchange(options: GatewayRequestOptions): Pr
   return { headers: gatewayHeaders, assistant, debug };
 }
 
+export function requestGatewayRaw(options: RawGatewayRequestOptions): Promise<Response> {
+  return fetch(`${normalizeBaseUrl(options.target.baseUrl)}${gatewayPath(options.protocol)}`, {
+    method: 'POST',
+    credentials: 'omit',
+    headers: buildRawGatewayHeaders(options),
+    body: JSON.stringify(options.body)
+  });
+}
+
 function buildGatewayHeaders(options: GatewayRequestOptions): Record<string, string> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${options.apiKey}`,
@@ -702,6 +744,23 @@ function buildGatewayHeaders(options: GatewayRequestOptions): Record<string, str
     'X-MemStation-Tool-Write': String(options.toolWrite),
     'X-MemStation-Memory-Persist': String(options.memoryPersist),
     'X-MemStation-End-Conversation': String(Boolean(options.endConversation))
+  };
+  if (options.provider?.trim()) {
+    headers['X-MemStation-Provider'] = options.provider.trim();
+  }
+  return headers;
+}
+
+function buildRawGatewayHeaders(options: RawGatewayRequestOptions): Record<string, string> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${options.apiKey}`,
+    'Content-Type': 'application/json',
+    'X-MemStation-Mode': options.mode,
+    'X-MemStation-Session': options.sessionId,
+    'X-MemStation-Memory-Persist': String(options.memoryPersist),
+    'X-MemStation-Inject-Context': String(options.injectContext),
+    'X-MemStation-Inject-Tools': String(options.injectTools),
+    'X-MemStation-Tool-Write': String(options.toolWrite)
   };
   if (options.provider?.trim()) {
     headers['X-MemStation-Provider'] = options.provider.trim();

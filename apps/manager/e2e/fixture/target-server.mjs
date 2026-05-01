@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { argon2Sync, randomUUID, timingSafeEqual } from 'node:crypto';
 
 const host = '127.0.0.1';
 const port = Number(process.env.PORT || '18080');
@@ -240,6 +240,43 @@ function cookies(req) {
 
 function isAdmin(req) {
   return cookies(req)[sessionCookieName] === sessionCookieValue;
+}
+
+function verifyAdminTokenHash(token, credential) {
+  const prefix = '$memstation-admin-argon2id$';
+  if (!credential.startsWith(prefix)) {
+    return false;
+  }
+  const parts = credential.slice(prefix.length).split('$');
+  if (parts.length !== 4 || parts[0] !== 'v=19') {
+    return false;
+  }
+
+  const params = Object.fromEntries(
+    parts[1].split(',').map((part) => {
+      const [key, value] = part.split('=');
+      return [key, Number(value)];
+    })
+  );
+  const salt = Buffer.from(parts[2], 'base64');
+  const expected = Buffer.from(parts[3], 'base64');
+  if (!params.m || !params.t || !params.p || !salt.length || !expected.length) {
+    return false;
+  }
+
+  try {
+    const actual = argon2Sync('argon2id', {
+      message: Buffer.from(token),
+      nonce: salt,
+      parallelism: params.p,
+      tagLength: expected.length,
+      memory: params.m,
+      passes: params.t
+    });
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+  } catch {
+    return false;
+  }
 }
 
 function ensureAdmin(req, res) {
@@ -1721,7 +1758,7 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'POST' && url.pathname === '/api/admin/login') {
     const body = await readJSON(req);
-    if (body.token !== adminToken) {
+    if (body.token !== adminToken && !verifyAdminTokenHash(adminToken, String(body.token || ''))) {
       json(req, res, { error: { message: 'invalid admin token' } }, 401);
       return;
     }

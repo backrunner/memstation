@@ -1,11 +1,31 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vitest/config';
 
+const devProxyTarget = process.env.MEMSTATION_MANAGER_DEV_PROXY_TARGET?.trim();
+
+function managerDevProxy() {
+  if (!devProxyTarget) {
+    return undefined;
+  }
+
+  return Object.fromEntries(
+    ['/api', '/health', '/graphql', '/v1'].map((path) => [
+      path,
+      {
+        target: devProxyTarget,
+        changeOrigin: true,
+        secure: false
+      }
+    ])
+  );
+}
+
 export default defineConfig({
   plugins: [sveltekit()],
   server: {
     host: '0.0.0.0',
-    port: 3000
+    port: 3000,
+    proxy: managerDevProxy()
   },
   test: {
     include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
