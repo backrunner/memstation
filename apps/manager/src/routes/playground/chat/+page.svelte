@@ -13,6 +13,7 @@
   import ChatMessageCard from '$lib/components/ChatMessageCard.svelte';
   import JsonView from '$lib/components/JsonView.svelte';
   import MemoryKeywordSignals from '$lib/components/MemoryKeywordSignals.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import SegmentedField from '$lib/components/SegmentedField.svelte';
   import SelectField from '$lib/components/SelectField.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -917,6 +918,11 @@
     return parts.join(' · ');
   }
 
+  function threadCountLabel(thread: ChatPlaygroundThreadDraft): string {
+    const count = thread.messages.length;
+    return `${count} msg${count === 1 ? '' : 's'}`;
+  }
+
   function usageSummary(usage?: UsageRecord): string {
     if (!usage) {
       return 'No usage yet';
@@ -1004,9 +1010,6 @@
       protocolLabel(protocol),
       modeLabel(mode)
     ];
-    if ($selectedTarget?.environment) {
-      parts.push($selectedTarget.environment);
-    }
     return parts.join(' · ');
   }
 
@@ -1035,109 +1038,121 @@
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <div class="page-stack playground-hero-copy">
-      <h1 class="page-title">Chat Playground</h1>
-      <div class="subtle-text">{playgroundStatusLine()}</div>
-    </div>
-  </div>
+  <PageHeader
+    eyebrow="Playground"
+    title="Chat"
+    subtitle={playgroundStatusLine()}
+    description="Send live gateway turns to validate proxy, injection, memory generation, and tool chain behavior."
+  />
 
   <div class="chat-studio">
     <section class="card chat-shell">
-      <div class="chat-shell-header">
-        <div class="chat-shell-title">
-          <h2 class="section-title">Thread</h2>
-          <div class="subtle-text">{threadMetaLine()}</div>
+      <aside class="chat-history-panel" aria-label="Conversation history">
+        <div class="chat-history-header">
+          <div class="chat-history-title">
+            <h2 class="section-title">History</h2>
+            <div class="panel-meta">{pluralize(threads.length, 'thread')}</div>
+          </div>
+          <button class="btn-secondary btn-sm" type="button" aria-label="New thread" on:click={createNewThread}>New</button>
         </div>
-        <div class="inline-group chat-thread-actions" style="justify-content: flex-end; flex-wrap: wrap;">
-          <button class="button-ghost" type="button" on:click={createNewThread}>New thread</button>
-          <button class="button-secondary" type="button" disabled={threadStatus === 'generating'} on:click={resetThread}>Reset</button>
+
+        <div class="chat-history-list" role="tablist" aria-label="Playground conversations">
+          {#each threads as thread}
+            <button
+              class:active-thread-pill={thread.threadId === activeThreadId}
+              class="thread-pill"
+              type="button"
+              role="tab"
+              aria-selected={thread.threadId === activeThreadId}
+              title={thread.sessionId}
+              on:click={() => activateThread(thread.threadId)}
+            >
+              <span class="thread-pill-title">{threadTitle(thread)}</span>
+              <span class="thread-pill-meta">{threadSubtitle(thread)}</span>
+              <span class="thread-pill-foot">
+                <span>{threadCountLabel(thread)}</span>
+                {#if isThreadGenerating(thread)}
+                  <span class="thread-pill-status">Streaming</span>
+                {:else if thread.status === 'failed' && thread.error}
+                  <span class="thread-pill-status thread-pill-status-danger">Failed</span>
+                {/if}
+              </span>
+            </button>
+          {/each}
         </div>
-      </div>
+      </aside>
 
-      <div class="thread-strip" role="tablist" aria-label="Playground conversations">
-        {#each threads as thread}
-          <button
-            class:active-thread-pill={thread.threadId === activeThreadId}
-            class="thread-pill"
-            type="button"
-            role="tab"
-            aria-selected={thread.threadId === activeThreadId}
-            title={thread.sessionId}
-            on:click={() => activateThread(thread.threadId)}
-          >
-            <span class="thread-pill-title">{threadTitle(thread)}</span>
-            <span class="thread-pill-meta">{threadSubtitle(thread)}</span>
-            {#if isThreadGenerating(thread)}
-              <span class="thread-pill-status">Streaming in background</span>
-            {:else if thread.status === 'failed' && thread.error}
-              <span class="thread-pill-status thread-pill-status-danger">{thread.error}</span>
-            {/if}
-          </button>
-        {/each}
-      </div>
+      <div class="chat-conversation-panel">
+        <div class="chat-shell-header">
+          <div class="chat-shell-title">
+            <h2 class="section-title">Conversation</h2>
+            <div class="panel-meta">{threadMetaLine()}</div>
+          </div>
+          <button class="btn-secondary btn-sm" type="button" disabled={threadStatus === 'generating'} on:click={resetThread}>Reset</button>
+        </div>
 
-      <div class="chat-thread-surface panel">
-        <ScrollArea.Root style="height: 100%;">
-          <ScrollArea.Viewport class="chat-thread-viewport">
-            <div class="chat-list">
-              {#if messages.length === 0}
-                <div class="chat-empty-state">
-                  <div class="chat-empty-title">Start a conversation</div>
-                  <div class="subtle-text">Send a live gateway turn and inspect memory behavior in real time.</div>
-                </div>
-              {:else}
-                {#each messages as message}
-                  <ChatMessageCard {message} />
-                {/each}
-              {/if}
-              <div bind:this={messageEndAnchor}></div>
+        <div class="chat-thread-surface">
+          <ScrollArea.Root style="height: 100%;">
+            <ScrollArea.Viewport class="chat-thread-viewport">
+              <div class="chat-list">
+                {#if messages.length === 0}
+                  <div class="chat-empty-state">
+                    <div class="chat-empty-title">Start a conversation</div>
+                    <div class="subtle-text">Send a live gateway turn and inspect memory behavior in real time.</div>
+                  </div>
+                {:else}
+                  {#each messages as message}
+                    <ChatMessageCard {message} />
+                  {/each}
+                {/if}
+                <div bind:this={messageEndAnchor}></div>
+              </div>
+            </ScrollArea.Viewport>
+            <ScrollArea.Scrollbar orientation="vertical">
+              <ScrollArea.Thumb />
+            </ScrollArea.Scrollbar>
+          </ScrollArea.Root>
+        </div>
+
+        <form class="chat-composer-card" on:submit|preventDefault={() => submit(false)}>
+          <textarea
+            class="chat-composer-input"
+            bind:value={input}
+            placeholder="Message the target, test memory recall, or inspect persistence."
+            on:keydown={handleComposerKeydown}
+          ></textarea>
+          {#if error}
+            <div class="field-error">{error}</div>
+          {/if}
+          <div class="chat-composer-footer">
+            <div class="chat-composer-meta">
+              <span>{messages.length} message{messages.length === 1 ? '' : 's'}</span>
+              <span>Ctrl/Cmd + Enter to send</span>
             </div>
-          </ScrollArea.Viewport>
-          <ScrollArea.Scrollbar orientation="vertical">
-            <ScrollArea.Thumb />
-          </ScrollArea.Scrollbar>
-        </ScrollArea.Root>
+            <div class="inline-group">
+              <button class="btn-ghost btn-sm" type="button" disabled={threadStatus === 'generating'} on:click={() => submit(true)}>
+                Send &amp; end
+              </button>
+              <button class="btn-primary" type="submit" disabled={threadStatus === 'generating' || !input.trim()}>
+                {threadStatus === 'generating' ? 'Generating…' : 'Send'}
+              </button>
+            </div>
+          </div>
+        </form>
       </div>
-
-      <form class="chat-composer-card" on:submit|preventDefault={() => submit(false)}>
-        <textarea
-          class="chat-composer-input"
-          bind:value={input}
-          placeholder="Message the target, test memory recall, or inspect persistence."
-          on:keydown={handleComposerKeydown}
-        ></textarea>
-        {#if error}
-          <div class="field-error">{error}</div>
-        {/if}
-        <div class="chat-composer-footer">
-          <div class="chat-composer-meta">
-            <span>{messages.length} message{messages.length === 1 ? '' : 's'}</span>
-            <span>Ctrl/Cmd + Enter to send</span>
-          </div>
-          <div class="inline-group">
-            <button class="button-ghost" type="button" disabled={threadStatus === 'generating'} on:click={() => submit(true)}>
-              Send and End
-            </button>
-            <button class="button" type="submit" disabled={threadStatus === 'generating' || !input.trim()}>
-              {threadStatus === 'generating' ? 'Generating...' : 'Send'}
-            </button>
-          </div>
-        </div>
-      </form>
     </section>
 
     <aside class="chat-inspector-rail">
       <section class="card inspector-card">
         <div class="page-header playground-inspector-header">
-          <div class="page-stack playground-heading-stack">
+          <div class="page-header-meta playground-heading-stack">
             <h2 class="section-title">Run</h2>
             <div class="panel-meta">{runMetaLine()}</div>
           </div>
         </div>
 
         <div class="playground-form-stack">
-          <div class="compact-field-grid playground-run-grid">
+          <div class="playground-run-grid">
             <TextInputField label="Gateway API key" bind:value={apiKey} type="password" autocomplete="off" placeholder="ms-..." />
             <TextInputField label="Model" bind:value={model} placeholder="Configured model name" />
             <SelectField
@@ -1160,10 +1175,10 @@
           <SegmentedField label="Mode" bind:value={mode} items={modeItems} />
 
           <div class="playground-switch-grid">
-            <SwitchField bind:checked={injectContext} label="Inject Context" />
-            <SwitchField bind:checked={injectTools} label="Inject Tools" />
-            <SwitchField bind:checked={toolWrite} label="Tool Memory Write" />
-            <SwitchField bind:checked={memoryPersist} label="Memory Persist" />
+            <SwitchField bind:checked={injectContext} label="Inject context" />
+            <SwitchField bind:checked={injectTools} label="Inject tools" />
+            <SwitchField bind:checked={toolWrite} label="Tool memory write" />
+            <SwitchField bind:checked={memoryPersist} label="Memory persist" />
             <SwitchField bind:checked={stream} label="Stream" />
           </div>
         </div>
@@ -1171,7 +1186,7 @@
 
       <section class="card inspector-card playground-inspect-card">
         <div class="page-header playground-inspector-header">
-          <div class="page-stack playground-heading-stack">
+          <div class="page-header-meta playground-heading-stack">
             <h2 class="section-title">Inspect</h2>
             <div class="panel-meta">{usageSummary(messages[messages.length - 1]?.usage)}</div>
           </div>
@@ -1185,19 +1200,19 @@
             <Tabs.Trigger class="tabs-trigger" value="raw">Raw</Tabs.Trigger>
           </Tabs.List>
 
-          <Tabs.Content value="request" class="page-stack" style="margin-top: 14px;">
-            <div class="page-stack playground-inspect-panel">
+          <Tabs.Content value="request" class="page-stack" style="margin-top: 12px;">
+            <div class="playground-inspect-panel">
               {#if !$targetState.session.authenticated}
-                <div class="notice-card">Sign in to inspect injected memory.</div>
+                <div class="notice-card">Connect a target token to inspect injected memory.</div>
               {:else if injectedMemory}
                 {#if injectionItems(injectedMemory).length > 0}
-                  <div class="toolbar">
+                  <div class="stack-list">
                     {#each injectionItems(injectedMemory) as item, index}
-                      <div class="debug-block" style="background: var(--bg-panel-muted);">
-                        <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
-                          <div class="page-stack" style="gap: 4px;">
+                      <div class="debug-block debug-block-muted">
+                        <div class="inline-group" style="justify-content: space-between;">
+                          <div class="page-header-meta">
                             <strong>{String(item.type ?? 'memory')}</strong>
-                            <div class="subtle-text">
+                            <div class="helper-text">
                               {#if item.injection_bucket}
                                 {String(item.injection_bucket)}
                               {/if}
@@ -1206,10 +1221,10 @@
                               {/if}
                             </div>
                           </div>
-                          <span class="subtle-text">#{index + 1}</span>
+                          <span class="helper-text mono">#{index + 1}</span>
                         </div>
                         <div class="message-body">{String(item.content ?? '')}</div>
-                        <div class="helper-text" style="margin-top: 10px;">
+                        <div class="helper-text mono">
                           semantic {numericLabel(item.score)} · effective {numericLabel(item.effective_score)} · importance {numericLabel(item.importance)} · decay {numericLabel(item.decay_factor)}
                         </div>
                         <div class="helper-text">
@@ -1225,7 +1240,7 @@
                   <Collapsible.Root>
                     <Collapsible.Trigger class="collapsible-trigger">Payload</Collapsible.Trigger>
                     <Collapsible.Content>
-                      <div class="toolbar" style="margin-top: 10px;">
+                      <div style="margin-top: 8px;">
                         <JsonView value={injectedMemory} />
                       </div>
                     </Collapsible.Content>
@@ -1239,26 +1254,26 @@
             </div>
           </Tabs.Content>
 
-          <Tabs.Content value="extracted" class="page-stack" style="margin-top: 14px;">
-            <div class="page-stack playground-inspect-panel">
+          <Tabs.Content value="extracted" class="page-stack" style="margin-top: 12px;">
+            <div class="playground-inspect-panel">
               {#if !$targetState.session.authenticated}
-                <div class="notice-card">Sign in to inspect extracted memory.</div>
+                <div class="notice-card">Connect a target token to inspect extracted memory.</div>
               {:else if debugMemoryPersistMode}
-                <div class="toolbar">
+                <div class="inline-group" style="justify-content: space-between;">
                   <div class="inline-group">
                     <StatusBadge tone={conversationDetail?.summary_status === 'completed' ? 'success' : conversationDetail?.summary_status === 'failed' ? 'danger' : conversationDetail?.summary_status === 'skipped' ? 'muted' : 'warning'} label={`summary ${conversationDetail?.summary_status ?? 'n/a'}`} />
                     <StatusBadge tone={conversationDetail?.analysis_status === 'completed' ? 'success' : conversationDetail?.analysis_status === 'failed' ? 'danger' : conversationDetail?.analysis_status === 'skipped' ? 'muted' : 'warning'} label={`analysis ${conversationDetail?.analysis_status ?? 'n/a'}`} />
                   </div>
-                  <button class="button-secondary" type="button" on:click={() => refreshDebugPanels()}>Refresh memory</button>
+                  <button class="btn-secondary btn-sm" type="button" on:click={() => refreshDebugPanels()}>Refresh</button>
                 </div>
                 {#if (conversationMemory?.documents.length ?? 0) > 0 || (conversationMemory?.key_memories.length ?? 0) > 0}
-                  <div class="toolbar">
+                  <div class="stack-list">
                     {#each conversationMemory?.documents ?? [] as item}
-                      <div class="debug-block" style="background: var(--bg-panel-muted);">
-                        <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
-                          <div class="page-stack" style="gap: 4px;">
+                      <div class="debug-block debug-block-muted">
+                        <div class="inline-group" style="justify-content: space-between;">
+                          <div class="page-header-meta">
                             <strong>{item.type}</strong>
-                            <div class="subtle-text">
+                            <div class="helper-text">
                               {#if item.time_tier}
                                 {item.time_tier}
                               {/if}
@@ -1267,10 +1282,10 @@
                               {/if}
                             </div>
                           </div>
-                          <span class="subtle-text">{item.id}</span>
+                          <span class="helper-text mono">{item.id}</span>
                         </div>
                         <div class="message-body">{item.content}</div>
-                        <div class="helper-text">
+                        <div class="helper-text mono">
                           activity {dateTimeLabel(item.activity_at)} · importance {numericLabel(item.importance)} · decay {numericLabel(item.decay_factor)}
                         </div>
                         <MemoryKeywordSignals
@@ -1280,11 +1295,11 @@
                       </div>
                     {/each}
                     {#each conversationMemory?.key_memories ?? [] as item}
-                      <div class="debug-block" style="background: var(--bg-panel-muted);">
-                        <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
-                          <div class="page-stack" style="gap: 4px;">
+                      <div class="debug-block debug-block-muted">
+                        <div class="inline-group" style="justify-content: space-between;">
+                          <div class="page-header-meta">
                             <strong>{item.key}</strong>
-                            <div class="subtle-text">
+                            <div class="helper-text">
                               {#if item.time_tier}
                                 {item.time_tier}
                               {/if}
@@ -1293,10 +1308,10 @@
                               {/if}
                             </div>
                           </div>
-                          <span class="subtle-text">{item.id}</span>
+                          <span class="helper-text mono">{item.id}</span>
                         </div>
                         <div class="message-body">{item.value}</div>
-                        <div class="helper-text">
+                        <div class="helper-text mono">
                           activity {dateTimeLabel(item.activity_at)} · importance {numericLabel(item.importance)} · decay {numericLabel(item.decay_factor)}
                         </div>
                       </div>
@@ -1314,17 +1329,17 @@
             </div>
           </Tabs.Content>
 
-          <Tabs.Content value="diff" class="page-stack" style="margin-top: 14px;">
-            <div class="page-stack playground-inspect-panel">
+          <Tabs.Content value="diff" class="page-stack" style="margin-top: 12px;">
+            <div class="playground-inspect-panel">
               {#if completedTurns === 0}
                 <div class="empty-state">Send a request to compare memory changes.</div>
               {:else}
-                <div class="toolbar">
+                <div class="inline-group" style="justify-content: space-between;">
                   <div class="inline-group">
-                    <StatusBadge tone={turnDiff.changeCount > 0 ? 'brand' : 'muted'} label={turnDiff.changeCount > 0 ? pluralize(turnDiff.changeCount, 'change') : 'No change detected'} />
-                    <StatusBadge tone={debugMemoryPersistMode ? 'success' : 'warning'} label={debugMemoryPersistMode ? 'Persisted flow' : 'Preview flow'} />
+                    <StatusBadge tone={turnDiff.changeCount > 0 ? 'brand' : 'muted'} label={turnDiff.changeCount > 0 ? pluralize(turnDiff.changeCount, 'change') : 'No change'} />
+                    <StatusBadge tone={debugMemoryPersistMode ? 'success' : 'warning'} label={debugMemoryPersistMode ? 'Persist' : 'Preview'} />
                   </div>
-                  <div class="helper-text">Latest turn #{completedTurns}: {latestTurnPrompt}</div>
+                  <div class="helper-text">Turn #{completedTurns}: {latestTurnPrompt}</div>
                 </div>
 
                 {#if turnDiff.sections.length === 0}
@@ -1332,10 +1347,10 @@
                 {:else}
                   {#each turnDiff.sections as section}
                     <section class="memory-diff-section">
-                      <div class="page-header" style="margin-bottom: 12px;">
-                        <div>
-                          <div class="section-title" style="font-size: 1rem;">{section.title}</div>
-                          <div class="field-help">{section.description}</div>
+                      <div class="page-header">
+                        <div class="page-header-meta">
+                          <h3 class="section-title" style="font-size: var(--font-size-md);">{section.title}</h3>
+                          <div class="helper-text">{section.description}</div>
                         </div>
                         <StatusBadge tone="brand" label={pluralize(section.entries.length, 'change')} />
                       </div>
@@ -1344,14 +1359,14 @@
                         {#each section.entries as entry}
                           <article class={`memory-diff-card ${entry.change}`}>
                             <div class="memory-diff-header">
-                              <div class="page-stack" style="gap: 4px;">
-                                <div class="inline-group" style="gap: 8px;">
+                              <div class="page-header-meta">
+                                <div class="inline-group">
                                   <strong>{entry.title}</strong>
                                   <StatusBadge tone={changeTone(entry.change)} label={changeLabel(entry.change)} />
                                   <StatusBadge tone="muted" label={kindLabel(entry.kind)} />
                                 </div>
                                 {#if entry.subtitle}
-                                  <span class="subtle-text">{entry.subtitle}</span>
+                                  <span class="helper-text">{entry.subtitle}</span>
                                 {/if}
                               </div>
                             </div>
@@ -1390,16 +1405,16 @@
             </div>
           </Tabs.Content>
 
-          <Tabs.Content value="raw" class="page-stack" style="margin-top: 14px;">
-            <div class="page-stack playground-inspect-panel">
-              <div class="debug-block" style="background: var(--bg-panel-muted);">
+          <Tabs.Content value="raw" class="page-stack" style="margin-top: 12px;">
+            <div class="playground-inspect-panel">
+              <div class="debug-block debug-block-muted">
                 <div class="field-label">Response headers</div>
                 <JsonView value={gatewayHeaders} />
               </div>
               <Collapsible.Root>
                 <Collapsible.Trigger class="collapsible-trigger">Request</Collapsible.Trigger>
                 <Collapsible.Content>
-                  <div class="toolbar" style="margin-top: 10px;">
+                  <div style="margin-top: 8px;">
                     <JsonView value={{ headers: debug.requestHeaders, body: debug.requestBody }} />
                   </div>
                 </Collapsible.Content>
@@ -1407,7 +1422,7 @@
               <Collapsible.Root>
                 <Collapsible.Trigger class="collapsible-trigger">Raw events ({debug.rawEvents.length})</Collapsible.Trigger>
                 <Collapsible.Content>
-                  <div class="toolbar" style="margin-top: 10px;">
+                  <div style="margin-top: 8px;">
                     <JsonView value={debug.rawEvents} emptyLabel="No raw protocol events captured." />
                   </div>
                 </Collapsible.Content>
@@ -1421,63 +1436,5 @@
 </section>
 
 <style>
-  .thread-strip {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 10px;
-    margin-bottom: 14px;
-  }
-
-  .thread-pill {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-    min-height: 88px;
-    padding: 14px 16px;
-    border: 1px solid var(--border-soft);
-    border-radius: 18px;
-    background: var(--bg-panel-muted);
-    color: var(--text-primary);
-    text-align: left;
-    transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
-  }
-
-  .thread-pill:hover {
-    transform: translateY(-1px);
-    border-color: rgba(15, 94, 168, 0.22);
-  }
-
-  .thread-pill.active-thread-pill {
-    border-color: rgba(15, 94, 168, 0.28);
-    box-shadow: inset 0 0 0 1px rgba(15, 94, 168, 0.16);
-    background: linear-gradient(180deg, rgba(216, 232, 248, 0.9), rgba(255, 255, 255, 0.95));
-  }
-
-  .thread-pill-title,
-  .thread-pill-meta,
-  .thread-pill-status {
-    width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .thread-pill-title {
-    font-weight: 600;
-  }
-
-  .thread-pill-meta {
-    color: var(--text-secondary);
-    font-size: 0.92rem;
-  }
-
-  .thread-pill-status {
-    color: var(--text-muted);
-    font-size: 0.84rem;
-  }
-
-  .thread-pill-status-danger {
-    color: var(--danger);
-  }
+  /* Chat-specific styling lives in app.css. Component-local overrides go here if needed. */
 </style>

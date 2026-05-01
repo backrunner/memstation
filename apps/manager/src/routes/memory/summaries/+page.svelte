@@ -6,6 +6,7 @@
 
   import { fetchAdminMemoryDocuments, updateAdminMemoryDocument } from '$lib/api/client';
   import MemoryWorkspaceNav from '$lib/components/MemoryWorkspaceNav.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import { memoryDetailHref } from '$lib/memory/routes';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
@@ -172,30 +173,32 @@
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <span class="sidebar-label">Memory / Summaries</span>
-    <h1 class="page-title">Summaries</h1>
-    <p class="page-description">Summaries are the primary rollup layer used to condense conversations into retrievable memory nodes and downstream keyword extraction.</p>
-    {#if activeUserId}
-      <div class="helper-text">Scoped to user `{activeUserId}`.</div>
-    {/if}
-  </div>
+  <PageHeader
+    eyebrow="Inspect / Memory"
+    title="Summaries"
+    description="Primary rollup layer that condenses conversations into retrievable memory nodes."
+    subtitle={activeUserId ? `Scoped to user ${activeUserId}` : ''}
+  />
 
   <MemoryWorkspaceNav current="/memory/summaries" />
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required to inspect summary records.</div>
+    <div class="notice-card">Connect this target to inspect summary records.</div>
   {:else if error}
     <div class="error-state">{error}</div>
   {:else if loading}
-    <div class="notice-card">Loading summary records...</div>
+    <div class="notice-card">Loading summary records…</div>
   {:else}
     {#if success}
-      <div class="notice-card">{success}</div>
+      <div class="notice-card is-success">{success}</div>
     {/if}
     <section class="card page-stack">
       <div class="filters two-up">
-        <TextInputField label="Filter Summaries" bind:value={filter} placeholder="topic label, incident, preference, project name..." />
+        <TextInputField
+          label="Filter"
+          bind:value={filter}
+          placeholder="topic label, incident, preference, project name…"
+        />
         <div class="field" style="align-self: end;">
           <div class="helper-text">{visibleSummaries.length} of {summaries.length} summaries visible</div>
         </div>
@@ -203,34 +206,60 @@
       {#if visibleSummaries.length === 0}
         <div class="empty-state">No summaries match the current filter.</div>
       {:else}
-        <div class="toolbar">
+        <div class="stack-list">
           {#each visibleSummaries as summary}
-            <div class="debug-block">
-              <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px;">
-                <div>
+            <article class="summary-card">
+              <header class="summary-head">
+                <div class="summary-head-main">
                   <strong>{typeof summary.metadata?.topic_label === 'string' ? summary.metadata.topic_label : 'Summary'}</strong>
-                  <div class="subtle-text">{summary.id}</div>
+                  <span class="helper-text mono">{summary.id}</span>
                 </div>
-                <div class="inline-group" style="gap: 8px;">
+                <div class="inline-group">
                   <StatusBadge tone="muted" label={summary.conversation_id ? 'conversation-linked' : 'manual'} />
-                  <a class="button-ghost" href={memoryDetailHref('summaries', summary.id, activeUserId)}>Open</a>
+                  <a class="btn-ghost btn-sm" href={memoryDetailHref('summaries', summary.id, activeUserId)}>Open</a>
                   {#if editingId === summary.id}
-                    <button class="button-ghost" type="button" on:click={cancelEdit}>Cancel</button>
-                    <button class="button" type="button" disabled={saving} on:click={() => saveEdit(summary)}>{saving ? 'Saving...' : 'Save'}</button>
+                    <button class="btn-ghost btn-sm" type="button" on:click={cancelEdit}>Cancel</button>
+                    <button class="btn-primary btn-sm" type="button" disabled={saving} on:click={() => saveEdit(summary)}>
+                      {saving ? 'Saving…' : 'Save'}
+                    </button>
                   {:else}
-                    <button class="button-ghost" type="button" on:click={() => startEdit(summary)}>Edit</button>
+                    <button class="btn-secondary btn-sm" type="button" on:click={() => startEdit(summary)}>Edit</button>
                   {/if}
                 </div>
-              </div>
+              </header>
               {#if editingId === summary.id}
-                <TextareaField label="Summary Content" bind:value={draftContent} rows={7} />
+                <TextareaField label="Summary content" bind:value={draftContent} rows={6} />
               {:else}
                 <div class="message-body">{summary.content}</div>
               {/if}
-            </div>
+            </article>
           {/each}
         </div>
       {/if}
     </section>
   {/if}
 </section>
+
+<style>
+  .summary-card {
+    display: grid;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+
+  .summary-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .summary-head-main {
+    display: grid;
+    gap: 2px;
+  }
+</style>

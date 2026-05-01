@@ -6,8 +6,16 @@
   import { fetchAudit, fetchConversations, fetchOverview, fetchQueues, fetchUsers } from '$lib/api/client';
   import EChart from '$lib/components/EChart.svelte';
   import KpiCard from '$lib/components/KpiCard.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
+  import StatusBadge from '$lib/components/StatusBadge.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { AuditEventRecord, ConversationListItem, DashboardOverview, QueueInfo, UserSummary } from '$lib/types';
+  import type {
+    AuditEventRecord,
+    ConversationListItem,
+    DashboardOverview,
+    QueueInfo,
+    UserSummary
+  } from '$lib/types';
 
   let loading = true;
   let error = '';
@@ -56,30 +64,45 @@
 
   $: totalTokens = users.reduce((sum, user) => sum + user.total_tokens, 0);
   $: pendingTasks = queues.reduce((sum, item) => sum + (item.pending ?? 0), 0);
-  $: recentConversations = conversations.filter((item) => Date.now() - new Date(item.updated_at).getTime() <= range * 24 * 60 * 60 * 1000);
+  $: retryTasks = queues.reduce((sum, item) => sum + (item.retry ?? 0), 0);
+  $: keyMemoryTotal = users.reduce((sum, user) => sum + (user.key_memory_count ?? 0), 0);
+  $: recentConversations = conversations.filter(
+    (item) => Date.now() - new Date(item.updated_at).getTime() <= range * 24 * 60 * 60 * 1000
+  );
   $: tokenTrend = buildTrend(recentConversations, range);
   $: tokenTrendOption = {
-    tooltip: { trigger: 'axis' },
-    grid: { left: 48, right: 18, top: 24, bottom: 36 },
+    tooltip: { trigger: 'axis', backgroundColor: '#ffffff', borderColor: '#d6e0ea', textStyle: { color: '#102033' } },
+    grid: { left: 44, right: 16, top: 16, bottom: 32 },
     xAxis: {
       type: 'category',
       boundaryGap: false,
       data: tokenTrend.map((item) => item.label),
-      axisLine: { lineStyle: { color: '#c8d4df' } },
-      axisLabel: { color: '#5a6b7d' }
+      axisLine: { lineStyle: { color: '#d6e0ea' } },
+      axisTick: { show: false },
+      axisLabel: { color: '#5a6b7d', fontSize: 11 }
     },
     yAxis: {
       type: 'value',
-      splitLine: { lineStyle: { color: '#e1e9f0' } },
-      axisLabel: { color: '#5a6b7d' }
+      splitLine: { lineStyle: { color: '#e3eaf2' } },
+      axisLabel: { color: '#5a6b7d', fontSize: 11 }
     },
     series: [
       {
         type: 'line',
         smooth: true,
+        showSymbol: false,
         data: tokenTrend.map((item) => item.total),
-        lineStyle: { color: '#1e5aa8', width: 3 },
-        areaStyle: { color: 'rgba(30, 90, 168, 0.16)' },
+        lineStyle: { color: '#1e5aa8', width: 2 },
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(30, 90, 168, 0.18)' },
+              { offset: 1, color: 'rgba(30, 90, 168, 0.02)' }
+            ]
+          }
+        },
         itemStyle: { color: '#1e5aa8' }
       }
     ]
@@ -87,27 +110,26 @@
 
   $: userFootprint = [...users].sort((a, b) => b.total_tokens - a.total_tokens).slice(0, 6);
   $: footprintOption = {
-    tooltip: { trigger: 'axis' },
-    grid: { left: 48, right: 18, top: 24, bottom: 56 },
+    tooltip: { trigger: 'axis', backgroundColor: '#ffffff', borderColor: '#d6e0ea', textStyle: { color: '#102033' } },
+    grid: { left: 44, right: 16, top: 16, bottom: 48 },
     xAxis: {
       type: 'category',
       data: userFootprint.map((item) => item.name),
-      axisLine: { lineStyle: { color: '#c8d4df' } },
-      axisLabel: { color: '#5a6b7d', rotate: 18 }
+      axisLine: { lineStyle: { color: '#d6e0ea' } },
+      axisTick: { show: false },
+      axisLabel: { color: '#5a6b7d', fontSize: 11, rotate: 16 }
     },
     yAxis: {
       type: 'value',
-      splitLine: { lineStyle: { color: '#e1e9f0' } },
-      axisLabel: { color: '#5a6b7d' }
+      splitLine: { lineStyle: { color: '#e3eaf2' } },
+      axisLabel: { color: '#5a6b7d', fontSize: 11 }
     },
     series: [
       {
         type: 'bar',
         data: userFootprint.map((item) => item.total_tokens),
-        itemStyle: {
-          color: '#2f855a',
-          borderRadius: [10, 10, 0, 0]
-        }
+        itemStyle: { color: '#1e5aa8', borderRadius: [4, 4, 0, 0] },
+        barWidth: '48%'
       }
     ]
   };
@@ -139,61 +161,95 @@
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <span class="sidebar-label">Dashboard</span>
-    <h1 class="page-title">Overview</h1>
-  </div>
+  <PageHeader
+    eyebrow="Overview"
+    title="Dashboard"
+    description="Signal of live load, queue posture, and recent sensitive activity for the selected target."
+  />
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required before dashboard data can be loaded from the selected target.</div>
+    <div class="notice-card">Connect this target before dashboard data can be loaded.</div>
   {:else if error}
     <div class="error-state">{error}</div>
   {:else if loading}
-    <div class="notice-card">Loading dashboard metrics...</div>
+    <div class="notice-card">Loading dashboard metrics…</div>
   {:else}
-    <div class="kpi-grid">
-      <KpiCard label="Active Conversations" value={String(overview?.active_conversations ?? 0)} />
-      <KpiCard label="Stored Memories" value={String(overview?.memory_count ?? 0)} />
-      <KpiCard label="Pending Tasks" value={String(pendingTasks)} />
-      <KpiCard label="Total Tokens" value={totalTokens.toLocaleString()} />
+    <div class="kpi-grid six-up">
+      <KpiCard
+        label="Active Conversations"
+        value={String(overview?.active_conversations ?? 0)}
+        href="/conversations"
+      />
+      <KpiCard
+        label="Stored Memories"
+        value={String(overview?.memory_count ?? 0)}
+        href="/memory"
+      />
+      <KpiCard
+        label="Key Memories"
+        value={String(keyMemoryTotal)}
+        href="/memory/keys"
+      />
+      <KpiCard
+        label="Pending Tasks"
+        value={String(pendingTasks)}
+        meta={`${retryTasks} in retry`}
+        href="/operations/queues"
+      />
+      <KpiCard
+        label="Audit Events"
+        value={String(auditItems.length)}
+        meta="Last 100 actions"
+        href="/audit"
+      />
+      <KpiCard
+        label="Total Tokens"
+        value={totalTokens.toLocaleString()}
+        meta="Sum across users"
+        href="/statistics/tokens"
+      />
     </div>
 
     <div class="grid-2">
-      <section class="card">
+      <section class="card page-stack">
         <div class="page-header">
-          <div>
-            <h2 class="section-title">Recent Token Load</h2>
+          <div class="page-header-meta">
+            <h2 class="section-title">Token load</h2>
+            <p class="panel-meta">Total tokens by day across active users.</p>
           </div>
-          <div class="inline-group">
+          <div class="segmented-control" role="tablist" aria-label="Range">
             {#each [7, 30] as item}
-              <button class={range === item ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => (range = item)}>{item}d</button>
+              <button
+                class="segmented-control-item"
+                type="button"
+                data-state={range === item ? 'on' : 'off'}
+                on:click={() => (range = item)}
+              >{item}d</button>
             {/each}
           </div>
         </div>
-        <EChart option={tokenTrendOption} height={300} />
+        <EChart option={tokenTrendOption} height={260} />
       </section>
 
-      <section class="card">
+      <section class="card page-stack">
         <div class="page-header">
-          <div>
-            <h2 class="section-title">Top User Load</h2>
+          <div class="page-header-meta">
+            <h2 class="section-title">Top users by tokens</h2>
+            <p class="panel-meta">Lifetime tokens per user, top six.</p>
           </div>
         </div>
-        <EChart option={footprintOption} height={300} />
+        <EChart option={footprintOption} height={260} />
       </section>
     </div>
 
     <div class="grid-2">
-      <section class="table-card">
-        <div class="card" style="border: none; box-shadow: none; border-radius: 0;">
-          <div class="page-header">
-            <div>
-              <h2 class="section-title">Worker Queues</h2>
-            </div>
-            <div class="toolbar">
-              <a class="button-secondary" href="/operations/queues">Queue Details</a>
-            </div>
+      <section class="card is-flush">
+        <div class="card-header">
+          <div class="page-header-meta">
+            <h2 class="section-title">Worker queues</h2>
+            <p class="panel-meta">Current depth across durable worker queues.</p>
           </div>
+          <a class="btn-secondary btn-sm" href="/operations/queues">Queue details</a>
         </div>
         <div class="table-scroll">
           <table class="data-table">
@@ -210,45 +266,77 @@
               {#each queues as queue}
                 <tr>
                   <td>
-                    <div class="inline-group" style="justify-content: space-between; flex-wrap: wrap;">
-                      <span>{queue.name}</span>
-                      <a class="button-ghost" href={`/operations/queues/${encodeURIComponent(queue.name)}`}>Open</a>
-                    </div>
+                    <a href={`/operations/queues/${encodeURIComponent(queue.name)}`}>
+                      <strong class="mono">{queue.name}</strong>
+                    </a>
                   </td>
-                  <td>{queue.pending}</td>
-                  <td>{queue.active}</td>
-                  <td>{queue.retry}</td>
-                  <td>{queue.latency_ms ?? 0} ms</td>
+                  <td class="mono">{queue.pending}</td>
+                  <td class="mono">{queue.active}</td>
+                  <td class="mono">
+                    {#if queue.retry > 0}
+                      <StatusBadge tone="warning" label={String(queue.retry)} />
+                    {:else}
+                      {queue.retry}
+                    {/if}
+                  </td>
+                  <td class="mono">{queue.latency_ms ?? 0} ms</td>
                 </tr>
               {/each}
+              {#if queues.length === 0}
+                <tr>
+                  <td colspan="5">
+                    <div class="empty-state" style="border: none; padding: 12px 0;">No queue metrics returned.</div>
+                  </td>
+                </tr>
+              {/if}
             </tbody>
           </table>
         </div>
       </section>
 
-      <section class="card">
-        <div class="page-header">
-          <div>
-            <h2 class="section-title">Latest Sensitive Actions</h2>
+      <section class="card is-flush">
+        <div class="card-header">
+          <div class="page-header-meta">
+            <h2 class="section-title">Recent sensitive actions</h2>
+            <p class="panel-meta">Audited operations on this target.</p>
           </div>
-          <a class="button-secondary" href="/audit">Open Audit</a>
+          <a class="btn-secondary btn-sm" href="/audit">Open audit</a>
         </div>
         {#if auditItems.length === 0}
-          <div class="empty-state">No audit events are available for this target yet.</div>
+          <div class="card-body">
+            <div class="empty-state">No audit events are available for this target yet.</div>
+          </div>
         {:else}
-          <div class="stack-list">
-            {#each auditItems.slice(0, 6) as item}
-              <a
-                class="table-row-link"
-                href={`/audit?action=${encodeURIComponent(item.action)}&target_type=${encodeURIComponent(item.target_type)}&target_id=${encodeURIComponent(item.target_id)}`}
-              >
-                <div class="page-stack" style="gap: 4px;">
-                  <strong>{item.action}</strong>
-                  <div class="subtle-text">{item.target_type} · {item.created_at ? new Date(item.created_at).toLocaleString() : 'n/a'}</div>
-                </div>
-                <span class="subtle-text">{item.target_id}</span>
-              </a>
-            {/each}
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th>Target</th>
+                  <th>Actor</th>
+                  <th>When</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each auditItems.slice(0, 8) as item}
+                  <tr class="is-selectable">
+                    <td>
+                      <a
+                        href={`/audit?action=${encodeURIComponent(item.action)}&target_type=${encodeURIComponent(item.target_type)}&target_id=${encodeURIComponent(item.target_id)}`}
+                      >
+                        <strong class="mono">{item.action}</strong>
+                      </a>
+                    </td>
+                    <td class="mono">
+                      <span>{item.target_type}</span>
+                      <div class="subtle-text">{item.target_id}</div>
+                    </td>
+                    <td class="subtle-text">{item.actor_type ?? 'system'}</td>
+                    <td class="subtle-text no-wrap">{item.created_at ? new Date(item.created_at).toLocaleString() : 'n/a'}</td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
           </div>
         {/if}
       </section>

@@ -7,6 +7,7 @@
   import { fetchConversations, fetchUsers } from '$lib/api/client';
   import EChart from '$lib/components/EChart.svelte';
   import KpiCard from '$lib/components/KpiCard.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type { ConversationListItem, UserSummary } from '$lib/types';
 
@@ -89,28 +90,39 @@
 
   $: trendBuckets = buildTrend(filteredConversations, Number(range));
   $: trendOption = {
-    tooltip: { trigger: 'axis' },
-    grid: { left: 48, right: 18, top: 24, bottom: 36 },
+    tooltip: { trigger: 'axis', backgroundColor: '#ffffff', borderColor: '#d6e0ea', textStyle: { color: '#102033' } },
+    grid: { left: 44, right: 16, top: 16, bottom: 32 },
     xAxis: {
       type: 'category',
       boundaryGap: false,
       data: trendBuckets.map((item) => item.label),
-      axisLine: { lineStyle: { color: '#c8d4df' } },
-      axisLabel: { color: '#5a6b7d' }
+      axisLine: { lineStyle: { color: '#d6e0ea' } },
+      axisTick: { show: false },
+      axisLabel: { color: '#5a6b7d', fontSize: 11 }
     },
     yAxis: {
       type: 'value',
       axisLine: { show: false },
-      splitLine: { lineStyle: { color: '#e1e9f0' } },
-      axisLabel: { color: '#5a6b7d' }
+      splitLine: { lineStyle: { color: '#e3eaf2' } },
+      axisLabel: { color: '#5a6b7d', fontSize: 11 }
     },
     series: [
       {
         type: 'line',
         smooth: true,
+        showSymbol: false,
         data: trendBuckets.map((item) => item.total),
-        lineStyle: { color: '#1e5aa8', width: 3 },
-        areaStyle: { color: 'rgba(30, 90, 168, 0.16)' },
+        lineStyle: { color: '#1e5aa8', width: 2 },
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(30, 90, 168, 0.18)' },
+              { offset: 1, color: 'rgba(30, 90, 168, 0.02)' }
+            ]
+          }
+        },
         itemStyle: { color: '#1e5aa8' }
       }
     ]
@@ -118,27 +130,26 @@
 
   $: providerBreakdown = buildBreakdown(filteredConversations);
   $: providerOption = {
-    tooltip: { trigger: 'axis' },
-    grid: { left: 48, right: 18, top: 24, bottom: 36 },
+    tooltip: { trigger: 'axis', backgroundColor: '#ffffff', borderColor: '#d6e0ea', textStyle: { color: '#102033' } },
+    grid: { left: 44, right: 16, top: 16, bottom: 32 },
     xAxis: {
       type: 'category',
       data: providerBreakdown.map((item) => item.label),
-      axisLine: { lineStyle: { color: '#c8d4df' } },
-      axisLabel: { color: '#5a6b7d' }
+      axisLine: { lineStyle: { color: '#d6e0ea' } },
+      axisTick: { show: false },
+      axisLabel: { color: '#5a6b7d', fontSize: 11 }
     },
     yAxis: {
       type: 'value',
-      splitLine: { lineStyle: { color: '#e1e9f0' } },
-      axisLabel: { color: '#5a6b7d' }
+      splitLine: { lineStyle: { color: '#e3eaf2' } },
+      axisLabel: { color: '#5a6b7d', fontSize: 11 }
     },
     series: [
       {
         type: 'bar',
         data: providerBreakdown.map((item) => item.total),
-        itemStyle: {
-          color: '#2f855a',
-          borderRadius: [10, 10, 0, 0]
-        }
+        itemStyle: { color: '#1e5aa8', borderRadius: [4, 4, 0, 0] },
+        barWidth: '48%'
       }
     ]
   };
@@ -183,17 +194,18 @@
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <span class="sidebar-label">Statistics</span>
-    <h1 class="page-title">Token Usage</h1>
-  </div>
+  <PageHeader
+    eyebrow="Inspect"
+    title="Token statistics"
+    description="Token load and provider mix across users and conversations."
+  />
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required to inspect token statistics.</div>
+    <div class="notice-card">Connect this target to inspect token statistics.</div>
   {:else if error}
     <div class="error-state">{error}</div>
   {:else if loading}
-    <div class="notice-card">Loading token analytics...</div>
+    <div class="notice-card">Loading token analytics…</div>
   {:else}
     <section class="card">
       <div class="filters three-up">
@@ -202,7 +214,7 @@
           <Select.Root type="single" bind:value={range} items={rangeItems}>
             <Select.Trigger class="select-trigger">{rangeItems.find((item) => item.value === range)?.label ?? 'Select range'}</Select.Trigger>
             <Select.Portal>
-              <Select.Content class="select-content" sideOffset={8}>
+              <Select.Content class="select-content" sideOffset={6}>
                 <Select.Viewport>
                   {#each rangeItems as item}
                     <Select.Item class="select-item" value={item.value} label={item.label}>{item.label}</Select.Item>
@@ -217,7 +229,7 @@
           <Select.Root type="single" bind:value={selectedUserId} items={userItems}>
             <Select.Trigger class="select-trigger">{userItems.find((item) => item.value === selectedUserId)?.label ?? 'All users'}</Select.Trigger>
             <Select.Portal>
-              <Select.Content class="select-content" sideOffset={8}>
+              <Select.Content class="select-content" sideOffset={6}>
                 <Select.Viewport>
                   {#each userItems as item}
                     <Select.Item class="select-item" value={item.value} label={item.label}>{item.label}</Select.Item>
@@ -232,7 +244,7 @@
           <Select.Root type="single" bind:value={selectedProvider} items={providerItems}>
             <Select.Trigger class="select-trigger">{providerItems.find((item) => item.value === selectedProvider)?.label ?? 'All providers'}</Select.Trigger>
             <Select.Portal>
-              <Select.Content class="select-content" sideOffset={8}>
+              <Select.Content class="select-content" sideOffset={6}>
                 <Select.Viewport>
                   {#each providerItems as item}
                     <Select.Item class="select-item" value={item.value} label={item.label}>{item.label}</Select.Item>
@@ -246,41 +258,39 @@
     </section>
 
     <div class="kpi-grid">
-      <KpiCard label="Filtered Tokens" value={totalTokens.toLocaleString()} />
+      <KpiCard label="Filtered tokens" value={totalTokens.toLocaleString()} />
       <KpiCard label="Conversations" value={String(filteredConversations.length)} />
-      <KpiCard label="Active Users" value={String(activeUsers)} />
-      <KpiCard label="Avg Tokens" value={averageTokens.toLocaleString()} />
+      <KpiCard label="Active users" value={String(activeUsers)} />
+      <KpiCard label="Avg tokens / session" value={averageTokens.toLocaleString()} />
     </div>
 
     <div class="grid-2">
-      <section class="card">
+      <section class="card page-stack">
         <div class="page-header">
-          <div>
-            <div class="sidebar-label">Trend</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Daily token totals</h2>
+          <div class="page-header-meta">
+            <h2 class="section-title">Daily token totals</h2>
+            <p class="panel-meta">Sum of total tokens per day within range.</p>
           </div>
         </div>
-        <EChart option={trendOption} height={300} />
+        <EChart option={trendOption} height={260} />
       </section>
 
-      <section class="card">
+      <section class="card page-stack">
         <div class="page-header">
-          <div>
-            <div class="sidebar-label">Providers</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Provider breakdown</h2>
+          <div class="page-header-meta">
+            <h2 class="section-title">Provider breakdown</h2>
+            <p class="panel-meta">Tokens grouped by gateway provider.</p>
           </div>
         </div>
-        <EChart option={providerOption} height={300} />
+        <EChart option={providerOption} height={260} />
       </section>
     </div>
 
-    <section class="table-card">
-      <div class="card" style="border: none; box-shadow: none; border-radius: 0;">
-        <div class="page-header">
-          <div>
-            <div class="sidebar-label">Top conversations</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Highest token sessions in range</h2>
-          </div>
+    <section class="card is-flush">
+      <div class="card-header">
+        <div class="page-header-meta">
+          <h2 class="section-title">Top conversations by tokens</h2>
+          <p class="panel-meta">Highest-token sessions in the current range.</p>
         </div>
       </div>
       <div class="table-scroll">
@@ -299,16 +309,23 @@
               <tr>
                 <td>
                   <a href={`/conversations/${item.conversation_id}?user_id=${item.user_id}`}>
-                    <strong>{item.conversation_id}</strong>
+                    <strong class="mono">{item.conversation_id}</strong>
                   </a>
                   <div class="subtle-text">{item.protocol} · {item.mode}</div>
                 </td>
-                <td>{item.user_id}</td>
-                <td>{item.provider}</td>
-                <td>{item.total_tokens.toLocaleString()}</td>
-                <td>{new Date(item.updated_at).toLocaleString()}</td>
+                <td class="mono">{item.user_id}</td>
+                <td class="mono">{item.provider}</td>
+                <td class="mono">{item.total_tokens.toLocaleString()}</td>
+                <td class="subtle-text no-wrap">{new Date(item.updated_at).toLocaleString()}</td>
               </tr>
             {/each}
+            {#if topConversations.length === 0}
+              <tr>
+                <td colspan="5">
+                  <div class="empty-state" style="border: none; padding: 12px 0;">No conversations in range.</div>
+                </td>
+              </tr>
+            {/if}
           </tbody>
         </table>
       </div>

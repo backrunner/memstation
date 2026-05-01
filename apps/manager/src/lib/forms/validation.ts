@@ -36,9 +36,6 @@ export function parseLineList(value: string): string[] {
 }
 
 export function isOriginValue(value: string): boolean {
-  if (value === '*') {
-    return true;
-  }
   const parsed = parseURL(value);
   return Boolean(parsed && (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.origin === value);
 }

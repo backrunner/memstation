@@ -6,6 +6,7 @@
 
   import { fetchAdminMemoryDocuments, updateAdminMemoryDocument } from '$lib/api/client';
   import MemoryWorkspaceNav from '$lib/components/MemoryWorkspaceNav.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import { memoryDetailHref } from '$lib/memory/routes';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
@@ -171,30 +172,32 @@
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <span class="sidebar-label">Memory / Facts</span>
-    <h1 class="page-title">Facts</h1>
-    <p class="page-description">Facts are structured statements that can supersede earlier information and feed both memory injection and admin correction workflows.</p>
-    {#if activeUserId}
-      <div class="helper-text">Scoped to user `{activeUserId}`.</div>
-    {/if}
-  </div>
+  <PageHeader
+    eyebrow="Inspect / Memory"
+    title="Facts"
+    description="Structured statements that can supersede earlier information and feed injection and admin correction workflows."
+    subtitle={activeUserId ? `Scoped to user ${activeUserId}` : ''}
+  />
 
   <MemoryWorkspaceNav current="/memory/facts" />
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required to inspect fact records.</div>
+    <div class="notice-card">Connect this target to inspect fact records.</div>
   {:else if error}
     <div class="error-state">{error}</div>
   {:else if loading}
-    <div class="notice-card">Loading fact records...</div>
+    <div class="notice-card">Loading fact records…</div>
   {:else}
     {#if success}
-      <div class="notice-card">{success}</div>
+      <div class="notice-card is-success">{success}</div>
     {/if}
     <section class="card page-stack">
       <div class="filters two-up">
-        <TextInputField label="Filter Facts" bind:value={filter} placeholder="location, preference, schedule, identity, status..." />
+        <TextInputField
+          label="Filter"
+          bind:value={filter}
+          placeholder="location, preference, schedule, identity, status…"
+        />
         <div class="field" style="align-self: end;">
           <div class="helper-text">{visibleFacts.length} of {facts.length} facts visible</div>
         </div>
@@ -202,34 +205,60 @@
       {#if visibleFacts.length === 0}
         <div class="empty-state">No facts match the current filter.</div>
       {:else}
-        <div class="toolbar">
+        <div class="stack-list">
           {#each visibleFacts as fact}
-            <div class="debug-block">
-              <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px;">
-                <div>
+            <article class="summary-card">
+              <header class="summary-head">
+                <div class="summary-head-main">
                   <strong>Fact</strong>
-                  <div class="subtle-text">{fact.id}</div>
+                  <span class="helper-text mono">{fact.id}</span>
                 </div>
-                <div class="inline-group" style="gap: 8px;">
+                <div class="inline-group">
                   <StatusBadge tone="muted" label={fact.conversation_id ? 'conversation-linked' : 'manual'} />
-                  <a class="button-ghost" href={memoryDetailHref('facts', fact.id, activeUserId)}>Open</a>
+                  <a class="btn-ghost btn-sm" href={memoryDetailHref('facts', fact.id, activeUserId)}>Open</a>
                   {#if editingId === fact.id}
-                    <button class="button-ghost" type="button" on:click={cancelEdit}>Cancel</button>
-                    <button class="button" type="button" disabled={saving} on:click={() => saveEdit(fact)}>{saving ? 'Saving...' : 'Save'}</button>
+                    <button class="btn-ghost btn-sm" type="button" on:click={cancelEdit}>Cancel</button>
+                    <button class="btn-primary btn-sm" type="button" disabled={saving} on:click={() => saveEdit(fact)}>
+                      {saving ? 'Saving…' : 'Save'}
+                    </button>
                   {:else}
-                    <button class="button-ghost" type="button" on:click={() => startEdit(fact)}>Edit</button>
+                    <button class="btn-secondary btn-sm" type="button" on:click={() => startEdit(fact)}>Edit</button>
                   {/if}
                 </div>
-              </div>
+              </header>
               {#if editingId === fact.id}
-                <TextareaField label="Fact Content" bind:value={draftContent} rows={6} />
+                <TextareaField label="Fact content" bind:value={draftContent} rows={5} />
               {:else}
                 <div class="message-body">{fact.content}</div>
               {/if}
-            </div>
+            </article>
           {/each}
         </div>
       {/if}
     </section>
   {/if}
 </section>
+
+<style>
+  .summary-card {
+    display: grid;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+
+  .summary-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .summary-head-main {
+    display: grid;
+    gap: 2px;
+  }
+</style>

@@ -6,6 +6,7 @@
   import { fetchConversation, fetchConversationMemory, searchAdminMemories } from '$lib/api/client';
   import JsonView from '$lib/components/JsonView.svelte';
   import MemoryKeywordSignals from '$lib/components/MemoryKeywordSignals.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
   import { matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '$lib/memory/keyword-signals';
@@ -143,32 +144,41 @@
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <div class="page-stack" style="gap: 4px;">
-      <h1 class="page-title">Memory Playground</h1>
-      <div class="panel-meta">Inspect persisted extraction and run direct recall queries against the selected target.</div>
-    </div>
-  </div>
+  <PageHeader
+    eyebrow="Playground"
+    title="Recall"
+    description="Inspect persisted extraction and run direct recall queries against the selected target."
+  />
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required to inspect memory extraction details.</div>
+    <div class="notice-card">Connect this target to inspect memory extraction details.</div>
   {:else}
     <div class="page-columns">
       <section class="card page-stack">
         <div class="page-header">
-          <h2 class="section-title">Inspect Conversation</h2>
-          <button class="button-secondary" type="button" disabled={loading || !conversationId.trim()} on:click={inspectConversation}>{loading ? 'Loading...' : 'Inspect'}</button>
+          <div class="page-header-meta">
+            <h2 class="section-title">Inspect conversation</h2>
+            <p class="panel-meta">Load metadata, messages, and persisted memory by id.</p>
+          </div>
+          <button class="btn-secondary btn-sm" type="button" disabled={loading || !conversationId.trim()} on:click={inspectConversation}>
+            {loading ? 'Loading…' : 'Inspect'}
+          </button>
         </div>
-        <TextInputField label="Conversation ID" bind:value={conversationId} placeholder="conv-..." inputClass="input-mono" />
+        <TextInputField label="Conversation ID" bind:value={conversationId} placeholder="conv-…" inputClass="input-mono" />
       </section>
 
       <section class="card page-stack">
         <div class="page-header">
-          <h2 class="section-title">Recall Search</h2>
-          <button class="button" type="button" disabled={searchLoading || !searchQuery.trim()} on:click={runSearch}>{searchLoading ? 'Searching...' : 'Search'}</button>
+          <div class="page-header-meta">
+            <h2 class="section-title">Recall search</h2>
+            <p class="panel-meta">Run a semantic query against persisted memory.</p>
+          </div>
+          <button class="btn-primary btn-sm" type="button" disabled={searchLoading || !searchQuery.trim()} on:click={runSearch}>
+            {searchLoading ? 'Searching…' : 'Search'}
+          </button>
         </div>
         <TextInputField
-          label="Memory search query"
+          label="Query"
           bind:value={searchQuery}
           placeholder="recent preference, travel plan, project status"
         />
@@ -179,13 +189,14 @@
       <div class="error-state">{error}</div>
     {/if}
 
-    <div class="grid-2" style="align-items: start;">
-      <section class="card">
+    <div class="page-columns">
+      <section class="card page-stack">
         <div class="page-header">
-          <div>
+          <div class="page-header-meta">
             <h2 class="section-title">Extraction</h2>
+            <p class="panel-meta">Memory documents linked to the inspected conversation.</p>
           </div>
-          <div class="toolbar">
+          <div class="inline-group">
             <StatusBadge tone={detail?.summary_status === 'completed' ? 'success' : detail?.summary_status === 'failed' ? 'danger' : detail?.summary_status === 'skipped' ? 'muted' : 'warning'} label={`summary ${detail?.summary_status ?? 'n/a'}`} />
             <StatusBadge tone={detail?.analysis_status === 'completed' ? 'success' : detail?.analysis_status === 'failed' ? 'danger' : detail?.analysis_status === 'skipped' ? 'muted' : 'warning'} label={`analysis ${detail?.analysis_status ?? 'n/a'}`} />
           </div>
@@ -194,11 +205,11 @@
         {#if !detail}
           <div class="empty-state">Inspect a conversation to load memory.</div>
         {:else}
-          <div class="toolbar">
+          <div class="stack-list">
             <Collapsible.Root>
-              <Collapsible.Trigger class="collapsible-trigger">Metadata</Collapsible.Trigger>
+              <Collapsible.Trigger class="collapsible-trigger">Conversation metadata</Collapsible.Trigger>
               <Collapsible.Content>
-                <div class="debug-block" style="margin-top: 10px;">
+                <div style="margin-top: 8px;">
                   <JsonView value={detail.metadata ?? {}} />
                 </div>
               </Collapsible.Content>
@@ -207,18 +218,18 @@
               <div class="empty-state">No persisted memory documents are linked to this conversation yet.</div>
             {:else}
               {#each memory?.documents ?? [] as item (item.id)}
-                <article class="debug-block">
-                  <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px;">
+                <article class="debug-block debug-block-muted">
+                  <div class="inline-group" style="justify-content: space-between;">
                     <strong>{item.type}</strong>
                     <StatusBadge tone={documentTone(item.type)} label={item.type} />
                   </div>
-                  <div class="message-body">{item.content}</div>
+                  <div class="message-body" style="margin-top: 6px;">{item.content}</div>
                   <MemoryKeywordSignals
                     matchedKeywords={matchedKeywordsFromMetadata(item.metadata)}
                     sourceKeywords={sourceKeywordsFromMetadata(item.metadata)}
                   />
                   {#if item.metadata}
-                    <div style="margin-top: 12px;">
+                    <div style="margin-top: 8px;">
                       <JsonView value={item.metadata} emptyLabel="No metadata" />
                     </div>
                   {/if}
@@ -229,10 +240,11 @@
         {/if}
       </section>
 
-      <section class="card">
+      <section class="card page-stack">
         <div class="page-header">
-          <div>
+          <div class="page-header-meta">
             <h2 class="section-title">Recall</h2>
+            <p class="panel-meta">Top results ranked by effective score.</p>
           </div>
           {#if searchResult}
             <StatusBadge tone="brand" label={`${searchResult.total} matches`} />
@@ -242,15 +254,15 @@
         {#if !searchResult}
           <div class="empty-state">Run a search to load recall results.</div>
         {:else}
-          <div class="helper-text" style="margin-bottom: 12px;">Query embedding tokens: {searchResult.queryEmbeddingTokens}</div>
-          <div class="toolbar">
+          <div class="helper-text mono">Query embedding tokens: {searchResult.queryEmbeddingTokens}</div>
+          <div class="stack-list">
             {#each searchResult.memories as item (item.id)}
-              <article class="debug-block">
-                <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px;">
+              <article class="debug-block debug-block-muted">
+                <div class="inline-group" style="justify-content: space-between;">
                   <strong>{item.type}</strong>
-                  <span class="subtle-text">semantic {item.score.toFixed(3)} · effective {item.effectiveScore.toFixed(3)}</span>
+                  <span class="helper-text mono">semantic {item.score.toFixed(3)} · effective {item.effectiveScore.toFixed(3)}</span>
                 </div>
-                <div class="message-body">{item.content}</div>
+                <div class="message-body" style="margin-top: 6px;">{item.content}</div>
                 <MemoryKeywordSignals
                   matchedKeywords={matchedKeywordsFromMetadata(item.metadata)}
                   sourceKeywords={sourceKeywordsFromMetadata(item.metadata)}

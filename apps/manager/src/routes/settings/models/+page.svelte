@@ -4,6 +4,8 @@
   import { onMount } from 'svelte';
 
   import { fetchConfig, saveConfig } from '$lib/api/client';
+  import PageHeader from '$lib/components/PageHeader.svelte';
+  import StatusBadge from '$lib/components/StatusBadge.svelte';
   import SwitchField from '$lib/components/SwitchField.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
   import { isNonNegativeInteger } from '$lib/forms/validation';
@@ -73,8 +75,8 @@
   $: if (draftReady && activeDraftKey && !hydratingDraft) {
     if (draftsEqual(currentDraft, savedDraft)) {
       clearSessionDraft(activeDraftKey);
-      } else {
-        writeSessionDraft(activeDraftKey, modelDraftVersion, currentDraft);
+    } else {
+      writeSessionDraft(activeDraftKey, modelDraftVersion, currentDraft);
     }
   }
 
@@ -223,59 +225,67 @@
     }
   }
 
-  $: providerSets = normalizeProviderSets(payload);
-  $: providerScopeCards = providerScopeOrder.map((scope) => ({
-    scope,
-    title: scopeTitle(scope),
-    providers: providerSets[scope] ?? [],
-    defaultProvider:
-      scope === 'gateway' ? String(payload.default_provider ?? '') :
-      scope === 'internal' ? String(payload.internal_default_provider ?? '') :
-      ''
-  }));
-
   function scopeSummary(scope: ProviderScope): string {
     if (scope === 'embedding' || scope === 'rerank') {
       return 'Selection follows the configured model namespace.';
     }
     return 'Requests route to the selected default provider.';
   }
+
+  $: providerSets = normalizeProviderSets(payload);
+  $: providerScopeCards = providerScopeOrder.map((scope) => ({
+    scope,
+    title: scopeTitle(scope),
+    providers: providerSets[scope] ?? [],
+    defaultProvider:
+      scope === 'gateway'
+        ? String(payload.default_provider ?? '')
+        : scope === 'internal'
+          ? String(payload.internal_default_provider ?? '')
+          : ''
+  }));
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <span class="sidebar-label">Settings</span>
-    <h1 class="page-title">Models</h1>
-  </div>
+  <PageHeader
+    eyebrow="Administer"
+    title="Models"
+    description="Configure default chat, summary, analysis, and embedding models plus provider routes for this target."
+  />
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required to modify runtime settings.</div>
+    <div class="notice-card">Connect this target to modify runtime settings.</div>
   {:else if error}
     <div class="error-state">{error}</div>
   {:else if loading}
-    <div class="notice-card">Loading config...</div>
+    <div class="notice-card">Loading config…</div>
   {:else}
+    {#if success}
+      <div class="notice-card is-success">{success}</div>
+    {/if}
+
     <div class="page-columns">
       <div class="page-column">
         <section class="card page-stack">
           <div class="page-header">
-            <div>
-              <h2 class="page-title" style="font-size: 1.08rem;">Model Defaults</h2>
+            <div class="page-header-meta">
+              <h2 class="section-title">Model defaults</h2>
+              <p class="panel-meta">Runtime model assignment for the four MemStation workflows.</p>
             </div>
           </div>
 
           <div class="form-grid two-up">
-            <TextInputField label="Chat Model" bind:value={chatModel} />
-            <TextInputField label="Summary Model" bind:value={summaryModel} />
-            <TextInputField label="Analysis Model" bind:value={analysisModel} />
-            <TextInputField label="Embedding Model" bind:value={embeddingModel} />
+            <TextInputField label="Chat model" bind:value={chatModel} />
+            <TextInputField label="Summary model" bind:value={summaryModel} />
+            <TextInputField label="Analysis model" bind:value={analysisModel} />
+            <TextInputField label="Embedding model" bind:value={embeddingModel} />
             <SwitchField
-              label="Tool Writes"
+              label="Tool writes"
               help="Allow model-triggered memory writes for users inheriting the deployment default."
               bind:checked={toolWriteEnabled}
             />
             <TextInputField
-              label="Max Injection Tokens"
+              label="Max injection tokens"
               bind:value={maxInjectionTokens}
               type="number"
               min="0"
@@ -283,47 +293,50 @@
             />
           </div>
 
-          <div class="inline-group" style="justify-content: flex-end; margin-top: 16px;">
-            <button class="button" type="button" disabled={saving} on:click={persist}>{saving ? 'Saving...' : 'Save Settings'}</button>
+          <div class="inline-group" style="justify-content: flex-end;">
+            <button class="btn-primary" type="button" disabled={saving} on:click={persist}>
+              {saving ? 'Saving…' : 'Save settings'}
+            </button>
           </div>
-          {#if success}
-            <div class="notice-card">{success}</div>
-          {/if}
         </section>
       </div>
 
       <div class="page-column">
         <section class="card page-stack">
           <div class="page-header">
-            <div>
-              <h2 class="page-title" style="font-size: 1.08rem;">Provider Routes</h2>
+            <div class="page-header-meta">
+              <h2 class="section-title">Provider routes</h2>
+              <p class="panel-meta">Readiness of upstream provider sets.</p>
             </div>
-            <a class="button-secondary" href="/settings/providers">Open provider settings</a>
+            <a class="btn-secondary btn-sm" href="/settings/providers">Open providers</a>
           </div>
 
-          <div class="toolbar">
+          <div class="stack-list">
             {#each providerScopeCards as card}
               <div class="route-row">
                 <div class="route-row-header">
                   <strong>{card.title}</strong>
-                  <span class="subtle-text">{card.providers.length} Ready</span>
+                  <span class="helper-text">{card.providers.length} provider{card.providers.length === 1 ? '' : 's'}</span>
                 </div>
-                <div class="subtle-text">{scopeSummary(card.scope)}</div>
+                <div class="helper-text">{scopeSummary(card.scope)}</div>
                 {#if card.defaultProvider}
-                  <div class="helper-text">Default route: {card.defaultProvider}</div>
+                  <div class="helper-text">Default route: <span class="mono">{card.defaultProvider}</span></div>
                 {/if}
-                <div class="route-provider-list">
-                  {#if card.providers.length > 0}
+                {#if card.providers.length > 0}
+                  <div class="route-provider-list">
                     {#each card.providers as provider}
                       <div class="route-provider-item">
-                        <span>{provider.provider}</span>
-                        <span class="subtle-text">{provider.has_api_key ? 'ready' : 'needs key'}</span>
+                        <span class="mono">{provider.provider}</span>
+                        <StatusBadge
+                          tone={provider.has_api_key ? 'success' : 'warning'}
+                          label={provider.has_api_key ? 'Ready' : 'Needs key'}
+                        />
                       </div>
                     {/each}
-                  {:else}
-                    <span class="subtle-text">No providers available.</span>
-                  {/if}
-                </div>
+                  </div>
+                {:else}
+                  <div class="helper-text">No providers configured.</div>
+                {/if}
               </div>
             {/each}
           </div>
@@ -336,15 +349,14 @@
 <style>
   .route-row {
     display: grid;
-    gap: 10px;
-    padding: 16px;
-    border: 1px solid var(--border-soft);
-    border-radius: var(--radius-md);
-    background: rgba(255, 255, 255, 0.86);
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
   }
 
-  .route-row-header,
-  .route-provider-item {
+  .route-row-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -353,6 +365,17 @@
 
   .route-provider-list {
     display: grid;
-    gap: 8px;
+    gap: 4px;
+  }
+
+  .route-provider-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 10px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xs);
+    background: var(--surface-muted);
   }
 </style>

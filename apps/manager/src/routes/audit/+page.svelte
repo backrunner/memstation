@@ -6,6 +6,7 @@
 
   import { fetchAudit } from '$lib/api/client';
   import JsonView from '$lib/components/JsonView.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type { AuditEventRecord } from '$lib/types';
@@ -72,36 +73,40 @@
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <span class="sidebar-label">Audit</span>
-    <h1 class="page-title">Audit</h1>
-    <p class="page-description">
-      Track API key changes, memory edits, configuration updates, and tool-driven writes with their associated payloads.
-    </p>
-  </div>
+  <PageHeader
+    eyebrow="Administer"
+    title="Audit"
+    description="Track API key changes, memory edits, configuration updates, and tool-driven writes with their associated payloads."
+  >
+    <div slot="actions">
+      <button class="btn-secondary btn-sm" type="button" on:click={loadAudit}>Refresh</button>
+    </div>
+  </PageHeader>
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required to load audit history.</div>
+    <div class="notice-card">Connect this target to load audit history.</div>
   {:else if error}
     <div class="error-state">{error}</div>
   {:else if loading}
-    <div class="notice-card">Loading audit events...</div>
+    <div class="notice-card">Loading audit events…</div>
   {:else}
-    <section class="card">
+    <section class="card page-stack">
       <div class="page-header">
-        <h2 class="section-title">Filters</h2>
-        <button class="button-secondary" type="button" on:click={loadAudit}>Refresh Audit</button>
+        <div class="page-header-meta">
+          <h2 class="section-title">Filters</h2>
+          <p class="panel-meta">Refine by action, target, actor, and limit.</p>
+        </div>
       </div>
       <div class="filters three-up">
         <TextInputField label="Action" bind:value={action} placeholder="update_memory_document" />
-        <TextInputField label="Target Type" bind:value={targetType} placeholder="summary, key_memory, api_key..." />
-        <TextInputField label="Target ID" bind:value={targetId} placeholder="memory id, task id, api key id..." />
-        <TextInputField label="Actor Type" bind:value={actorType} placeholder="admin, tool, system..." />
+        <TextInputField label="Target type" bind:value={targetType} placeholder="summary, key_memory, api_key…" />
+        <TextInputField label="Target ID" bind:value={targetId} placeholder="memory id, task id, api key id…" />
+        <TextInputField label="Actor type" bind:value={actorType} placeholder="admin, tool, system…" />
         <TextInputField label="Limit" bind:value={limit} type="number" min="1" max="500" />
       </div>
     </section>
 
-    <div class="grid-2" style="align-items: start;">
+    <div class="page-columns">
       <section class="table-card">
         <div class="table-scroll">
           <table class="data-table">
@@ -109,37 +114,68 @@
               <tr>
                 <th>Action</th>
                 <th>Target</th>
-                <th>Created</th>
+                <th>When</th>
               </tr>
             </thead>
             <tbody>
               {#each events as event}
-                <tr on:click={() => (selected = event)} style="cursor: pointer;">
+                <tr
+                  class="is-selectable"
+                  class:is-active={selected?.id === event.id}
+                  on:click={() => (selected = event)}
+                >
                   <td>
-                    <strong>{event.action}</strong>
+                    <strong class="mono">{event.action}</strong>
                     <div class="subtle-text">{event.actor_type ?? 'system'} · {event.actor_id ?? 'unknown'}</div>
                   </td>
-                  <td>{event.target_type} / {event.target_id}</td>
-                  <td>{event.created_at ? new Date(event.created_at).toLocaleString() : 'n/a'}</td>
+                  <td>
+                    <div class="mono">{event.target_type}</div>
+                    <div class="subtle-text mono">{event.target_id}</div>
+                  </td>
+                  <td class="subtle-text no-wrap">{event.created_at ? new Date(event.created_at).toLocaleString() : 'n/a'}</td>
                 </tr>
               {/each}
+              {#if events.length === 0}
+                <tr>
+                  <td colspan="3">
+                    <div class="empty-state" style="border: none; padding: 12px 0;">No audit events match the current filter.</div>
+                  </td>
+                </tr>
+              {/if}
             </tbody>
           </table>
         </div>
       </section>
 
-      <section class="debug-block">
+      <section class="card page-stack">
         <div class="page-header">
-          <div>
-            <h2 class="section-title">Selected Event Detail</h2>
+          <div class="page-header-meta">
+            <h2 class="section-title">Event detail</h2>
+            <p class="panel-meta">Payload captured when this action was performed.</p>
           </div>
         </div>
         {#if selected}
-          <div class="toolbar">
-            <div class="inline-group"><strong>Action</strong><span>{selected.action}</span></div>
-            <div class="inline-group"><strong>Target</strong><span>{selected.target_type} / {selected.target_id}</span></div>
-            <div class="inline-group"><strong>Created</strong><span>{selected.created_at ? new Date(selected.created_at).toLocaleString() : 'n/a'}</span></div>
-            <JsonView value={selected.payload ?? {}} emptyLabel="No payload on this event" />
+          <dl class="audit-dl">
+            <div>
+              <dt>Action</dt>
+              <dd class="mono">{selected.action}</dd>
+            </div>
+            <div>
+              <dt>Target</dt>
+              <dd class="mono">{selected.target_type} / {selected.target_id}</dd>
+            </div>
+            <div>
+              <dt>Actor</dt>
+              <dd>{selected.actor_type ?? 'system'} <span class="subtle-text">· {selected.actor_id ?? 'unknown'}</span></dd>
+            </div>
+            <div>
+              <dt>Created</dt>
+              <dd>{selected.created_at ? new Date(selected.created_at).toLocaleString() : 'n/a'}</dd>
+            </div>
+          </dl>
+          <div>
+            <div class="field-label" style="margin-bottom: 6px;">Payload</div>
+            <JsonView value={selected.payload ?? {}} emptyLabel="No payload on this event." />
           </div>
         {:else}
           <div class="empty-state">Select an event to inspect its payload.</div>
@@ -148,3 +184,34 @@
     </div>
   {/if}
 </section>
+
+<style>
+  .audit-dl {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+  }
+
+  .audit-dl > div {
+    display: grid;
+    grid-template-columns: 100px minmax(0, 1fr);
+    gap: 12px;
+    align-items: baseline;
+  }
+
+  .audit-dl dt {
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 0;
+  }
+
+  .audit-dl dd {
+    margin: 0;
+    color: var(--text);
+    font-size: var(--font-size-md);
+    word-break: break-all;
+  }
+</style>

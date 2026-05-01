@@ -8,6 +8,7 @@
   import MemoryKeywordSignals from '$lib/components/MemoryKeywordSignals.svelte';
   import { memoryDetailHref } from '$lib/memory/routes';
   import { matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '$lib/memory/keyword-signals';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
   import { fetchMemoryWorkspace, searchMemories, type MemoryWorkspaceData } from '$lib/memory/workspace';
@@ -113,54 +114,50 @@
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <span class="sidebar-label">Memory Workspace</span>
-    <h1 class="page-title">Memory Workspace</h1>
-    <p class="page-description">
-      Use the workspace as the operator hub for semantic recall checks, summary QA, fact review, and long-lived key memory management.
-    </p>
-    {#if activeUserId}
-      <div class="helper-text">Scoped to user `{activeUserId}` from the current route query.</div>
-    {/if}
-  </div>
+  <PageHeader
+    eyebrow="Inspect"
+    title="Memory workspace"
+    description="Operator hub for semantic recall checks, summary QA, fact review, and long-lived key memory management."
+    subtitle={activeUserId ? `Scoped to user ${activeUserId}` : ''}
+  />
 
   <MemoryWorkspaceNav current="/memory" />
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required to inspect memory data from the selected target.</div>
+    <div class="notice-card">Connect this target to inspect memory data.</div>
   {:else if error}
     <div class="error-state">{error}</div>
   {:else if loading}
-    <div class="notice-card">Loading memory workspace...</div>
+    <div class="notice-card">Loading memory workspace…</div>
   {:else}
     <div class="kpi-grid">
-      <div class="kpi-card">
+      <article class="kpi-card">
         <span class="kpi-label">Summaries</span>
-        <span class="kpi-value">{workspace?.memorySummaries.length ?? 0}</span>
+        <strong class="kpi-value">{workspace?.memorySummaries.length ?? 0}</strong>
         <span class="kpi-meta">Conversation rollups ready for recall.</span>
-      </div>
-      <div class="kpi-card">
+      </article>
+      <article class="kpi-card">
         <span class="kpi-label">Impressions</span>
-        <span class="kpi-value">{workspace?.impressions.length ?? 0}</span>
-        <span class="kpi-meta">Behavioral or preference signals extracted by analysis.</span>
-      </div>
-      <div class="kpi-card">
+        <strong class="kpi-value">{workspace?.impressions.length ?? 0}</strong>
+        <span class="kpi-meta">Behavioral or preference signals.</span>
+      </article>
+      <article class="kpi-card">
         <span class="kpi-label">Facts</span>
-        <span class="kpi-value">{workspace?.facts.length ?? 0}</span>
-        <span class="kpi-meta">Structured factual statements available to retrieval.</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Key Memories</span>
-        <span class="kpi-value">{workspace?.keyMemories.length ?? 0}</span>
-        <span class="kpi-meta">Stable operator-managed slots exposed through tools and REST.</span>
-      </div>
+        <strong class="kpi-value">{workspace?.facts.length ?? 0}</strong>
+        <span class="kpi-meta">Structured factual statements.</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Key memories</span>
+        <strong class="kpi-value">{workspace?.keyMemories.length ?? 0}</strong>
+        <span class="kpi-meta">Operator-managed stable slots.</span>
+      </article>
     </div>
 
     <section class="card page-stack">
       <div class="page-header">
-        <div>
-          <div class="sidebar-label">Semantic search</div>
-          <h2 class="page-title" style="font-size: 1.35rem;">Test ranked recall against live memory data</h2>
+        <div class="page-header-meta">
+          <h2 class="section-title">Semantic search</h2>
+          <p class="panel-meta">Test ranked recall against live memory data.</p>
         </div>
         {#if searchResult}
           <StatusBadge tone="brand" label={`${searchResult.total} matches`} />
@@ -168,61 +165,79 @@
       </div>
 
       <div class="filters two-up">
-        <TextInputField label="Search Query" bind:value={query} placeholder="project roadmap, preferences, recent incident, family details..." />
-        <div class="field" style="align-self: end;">
-          <button class="button" type="button" disabled={searchLoading || !query.trim()} on:click={runSearch}>
-            {searchLoading ? 'Searching...' : 'Run Semantic Search'}
-          </button>
+        <TextInputField
+          label="Query"
+          bind:value={query}
+          placeholder="project roadmap, preferences, recent incident, family details…"
+          fieldClass="field-span-2"
+        />
+        <TextInputField label="Date from" bind:value={dateFrom} type="date" />
+        <TextInputField label="Date to" bind:value={dateTo} type="date" />
+      </div>
+      <div class="inline-group">
+        <span class="field-label">Time tier</span>
+        <div class="segmented-control" style="flex-wrap: wrap;">
+          {#each timeTierOptions as option}
+            <button
+              class="segmented-control-item"
+              type="button"
+              data-state={selectedTiers.includes(option.value) ? 'on' : 'off'}
+              on:click={() => toggleTier(option.value)}
+            >{option.label}</button>
+          {/each}
         </div>
-      </div>
-      <div class="filters two-up">
-        <TextInputField label="Date From" bind:value={dateFrom} type="date" />
-        <TextInputField label="Date To" bind:value={dateTo} type="date" />
-      </div>
-      <div class="inline-group" style="flex-wrap: wrap;">
-        {#each timeTierOptions as option}
-          <button
-            class={selectedTiers.includes(option.value) ? 'button-secondary' : 'button-ghost'}
-            type="button"
-            on:click={() => toggleTier(option.value)}
-          >
-            {option.label}
-          </button>
-        {/each}
+        <button
+          class="btn-primary btn-sm"
+          type="button"
+          style="margin-left: auto;"
+          disabled={searchLoading || !query.trim()}
+          on:click={runSearch}
+        >
+          {searchLoading ? 'Searching…' : 'Run search'}
+        </button>
       </div>
 
       {#if !searchResult}
-        <div class="empty-state">Run a search to inspect semantic score, effective score, and the memory snippets that would be injected.</div>
+        <div class="empty-state">Run a search to inspect semantic score, effective score, and memory snippets.</div>
       {:else}
         <div class="inline-group" style="justify-content: space-between;">
-          <span class="helper-text">Query embedding token estimate: {searchResult.queryEmbeddingTokens}</span>
+          <span class="helper-text">Query embedding tokens: <span class="mono">{searchResult.queryEmbeddingTokens}</span></span>
           <span class="helper-text">Top {searchResult.memories.length} items shown</span>
         </div>
-        <div class="toolbar">
+        <div class="stack-list">
           {#each searchResult.memories as memory}
-            <div class="debug-block">
-              <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px;">
-                <strong>{memory.type}</strong>
-                <div class="inline-group" style="gap: 8px;">
-                  <span class="subtle-text">effective {memory.effectiveScore?.toFixed?.(3) ?? memory.effectiveScore}</span>
+            <article class="memory-result-card">
+              <header class="memory-result-head">
+                <div class="memory-result-head-main">
+                  <StatusBadge tone="muted" label={memory.type} />
+                  <StatusBadge tone="brand" label={`effective ${memory.effectiveScore?.toFixed?.(3) ?? memory.effectiveScore}`} />
                   {#if matchedKeywordsFromMetadata(memory.metadata).length > 0}
-                    <StatusBadge tone="brand" label={`${matchedKeywordsFromMetadata(memory.metadata).length} keyword hit${matchedKeywordsFromMetadata(memory.metadata).length === 1 ? '' : 's'}`} />
-                  {/if}
-                  {#if memory.type === 'summary' || memory.type === 'impression' || memory.type === 'fact'}
-                    <a class="button-ghost" href={memoryDetailHref(memory.type === 'summary' ? 'summaries' : memory.type === 'impression' ? 'impressions' : 'facts', memory.id, activeUserId)}>Open</a>
+                    <StatusBadge
+                      tone="success"
+                      label={`${matchedKeywordsFromMetadata(memory.metadata).length} keyword hit${matchedKeywordsFromMetadata(memory.metadata).length === 1 ? '' : 's'}`}
+                    />
                   {/if}
                 </div>
-              </div>
+                {#if memory.type === 'summary' || memory.type === 'impression' || memory.type === 'fact'}
+                  <a
+                    class="btn-ghost btn-sm"
+                    href={memoryDetailHref(
+                      memory.type === 'summary' ? 'summaries' : memory.type === 'impression' ? 'impressions' : 'facts',
+                      memory.id,
+                      activeUserId
+                    )}
+                  >Open</a>
+                {/if}
+              </header>
               <div class="message-body">{memory.content}</div>
               <MemoryKeywordSignals
                 matchedKeywords={matchedKeywordsFromMetadata(memory.metadata)}
                 sourceKeywords={sourceKeywordsFromMetadata(memory.metadata)}
               />
-              <div class="helper-text" style="margin-top: 10px;">raw semantic score: {memory.score?.toFixed?.(3) ?? memory.score}</div>
-              <div class="helper-text">
-                effective: {memory.effectiveScore?.toFixed?.(3) ?? memory.effectiveScore} · tier {memory.time_tier ?? 'n/a'} · activity {dateTimeLabel(memory.activity_at)}
+              <div class="helper-text mono">
+                raw {memory.score?.toFixed?.(3) ?? memory.score} · effective {memory.effectiveScore?.toFixed?.(3) ?? memory.effectiveScore} · tier {memory.time_tier ?? 'n/a'} · activity {dateTimeLabel(memory.activity_at)}
               </div>
-            </div>
+            </article>
           {/each}
         </div>
       {/if}
@@ -231,56 +246,56 @@
     <div class="grid-2">
       <section class="card page-stack">
         <div class="page-header">
-          <div>
-            <div class="sidebar-label">Collections</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Memory stores at a glance</h2>
+          <div class="page-header-meta">
+            <h2 class="section-title">Collections</h2>
+            <p class="panel-meta">Memory stores at a glance.</p>
           </div>
         </div>
         <div class="list-table">
           <a class="table-row-link" href={`/memory/summaries${userSuffix}`}>
             <span>Summaries</span>
-            <span>{workspace?.memorySummaries.length ?? 0}</span>
+            <span class="mono">{workspace?.memorySummaries.length ?? 0}</span>
           </a>
           <a class="table-row-link" href={`/memory/impressions${userSuffix}`}>
             <span>Impressions</span>
-            <span>{workspace?.impressions.length ?? 0}</span>
+            <span class="mono">{workspace?.impressions.length ?? 0}</span>
           </a>
           <a class="table-row-link" href={`/memory/facts${userSuffix}`}>
             <span>Facts</span>
-            <span>{workspace?.facts.length ?? 0}</span>
+            <span class="mono">{workspace?.facts.length ?? 0}</span>
           </a>
           <a class="table-row-link" href={`/memory/keys${userSuffix}`}>
-            <span>Key Memories</span>
-            <span>{workspace?.keyMemories.length ?? 0}</span>
+            <span>Key memories</span>
+            <span class="mono">{workspace?.keyMemories.length ?? 0}</span>
           </a>
         </div>
       </section>
 
       <section class="card page-stack">
         <div class="page-header">
-          <div>
-            <div class="sidebar-label">Recent excerpts</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Quick spot-check samples</h2>
+          <div class="page-header-meta">
+            <h2 class="section-title">Recent excerpts</h2>
+            <p class="panel-meta">Quick spot-check samples.</p>
           </div>
         </div>
-        <div class="toolbar">
+        <div class="stack-list">
           {#each (workspace?.memorySummaries ?? []).slice(0, 2) as summary}
-            <div class="debug-block">
-              <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px;">
+            <article class="excerpt-card">
+              <header class="excerpt-head">
                 <strong>{summary.topicLabel ?? 'Summary'}</strong>
-                <a class="button-ghost" href={memoryDetailHref('summaries', summary.id, activeUserId)}>Open</a>
-              </div>
+                <a class="btn-link" href={memoryDetailHref('summaries', summary.id, activeUserId)}>Open</a>
+              </header>
               <div class="message-body">{summary.summary}</div>
-            </div>
+            </article>
           {/each}
           {#each (workspace?.facts ?? []).slice(0, 1) as fact}
-            <div class="debug-block">
-              <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px;">
+            <article class="excerpt-card">
+              <header class="excerpt-head">
                 <strong>Fact</strong>
-                <a class="button-ghost" href={memoryDetailHref('facts', fact.id, activeUserId)}>Open</a>
-              </div>
+                <a class="btn-link" href={memoryDetailHref('facts', fact.id, activeUserId)}>Open</a>
+              </header>
               <div class="message-body">{fact.content}</div>
-            </div>
+            </article>
           {/each}
           {#if (workspace?.memorySummaries.length ?? 0) === 0 && (workspace?.facts.length ?? 0) === 0}
             <div class="empty-state">This target has not generated summaries or facts yet.</div>
@@ -290,3 +305,30 @@
     </div>
   {/if}
 </section>
+
+<style>
+  .memory-result-card,
+  .excerpt-card {
+    display: grid;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+
+  .memory-result-head,
+  .excerpt-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .memory-result-head-main {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+</style>

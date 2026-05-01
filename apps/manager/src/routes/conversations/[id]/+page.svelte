@@ -8,6 +8,7 @@
   import { createMemoryRebuild, fetchConversation, fetchConversationMemory, fetchConversationSources, requeueTask } from '$lib/api/client';
   import ChatMessageCard from '$lib/components/ChatMessageCard.svelte';
   import JsonView from '$lib/components/JsonView.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import { memoryDetailHref } from '$lib/memory/routes';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
@@ -114,36 +115,40 @@
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <span class="sidebar-label">Conversation Detail</span>
-    <h1 class="page-title">{$page.params.id}</h1>
-    <p class="page-description">
-      Inspect the exact message timeline, worker lifecycle metadata, and the memory artifacts linked to this conversation.
-    </p>
-  </div>
+  <PageHeader
+    eyebrow="Conversation"
+    title={$page.params.id}
+    description="Inspect the message timeline, worker lifecycle metadata, and memory artifacts linked to this conversation."
+  >
+    <div slot="actions">
+      <button class="btn-secondary btn-sm" type="button" disabled={requeueing} on:click={requeueAnalysis}>
+        {requeueing ? 'Requeueing…' : 'Requeue analysis'}
+      </button>
+      <button class="btn-secondary btn-sm" type="button" disabled={rebuilding || !sources?.has_snapshot} on:click={rebuildConversation}>
+        {rebuilding ? 'Creating…' : 'Rebuild'}
+      </button>
+    </div>
+  </PageHeader>
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required to open conversation detail pages.</div>
+    <div class="notice-card">Connect this target to open conversation detail pages.</div>
   {:else if error}
     <div class="error-state">{error}</div>
   {:else if loading}
-    <div class="notice-card">Loading conversation detail...</div>
+    <div class="notice-card">Loading conversation detail…</div>
   {:else if detail}
     {#if actionMessage}
-      <div class="notice-card">{actionMessage}</div>
+      <div class="notice-card is-success">{actionMessage}</div>
     {/if}
-    <div class="grid-2" style="align-items: start;">
-      <section class="chat-thread-card card">
+
+    <div class="conversation-grid">
+      <section class="card page-stack">
         <div class="page-header">
-          <div>
-            <div class="sidebar-label">Timeline</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Protocol and message flow</h2>
+          <div class="page-header-meta">
+            <h2 class="section-title">Timeline</h2>
+            <p class="panel-meta">Protocol and message flow on the wire.</p>
           </div>
-          <div class="toolbar">
-            <button class="button-ghost" type="button" disabled={requeueing} on:click={requeueAnalysis}>{requeueing ? 'Requeueing...' : 'Requeue analysis'}</button>
-            <button class="button-ghost" type="button" disabled={rebuilding || !sources?.has_snapshot} on:click={rebuildConversation}>
-              {rebuilding ? 'Creating rebuild...' : 'Rebuild this conversation'}
-            </button>
+          <div class="inline-group">
             <StatusBadge tone={detail.finalize_status === 'ended' ? 'success' : detail.finalize_status === 'failed' ? 'danger' : 'warning'} label={detail.finalize_status} />
             <StatusBadge tone={detail.summary_status === 'completed' ? 'success' : detail.summary_status === 'failed' ? 'danger' : detail.summary_status === 'skipped' ? 'muted' : 'warning'} label={`summary ${detail.summary_status}`} />
             <StatusBadge tone={detail.analysis_status === 'completed' ? 'success' : detail.analysis_status === 'failed' ? 'danger' : detail.analysis_status === 'skipped' ? 'muted' : 'warning'} label={`analysis ${detail.analysis_status}`} />
@@ -155,40 +160,40 @@
           {/each}
         </div>
         {#if (detail.parts?.length ?? 0) > 0}
-          <div class="debug-block" style="margin-top: 18px;">
+          <div class="page-stack" style="margin-top: 12px;">
             <div class="page-header">
-              <div>
-                <div class="sidebar-label">Materialized timeline</div>
-                <h2 class="page-title" style="font-size: 1.15rem;">Message parts and extracted artifacts</h2>
+              <div class="page-header-meta">
+                <h3 class="section-title" style="font-size: var(--font-size-md);">Materialized timeline</h3>
+                <p class="panel-meta">Message parts and extracted artifacts.</p>
               </div>
             </div>
-            <div class="toolbar" style="display: grid; gap: 12px;">
+            <div class="stack-list">
               {#each detail.parts ?? [] as part}
-                <div class="debug-block" style="background: var(--bg-panel-muted);">
-                  <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
+                <div class="debug-block debug-block-muted">
+                  <div class="inline-group" style="justify-content: space-between;">
                     <strong>{part.role} · {part.part_type}</strong>
-                    <span class="subtle-text">seq {part.sequence_num} · part {part.part_index}</span>
+                    <span class="helper-text mono">seq {part.sequence_num} · part {part.part_index}</span>
                   </div>
                   {#if part.source_url && part.part_type === 'image'}
-                    <img src={part.source_url} alt={part.filename ?? 'image part'} style="max-width: 100%; border-radius: 10px;" />
+                    <img src={part.source_url} alt={part.filename ?? 'image part'} style="max-width: 100%; border-radius: var(--radius-sm); margin-top: 8px;" />
                   {:else if part.source_url && part.part_type === 'audio'}
-                    <audio controls style="width: 100%;" src={part.source_url}></audio>
+                    <audio controls style="width: 100%; margin-top: 8px;" src={part.source_url}></audio>
                   {:else if part.source_url && part.part_type === 'video'}
                     <!-- svelte-ignore a11y_media_has_caption -->
-                    <video controls style="width: 100%; border-radius: 10px;" src={part.source_url}></video>
+                    <video controls style="width: 100%; border-radius: var(--radius-sm); margin-top: 8px;" src={part.source_url}></video>
                   {:else if part.source_url && part.part_type === 'file'}
                     <a class="link-inline" href={part.source_url} target="_blank" rel="noreferrer">{part.filename ?? 'Open file'}</a>
                   {/if}
                   {#if part.text_content}
-                    <div class="subtle-text" style="margin-top: 8px;">{part.text_content}</div>
+                    <div class="helper-text" style="margin-top: 8px;">{part.text_content}</div>
                   {/if}
                   {#if (detail.artifacts ?? []).filter((artifact) => artifact.part_id === part.part_id).length > 0}
-                    <div class="toolbar" style="display: grid; gap: 8px; margin-top: 10px;">
+                    <div class="stack-list" style="margin-top: 8px;">
                       {#each (detail.artifacts ?? []).filter((artifact) => artifact.part_id === part.part_id) as artifact}
                         <div class="debug-block">
                           <div class="inline-group" style="justify-content: space-between;">
                             <strong>{artifact.artifact_type}</strong>
-                            <span class="subtle-text">{artifact.status}</span>
+                            <StatusBadge tone="muted" label={artifact.status} />
                           </div>
                           {#if artifact.text_content}
                             <div class="message-body">{artifact.text_content}</div>
@@ -204,82 +209,103 @@
         {/if}
       </section>
 
-      <section class="debug-column">
-        <div class="debug-block">
+      <aside class="conversation-side">
+        <div class="card page-stack">
           <div class="page-header">
-            <div>
-              <div class="sidebar-label">Meta</div>
-              <h2 class="page-title" style="font-size: 1.2rem;">Conversation envelope</h2>
+            <div class="page-header-meta">
+              <h3 class="section-title">Envelope</h3>
+              <p class="panel-meta">Routing &amp; protocol metadata.</p>
             </div>
           </div>
-          <div class="toolbar">
-            <div class="inline-group"><strong>Provider</strong><span>{detail.provider}</span></div>
-            <div class="inline-group"><strong>Protocol</strong><span>{detail.request_format}</span></div>
-            <div class="inline-group"><strong>Mode</strong><span>{detail.mode}</span></div>
-            <div class="inline-group"><strong>Updated</strong><span>{new Date(detail.updated_at).toLocaleString()}</span></div>
-          </div>
+          <dl class="meta-grid compact">
+            <div>
+              <dt>Provider</dt>
+              <dd class="mono">{detail.provider}</dd>
+            </div>
+            <div>
+              <dt>Protocol</dt>
+              <dd class="mono">{detail.request_format}</dd>
+            </div>
+            <div>
+              <dt>Mode</dt>
+              <dd class="mono">{detail.mode}</dd>
+            </div>
+            <div>
+              <dt>Updated</dt>
+              <dd>{new Date(detail.updated_at).toLocaleString()}</dd>
+            </div>
+          </dl>
         </div>
 
-        <div class="debug-block">
+        <div class="card page-stack">
           <div class="page-header">
-            <div>
-              <div class="sidebar-label">Source retention</div>
-              <h2 class="page-title" style="font-size: 1.2rem;">Snapshot availability</h2>
+            <div class="page-header-meta">
+              <h3 class="section-title">Snapshot</h3>
+              <p class="panel-meta">Source retention for rebuilds.</p>
             </div>
           </div>
           {#if sources?.has_snapshot && sources.latest_snapshot}
-            <div class="toolbar">
-              <div class="inline-group"><strong>Latest version</strong><span>v{sources.latest_snapshot.snapshot_version}</span></div>
-              <div class="inline-group"><strong>Hash</strong><span>{sources.latest_snapshot.source_hash}</span></div>
-              <div class="inline-group"><strong>Captured</strong><span>{sources.latest_snapshot.updated_at ? new Date(sources.latest_snapshot.updated_at).toLocaleString() : 'Unknown'}</span></div>
-            </div>
+            <dl class="meta-grid compact">
+              <div>
+                <dt>Version</dt>
+                <dd class="mono">v{sources.latest_snapshot.snapshot_version}</dd>
+              </div>
+              <div>
+                <dt>Hash</dt>
+                <dd class="mono">{sources.latest_snapshot.source_hash}</dd>
+              </div>
+              <div>
+                <dt>Captured</dt>
+                <dd>{sources.latest_snapshot.updated_at ? new Date(sources.latest_snapshot.updated_at).toLocaleString() : 'Unknown'}</dd>
+              </div>
+            </dl>
           {:else}
-            <div class="empty-state">No retained source snapshot exists for this conversation yet, so one-click rebuild is unavailable.</div>
+            <div class="empty-state">No retained snapshot for this conversation.</div>
           {/if}
         </div>
 
-        <div class="debug-block">
+        <div class="card page-stack">
           <div class="page-header">
-            <div>
-              <div class="sidebar-label">Usage</div>
-              <h2 class="page-title" style="font-size: 1.2rem;">Token totals</h2>
+            <div class="page-header-meta">
+              <h3 class="section-title">Usage</h3>
+              <p class="panel-meta">Token totals.</p>
             </div>
           </div>
           <JsonView value={detail.usage} />
         </div>
 
-        <div class="debug-block">
+        <div class="card page-stack">
           <div class="page-header">
-            <div>
-              <div class="sidebar-label">Metadata</div>
-              <h2 class="page-title" style="font-size: 1.2rem;">Stored request and worker context</h2>
+            <div class="page-header-meta">
+              <h3 class="section-title">Metadata</h3>
+              <p class="panel-meta">Stored request &amp; worker context.</p>
             </div>
           </div>
           <JsonView value={detail.metadata ?? {}} />
         </div>
 
-        <div class="debug-block">
+        <div class="card page-stack">
           <div class="page-header">
-            <div>
-              <div class="sidebar-label">Segments</div>
-              <h2 class="page-title" style="font-size: 1.2rem;">Incremental dialogue slices</h2>
+            <div class="page-header-meta">
+              <h3 class="section-title">Segments</h3>
+              <p class="panel-meta">Incremental dialogue slices.</p>
             </div>
           </div>
           {#if (detail.segments?.length ?? 0) === 0}
-            <div class="empty-state">No conversation segments have been materialized for this conversation yet.</div>
+            <div class="empty-state">No segments materialized yet.</div>
           {:else}
-            <div class="toolbar" style="display: grid; gap: 12px;">
+            <div class="stack-list">
               {#each detail.segments ?? [] as segment}
-                <div class="debug-block" style="background: var(--bg-panel-muted);">
-                  <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px;">
+                <div class="debug-block debug-block-muted">
+                  <div class="inline-group" style="justify-content: space-between;">
                     <div>
                       <strong>Segment #{segment.segment_index}</strong>
-                      <div class="subtle-text">seq {segment.start_sequence} -> {segment.end_sequence}</div>
+                      <div class="helper-text mono">seq {segment.start_sequence} → {segment.end_sequence}</div>
                     </div>
-                    <div class="subtle-text">
+                    <div class="helper-text">
                       {segment.message_count} msgs
                       {#if segment.overlap_message_count > 0}
-                        · overlap {segment.overlap_message_count} from seq {segment.overlap_from_sequence}
+                        · overlap {segment.overlap_message_count}
                       {/if}
                     </div>
                   </div>
@@ -290,30 +316,30 @@
           {/if}
         </div>
 
-        <div class="debug-block">
+        <div class="card page-stack">
           <div class="page-header">
-            <div>
-              <div class="sidebar-label">Memory output</div>
-              <h2 class="page-title" style="font-size: 1.2rem;">Documents linked to this conversation</h2>
+            <div class="page-header-meta">
+              <h3 class="section-title">Memory output</h3>
+              <p class="panel-meta">Documents linked to this conversation.</p>
             </div>
           </div>
           {#if memory?.generation_id}
-            <div class="helper-text" style="margin-bottom: 10px;">Viewing generation `{memory.generation_id}`.</div>
+            <div class="helper-text mono">Generation: {memory.generation_id}</div>
           {/if}
           {#if (memory?.documents.length ?? 0) === 0}
-            <div class="empty-state">No persisted memory documents are linked to this conversation yet.</div>
+            <div class="empty-state">No persisted memory documents linked yet.</div>
           {:else}
-            <div class="toolbar">
+            <div class="stack-list">
               {#each memory?.documents ?? [] as item}
-                <div class="debug-block" style="background: var(--bg-panel-muted);">
-                  <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px;">
+                <div class="debug-block debug-block-muted">
+                  <div class="inline-group" style="justify-content: space-between;">
                     <div>
                       <strong>{item.type}</strong>
-                      <div class="subtle-text">{item.id}</div>
+                      <div class="helper-text mono">{item.id}</div>
                     </div>
-                    <div class="inline-group" style="gap: 8px;">
-                      <a class="button-ghost" href={memoryDetailHref(item.type === 'summary' ? 'summaries' : item.type === 'impression' ? 'impressions' : 'facts', item.id, detail.user_id)}>Open detail</a>
-                      <a class="button-ghost" href={`/memory/${item.type === 'summary' ? 'summaries' : item.type === 'impression' ? 'impressions' : 'facts'}?user_id=${detail.user_id}`}>Open workspace</a>
+                    <div class="inline-group" style="gap: 4px;">
+                      <a class="btn-ghost btn-sm" href={memoryDetailHref(item.type === 'summary' ? 'summaries' : item.type === 'impression' ? 'impressions' : 'facts', item.id, detail.user_id)}>Open</a>
+                      <a class="btn-ghost btn-sm" href={`/memory/${item.type === 'summary' ? 'summaries' : item.type === 'impression' ? 'impressions' : 'facts'}?user_id=${detail.user_id}`}>Workspace</a>
                     </div>
                   </div>
                   <div class="message-body">{item.content}</div>
@@ -322,7 +348,63 @@
             </div>
           {/if}
         </div>
-      </section>
+      </aside>
     </div>
   {/if}
 </section>
+
+<style>
+  .conversation-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr);
+    gap: 14px;
+    align-items: start;
+  }
+
+  .conversation-side {
+    display: grid;
+    gap: 14px;
+    align-content: start;
+    min-width: 0;
+  }
+
+  .meta-grid {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+  }
+
+  .meta-grid.compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .meta-grid > div {
+    display: grid;
+    gap: 2px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--surface-muted);
+  }
+
+  .meta-grid dt {
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 0;
+  }
+
+  .meta-grid dd {
+    margin: 0;
+    color: var(--text);
+    font-size: var(--font-size-sm);
+  }
+
+  @media (max-width: 1100px) {
+    .conversation-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

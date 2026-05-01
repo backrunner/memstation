@@ -6,6 +6,7 @@
 
   import { fetchAdminMemoryDocuments, updateAdminMemoryDocument } from '$lib/api/client';
   import MemoryWorkspaceNav from '$lib/components/MemoryWorkspaceNav.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import { memoryDetailHref } from '$lib/memory/routes';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
@@ -171,30 +172,32 @@
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <span class="sidebar-label">Memory / Impressions</span>
-    <h1 class="page-title">Impressions</h1>
-    <p class="page-description">Impressions capture preference hints, attitudes, and familiarity signals that are useful for style adaptation and operator review.</p>
-    {#if activeUserId}
-      <div class="helper-text">Scoped to user `{activeUserId}`.</div>
-    {/if}
-  </div>
+  <PageHeader
+    eyebrow="Inspect / Memory"
+    title="Impressions"
+    description="Preference hints, attitudes, and familiarity signals useful for style adaptation and operator review."
+    subtitle={activeUserId ? `Scoped to user ${activeUserId}` : ''}
+  />
 
   <MemoryWorkspaceNav current="/memory/impressions" />
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required to inspect impression records.</div>
+    <div class="notice-card">Connect this target to inspect impression records.</div>
   {:else if error}
     <div class="error-state">{error}</div>
   {:else if loading}
-    <div class="notice-card">Loading impression records...</div>
+    <div class="notice-card">Loading impression records…</div>
   {:else}
     {#if success}
-      <div class="notice-card">{success}</div>
+      <div class="notice-card is-success">{success}</div>
     {/if}
     <section class="card page-stack">
       <div class="filters two-up">
-        <TextInputField label="Filter Impressions" bind:value={filter} placeholder="tone, preference, attitude, repeated behavior..." />
+        <TextInputField
+          label="Filter"
+          bind:value={filter}
+          placeholder="tone, preference, attitude, repeated behavior…"
+        />
         <div class="field" style="align-self: end;">
           <div class="helper-text">{visibleImpressions.length} of {impressions.length} impressions visible</div>
         </div>
@@ -202,34 +205,60 @@
       {#if visibleImpressions.length === 0}
         <div class="empty-state">No impressions match the current filter.</div>
       {:else}
-        <div class="toolbar">
+        <div class="stack-list">
           {#each visibleImpressions as impression}
-            <div class="debug-block">
-              <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px;">
-                <div>
+            <article class="summary-card">
+              <header class="summary-head">
+                <div class="summary-head-main">
                   <strong>Impression</strong>
-                  <div class="subtle-text">{impression.id}</div>
+                  <span class="helper-text mono">{impression.id}</span>
                 </div>
-                <div class="inline-group" style="gap: 8px;">
+                <div class="inline-group">
                   <StatusBadge tone="muted" label={impression.conversation_id ? 'conversation-linked' : 'manual'} />
-                  <a class="button-ghost" href={memoryDetailHref('impressions', impression.id, activeUserId)}>Open</a>
+                  <a class="btn-ghost btn-sm" href={memoryDetailHref('impressions', impression.id, activeUserId)}>Open</a>
                   {#if editingId === impression.id}
-                    <button class="button-ghost" type="button" on:click={cancelEdit}>Cancel</button>
-                    <button class="button" type="button" disabled={saving} on:click={() => saveEdit(impression)}>{saving ? 'Saving...' : 'Save'}</button>
+                    <button class="btn-ghost btn-sm" type="button" on:click={cancelEdit}>Cancel</button>
+                    <button class="btn-primary btn-sm" type="button" disabled={saving} on:click={() => saveEdit(impression)}>
+                      {saving ? 'Saving…' : 'Save'}
+                    </button>
                   {:else}
-                    <button class="button-ghost" type="button" on:click={() => startEdit(impression)}>Edit</button>
+                    <button class="btn-secondary btn-sm" type="button" on:click={() => startEdit(impression)}>Edit</button>
                   {/if}
                 </div>
-              </div>
+              </header>
               {#if editingId === impression.id}
-                <TextareaField label="Impression Content" bind:value={draftContent} rows={6} />
+                <TextareaField label="Impression content" bind:value={draftContent} rows={5} />
               {:else}
                 <div class="message-body">{impression.content}</div>
               {/if}
-            </div>
+            </article>
           {/each}
         </div>
       {/if}
     </section>
   {/if}
 </section>
+
+<style>
+  .summary-card {
+    display: grid;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+
+  .summary-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .summary-head-main {
+    display: grid;
+    gap: 2px;
+  }
+</style>

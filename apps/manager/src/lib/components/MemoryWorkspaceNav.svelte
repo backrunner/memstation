@@ -23,6 +23,10 @@
 
 <nav class="subnav-pills" aria-label="Memory workspace sections">
   {#each items as item}
-    <a class={`subnav-pill ${current === item.href ? 'is-active' : ''}`} href={`${item.href}${suffix}`}>{item.label}</a>
+    <a
+      class="subnav-pill"
+      class:is-active={current === item.href}
+      href={`${item.href}${suffix}`}
+    >{item.label}</a>
   {/each}
 </nav>

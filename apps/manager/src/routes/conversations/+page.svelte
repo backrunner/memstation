@@ -4,6 +4,7 @@
   import { onMount } from 'svelte';
 
   import { fetchConversations } from '$lib/api/client';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
@@ -51,36 +52,53 @@
       .toLowerCase()
       .includes(query);
   });
+
+  function finalizeStatusTone(status: string): 'brand' | 'success' | 'warning' | 'danger' | 'muted' {
+    if (status === 'ended') return 'success';
+    if (status === 'active') return 'brand';
+    if (status === 'failed') return 'danger';
+    return 'warning';
+  }
+
+  function summaryStatusTone(status: string): 'success' | 'danger' | 'muted' | 'warning' {
+    if (status === 'completed') return 'success';
+    if (status === 'failed') return 'danger';
+    if (status === 'skipped') return 'muted';
+    return 'warning';
+  }
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <span class="sidebar-label">Conversations</span>
-    <h1 class="page-title">Conversations</h1>
-    <p class="page-description">
-      Browse persisted conversations, inspect finalize and worker states, and open a single session to debug tool round-trips or post-conversation extraction outcomes.
-    </p>
-  </div>
+  <PageHeader
+    eyebrow="Inspect"
+    title="Conversations"
+    description="Browse persisted conversations, inspect finalize and worker states, and open a session to debug tool round-trips or post-conversation extraction outcomes."
+  />
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required to inspect conversation history.</div>
+    <div class="notice-card">Connect this target to inspect conversation history.</div>
   {:else}
     <section class="card">
-      <div class="page-header">
+      <div class="filters two-up">
         <TextInputField
           label="Search"
           bind:value={search}
-          placeholder="conversation id, provider, protocol, mode..."
+          placeholder="conversation id, provider, protocol, mode…"
           fieldClass="field-span-2"
         />
-        <button class="button-secondary" type="button" on:click={loadConversations}>Refresh List</button>
+        <div class="field" style="align-self: end;">
+          <div class="inline-group" style="justify-content: space-between;">
+            <span class="helper-text">{filtered.length} of {conversations.length} conversations</span>
+            <button class="btn-secondary btn-sm" type="button" on:click={loadConversations}>Refresh</button>
+          </div>
+        </div>
       </div>
     </section>
 
     {#if error}
       <div class="error-state">{error}</div>
     {:else if loading}
-      <div class="notice-card">Loading conversations...</div>
+      <div class="notice-card">Loading conversations…</div>
     {:else}
       <section class="table-card">
         <div class="table-scroll">
@@ -101,23 +119,38 @@
                 <tr>
                   <td>
                     <a href={`/conversations/${item.conversation_id}`}>
-                      <strong>{item.conversation_id}</strong>
+                      <strong class="mono">{item.conversation_id}</strong>
                     </a>
                     <div class="subtle-text">{item.mode}</div>
                   </td>
                   <td>{item.provider}</td>
-                  <td>{item.protocol}</td>
+                  <td class="mono">{item.protocol}</td>
                   <td>
-                    <div class="toolbar">
-                      <StatusBadge tone={item.finalize_status === 'ended' ? 'success' : item.finalize_status === 'active' ? 'brand' : item.finalize_status === 'failed' ? 'danger' : 'warning'} label={item.finalize_status} />
-                      <StatusBadge tone={item.summary_status === 'completed' ? 'success' : item.summary_status === 'failed' ? 'danger' : item.summary_status === 'skipped' ? 'muted' : 'warning'} label={`summary ${item.summary_status}`} />
+                    <div class="inline-group" style="gap: 4px;">
+                      <StatusBadge
+                        tone={finalizeStatusTone(item.finalize_status)}
+                        label={item.finalize_status}
+                      />
+                      <StatusBadge
+                        tone={summaryStatusTone(item.summary_status)}
+                        label={`summary ${item.summary_status}`}
+                      />
                     </div>
                   </td>
-                  <td>{item.message_count}</td>
-                  <td>{item.total_tokens}</td>
-                  <td>{new Date(item.updated_at).toLocaleString()}</td>
+                  <td class="mono">{item.message_count}</td>
+                  <td class="mono">{item.total_tokens}</td>
+                  <td class="subtle-text no-wrap">{new Date(item.updated_at).toLocaleString()}</td>
                 </tr>
               {/each}
+              {#if filtered.length === 0}
+                <tr>
+                  <td colspan="7">
+                    <div class="empty-state" style="border: none; padding: 12px 0;">
+                      {search ? 'No conversations match the current filter.' : 'No conversations recorded on this target yet.'}
+                    </div>
+                  </td>
+                </tr>
+              {/if}
             </tbody>
           </table>
         </div>

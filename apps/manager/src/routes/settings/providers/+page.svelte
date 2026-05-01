@@ -6,7 +6,9 @@
   import { PencilLine, Plus, TriangleAlert } from 'lucide-svelte';
 
   import { fetchConfig, fetchProviderDiagnostics, saveConfig } from '$lib/api/client';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import SelectField from '$lib/components/SelectField.svelte';
+  import StatusBadge from '$lib/components/StatusBadge.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
   import { isHTTPURL } from '$lib/forms/validation';
   import {
@@ -525,14 +527,6 @@
     return activeProvider || 'Auto';
   }
 
-  function providerMeta(form: ProviderForm): string {
-    const parts = [form.hasAPIKey ? 'Stored Key' : 'No Key'];
-    if (form.source === 'override') {
-      parts.push('Override');
-    }
-    return parts.join(' · ');
-  }
-
   function providerEndpoint(form: ProviderForm, diagnostic?: ProviderDiagnostic): string {
     const value = form.baseUrl.trim() || diagnostic?.base_url || '';
     if (!value) {
@@ -646,36 +640,41 @@
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <div class="page-header provider-page-header" style="margin-bottom: 0;">
-      <h1 class="page-title">Providers</h1>
+  <PageHeader
+    eyebrow="Administer"
+    title="Providers"
+    description="Manage upstream provider credentials, base URLs, and default routes. Writes are audited on the target."
+  >
+    <div slot="actions">
       {#if $targetState.session.authenticated && !loading}
-        <button class="button" type="button" disabled={saving} on:click={persist}>{saving ? 'Saving...' : 'Save Provider Settings'}</button>
+        <button class="btn-primary" type="button" disabled={saving} on:click={persist}>
+          {saving ? 'Saving…' : 'Save provider settings'}
+        </button>
       {/if}
     </div>
-  </div>
+  </PageHeader>
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required to manage provider settings.</div>
+    <div class="notice-card">Connect this target to manage provider settings.</div>
   {:else if error}
     <div class="error-state">{error}</div>
   {:else if loading}
-    <div class="notice-card">Loading provider settings...</div>
+    <div class="notice-card">Loading provider settings…</div>
   {:else}
     {#if success}
-      <div class="notice-card">{success}</div>
+      <div class="notice-card is-success">{success}</div>
     {/if}
 
     <div class="providers-grid">
       {#each scopeOrder as typedScope}
         <section class="card page-stack provider-scope-card">
           <div class="page-header provider-scope-header">
-            <div class="page-stack provider-scope-title">
+            <div class="page-header-meta">
               <h2 class="section-title">{scopeTitle(typedScope)}</h2>
             </div>
 
             <div class="provider-scope-actions">
-              <div class="provider-route-control provider-route-shell">
+              <div class="provider-route-control">
                 <span class="provider-route-tag">Route</span>
                 {#if scopeSupportsDefaultRoute(typedScope)}
                   {#if typedScope === 'gateway'}
@@ -686,10 +685,10 @@
                       onValueChange={(value) => (gatewayDefaultProvider = value)}
                     >
                       <Select.Trigger class={`select-trigger provider-route-trigger ${fieldErrors.gatewayDefault ? 'is-invalid' : ''}`}>
-                        {providerItemsForScope(typedScope).find((item) => item.value === gatewayDefaultProvider)?.label ?? 'Select Route'}
+                        {providerItemsForScope(typedScope).find((item) => item.value === gatewayDefaultProvider)?.label ?? 'Select route'}
                       </Select.Trigger>
                       <Select.Portal>
-                        <Select.Content class="select-content" sideOffset={8}>
+                        <Select.Content class="select-content" sideOffset={6}>
                           <Select.Viewport>
                             {#each providerItemsForScope(typedScope) as item}
                               <Select.Item class="select-item" value={item.value} label={item.label}>{item.label}</Select.Item>
@@ -706,10 +705,10 @@
                       onValueChange={(value) => (internalDefaultProvider = value)}
                     >
                       <Select.Trigger class={`select-trigger provider-route-trigger ${fieldErrors.internalDefault ? 'is-invalid' : ''}`}>
-                        {providerItemsForScope(typedScope).find((item) => item.value === internalDefaultProvider)?.label ?? 'Select Route'}
+                        {providerItemsForScope(typedScope).find((item) => item.value === internalDefaultProvider)?.label ?? 'Select route'}
                       </Select.Trigger>
                       <Select.Portal>
-                        <Select.Content class="select-content" sideOffset={8}>
+                        <Select.Content class="select-content" sideOffset={6}>
                           <Select.Viewport>
                             {#each providerItemsForScope(typedScope) as item}
                               <Select.Item class="select-item" value={item.value} label={item.label}>{item.label}</Select.Item>
@@ -720,17 +719,17 @@
                     </Select.Root>
                   {/if}
                 {:else}
-                  <span class="provider-route-readout">{routeDisplayValue(typedScope)}</span>
+                  <span class="provider-route-readout mono">{routeDisplayValue(typedScope)}</span>
                 {/if}
               </div>
 
               <button
-                class="button-secondary provider-add-button"
+                class="btn-secondary btn-sm"
                 type="button"
                 disabled={availableProviderItems(typedScope).length === 0}
                 on:click={() => openAddProviderDialog(typedScope)}
               >
-                <Plus size={16} />
+                <Plus size={13} strokeWidth={2} />
                 Add
               </button>
             </div>
@@ -740,30 +739,37 @@
             <div class="field-error">{fieldErrors[typedScope === 'gateway' ? 'gatewayDefault' : 'internalDefault']}</div>
           {/if}
 
-          <div class="provider-list provider-list-compact">
+          <div class="provider-list">
             {#each visibleFormsForScope(typedScope) as form}
               {@const diagnostic = diagnosticFor(form.scope, form.provider)}
               {@const isActive = activeProviderForScope(typedScope) === form.provider}
               {@const issue = primaryIssue(form, diagnostic)}
-              <div class={`provider-list-item ${isActive ? 'is-active' : ''}`}>
+              <div class="provider-list-item" class:is-active={isActive}>
                 <div class="provider-list-main">
                   <div class="provider-list-heading">
                     <strong>{form.provider}</strong>
+                    {#if isActive}
+                      <StatusBadge tone="brand" label="Active route" />
+                    {/if}
+                    <StatusBadge
+                      tone={form.hasAPIKey ? 'success' : 'warning'}
+                      label={form.hasAPIKey ? 'Key set' : 'No key'}
+                    />
+                    {#if form.source === 'override'}
+                      <StatusBadge tone="muted" label="Override" />
+                    {/if}
                   </div>
-                  <div class="provider-list-endpoint">{providerEndpoint(form, diagnostic)}</div>
-                  <div class="provider-list-meta">
-                    <span>{providerMeta(form)}</span>
-                  </div>
+                  <div class="provider-list-endpoint mono">{providerEndpoint(form, diagnostic)}</div>
                   {#if issue}
                     <div class="provider-warning">
-                      <TriangleAlert size={14} />
+                      <TriangleAlert size={13} strokeWidth={1.75} />
                       <span>{issue}</span>
                     </div>
                   {/if}
                 </div>
                 <div class="provider-list-side">
-                  <button class="icon-button" type="button" aria-label={`Edit ${form.provider}`} on:click={() => openProviderDialog(form)}>
-                    <PencilLine size={16} />
+                  <button class="btn-ghost btn-icon btn-sm" type="button" aria-label={`Edit ${form.provider}`} on:click={() => openProviderDialog(form)}>
+                    <PencilLine size={14} strokeWidth={1.75} />
                   </button>
                 </div>
               </div>
@@ -779,16 +785,21 @@
       <Dialog.Overlay class="dialog-overlay" />
       <Dialog.Content class="dialog-card provider-dialog-card">
         <div class="page-header">
-          <Dialog.Title class="section-title provider-dialog-title" level={3}>{editingForm ? `Edit ${editingForm.provider}` : 'Provider'}</Dialog.Title>
-          <Dialog.Close class="button-ghost">Close</Dialog.Close>
+          <div class="page-header-meta">
+            <Dialog.Title class="section-title provider-dialog-title" level={3}>
+              {editingForm ? `Edit ${editingForm.provider}` : 'Provider'}
+            </Dialog.Title>
+            <p class="panel-meta">Writes are audited on the selected target.</p>
+          </div>
+          <Dialog.Close class="btn-ghost btn-sm">Close</Dialog.Close>
         </div>
 
         {#if editingForm}
           {@const editingDiagnostic = diagnosticFor(editingForm.scope, editingForm.provider)}
           <div class="provider-dialog-summary">
-            <span class="subtle-text">{providerEndpoint(editingForm, editingDiagnostic)}</span>
+            <span class="helper-text mono">{providerEndpoint(editingForm, editingDiagnostic)}</span>
             {#if editingDiagnostic?.restart_required}
-              <span class="subtle-text">Restart Pending</span>
+              <StatusBadge tone="warning" label="Restart pending" />
             {/if}
           </div>
 
@@ -800,11 +811,11 @@
               error={fieldErrors[formKey(editingForm.scope, editingForm.provider)]}
             />
             <TextInputField
-              label="Rotate API Key"
+              label="Rotate API key"
               bind:value={draftAPIKey}
               type="password"
               autocomplete="off"
-              placeholder="Leave Blank To Keep The Stored Secret"
+              placeholder="Leave blank to keep the stored secret"
             />
           </div>
 
@@ -812,14 +823,12 @@
             <div class="error-state">{dialogError}</div>
           {/if}
           {#if (editingDiagnostic?.issues.length ?? 0) > 0}
-            <div class="notice-card">{editingDiagnostic?.issues?.[0]}</div>
+            <div class="notice-card is-warning">{editingDiagnostic?.issues?.[0]}</div>
           {/if}
 
-          <div class="inline-group" style="justify-content: space-between; flex-wrap: wrap;">
-            <div class="helper-text">Changes apply to the form first, then save to the target.</div>
-            <div class="inline-group" style="justify-content: flex-end;">
-              <button class="button" type="button" on:click={applyDialogChanges}>Apply Changes</button>
-            </div>
+          <div class="target-dialog-footer">
+            <p class="helper-text">Changes stage into the form first, then save to the target.</p>
+            <button class="btn-primary" type="button" on:click={applyDialogChanges}>Apply changes</button>
           </div>
         {/if}
       </Dialog.Content>
@@ -831,8 +840,10 @@
       <Dialog.Overlay class="dialog-overlay" />
       <Dialog.Content class="dialog-card provider-add-dialog">
         <div class="page-header">
-          <Dialog.Title class="section-title" level={3}>{addProviderScope ? `Add ${scopeTitle(addProviderScope)}` : 'Add Provider'}</Dialog.Title>
-          <Dialog.Close class="button-ghost">Close</Dialog.Close>
+          <Dialog.Title class="section-title" level={3}>
+            {addProviderScope ? `Add ${scopeTitle(addProviderScope)}` : 'Add provider'}
+          </Dialog.Title>
+          <Dialog.Close class="btn-ghost btn-sm">Close</Dialog.Close>
         </div>
 
         {#if addProviderScope}
@@ -843,7 +854,9 @@
           />
 
           <div class="inline-group" style="justify-content: flex-end;">
-            <button class="button" type="button" disabled={!addProviderValue} on:click={addVisibleProvider}>Add Provider</button>
+            <button class="btn-primary btn-sm" type="button" disabled={!addProviderValue} on:click={addVisibleProvider}>
+              Add provider
+            </button>
           </div>
         {/if}
       </Dialog.Content>
@@ -855,221 +868,173 @@
   .providers-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 18px;
+    gap: 14px;
     align-items: start;
   }
 
-  .provider-page-header,
-  .provider-scope-header {
-    align-items: center;
-  }
-
-  .provider-page-header {
-    min-height: 44px;
-  }
-
   .provider-scope-card {
-    gap: 16px;
+    gap: 14px;
     min-height: 100%;
-  }
-
-  .provider-scope-title {
-    gap: 0;
   }
 
   .provider-scope-actions {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
   }
 
-  .provider-route-shell {
+  .provider-route-control {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    min-width: 0;
-    max-width: 100%;
-    padding: 5px;
-    border: 1px solid var(--border-soft);
-    border-radius: 999px;
-    background: rgba(246, 249, 251, 0.94);
   }
 
   .provider-route-tag {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 30px;
-    padding: 0 10px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.92);
-    color: var(--text-secondary);
-    font-size: 0.76rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    white-space: nowrap;
-  }
-
-  .provider-route-trigger,
-  .provider-route-readout {
-    min-width: 0;
-    max-width: 220px;
-    min-height: 34px;
-    border-radius: 999px;
-  }
-
-  .provider-route-trigger {
-    width: auto;
-    padding-inline: 14px;
-    background: rgba(255, 255, 255, 0.94);
-    box-shadow: none;
-  }
-
-  .provider-route-readout {
-    display: inline-flex;
-    align-items: center;
-    padding: 0 14px;
-    background: rgba(255, 255, 255, 0.94);
-    color: var(--text-primary);
-    font-size: 0.86rem;
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
     font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  :global(.provider-route-trigger) {
+    min-width: 150px;
+    max-width: 220px;
+    height: 28px;
+    padding: 0 10px;
+  }
+
+  .provider-route-readout {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-muted);
+    color: var(--text);
+    font-size: var(--font-size-sm);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    max-width: 220px;
   }
 
   .provider-list {
     display: grid;
-    gap: 12px;
+    gap: 8px;
   }
 
   .provider-list-item {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 16px;
-    padding: 14px 16px;
-    border: 1px solid var(--border-soft);
-    border-radius: var(--radius-md);
-    background: rgba(255, 255, 255, 0.9);
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
   }
 
   .provider-list-item.is-active {
-    border-color: rgba(15, 94, 168, 0.2);
-    background: linear-gradient(180deg, rgba(244, 249, 254, 0.98), rgba(255, 255, 255, 0.94));
-  }
-
-  .provider-list-main,
-  .provider-list-side,
-  .provider-dialog-summary {
-    display: flex;
+    border-color: var(--brand);
+    background: var(--brand-soft);
   }
 
   .provider-list-main {
     flex: 1;
+    display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     min-width: 0;
   }
 
-  .provider-list-heading,
-  .provider-dialog-summary {
+  .provider-list-heading {
+    display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 6px;
     flex-wrap: wrap;
   }
 
   .provider-list-endpoint {
-    color: var(--text-primary);
-    font-size: 0.9rem;
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .provider-list-meta {
-    color: var(--text-secondary);
-    font-size: 0.82rem;
-  }
-
   .provider-warning {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     color: var(--warning);
-    font-size: 0.8rem;
+    font-size: var(--font-size-xs);
   }
 
   .provider-list-side {
-    align-items: center;
-    gap: 8px;
     flex-shrink: 0;
   }
 
-  .provider-add-button,
-  .icon-button {
-    display: inline-flex;
+  .provider-dialog-summary {
+    display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 8px;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-muted);
   }
 
-  .icon-button {
-    width: 34px;
-    height: 34px;
-    border: 1px solid var(--border-soft);
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.94);
-    color: var(--text-secondary);
+  :global(.provider-dialog-card) {
+    display: grid;
+    gap: 14px;
   }
 
-  .icon-button:hover {
-    border-color: rgba(15, 94, 168, 0.24);
-    color: var(--brand-strong);
-  }
-
-  .provider-dialog-card {
-    gap: 18px;
-  }
-
-  .provider-dialog-title {
+  :global(.provider-dialog-title) {
     text-transform: capitalize;
   }
 
-  .provider-add-dialog {
-    max-width: 520px;
+  :global(.provider-add-dialog) {
+    max-width: 480px;
+    display: grid;
+    gap: 14px;
   }
 
-  @media (max-width: 720px) {
-    .providers-grid,
-    .provider-scope-actions,
-    .provider-list-item,
-    .provider-list-side {
+  .target-dialog-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .target-dialog-footer .helper-text {
+    max-width: 320px;
+  }
+
+  @media (max-width: 900px) {
+    .providers-grid {
       grid-template-columns: 1fr;
     }
+  }
 
-    .provider-route-shell {
-      width: 100%;
-      justify-content: space-between;
-    }
-
+  @media (max-width: 640px) {
     .provider-scope-actions,
-    .provider-list-item,
-    .provider-list-side {
-      flex-direction: column;
-      align-items: flex-start;
+    .provider-route-control {
+      width: 100%;
     }
-
-    .provider-route-trigger,
+    :global(.provider-route-trigger),
     .provider-route-readout {
       max-width: none;
       flex: 1 1 auto;
     }
-
-    .provider-list-endpoint {
-      white-space: normal;
+    .target-dialog-footer {
+      flex-direction: column;
+      align-items: stretch;
     }
   }
 </style>

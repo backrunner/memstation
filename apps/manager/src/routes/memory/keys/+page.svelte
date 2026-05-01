@@ -12,6 +12,7 @@
   } from '$lib/api/client';
   import JsonView from '$lib/components/JsonView.svelte';
   import MemoryWorkspaceNav from '$lib/components/MemoryWorkspaceNav.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import { memoryDetailHref } from '$lib/memory/routes';
   import SelectField from '$lib/components/SelectField.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -330,31 +331,32 @@
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <span class="sidebar-label">Memory / Key Memories</span>
-    <h1 class="page-title">Key Memories</h1>
-    <p class="page-description">These records back whitelisted memory tools and admin workflows for durable slots such as preferences, recent conversation markers, and operator-curated notes.</p>
-    {#if activeUserId}
-      <div class="helper-text">Scoped to user `{activeUserId}`.</div>
-    {/if}
-  </div>
+  <PageHeader
+    eyebrow="Inspect / Memory"
+    title="Key memories"
+    description="Whitelisted slots backing memory tools and admin workflows: preferences, recent markers, operator-curated notes."
+    subtitle={activeUserId ? `Scoped to user ${activeUserId}` : ''}
+  />
 
   <MemoryWorkspaceNav current="/memory/keys" />
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required to inspect key memories.</div>
+    <div class="notice-card">Connect this target to inspect key memories.</div>
   {:else if error}
     <div class="error-state">{error}</div>
   {:else if loading}
-    <div class="notice-card">Loading key memories...</div>
+    <div class="notice-card">Loading key memories…</div>
   {:else}
     {#if success}
-      <div class="notice-card">{success}</div>
+      <div class="notice-card is-success">{success}</div>
     {/if}
 
     <section class="card page-stack">
       <div class="page-header">
-        <h2 class="section-title">Create Key Memory</h2>
+        <div class="page-header-meta">
+          <h2 class="section-title">Create key memory</h2>
+          <p class="panel-meta">New writes are audited on the target.</p>
+        </div>
       </div>
       <div class="form-grid two-up">
         <TextInputField label="Key" bind:value={createKey} placeholder="preferred_name or recent_conversation" />
@@ -363,64 +365,83 @@
         <SelectField label="Review status" items={reviewStatusItems} bind:value={createReviewStatus} />
       </div>
       <div class="inline-group" style="justify-content: flex-end;">
-        <button class="button" type="button" disabled={creating || !createKey.trim() || !createValue.trim()} on:click={createItem}>{creating ? 'Creating...' : 'Create Key Memory'}</button>
+        <button class="btn-primary" type="button" disabled={creating || !createKey.trim() || !createValue.trim()} on:click={createItem}>
+          {creating ? 'Creating…' : 'Create key memory'}
+        </button>
       </div>
     </section>
 
     <section class="card page-stack">
+      <div class="page-header">
+        <div class="page-header-meta">
+          <h2 class="section-title">Filters</h2>
+          <p class="panel-meta">{visibleKeyMemories.length} key memor{visibleKeyMemories.length === 1 ? 'y' : 'ies'} returned</p>
+        </div>
+        <button class="btn-secondary btn-sm" type="button" on:click={loadData}>Apply filters</button>
+      </div>
       <div class="filters two-up">
-        <TextInputField label="Filter Key Memories" bind:value={filter} placeholder="key, category, value, review status..." />
-        <div class="field" style="align-self: end;">
-          <div class="inline-group" style="justify-content: flex-end;">
-            <div class="helper-text">{visibleKeyMemories.length} key memories returned</div>
-            <button class="button-secondary" type="button" on:click={loadData}>Apply Filters</button>
-          </div>
+        <TextInputField
+          label="Filter"
+          bind:value={filter}
+          placeholder="key, category, value, review status…"
+          fieldClass="field-span-2"
+        />
+        <TextInputField label="Date from" bind:value={dateFrom} type="date" />
+        <TextInputField label="Date to" bind:value={dateTo} type="date" />
+      </div>
+      <div class="inline-group">
+        <span class="field-label">Time tier</span>
+        <div class="segmented-control" style="flex-wrap: wrap;">
+          {#each timeTierOptions as option}
+            <button
+              class="segmented-control-item"
+              type="button"
+              data-state={selectedTiers.includes(option.value) ? 'on' : 'off'}
+              on:click={() => toggleTier(option.value)}
+            >{option.label}</button>
+          {/each}
         </div>
       </div>
-      <div class="filters two-up">
-        <TextInputField label="Date From" bind:value={dateFrom} type="date" />
-        <TextInputField label="Date To" bind:value={dateTo} type="date" />
-      </div>
-      <div class="inline-group" style="flex-wrap: wrap;">
-        {#each timeTierOptions as option}
-          <button
-            class={selectedTiers.includes(option.value) ? 'button-secondary' : 'button-ghost'}
-            type="button"
-            on:click={() => toggleTier(option.value)}
-          >
-            {option.label}
-          </button>
-        {/each}
-      </div>
+
       {#if visibleKeyMemories.length === 0}
         <div class="empty-state">No key memories match the current filter.</div>
       {:else}
-        <div class="toolbar">
+        <div class="stack-list">
           {#each visibleKeyMemories as keyMemory}
-            <div class="debug-block">
-              <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px; align-items: flex-start;">
-                <div>
+            <article class="keymem-card">
+              <header class="keymem-head">
+                <div class="keymem-head-main">
                   <strong>{keyMemory.key}</strong>
-                  <div class="subtle-text">{keyMemory.id}</div>
+                  <span class="helper-text mono">{keyMemory.id}</span>
                 </div>
-                <div class="inline-group" style="gap: 8px; flex-wrap: wrap; justify-content: flex-end;">
+                <div class="inline-group">
                   {#if keyMemory.time_tier}
                     <StatusBadge tone="muted" label={keyMemory.time_tier} />
                   {/if}
                   <StatusBadge tone="muted" label={keyMemory.category ?? 'uncategorized'} />
-                  <StatusBadge tone={keyMemory.review_status === 'approved' ? 'success' : keyMemory.review_status === 'rejected' ? 'danger' : 'warning'} label={keyMemory.review_status ?? 'pending'} />
+                  <StatusBadge
+                    tone={keyMemory.review_status === 'approved' ? 'success' : keyMemory.review_status === 'rejected' ? 'danger' : 'warning'}
+                    label={keyMemory.review_status ?? 'pending'}
+                  />
                   {#if keyMemory.effective_score !== undefined}
                     <StatusBadge tone="brand" label={`effective ${keyMemory.effective_score.toFixed(3)}`} />
                   {/if}
-                  <a class="button-ghost" href={memoryDetailHref('keys', keyMemory.id, activeUserId)}>Open</a>
-                  {#if editingId === keyMemory.id}
-                    <button class="button-ghost" type="button" on:click={cancelEdit}>Cancel</button>
-                    <button class="button" type="button" disabled={saving} on:click={() => saveEdit(keyMemory)}>{saving ? 'Saving...' : 'Save'}</button>
-                  {:else}
-                    <button class="button-ghost" type="button" on:click={() => startEdit(keyMemory)}>Edit</button>
-                  {/if}
-                  <button class="button-danger" type="button" disabled={deletingId === keyMemory.id} on:click={() => removeItem(keyMemory)}>{deletingId === keyMemory.id ? 'Deleting...' : 'Delete'}</button>
                 </div>
+              </header>
+
+              <div class="keymem-actions">
+                <a class="btn-ghost btn-sm" href={memoryDetailHref('keys', keyMemory.id, activeUserId)}>Open</a>
+                {#if editingId === keyMemory.id}
+                  <button class="btn-ghost btn-sm" type="button" on:click={cancelEdit}>Cancel</button>
+                  <button class="btn-primary btn-sm" type="button" disabled={saving} on:click={() => saveEdit(keyMemory)}>
+                    {saving ? 'Saving…' : 'Save'}
+                  </button>
+                {:else}
+                  <button class="btn-secondary btn-sm" type="button" on:click={() => startEdit(keyMemory)}>Edit</button>
+                {/if}
+                <button class="btn-danger btn-sm" type="button" disabled={deletingId === keyMemory.id} on:click={() => removeItem(keyMemory)}>
+                  {deletingId === keyMemory.id ? 'Deleting…' : 'Delete'}
+                </button>
               </div>
 
               {#if editingId === keyMemory.id}
@@ -430,15 +451,46 @@
                   <SelectField label="Review status" items={reviewStatusItems} bind:value={draftReviewStatus} />
                 </div>
               {:else}
-                <div class="helper-text" style="margin-bottom: 10px;">
+                <div class="helper-text mono">
                   activity {dateTimeLabel(keyMemory.activity_at)} · importance {(keyMemory.importance ?? 0).toFixed(3)} · decay {(keyMemory.decay_factor ?? 0).toFixed(3)}
                 </div>
                 <JsonView value={keyMemory} />
               {/if}
-            </div>
+            </article>
           {/each}
         </div>
       {/if}
     </section>
   {/if}
 </section>
+
+<style>
+  .keymem-card {
+    display: grid;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+
+  .keymem-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .keymem-head-main {
+    display: grid;
+    gap: 2px;
+  }
+
+  .keymem-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+</style>

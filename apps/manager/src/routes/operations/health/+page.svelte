@@ -4,6 +4,7 @@
   import { onMount } from 'svelte';
 
   import { fetchConfig, fetchHealth, fetchProviderDiagnostics, fetchQueues } from '$lib/api/client';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type { AdminConfigPayload, HealthPayload, ProviderDiagnostic, QueueInfo } from '$lib/types';
@@ -30,7 +31,6 @@
   let degradedProviders = 0;
   let warningProviders = 0;
   let runtimeDriftEntries: RuntimeDriftEntry[] = [];
-  let healthSummaryLine = '';
 
   onMount(async () => {
     await loadHealth();
@@ -96,65 +96,99 @@
       live: JSON.stringify(config?.runtime_live?.[key as keyof NonNullable<typeof config.runtime_live>])
     }));
 
-  $: healthSummaryLine = [
-    ready?.status ?? 'unknown',
-    `${restartPending} restart pending`,
-    `${liveOverrides} live overrides`,
-    `${backlogTotal} queued`,
-    `${degradedProviders + warningProviders} provider issues`
-  ].join(' · ');
+  function readyTone(status?: string): 'success' | 'warning' | 'danger' {
+    if (status === 'ready') return 'success';
+    if (status === 'unknown') return 'warning';
+    return 'warning';
+  }
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <h1 class="page-title">Health</h1>
-    <div class="panel-meta">{healthSummaryLine}</div>
-  </div>
+  <PageHeader
+    eyebrow="Operate"
+    title="Health"
+    description="Dependency posture, drift, and queue/provider signals for the selected target."
+  >
+    <div slot="actions">
+      <button class="btn-secondary btn-sm" type="button" on:click={loadHealth}>Refresh</button>
+    </div>
+  </PageHeader>
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required to inspect target health.</div>
+    <div class="notice-card">Connect this target to inspect target health.</div>
   {:else if error}
     <div class="error-state">{error}</div>
   {:else if loading}
-    <div class="notice-card">Loading target health...</div>
+    <div class="notice-card">Loading target health…</div>
   {:else}
+    <div class="kpi-grid">
+      <article class="kpi-card">
+        <span class="kpi-label">Readiness</span>
+        <strong class="kpi-value" style="text-transform: capitalize;">{ready?.status ?? 'unknown'}</strong>
+        <span class="kpi-meta">Process: {live?.status ?? 'unknown'}</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Restart pending</span>
+        <strong class="kpi-value">{restartPending}</strong>
+        <span class="kpi-meta">{liveOverrides} live override{liveOverrides === 1 ? '' : 's'}</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Queue backlog</span>
+        <strong class="kpi-value">{backlogTotal}</strong>
+        <span class="kpi-meta">Worst latency {worstLatency} ms</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Provider issues</span>
+        <strong class="kpi-value">{degradedProviders + warningProviders}</strong>
+        <span class="kpi-meta">{degradedProviders} degraded · {warningProviders} warning</span>
+      </article>
+    </div>
+
     <div class="grid-2">
-      <section class="card">
+      <section class="card page-stack">
         <div class="page-header">
+          <div class="page-header-meta">
+            <h2 class="section-title">Process heartbeat</h2>
+            <p class="panel-meta">/health/live snapshot</p>
+          </div>
+          <StatusBadge
+            withDot
+            tone={live?.status === 'live' ? 'success' : 'danger'}
+            label={live?.status ?? 'unknown'}
+          />
+        </div>
+        <dl class="meta-grid">
           <div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Process heartbeat</h2>
+            <dt>Version</dt>
+            <dd class="mono">{live?.version ?? 'n/a'}</dd>
           </div>
-          <StatusBadge tone={live?.status === 'live' ? 'success' : 'danger'} label={live?.status ?? 'unknown'} />
-        </div>
-        <div class="toolbar">
-          <div class="debug-block">
-            <div class="sidebar-label">Version</div>
-            <div>{live?.version ?? 'n/a'}</div>
+          <div>
+            <dt>Mode</dt>
+            <dd class="mono">{live?.mode ?? 'n/a'}</dd>
           </div>
-          <div class="debug-block">
-            <div class="sidebar-label">Mode</div>
-            <div>{live?.mode ?? 'n/a'}</div>
-          </div>
-        </div>
+        </dl>
       </section>
 
-      <section class="card">
+      <section class="card page-stack">
         <div class="page-header">
-          <div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Dependency gate</h2>
+          <div class="page-header-meta">
+            <h2 class="section-title">Dependency gate</h2>
+            <p class="panel-meta">/health/ready components</p>
           </div>
-          <StatusBadge tone={ready?.status === 'ready' ? 'success' : 'warning'} label={ready?.status ?? 'unknown'} />
+          <StatusBadge
+            withDot
+            tone={readyTone(ready?.status)}
+            label={ready?.status ?? 'unknown'}
+          />
         </div>
         {#if !ready?.services}
           <div class="empty-state">This target did not return readiness component details.</div>
         {:else}
-          <div class="toolbar">
+          <div class="stack-list">
             {#each Object.entries(ready.services) as [name, status]}
-              <div class="debug-block">
-                <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
-                  <strong>{name}</strong>
-                  <StatusBadge tone={status === 'ok' ? 'success' : 'warning'} label={status} />
-                </div>
+              <div class="dep-row">
+                <span class="mono">{name}</span>
+                <StatusBadge tone={status === 'ok' ? 'success' : 'warning'} label={String(status)} />
               </div>
             {/each}
           </div>
@@ -163,74 +197,89 @@
     </div>
 
     <div class="grid-2">
-      <section class="card">
+      <section class="card page-stack">
         <div class="page-header">
-          <div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Runtime drift</h2>
+          <div class="page-header-meta">
+            <h2 class="section-title">Runtime drift</h2>
+            <p class="panel-meta">Desired vs live configuration values.</p>
           </div>
-          <a class="button-ghost" href="/settings/system">Open system settings</a>
+          <a class="btn-ghost btn-sm" href="/settings/system">Open settings</a>
         </div>
         {#if runtimeDriftEntries.length === 0}
-          <div class="notice-card">No runtime drift.</div>
+          <div class="notice-card is-success">No runtime drift detected.</div>
         {:else}
-          <div class="toolbar">
+          <div class="stack-list">
             {#each runtimeDriftEntries as entry}
-              <div class="debug-block">
-                <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
-                  <strong>{entry.key}</strong>
-                  <StatusBadge tone={entry.applyMode === 'live' ? 'danger' : 'warning'} label={entry.applyMode === 'live' ? 'drift' : 'restart'} />
+              <div class="drift-row">
+                <div class="drift-row-head">
+                  <strong class="mono">{entry.key}</strong>
+                  <StatusBadge
+                    tone={entry.applyMode === 'live' ? 'danger' : 'warning'}
+                    label={entry.applyMode === 'live' ? 'drift' : 'restart'}
+                  />
                 </div>
-                <div class="helper-text">desired {entry.desired}</div>
-                <div class="helper-text">live {entry.live}</div>
+                <div class="helper-text">
+                  <span class="mono">desired</span> {entry.desired}
+                </div>
+                <div class="helper-text">
+                  <span class="mono">live</span> {entry.live}
+                </div>
               </div>
             {/each}
           </div>
         {/if}
       </section>
 
-      <section class="card">
+      <section class="card page-stack">
         <div class="page-header">
-          <div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Queue posture</h2>
+          <div class="page-header-meta">
+            <h2 class="section-title">Queue posture</h2>
+            <p class="panel-meta">Depth and latency across worker queues.</p>
           </div>
-          <div class="runtime-field-status">
-            <StatusBadge tone={worstLatency > 1000 ? 'warning' : 'success'} label={`${worstLatency} ms worst latency`} />
-            <a class="button-ghost" href="/operations/queues">Open queues</a>
-          </div>
+          <a class="btn-ghost btn-sm" href="/operations/queues">Open queues</a>
         </div>
-        <div class="toolbar">
+        <div class="stack-list">
           {#each queues as queue}
-            <div class="debug-block">
-              <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
-                <strong>{queue.name}</strong>
-                <StatusBadge tone={queue.pending + queue.retry > 10 ? 'warning' : 'success'} label={queue.pending + queue.retry > 10 ? 'watch' : 'ok'} />
+            <div class="queue-row">
+              <div class="queue-row-head">
+                <strong class="mono">{queue.name}</strong>
+                <StatusBadge
+                  tone={queue.pending + queue.retry > 10 ? 'warning' : 'success'}
+                  label={queue.pending + queue.retry > 10 ? 'watch' : 'ok'}
+                />
               </div>
-              <div class="helper-text">pending {queue.pending} · active {queue.active} · retry {queue.retry}</div>
-              <div class="helper-text">archived {queue.archived ?? 0} · latency {queue.latency_ms ?? 0} ms</div>
+              <div class="helper-text">
+                pending {queue.pending} · active {queue.active} · retry {queue.retry} · archived {queue.archived ?? 0}
+              </div>
+              <div class="helper-text">latency {queue.latency_ms ?? 0} ms</div>
             </div>
           {/each}
         </div>
       </section>
     </div>
 
-    <section class="card">
+    <section class="card page-stack">
       <div class="page-header">
-          <div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Provider posture</h2>
-          </div>
-          <a class="button-ghost" href="/settings/providers">Open provider settings</a>
+        <div class="page-header-meta">
+          <h2 class="section-title">Provider posture</h2>
+          <p class="panel-meta">Upstream provider health and configuration.</p>
         </div>
-      <div class="toolbar">
+        <a class="btn-ghost btn-sm" href="/settings/providers">Open providers</a>
+      </div>
+      <div class="grid-2">
         {#each providers as provider}
-          <div class="debug-block">
-            <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
+          <div class="provider-row">
+            <div class="provider-row-head">
               <strong>{provider.scope} / {provider.provider}</strong>
-              <StatusBadge tone={provider.status === 'ready' ? 'success' : provider.status === 'degraded' ? 'danger' : 'warning'} label={provider.status} />
+              <StatusBadge
+                tone={provider.status === 'ready' ? 'success' : provider.status === 'degraded' ? 'danger' : 'warning'}
+                label={provider.status}
+              />
             </div>
-            <div class="helper-text">{provider.host ?? provider.base_url}</div>
+            <div class="helper-text mono">{provider.host ?? provider.base_url}</div>
             <div class="helper-text">timeout {provider.live_timeout_seconds}s live / {provider.desired_timeout_seconds}s desired</div>
-            {#if (provider.issues.length ?? 0) > 0}
-              <div class="helper-text" style="margin-top: 8px;">{provider.issues[0]}</div>
+            {#if (provider.issues?.length ?? 0) > 0}
+              <div class="helper-text" style="color: var(--danger); margin-top: 4px;">{provider.issues[0]}</div>
             {/if}
           </div>
         {/each}
@@ -238,3 +287,62 @@
     </section>
   {/if}
 </section>
+
+<style>
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin: 0;
+  }
+
+  .meta-grid > div {
+    display: grid;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-muted);
+  }
+
+  .meta-grid dt {
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 0;
+  }
+
+  .meta-grid dd {
+    margin: 0;
+    color: var(--text);
+    font-size: var(--font-size-md);
+  }
+
+  .dep-row,
+  .drift-row,
+  .queue-row,
+  .provider-row {
+    display: grid;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+
+  .dep-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .drift-row-head,
+  .queue-row-head,
+  .provider-row-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+</style>

@@ -6,6 +6,7 @@
 
   import { activateMemoryRebuild, fetchMemoryRebuilds, fetchQueues, fetchTasks, requeueTask } from '$lib/api/client';
   import CodeBlock from '$lib/components/CodeBlock.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import SelectField from '$lib/components/SelectField.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
@@ -18,6 +19,8 @@
     { value: 'keymemory.reconcile', label: 'keymemory.reconcile' },
     { value: 'conversation.finalize', label: 'conversation.finalize' }
   ];
+
+  const stateFilters = ['retry', 'archived', 'scheduled', 'active', 'pending'];
 
   let loading = true;
   let actionLoading = false;
@@ -147,37 +150,52 @@
       actionLoading = false;
     }
   }
+
+  function stateTone(state: string): 'warning' | 'brand' | 'muted' | 'success' | 'danger' {
+    if (state === 'archived' || state === 'retry') return 'warning';
+    if (state === 'active') return 'brand';
+    return 'muted';
+  }
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <span class="sidebar-label">Operations / Tasks</span>
-    <h1 class="page-title">Tasks</h1>
-    <p class="page-description">
-      Review archived, retry, scheduled, and active work items, then re-run a task by queue identity or publish a manual follow-up task by conversation id.
-    </p>
-  </div>
+  <PageHeader
+    eyebrow="Operate"
+    title="Tasks"
+    description="Review archived, retry, scheduled, and active work items, then re-run by queue identity or publish a manual follow-up task."
+  >
+    <div slot="actions">
+      <button class="btn-secondary btn-sm" type="button" on:click={loadTasks}>Refresh</button>
+    </div>
+  </PageHeader>
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required to inspect worker tasks.</div>
+    <div class="notice-card">Connect this target to inspect worker tasks.</div>
   {:else}
-    <section class="card">
-      <div class="inline-group" style="flex-wrap: wrap; justify-content: space-between;">
-        <div class="inline-group" style="flex-wrap: wrap; flex: 1;">
-          {#each ['retry', 'archived', 'scheduled', 'active', 'pending'] as state}
-            <button class={selectedStates.includes(state) ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => toggleState(state)}>{state}</button>
-          {/each}
-        </div>
-        <div class="inline-group" style="flex-wrap: wrap;">
-          <div style="min-width: 220px;">
-            <SelectField label="Queue filter" items={queueItems} bind:value={selectedQueue} />
-          </div>
-          <button class="button-secondary" type="button" on:click={loadTasks}>Refresh tasks</button>
+    <section class="card page-stack">
+      <div class="page-header">
+        <div class="page-header-meta">
+          <h2 class="section-title">Filters</h2>
+          <p class="panel-meta">Narrow by state, queue, and rebuild user scope.</p>
         </div>
       </div>
-      <div class="inline-group" style="margin-top: 12px;">
-        <div style="min-width: 260px;">
-          <TextInputField label="Rebuild User Filter" bind:value={rebuildUserId} placeholder="user id for generation status" />
+      <div class="filter-bar">
+        <div class="filter-bar-states">
+          <span class="field-label">State</span>
+          <div class="segmented-control" style="flex-wrap: wrap;">
+            {#each stateFilters as state}
+              <button
+                class="segmented-control-item"
+                type="button"
+                data-state={selectedStates.includes(state) ? 'on' : 'off'}
+                on:click={() => toggleState(state)}
+              >{state}</button>
+            {/each}
+          </div>
+        </div>
+        <div class="filter-bar-selects">
+          <SelectField label="Queue" items={queueItems} bind:value={selectedQueue} fieldClass="filter-bar-field" />
+          <TextInputField label="Rebuild user filter" bind:value={rebuildUserId} placeholder="user id" fieldClass="filter-bar-field" />
         </div>
       </div>
     </section>
@@ -185,12 +203,13 @@
     {#if error}
       <div class="error-state">{error}</div>
     {:else if loading}
-      <div class="notice-card">Loading task data...</div>
+      <div class="notice-card">Loading task data…</div>
     {:else}
       {#if success}
-        <div class="notice-card">{success}</div>
+        <div class="notice-card is-success">{success}</div>
       {/if}
-      <div class="grid-2" style="align-items: start;">
+
+      <div class="page-columns">
         <section class="table-card">
           <div class="table-scroll">
             <table class="data-table">
@@ -205,51 +224,103 @@
               </thead>
               <tbody>
                 {#each tasks as task}
-                  <tr on:click={() => (selectedTask = task)} style="cursor: pointer;">
+                  <tr
+                    class="is-selectable"
+                    class:is-active={selectedTask?.id === task.id}
+                    on:click={() => (selectedTask = task)}
+                  >
                     <td>
-                      <strong>{task.type}</strong>
-                      <div class="subtle-text">{task.id}</div>
-                      <div style="margin-top: 8px;">
-                        <a class="button-ghost" href={`/operations/tasks/${encodeURIComponent(task.queue)}/${encodeURIComponent(task.id)}`}>Open detail</a>
-                      </div>
+                      <strong class="mono">{task.type}</strong>
+                      <div class="subtle-text mono">{task.id}</div>
+                      <a class="btn-link" style="margin-top: 4px;" href={`/operations/tasks/${encodeURIComponent(task.queue)}/${encodeURIComponent(task.id)}`}>
+                        Open detail
+                      </a>
                     </td>
                     <td>
-                      <StatusBadge tone={task.state === 'archived' || task.state === 'retry' ? 'warning' : task.state === 'active' ? 'brand' : 'muted'} label={task.state} />
+                      <StatusBadge tone={stateTone(task.state)} label={task.state} />
                     </td>
-                    <td>
-                      <div class="inline-group" style="flex-wrap: wrap;">
-                        <span>{task.queue}</span>
-                        {#if selectedQueue !== task.queue}
-                          <button class="button-ghost" type="button" on:click|stopPropagation={() => { selectedQueue = task.queue; void loadTasks(); }}>Only this queue</button>
-                        {/if}
-                      </div>
+                    <td class="mono">
+                      {task.queue}
+                      {#if selectedQueue !== task.queue}
+                        <div style="margin-top: 4px;">
+                          <button
+                            class="btn-link"
+                            type="button"
+                            on:click|stopPropagation={() => { selectedQueue = task.queue; void loadTasks(); }}
+                          >Filter</button>
+                        </div>
+                      {/if}
                     </td>
-                    <td>{task.conversation_id ?? 'n/a'}</td>
-                    <td>{task.last_error || 'No error captured'}</td>
+                    <td class="subtle-text mono">{task.conversation_id ?? 'n/a'}</td>
+                    <td class="subtle-text">{task.last_error || 'No error captured'}</td>
                   </tr>
                 {/each}
+                {#if tasks.length === 0}
+                  <tr>
+                    <td colspan="5">
+                      <div class="empty-state" style="border: none; padding: 12px 0;">No tasks match the current filter.</div>
+                    </td>
+                  </tr>
+                {/if}
               </tbody>
             </table>
           </div>
         </section>
 
-        <section class="debug-column">
-          <div class="debug-block">
+        <div class="page-column">
+          <section class="card page-stack">
             <div class="page-header">
+              <div class="page-header-meta">
+                <h2 class="section-title">Payload &amp; retry context</h2>
+                <p class="panel-meta">Inspect the selected task before requeuing.</p>
+              </div>
+            </div>
+            {#if selectedTask}
+              <dl class="meta-grid compact">
+                <div>
+                  <dt>Type</dt>
+                  <dd class="mono">{selectedTask.type}</dd>
+                </div>
+                <div>
+                  <dt>Queue</dt>
+                  <dd class="mono">{selectedTask.queue}</dd>
+                </div>
+                <div>
+                  <dt>Retries</dt>
+                  <dd class="mono">{selectedTask.retried ?? 0} / {selectedTask.max_retry ?? 0}</dd>
+                </div>
+              </dl>
               <div>
-                <h2 class="section-title">Generation Lifecycle</h2>
+                <div class="field-label" style="margin-bottom: 6px;">Payload</div>
+                <CodeBlock code={JSON.stringify(selectedTask.payload ?? {}, null, 2)} language="json" />
+              </div>
+              <div class="inline-group" style="justify-content: flex-end;">
+                <button class="btn-primary btn-sm" type="button" disabled={actionLoading} on:click={runSelectedTask}>
+                  {actionLoading ? 'Requeueing…' : 'Run task now'}
+                </button>
+              </div>
+            {:else}
+              <div class="empty-state">Select a task row to inspect its payload.</div>
+            {/if}
+          </section>
+
+          <section class="card page-stack">
+            <div class="page-header">
+              <div class="page-header-meta">
+                <h2 class="section-title">Generation lifecycle</h2>
+                <p class="panel-meta">Memory rebuild candidates for the filtered user.</p>
               </div>
             </div>
             {#if rebuilds.length === 0}
-              <div class="empty-state">No rebuild generations found for the selected user filter.</div>
+              <div class="empty-state">No rebuild generations found for this user filter.</div>
             {:else}
-              <div class="toolbar">
+              <div class="stack-list">
                 {#each rebuilds as rebuild}
-                  <div class="debug-block" style="background: var(--bg-panel-muted);">
-                    <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px;">
+                  <div class="rebuild-card">
+                    <div class="rebuild-head">
                       <div>
                         <strong>{rebuild.scope}</strong>
-                        <div class="subtle-text">{rebuild.generation_id}</div>
+                        <div class="subtle-text mono">{rebuild.generation_id}</div>
                       </div>
                       <StatusBadge
                         tone={rebuild.is_active ? 'success' : rebuild.status === 'failed' ? 'danger' : rebuild.status === 'queued' || rebuild.status === 'running' ? 'warning' : 'muted'}
@@ -258,14 +329,14 @@
                     </div>
                     <div class="helper-text">{rebuild.processed_count}/{rebuild.source_count} snapshots · {rebuild.embedding_count} embeddings</div>
                     {#if rebuild.last_error}
-                      <div class="subtle-text" style="margin-top: 8px;">{rebuild.last_error}</div>
+                      <div class="helper-text" style="color: var(--danger);">{rebuild.last_error}</div>
                     {/if}
                     {#if rebuild.scope === 'conversation'}
-                      <div class="helper-text" style="margin-top: 10px;">Conversation-scoped rebuilds are inspection-only candidates and cannot replace the user's active generation.</div>
+                      <div class="helper-text">Conversation-scoped rebuilds are inspection-only candidates.</div>
                     {:else if !rebuild.is_active && (rebuild.status === 'completed' || rebuild.status === 'activated')}
-                      <div style="margin-top: 10px;">
-                        <button class="button-ghost" type="button" disabled={actionLoading} on:click={() => activateGeneration(rebuild.generation_id)}>
-                          {actionLoading ? 'Activating...' : 'Activate / rollback to this generation'}
+                      <div class="inline-group" style="justify-content: flex-end;">
+                        <button class="btn-secondary btn-sm" type="button" disabled={actionLoading} on:click={() => activateGeneration(rebuild.generation_id)}>
+                          {actionLoading ? 'Activating…' : 'Activate generation'}
                         </button>
                       </div>
                     {/if}
@@ -273,46 +344,111 @@
                 {/each}
               </div>
             {/if}
-          </div>
+          </section>
 
-          <div class="debug-block">
+          <section class="card page-stack">
             <div class="page-header">
-              <div>
-                <h2 class="section-title">Payload And Retry Context</h2>
+              <div class="page-header-meta">
+                <h2 class="section-title">Publish manual task</h2>
+                <p class="panel-meta">Enqueue a follow-up task by conversation id.</p>
               </div>
             </div>
-            {#if selectedTask}
-              <div class="toolbar">
-                <div class="inline-group"><strong>Type</strong><span>{selectedTask.type}</span></div>
-                <div class="inline-group"><strong>Queue</strong><span>{selectedTask.queue}</span></div>
-                <div class="inline-group"><strong>Retries</strong><span>{selectedTask.retried ?? 0} / {selectedTask.max_retry ?? 0}</span></div>
-                <CodeBlock code={JSON.stringify(selectedTask.payload ?? {}, null, 2)} language="json" />
-                <button class="button" type="button" disabled={actionLoading} on:click={runSelectedTask}>{actionLoading ? 'Requeueing...' : 'Run selected task now'}</button>
-              </div>
-            {:else}
-              <div class="empty-state">Select a task row to inspect its payload.</div>
-            {/if}
-          </div>
-
-          <div class="debug-block">
-            <div class="page-header">
-              <div>
-                <h2 class="section-title">Publish A Fresh Task</h2>
-              </div>
+            <div class="form-grid two-up">
+              <SelectField label="Task type" bind:value={manualTaskType} items={taskTypeItems} />
+              <TextInputField label="User ID" bind:value={manualUserId} />
+              <TextInputField label="Conversation ID" bind:value={manualConversationId} placeholder="conv-…" fieldClass="field-span-2" />
             </div>
-            <div class="toolbar">
-              <div class="form-grid two-up">
-                <SelectField label="Task Type" bind:value={manualTaskType} items={taskTypeItems} />
-                <TextInputField label="Conversation ID" bind:value={manualConversationId} placeholder="conv-..." />
-                <TextInputField label="User ID" bind:value={manualUserId} />
-              </div>
-              <div class="inline-group" style="justify-content: flex-end;">
-                <button class="button-secondary" type="button" disabled={actionLoading} on:click={runManualRequeue}>Publish Manual Task</button>
-              </div>
+            <div class="inline-group" style="justify-content: flex-end;">
+              <button class="btn-secondary btn-sm" type="button" disabled={actionLoading} on:click={runManualRequeue}>Publish task</button>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
       </div>
     {/if}
   {/if}
 </section>
+
+<style>
+  .filter-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
+    align-items: end;
+  }
+
+  .filter-bar-states {
+    display: grid;
+    gap: 6px;
+  }
+
+  .filter-bar-selects {
+    display: grid;
+    grid-template-columns: 220px 220px;
+    gap: 12px;
+  }
+
+  :global(.filter-bar-field) { min-width: 0; }
+
+  .meta-grid.compact {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .meta-grid.compact > div {
+    padding: 8px 10px;
+  }
+
+  .meta-grid dt {
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 0;
+  }
+
+  .meta-grid dd {
+    margin: 0;
+    color: var(--text);
+    font-size: var(--font-size-md);
+    font-weight: 500;
+  }
+
+  .meta-grid {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+  }
+
+  .meta-grid > div {
+    display: grid;
+    gap: 3px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-muted);
+  }
+
+  .rebuild-card {
+    display: grid;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+
+  .rebuild-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  @media (max-width: 960px) {
+    .filter-bar,
+    .filter-bar-selects {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

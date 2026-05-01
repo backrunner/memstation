@@ -4,6 +4,7 @@
   import { onMount } from 'svelte';
 
   import { fetchUsers } from '$lib/api/client';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
@@ -51,33 +52,36 @@
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <span class="sidebar-label">Users</span>
-    <h1 class="page-title">Users</h1>
-    <p class="page-description">
-      Use this view to find active users quickly, identify which accounts carry the most memory or token load, and jump into per-user operational detail.
-    </p>
-  </div>
+  <PageHeader
+    eyebrow="Inspect"
+    title="Users"
+    description="Find active users, identify accounts carrying the most memory or token load, and jump into per-user operational detail."
+  />
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required to inspect users on the selected target.</div>
+    <div class="notice-card">Connect this target to inspect users.</div>
   {:else}
     <section class="card">
-      <div class="page-header">
+      <div class="filters two-up">
         <TextInputField
           label="Search"
           bind:value={search}
           placeholder="user id or display name"
           fieldClass="field-span-2"
         />
-        <button class="button-secondary" type="button" on:click={loadUsers}>Refresh Users</button>
+        <div class="field" style="align-self: end;">
+          <div class="inline-group" style="justify-content: space-between;">
+            <span class="helper-text">{filtered.length} of {users.length} users</span>
+            <button class="btn-secondary btn-sm" type="button" on:click={loadUsers}>Refresh</button>
+          </div>
+        </div>
       </div>
     </section>
 
     {#if error}
       <div class="error-state">{error}</div>
     {:else if loading}
-      <div class="notice-card">Loading users...</div>
+      <div class="notice-card">Loading users…</div>
     {:else}
       <section class="table-card">
         <div class="table-scroll">
@@ -89,7 +93,7 @@
                 <th>Conversations</th>
                 <th>Key Memories</th>
                 <th>Total Tokens</th>
-                <th>Recent Activity</th>
+                <th>Last Active</th>
               </tr>
             </thead>
             <tbody>
@@ -99,20 +103,31 @@
                     <a href={`/users/${item.user_id}`}>
                       <strong>{item.name}</strong>
                     </a>
-                    <div class="subtle-text">{item.user_id}</div>
+                    <div class="subtle-text mono">{item.user_id}</div>
                     {#if item.is_admin}
-                      <div style="margin-top: 8px;">
+                      <div style="margin-top: 4px;">
                         <StatusBadge tone="brand" label="Admin" />
                       </div>
                     {/if}
                   </td>
-                  <td>{item.api_key_count}</td>
-                  <td>{item.conversation_count}</td>
-                  <td>{item.key_memory_count}</td>
-                  <td>{item.total_tokens.toLocaleString()}</td>
-                  <td>{item.recent_active_at ? new Date(item.recent_active_at).toLocaleString() : 'No activity yet'}</td>
+                  <td class="mono">{item.api_key_count}</td>
+                  <td class="mono">{item.conversation_count}</td>
+                  <td class="mono">{item.key_memory_count}</td>
+                  <td class="mono">{item.total_tokens.toLocaleString()}</td>
+                  <td class="subtle-text no-wrap">
+                    {item.recent_active_at ? new Date(item.recent_active_at).toLocaleString() : 'No activity yet'}
+                  </td>
                 </tr>
               {/each}
+              {#if filtered.length === 0}
+                <tr>
+                  <td colspan="6">
+                    <div class="empty-state" style="border: none; padding: 12px 0;">
+                      {search ? 'No users match the current filter.' : 'No users on this target yet.'}
+                    </div>
+                  </td>
+                </tr>
+              {/if}
             </tbody>
           </table>
         </div>

@@ -18,6 +18,7 @@
   import JsonView from '$lib/components/JsonView.svelte';
   import MemoryKeywordSignals from '$lib/components/MemoryKeywordSignals.svelte';
   import MemoryRelationGraph from '$lib/components/MemoryRelationGraph.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import SelectField from '$lib/components/SelectField.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
@@ -412,17 +413,15 @@
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <span class="sidebar-label">Memory / {itemTitle}</span>
-    <h1 class="page-title">{$page.params.id}</h1>
-    <p class="page-description">{itemDescription}</p>
-    {#if activeUserId}
-      <div class="helper-text">Scoped to user `{activeUserId}`.</div>
-    {/if}
-  </div>
+  <PageHeader
+    eyebrow={`Memory / ${itemTitle}`}
+    title={$page.params.id}
+    description={itemDescription}
+    subtitle={activeUserId ? `Scoped to user ${activeUserId}` : ''}
+  />
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required to inspect memory detail.</div>
+    <div class="notice-card">Connect this target to inspect memory detail.</div>
   {:else if !routeKind}
     <div class="error-state">Unsupported memory kind: {$page.params.kind}</div>
   {:else if error}

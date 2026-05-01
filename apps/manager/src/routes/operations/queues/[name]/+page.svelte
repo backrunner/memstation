@@ -7,6 +7,7 @@
   import { fetchQueues, fetchTasks } from '$lib/api/client';
   import JsonView from '$lib/components/JsonView.svelte';
   import KpiCard from '$lib/components/KpiCard.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type { QueueInfo, QueueTaskRecord } from '$lib/types';
@@ -78,16 +79,14 @@
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <span class="sidebar-label">Operations / Queue Detail</span>
-    <h1 class="page-title">{$page.params.name}</h1>
-    <p class="page-description">
-      Inspect a single worker lane, review backlog posture, and jump directly into the tasks currently occupying this queue.
-    </p>
-  </div>
+  <PageHeader
+    eyebrow="Operations / Queue"
+    title={$page.params.name}
+    description="Inspect this worker lane, review backlog posture, and jump into the tasks currently occupying it."
+  />
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required to inspect queue detail.</div>
+    <div class="notice-card">Connect this target to inspect queue detail.</div>
   {:else if error}
     <div class="error-state">{error}</div>
   {:else if loading}

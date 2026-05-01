@@ -7,8 +7,6 @@
   });
 </script>
 
-<div class="hero-card">
-  <span class="sidebar-label">Redirecting</span>
-  <h1 class="page-title">Opening Workspace</h1>
-  <p class="page-description">If the redirect does not happen automatically, open the dashboard from the sidebar.</p>
-</div>
+<section class="page-stack">
+  <div class="notice-card">Redirecting to dashboard…</div>
+</section>

@@ -14,6 +14,7 @@
     updateUserSettings
   } from '$lib/api/client';
   import CodeBlock from '$lib/components/CodeBlock.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import SwitchField from '$lib/components/SwitchField.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
@@ -434,29 +435,32 @@
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <span class="sidebar-label">User Detail</span>
-    <h1 class="page-title">{$page.params.id}</h1>
-  </div>
+  <PageHeader
+    eyebrow="User"
+    title={$page.params.id}
+    description="API keys, settings, and memory generation state for this user."
+  />
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required to inspect user detail pages.</div>
+    <div class="notice-card">Connect this target to inspect user detail pages.</div>
   {:else if error}
     <div class="error-state">{error}</div>
   {:else if loading}
-    <div class="notice-card">Loading user detail...</div>
+    <div class="notice-card">Loading user detail…</div>
   {:else if detail}
     {#if success}
-      <div class="notice-card">{success}</div>
+      <div class="notice-card is-success">{success}</div>
     {/if}
     {#if createdKey}
-      <div class="card">
-        <div class="sidebar-label">New API key</div>
-        <div class="helper-text" style="margin-top: 8px;">Shown once.</div>
-        <div style="margin-top: 12px;">
-          <CodeBlock code={createdKey} language="text" />
+      <section class="card page-stack">
+        <div class="page-header">
+          <div class="page-header-meta">
+            <h3 class="section-title">New API key</h3>
+            <p class="panel-meta">Shown once — copy and store now.</p>
+          </div>
         </div>
-      </div>
+        <CodeBlock code={createdKey} language="text" />
+      </section>
     {/if}
 
     <div class="kpi-grid compact-kpis">

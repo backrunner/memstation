@@ -7,6 +7,7 @@
   import { fetchAudit, fetchTaskDetail, requeueTask } from '$lib/api/client';
   import JsonView from '$lib/components/JsonView.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
+  import PageHeader from '$lib/components/PageHeader.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type { AuditEventRecord, QueueTaskDetailPayload } from '$lib/types';
 
@@ -76,16 +77,14 @@
 </script>
 
 <section class="page-stack">
-  <div class="hero-card">
-    <span class="sidebar-label">Operations / Task Detail</span>
-    <h1 class="page-title">{$page.params.id}</h1>
-    <p class="page-description">
-      Inspect retry context, payload, queue pressure, and rerun status for a single worker task on the selected MemStation target.
-    </p>
-  </div>
+  <PageHeader
+    eyebrow="Operations / Task"
+    title={$page.params.id}
+    description="Inspect retry context, payload, queue pressure, and rerun status for this worker task."
+  />
 
   {#if !$targetState.session.authenticated}
-    <div class="notice-card">Admin login is required to inspect task detail.</div>
+    <div class="notice-card">Connect this target to inspect task detail.</div>
   {:else if error}
     <div class="error-state">{error}</div>
   {:else if loading}
