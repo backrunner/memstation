@@ -15,4 +15,4 @@ echo "- Manager: https://${PORTLESS_NAME}.localhost"
 echo "- API proxy target: ${MEMSTATION_MANAGER_DEV_PROXY_TARGET}"
 echo "- Connection URI default: ${PUBLIC_MEMSTATION_DEFAULT_TARGET}"
 
-exec pnpm exec portless run --name "$PORTLESS_NAME" -- pnpm --filter @memstation/manager exec vite dev --host 127.0.0.1
+exec pnpm exec portless run --name "$PORTLESS_NAME" -- bash -lc 'pnpm --filter @memstation/manager exec vite dev --host "${HOST:-127.0.0.1}" --port "$PORT" --strictPort'
