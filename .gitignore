@@ -21,3 +21,4 @@ apps/server/memstation
 apps/server/bin/
 apps/server/coverage.out
 apps/server/tmp/
+output/playwright
