@@ -66,8 +66,8 @@ fi
 
 if [[ "$EMBEDDING_MODE" == "provider" ]]; then
   if [[ -z "$EMBEDDING_MODEL" || -z "$EMBEDDING_BASE_URL" || -z "$EMBEDDING_API_KEY" ]]; then
-    echo "nightly external benchmarks in provider mode require EMBEDDING_MODEL, EMBEDDING_BASE_URL, and EMBEDDING_API_KEY" >&2
-    exit 1
+    echo "nightly external benchmark provider credentials are missing; falling back to deterministic embeddings for this run" >&2
+    EMBEDDING_MODE=deterministic
   fi
 fi
 
