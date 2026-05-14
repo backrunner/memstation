@@ -127,7 +127,14 @@ cleanup() {
     fi
   fi
   if [[ -n "$TEMP_ROOT" && -d "$TEMP_ROOT" ]]; then
-    rm -rf "$TEMP_ROOT"
+    if ! rm -rf "$TEMP_ROOT" 2>/dev/null; then
+      if command -v sudo >/dev/null 2>&1; then
+        sudo rm -rf "$TEMP_ROOT" || true
+      else
+        chmod -R u+rwX "$TEMP_ROOT" 2>/dev/null || true
+        rm -rf "$TEMP_ROOT" || true
+      fi
+    fi
   fi
 }
 
@@ -281,7 +288,7 @@ INSERT INTO users (id, name, email, is_admin) VALUES ('$DRILL_USER_ID', 'Backup 
 INSERT INTO api_keys (id, user_id, name, prefix, hash, scopes) VALUES ('api-$DRILL_SUFFIX', '$DRILL_USER_ID', 'drill-key', 'msk_drill', 'hash-drill', '["gateway"]'::jsonb);
 INSERT INTO user_settings (id, user_id, chat_model, summary_model, analysis_model, embedding_model, tool_write_enabled, max_injection_tokens)
 VALUES ('settings-$DRILL_SUFFIX', '$DRILL_USER_ID', 'chat-model', 'summary-model', 'analysis-model', 'embedding-model', FALSE, 2048);
-INSERT INTO provider_credentials (provider, encrypted_api_key, base_url) VALUES ('openai', 'ciphertext-drill', 'https://api.example.com');
+INSERT INTO provider_credentials (scope, provider, encrypted_api_key, base_url) VALUES ('gateway', 'openai_compatible', 'ciphertext-drill', 'https://api.example.com');
 INSERT INTO conversations (id, user_id, request_format, upstream_provider, mode, finalize_status, summary_status, analysis_status, metadata)
 VALUES ('$DRILL_CONVERSATION_ID', '$DRILL_USER_ID', 'openai_chat', 'openai', 'inject', 'ended', 'completed', 'completed', '{"drill":true}'::jsonb);
 INSERT INTO messages (id, user_id, conversation_id, role, content_blocks, text_content, provider_payload, sequence_num)
