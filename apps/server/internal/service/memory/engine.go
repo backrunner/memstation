@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 
@@ -25,6 +26,7 @@ type Engine struct {
 	configMu       sync.RWMutex
 	relationRecall RelationRecallConfig
 	rerank         RerankConfig
+	clock          func() time.Time
 }
 
 type RelationRecallConfig struct {
@@ -64,7 +66,22 @@ func NewEngine(repo ports.MemoryRepository, vectors ports.VectorStore) *Engine {
 		vectors:        vectors,
 		relationRecall: DefaultRelationRecallConfig(),
 		rerank:         DefaultRerankConfig(),
+		clock:          utcNow,
 	}
+}
+
+func utcNow() time.Time {
+	return time.Now().UTC()
+}
+
+func (e *Engine) SetClock(clock func() time.Time) {
+	e.configMu.Lock()
+	defer e.configMu.Unlock()
+	if clock == nil {
+		e.clock = utcNow
+		return
+	}
+	e.clock = clock
 }
 
 func (e *Engine) SetGenerationService(service *memorygenservice.Service) {
@@ -114,6 +131,20 @@ func (e *Engine) RerankConfig() RerankConfig {
 	e.configMu.RLock()
 	defer e.configMu.RUnlock()
 	return e.rerank.normalized()
+}
+
+func (e *Engine) now() time.Time {
+	e.configMu.RLock()
+	clock := e.clock
+	e.configMu.RUnlock()
+	if clock == nil {
+		return utcNow()
+	}
+	now := clock()
+	if now.IsZero() {
+		return utcNow()
+	}
+	return now.UTC()
 }
 
 func (e *Engine) Inject(ctx context.Context, req domain.UnifiedRequest) (domain.UnifiedRequest, domain.InjectionResult, error) {
@@ -310,6 +341,7 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 	defer span.End()
 
 	cfg := configForVariant(variant)
+	now := e.now()
 	if input.TopN <= 0 {
 		input.TopN = 10
 	}
@@ -439,7 +471,7 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 		relationExpansion := maxFloat(relationScores[doc.NodeID]-baseScore, 0)
 		supersessionBoost := supersessionBoosts[doc.NodeID]
 		conversationBoost := conversationBoosts[doc.NodeID]
-		components := scoreDocument(doc, semanticScores[doc.NodeID], keywordScores[doc.NodeID], relationExpansion, supersessionBoost, conversationBoost, 0, 0, cfg)
+		components := scoreDocumentAt(doc, semanticScores[doc.NodeID], keywordScores[doc.NodeID], relationExpansion, supersessionBoost, conversationBoost, 0, 0, now, cfg)
 		candidates = append(candidates, searchCandidate{
 			Document:          doc,
 			PreliminaryScore:  components.EffectiveScore,
@@ -462,7 +494,7 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 		if _, ok := rerankRanks[doc.NodeID]; ok {
 			rerankWeight = rerankConfig.BlendWeight
 		}
-		components := scoreDocument(doc, candidate.BaseSemanticScore, candidate.KeywordScore, candidate.RelationExpansion, candidate.SupersessionBoost, candidate.ConversationBoost, rerankScore, rerankWeight, cfg)
+		components := scoreDocumentAt(doc, candidate.BaseSemanticScore, candidate.KeywordScore, candidate.RelationExpansion, candidate.SupersessionBoost, candidate.ConversationBoost, rerankScore, rerankWeight, now, cfg)
 		if match, ok := keywordMatches[doc.NodeID]; ok {
 			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
 				"matched_keywords": match.Keywords,
@@ -572,13 +604,14 @@ func (e *Engine) searchWithoutVectors(ctx context.Context, input domain.SearchIn
 		return DebugSearchResult{}, err
 	}
 	cfg := configForVariant(variant)
+	now := e.now()
 	candidates := make([]searchCandidate, 0, len(result.Memories))
 	componentBaseScores := make(map[string]float64, len(result.Memories))
 	for _, doc := range result.Memories {
 		if doc.ID == "" || !matchesTemporalSearchInput(doc, input) || !matchesSearchDocument(doc, input) {
 			continue
 		}
-		components := scoreDocument(doc, baseScores[doc.NodeID], 0, 0, supersessionBoosts[doc.NodeID], conversationBoosts[doc.NodeID], 0, 0, cfg)
+		components := scoreDocumentAt(doc, baseScores[doc.NodeID], 0, 0, supersessionBoosts[doc.NodeID], conversationBoosts[doc.NodeID], 0, 0, now, cfg)
 		candidates = append(candidates, searchCandidate{
 			Document:          doc,
 			PreliminaryScore:  components.EffectiveScore,
@@ -600,7 +633,7 @@ func (e *Engine) searchWithoutVectors(ctx context.Context, input domain.SearchIn
 		if _, ok := rerankRanks[doc.NodeID]; ok {
 			rerankWeight = rerankConfig.BlendWeight
 		}
-		components := scoreDocument(doc, candidate.BaseSemanticScore, 0, 0, candidate.SupersessionBoost, candidate.ConversationBoost, rerankScore, rerankWeight, cfg)
+		components := scoreDocumentAt(doc, candidate.BaseSemanticScore, 0, 0, candidate.SupersessionBoost, candidate.ConversationBoost, rerankScore, rerankWeight, now, cfg)
 		if aliases := supersessionAliases[doc.NodeID]; len(aliases) > 0 {
 			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
 				"superseded_alias_node_ids": aliases,

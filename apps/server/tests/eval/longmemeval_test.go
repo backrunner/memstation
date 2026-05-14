@@ -74,3 +74,42 @@ func TestLongMemEvalTurnAdapterUsesTurnEvidence(t *testing.T) {
 		}
 	}
 }
+
+func TestLongMemEvalAdapterAllowsRepeatedSessionIDs(t *testing.T) {
+	t.Parallel()
+
+	samples := []longMemEvalSample{{
+		QuestionID:         "q-duplicate-session",
+		QuestionType:       "single-session-user",
+		Question:           "Who approves the freeze exception?",
+		QuestionDate:       "2025-03-10",
+		HaystackSessionIDs: []any{"sharegpt-syblhtk-0", "sharegpt-syblhtk-0"},
+		HaystackDates:      []any{"2025-03-01", "2025-03-02"},
+		HaystackSessions: [][]longMemEvalTurn{
+			{
+				{Role: "user", Content: "Mina approves freeze exceptions."},
+			},
+			{
+				{Role: "assistant", Content: "Noted that Mina approves the exception.", HasAnswer: true},
+			},
+		},
+		AnswerSessionIDs: []any{"sharegpt-syblhtk-0"},
+	}}
+
+	for _, granularity := range []LongMemEvalGranularity{LongMemEvalGranularitySession, LongMemEvalGranularityTurn} {
+		dataset, err := buildLongMemEvalDataset(samples, LongMemEvalOptions{Granularity: granularity})
+		if err != nil {
+			t.Fatalf("build dataset with %s granularity: %v", granularity, err)
+		}
+		if err := dataset.Validate(); err != nil {
+			t.Fatalf("validate dataset with %s granularity: %v", granularity, err)
+		}
+		seen := map[string]struct{}{}
+		for _, doc := range dataset.Documents {
+			if _, ok := seen[doc.ID]; ok {
+				t.Fatalf("duplicate document id for %s granularity: %s", granularity, doc.ID)
+			}
+			seen[doc.ID] = struct{}{}
+		}
+	}
+}

@@ -111,6 +111,7 @@ func newHarness(ctx context.Context, dataset Dataset, embeddingOptions Embedding
 	if err != nil {
 		return nil, err
 	}
+	referenceTime := datasetReferenceTime(dataset)
 	repo := sqlstore.NewInMemoryMemoryRepository()
 	vectors := vectorstore.NewPGVectorStore(nil)
 	embedder, err := newEvalEmbeddingClient(normalizedEmbedding)
@@ -122,6 +123,12 @@ func newHarness(ctx context.Context, dataset Dataset, embeddingOptions Embedding
 	}
 	for _, item := range dataset.Documents {
 		doc := item.ToDomain()
+		if doc.CreatedAt.IsZero() {
+			doc.CreatedAt = referenceTime
+		}
+		if doc.UpdatedAt.IsZero() {
+			doc.UpdatedAt = referenceTime
+		}
 		if err := repo.StoreDocument(ctx, doc); err != nil {
 			return nil, err
 		}
@@ -146,10 +153,27 @@ func newHarness(ctx context.Context, dataset Dataset, embeddingOptions Embedding
 			return nil, err
 		}
 	}
+	engine := memoryservice.NewEngine(repo, vectors)
+	engine.SetClock(func() time.Time {
+		return referenceTime
+	})
 	return &harness{
-		engine:    memoryservice.NewEngine(repo, vectors),
+		engine:    engine,
 		embedding: normalizedEmbedding.runInfo(),
 	}, nil
+}
+
+func datasetReferenceTime(dataset Dataset) time.Time {
+	referenceTime := time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC)
+	for _, doc := range dataset.Documents {
+		for _, candidate := range []time.Time{doc.UpdatedAt, doc.CreatedAt} {
+			if candidate.IsZero() || !candidate.After(referenceTime) {
+				continue
+			}
+			referenceTime = candidate.UTC()
+		}
+	}
+	return referenceTime.Add(24 * time.Hour)
 }
 
 func memorygenCurrentGenerationID(userID string) string {

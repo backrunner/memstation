@@ -172,10 +172,11 @@ func buildLongMemEvalSessionDocuments(sample longMemEvalSample, userID string) (
 		}
 		sessionTime := longMemEvalSessionTime(sample, idx, questionTime)
 		sanitizedSessionID := sanitizeExternalID(sessionID)
-		docID := fmt.Sprintf("longmemeval-doc-%s-session-%s", questionID, sanitizedSessionID)
+		docSuffix := fmt.Sprintf("%s-%03d", sanitizedSessionID, idx+1)
+		docID := fmt.Sprintf("longmemeval-doc-%s-session-%s", questionID, docSuffix)
 		documents = append(documents, DatasetDocument{
 			ID:          docID,
-			NodeID:      fmt.Sprintf("longmemeval-node-%s-session-%s", questionID, sanitizedSessionID),
+			NodeID:      fmt.Sprintf("longmemeval-node-%s-session-%s", questionID, docSuffix),
 			UserID:      userID,
 			Type:        domain.MemoryTypeSegment,
 			Content:     content,
@@ -211,6 +212,7 @@ func buildLongMemEvalTurnDocuments(sample longMemEvalSample, userID string) ([]D
 		sessionID := longMemEvalSessionID(sample, sessionIdx)
 		sessionTime := longMemEvalSessionTime(sample, sessionIdx, questionTime)
 		sanitizedSessionID := sanitizeExternalID(sessionID)
+		sessionSuffix := fmt.Sprintf("%s-%03d", sanitizedSessionID, sessionIdx+1)
 		sessionMarked := false
 		for turnIdx, turn := range session {
 			content := strings.TrimSpace(turn.Content)
@@ -221,10 +223,10 @@ func buildLongMemEvalTurnDocuments(sample longMemEvalSample, userID string) ([]D
 			if role == "" {
 				role = "unknown"
 			}
-			docID := fmt.Sprintf("longmemeval-doc-%s-turn-%s-%03d", questionID, sanitizedSessionID, turnIdx+1)
+			docID := fmt.Sprintf("longmemeval-doc-%s-turn-%s-%03d", questionID, sessionSuffix, turnIdx+1)
 			documents = append(documents, DatasetDocument{
 				ID:          docID,
-				NodeID:      fmt.Sprintf("longmemeval-node-%s-turn-%s-%03d", questionID, sanitizedSessionID, turnIdx+1),
+				NodeID:      fmt.Sprintf("longmemeval-node-%s-turn-%s-%03d", questionID, sessionSuffix, turnIdx+1),
 				UserID:      userID,
 				Type:        domain.MemoryTypeSegment,
 				Content:     fmt.Sprintf("%s: %s", role, content),

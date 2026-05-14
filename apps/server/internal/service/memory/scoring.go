@@ -53,6 +53,13 @@ func configForVariant(variant SearchVariant) searchConfig {
 }
 
 func scoreDocument(doc domain.MemoryDocument, baseSemanticScore, keywordScore, relationExpansion, supersessionBoost, conversationBoost, rerankScore, rerankWeight float64, cfg searchConfig) ScoreComponents {
+	return scoreDocumentAt(doc, baseSemanticScore, keywordScore, relationExpansion, supersessionBoost, conversationBoost, rerankScore, rerankWeight, time.Now().UTC(), cfg)
+}
+
+func scoreDocumentAt(doc domain.MemoryDocument, baseSemanticScore, keywordScore, relationExpansion, supersessionBoost, conversationBoost, rerankScore, rerankWeight float64, now time.Time, cfg searchConfig) ScoreComponents {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
 	directScore := combineDirectSignal(baseSemanticScore, keywordScore)
 	if rerankWeight > 1 {
 		rerankWeight = 1
@@ -80,10 +87,10 @@ func scoreDocument(doc domain.MemoryDocument, baseSemanticScore, keywordScore, r
 		components.EffectiveScore *= components.ImportanceWeight
 	}
 	if cfg.useTimeDecay {
-		components.TimeDecay = domain.TimeDecay(doc.Type, doc.ActivityAt, doc.DecayFactor, doc.Importance, time.Now().UTC())
+		components.TimeDecay = domain.TimeDecay(doc.Type, doc.ActivityAt, doc.DecayFactor, doc.Importance, now)
 		components.EffectiveScore *= components.TimeDecay
 	}
-	components.FreshnessPenalty = domain.StalePenalty(doc, time.Now().UTC())
+	components.FreshnessPenalty = domain.StalePenalty(doc, now)
 	components.EffectiveScore *= components.FreshnessPenalty
 	return components
 }
