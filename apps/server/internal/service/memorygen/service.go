@@ -626,9 +626,6 @@ func (s *Service) CreateRebuildGeneration(ctx context.Context, input CreateRebui
 	if input.Scope == "conversation" && input.ActivateOnSuccess {
 		return domain.MemoryGeneration{}, nil, errors.New("conversation-scoped rebuilds cannot activate a user-wide generation; use user scope rebuild to switch active memory")
 	}
-	if input.ActivateOnSuccess == false {
-		// keep explicit false
-	}
 	if existing, ok, err := s.GetInProgressGeneration(ctx, input.UserID); err != nil {
 		return domain.MemoryGeneration{}, nil, err
 	} else if ok {
@@ -1454,24 +1451,6 @@ func canActivateGeneration(generation domain.MemoryGeneration) bool {
 		return false
 	}
 	return generation.SourceCount > 0 && generation.ProcessedCount >= generation.SourceCount
-}
-
-func stringValue(metadata map[string]any, key string) string {
-	if metadata == nil {
-		return ""
-	}
-	value, ok := metadata[key]
-	if !ok || value == nil {
-		return ""
-	}
-	switch typed := value.(type) {
-	case string:
-		return typed
-	case fmt.Stringer:
-		return typed.String()
-	default:
-		return fmt.Sprintf("%v", value)
-	}
 }
 
 func firstNonEmpty(values ...string) string {

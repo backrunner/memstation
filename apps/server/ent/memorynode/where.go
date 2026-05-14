@@ -89,6 +89,16 @@ func DecayFactor(v float64) predicate.MemoryNode {
 	return predicate.MemoryNode(sql.FieldEQ(FieldDecayFactor, v))
 }
 
+// ActivityAt applies equality check predicate on the "activity_at" field. It's identical to ActivityAtEQ.
+func ActivityAt(v time.Time) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEQ(FieldActivityAt, v))
+}
+
+// TimeTier applies equality check predicate on the "time_tier" field. It's identical to TimeTierEQ.
+func TimeTier(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEQ(FieldTimeTier, v))
+}
+
 // EmbeddingStatus applies equality check predicate on the "embedding_status" field. It's identical to EmbeddingStatusEQ.
 func EmbeddingStatus(v string) predicate.MemoryNode {
 	return predicate.MemoryNode(sql.FieldEQ(FieldEmbeddingStatus, v))
@@ -447,6 +457,121 @@ func DecayFactorLT(v float64) predicate.MemoryNode {
 // DecayFactorLTE applies the LTE predicate on the "decay_factor" field.
 func DecayFactorLTE(v float64) predicate.MemoryNode {
 	return predicate.MemoryNode(sql.FieldLTE(FieldDecayFactor, v))
+}
+
+// ActivityAtEQ applies the EQ predicate on the "activity_at" field.
+func ActivityAtEQ(v time.Time) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEQ(FieldActivityAt, v))
+}
+
+// ActivityAtNEQ applies the NEQ predicate on the "activity_at" field.
+func ActivityAtNEQ(v time.Time) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldNEQ(FieldActivityAt, v))
+}
+
+// ActivityAtIn applies the In predicate on the "activity_at" field.
+func ActivityAtIn(vs ...time.Time) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldIn(FieldActivityAt, vs...))
+}
+
+// ActivityAtNotIn applies the NotIn predicate on the "activity_at" field.
+func ActivityAtNotIn(vs ...time.Time) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldNotIn(FieldActivityAt, vs...))
+}
+
+// ActivityAtGT applies the GT predicate on the "activity_at" field.
+func ActivityAtGT(v time.Time) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldGT(FieldActivityAt, v))
+}
+
+// ActivityAtGTE applies the GTE predicate on the "activity_at" field.
+func ActivityAtGTE(v time.Time) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldGTE(FieldActivityAt, v))
+}
+
+// ActivityAtLT applies the LT predicate on the "activity_at" field.
+func ActivityAtLT(v time.Time) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldLT(FieldActivityAt, v))
+}
+
+// ActivityAtLTE applies the LTE predicate on the "activity_at" field.
+func ActivityAtLTE(v time.Time) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldLTE(FieldActivityAt, v))
+}
+
+// ActivityAtIsNil applies the IsNil predicate on the "activity_at" field.
+func ActivityAtIsNil() predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldIsNull(FieldActivityAt))
+}
+
+// ActivityAtNotNil applies the NotNil predicate on the "activity_at" field.
+func ActivityAtNotNil() predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldNotNull(FieldActivityAt))
+}
+
+// TimeTierEQ applies the EQ predicate on the "time_tier" field.
+func TimeTierEQ(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEQ(FieldTimeTier, v))
+}
+
+// TimeTierNEQ applies the NEQ predicate on the "time_tier" field.
+func TimeTierNEQ(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldNEQ(FieldTimeTier, v))
+}
+
+// TimeTierIn applies the In predicate on the "time_tier" field.
+func TimeTierIn(vs ...string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldIn(FieldTimeTier, vs...))
+}
+
+// TimeTierNotIn applies the NotIn predicate on the "time_tier" field.
+func TimeTierNotIn(vs ...string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldNotIn(FieldTimeTier, vs...))
+}
+
+// TimeTierGT applies the GT predicate on the "time_tier" field.
+func TimeTierGT(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldGT(FieldTimeTier, v))
+}
+
+// TimeTierGTE applies the GTE predicate on the "time_tier" field.
+func TimeTierGTE(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldGTE(FieldTimeTier, v))
+}
+
+// TimeTierLT applies the LT predicate on the "time_tier" field.
+func TimeTierLT(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldLT(FieldTimeTier, v))
+}
+
+// TimeTierLTE applies the LTE predicate on the "time_tier" field.
+func TimeTierLTE(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldLTE(FieldTimeTier, v))
+}
+
+// TimeTierContains applies the Contains predicate on the "time_tier" field.
+func TimeTierContains(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldContains(FieldTimeTier, v))
+}
+
+// TimeTierHasPrefix applies the HasPrefix predicate on the "time_tier" field.
+func TimeTierHasPrefix(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldHasPrefix(FieldTimeTier, v))
+}
+
+// TimeTierHasSuffix applies the HasSuffix predicate on the "time_tier" field.
+func TimeTierHasSuffix(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldHasSuffix(FieldTimeTier, v))
+}
+
+// TimeTierEqualFold applies the EqualFold predicate on the "time_tier" field.
+func TimeTierEqualFold(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEqualFold(FieldTimeTier, v))
+}
+
+// TimeTierContainsFold applies the ContainsFold predicate on the "time_tier" field.
+func TimeTierContainsFold(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldContainsFold(FieldTimeTier, v))
 }
 
 // EmbeddingStatusEQ applies the EQ predicate on the "embedding_status" field.

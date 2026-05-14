@@ -138,6 +138,20 @@ func (_c *UserSettingCreate) SetNillableEmbeddingAPIKeyEncrypted(v *string) *Use
 	return _c
 }
 
+// SetRetainSourceMaterials sets the "retain_source_materials" field.
+func (_c *UserSettingCreate) SetRetainSourceMaterials(v bool) *UserSettingCreate {
+	_c.mutation.SetRetainSourceMaterials(v)
+	return _c
+}
+
+// SetNillableRetainSourceMaterials sets the "retain_source_materials" field if the given value is not nil.
+func (_c *UserSettingCreate) SetNillableRetainSourceMaterials(v *bool) *UserSettingCreate {
+	if v != nil {
+		_c.SetRetainSourceMaterials(*v)
+	}
+	return _c
+}
+
 // SetToolWriteEnabled sets the "tool_write_enabled" field.
 func (_c *UserSettingCreate) SetToolWriteEnabled(v bool) *UserSettingCreate {
 	_c.mutation.SetToolWriteEnabled(v)
@@ -209,6 +223,10 @@ func (_c *UserSettingCreate) defaults() {
 		v := usersetting.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.RetainSourceMaterials(); !ok {
+		v := usersetting.DefaultRetainSourceMaterials
+		_c.mutation.SetRetainSourceMaterials(v)
+	}
 	if _, ok := _c.mutation.ToolWriteEnabled(); !ok {
 		v := usersetting.DefaultToolWriteEnabled
 		_c.mutation.SetToolWriteEnabled(v)
@@ -229,6 +247,9 @@ func (_c *UserSettingCreate) check() error {
 	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "UserSetting.user_id"`)}
+	}
+	if _, ok := _c.mutation.RetainSourceMaterials(); !ok {
+		return &ValidationError{Name: "retain_source_materials", err: errors.New(`ent: missing required field "UserSetting.retain_source_materials"`)}
 	}
 	if _, ok := _c.mutation.ToolWriteEnabled(); !ok {
 		return &ValidationError{Name: "tool_write_enabled", err: errors.New(`ent: missing required field "UserSetting.tool_write_enabled"`)}
@@ -297,6 +318,10 @@ func (_c *UserSettingCreate) createSpec() (*UserSetting, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.EmbeddingAPIKeyEncrypted(); ok {
 		_spec.SetField(usersetting.FieldEmbeddingAPIKeyEncrypted, field.TypeString, value)
 		_node.EmbeddingAPIKeyEncrypted = value
+	}
+	if value, ok := _c.mutation.RetainSourceMaterials(); ok {
+		_spec.SetField(usersetting.FieldRetainSourceMaterials, field.TypeBool, value)
+		_node.RetainSourceMaterials = value
 	}
 	if value, ok := _c.mutation.ToolWriteEnabled(); ok {
 		_spec.SetField(usersetting.FieldToolWriteEnabled, field.TypeBool, value)

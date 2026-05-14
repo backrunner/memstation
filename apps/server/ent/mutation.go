@@ -7151,6 +7151,8 @@ type MemoryNodeMutation struct {
 	addimportance    *float64
 	decay_factor     *float64
 	adddecay_factor  *float64
+	activity_at      *time.Time
+	time_tier        *string
 	embedding_status *string
 	clearedFields    map[string]struct{}
 	done             bool
@@ -7548,6 +7550,91 @@ func (m *MemoryNodeMutation) ResetDecayFactor() {
 	m.adddecay_factor = nil
 }
 
+// SetActivityAt sets the "activity_at" field.
+func (m *MemoryNodeMutation) SetActivityAt(t time.Time) {
+	m.activity_at = &t
+}
+
+// ActivityAt returns the value of the "activity_at" field in the mutation.
+func (m *MemoryNodeMutation) ActivityAt() (r time.Time, exists bool) {
+	v := m.activity_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldActivityAt returns the old "activity_at" field's value of the MemoryNode entity.
+// If the MemoryNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryNodeMutation) OldActivityAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldActivityAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldActivityAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldActivityAt: %w", err)
+	}
+	return oldValue.ActivityAt, nil
+}
+
+// ClearActivityAt clears the value of the "activity_at" field.
+func (m *MemoryNodeMutation) ClearActivityAt() {
+	m.activity_at = nil
+	m.clearedFields[memorynode.FieldActivityAt] = struct{}{}
+}
+
+// ActivityAtCleared returns if the "activity_at" field was cleared in this mutation.
+func (m *MemoryNodeMutation) ActivityAtCleared() bool {
+	_, ok := m.clearedFields[memorynode.FieldActivityAt]
+	return ok
+}
+
+// ResetActivityAt resets all changes to the "activity_at" field.
+func (m *MemoryNodeMutation) ResetActivityAt() {
+	m.activity_at = nil
+	delete(m.clearedFields, memorynode.FieldActivityAt)
+}
+
+// SetTimeTier sets the "time_tier" field.
+func (m *MemoryNodeMutation) SetTimeTier(s string) {
+	m.time_tier = &s
+}
+
+// TimeTier returns the value of the "time_tier" field in the mutation.
+func (m *MemoryNodeMutation) TimeTier() (r string, exists bool) {
+	v := m.time_tier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTimeTier returns the old "time_tier" field's value of the MemoryNode entity.
+// If the MemoryNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryNodeMutation) OldTimeTier(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTimeTier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTimeTier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTimeTier: %w", err)
+	}
+	return oldValue.TimeTier, nil
+}
+
+// ResetTimeTier resets all changes to the "time_tier" field.
+func (m *MemoryNodeMutation) ResetTimeTier() {
+	m.time_tier = nil
+}
+
 // SetEmbeddingStatus sets the "embedding_status" field.
 func (m *MemoryNodeMutation) SetEmbeddingStatus(s string) {
 	m.embedding_status = &s
@@ -7618,7 +7705,7 @@ func (m *MemoryNodeMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *MemoryNodeMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 10)
 	if m.created_at != nil {
 		fields = append(fields, memorynode.FieldCreatedAt)
 	}
@@ -7639,6 +7726,12 @@ func (m *MemoryNodeMutation) Fields() []string {
 	}
 	if m.decay_factor != nil {
 		fields = append(fields, memorynode.FieldDecayFactor)
+	}
+	if m.activity_at != nil {
+		fields = append(fields, memorynode.FieldActivityAt)
+	}
+	if m.time_tier != nil {
+		fields = append(fields, memorynode.FieldTimeTier)
 	}
 	if m.embedding_status != nil {
 		fields = append(fields, memorynode.FieldEmbeddingStatus)
@@ -7665,6 +7758,10 @@ func (m *MemoryNodeMutation) Field(name string) (ent.Value, bool) {
 		return m.Importance()
 	case memorynode.FieldDecayFactor:
 		return m.DecayFactor()
+	case memorynode.FieldActivityAt:
+		return m.ActivityAt()
+	case memorynode.FieldTimeTier:
+		return m.TimeTier()
 	case memorynode.FieldEmbeddingStatus:
 		return m.EmbeddingStatus()
 	}
@@ -7690,6 +7787,10 @@ func (m *MemoryNodeMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldImportance(ctx)
 	case memorynode.FieldDecayFactor:
 		return m.OldDecayFactor(ctx)
+	case memorynode.FieldActivityAt:
+		return m.OldActivityAt(ctx)
+	case memorynode.FieldTimeTier:
+		return m.OldTimeTier(ctx)
 	case memorynode.FieldEmbeddingStatus:
 		return m.OldEmbeddingStatus(ctx)
 	}
@@ -7749,6 +7850,20 @@ func (m *MemoryNodeMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetDecayFactor(v)
+		return nil
+	case memorynode.FieldActivityAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetActivityAt(v)
+		return nil
+	case memorynode.FieldTimeTier:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTimeTier(v)
 		return nil
 	case memorynode.FieldEmbeddingStatus:
 		v, ok := value.(string)
@@ -7813,7 +7928,11 @@ func (m *MemoryNodeMutation) AddField(name string, value ent.Value) error {
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *MemoryNodeMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(memorynode.FieldActivityAt) {
+		fields = append(fields, memorynode.FieldActivityAt)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -7826,6 +7945,11 @@ func (m *MemoryNodeMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *MemoryNodeMutation) ClearField(name string) error {
+	switch name {
+	case memorynode.FieldActivityAt:
+		m.ClearActivityAt()
+		return nil
+	}
 	return fmt.Errorf("unknown MemoryNode nullable field %s", name)
 }
 
@@ -7853,6 +7977,12 @@ func (m *MemoryNodeMutation) ResetField(name string) error {
 		return nil
 	case memorynode.FieldDecayFactor:
 		m.ResetDecayFactor()
+		return nil
+	case memorynode.FieldActivityAt:
+		m.ResetActivityAt()
+		return nil
+	case memorynode.FieldTimeTier:
+		m.ResetTimeTier()
 		return nil
 	case memorynode.FieldEmbeddingStatus:
 		m.ResetEmbeddingStatus()
@@ -13186,6 +13316,7 @@ type UserSettingMutation struct {
 	embedding_model             *string
 	embedding_base_url          *string
 	embedding_api_key_encrypted *string
+	retain_source_materials     *bool
 	tool_write_enabled          *bool
 	max_injection_tokens        *int
 	addmax_injection_tokens     *int
@@ -13695,6 +13826,42 @@ func (m *UserSettingMutation) ResetEmbeddingAPIKeyEncrypted() {
 	delete(m.clearedFields, usersetting.FieldEmbeddingAPIKeyEncrypted)
 }
 
+// SetRetainSourceMaterials sets the "retain_source_materials" field.
+func (m *UserSettingMutation) SetRetainSourceMaterials(b bool) {
+	m.retain_source_materials = &b
+}
+
+// RetainSourceMaterials returns the value of the "retain_source_materials" field in the mutation.
+func (m *UserSettingMutation) RetainSourceMaterials() (r bool, exists bool) {
+	v := m.retain_source_materials
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRetainSourceMaterials returns the old "retain_source_materials" field's value of the UserSetting entity.
+// If the UserSetting object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSettingMutation) OldRetainSourceMaterials(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRetainSourceMaterials is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRetainSourceMaterials requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRetainSourceMaterials: %w", err)
+	}
+	return oldValue.RetainSourceMaterials, nil
+}
+
+// ResetRetainSourceMaterials resets all changes to the "retain_source_materials" field.
+func (m *UserSettingMutation) ResetRetainSourceMaterials() {
+	m.retain_source_materials = nil
+}
+
 // SetToolWriteEnabled sets the "tool_write_enabled" field.
 func (m *UserSettingMutation) SetToolWriteEnabled(b bool) {
 	m.tool_write_enabled = &b
@@ -13821,7 +13988,7 @@ func (m *UserSettingMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserSettingMutation) Fields() []string {
-	fields := make([]string, 0, 11)
+	fields := make([]string, 0, 12)
 	if m.created_at != nil {
 		fields = append(fields, usersetting.FieldCreatedAt)
 	}
@@ -13848,6 +14015,9 @@ func (m *UserSettingMutation) Fields() []string {
 	}
 	if m.embedding_api_key_encrypted != nil {
 		fields = append(fields, usersetting.FieldEmbeddingAPIKeyEncrypted)
+	}
+	if m.retain_source_materials != nil {
+		fields = append(fields, usersetting.FieldRetainSourceMaterials)
 	}
 	if m.tool_write_enabled != nil {
 		fields = append(fields, usersetting.FieldToolWriteEnabled)
@@ -13881,6 +14051,8 @@ func (m *UserSettingMutation) Field(name string) (ent.Value, bool) {
 		return m.EmbeddingBaseURL()
 	case usersetting.FieldEmbeddingAPIKeyEncrypted:
 		return m.EmbeddingAPIKeyEncrypted()
+	case usersetting.FieldRetainSourceMaterials:
+		return m.RetainSourceMaterials()
 	case usersetting.FieldToolWriteEnabled:
 		return m.ToolWriteEnabled()
 	case usersetting.FieldMaxInjectionTokens:
@@ -13912,6 +14084,8 @@ func (m *UserSettingMutation) OldField(ctx context.Context, name string) (ent.Va
 		return m.OldEmbeddingBaseURL(ctx)
 	case usersetting.FieldEmbeddingAPIKeyEncrypted:
 		return m.OldEmbeddingAPIKeyEncrypted(ctx)
+	case usersetting.FieldRetainSourceMaterials:
+		return m.OldRetainSourceMaterials(ctx)
 	case usersetting.FieldToolWriteEnabled:
 		return m.OldToolWriteEnabled(ctx)
 	case usersetting.FieldMaxInjectionTokens:
@@ -13987,6 +14161,13 @@ func (m *UserSettingMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetEmbeddingAPIKeyEncrypted(v)
+		return nil
+	case usersetting.FieldRetainSourceMaterials:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRetainSourceMaterials(v)
 		return nil
 	case usersetting.FieldToolWriteEnabled:
 		v, ok := value.(bool)
@@ -14131,6 +14312,9 @@ func (m *UserSettingMutation) ResetField(name string) error {
 		return nil
 	case usersetting.FieldEmbeddingAPIKeyEncrypted:
 		m.ResetEmbeddingAPIKeyEncrypted()
+		return nil
+	case usersetting.FieldRetainSourceMaterials:
+		m.ResetRetainSourceMaterials()
 		return nil
 	case usersetting.FieldToolWriteEnabled:
 		m.ResetToolWriteEnabled()

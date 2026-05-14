@@ -32,13 +32,13 @@ func (h *StaticDBHandle) Current() *sql.DB {
 type PostConnectHook func(context.Context, *sql.DB) error
 
 type SwitchableDB struct {
-	logger      *slog.Logger
+	logger       *slog.Logger
 	afterConnect PostConnectHook
 
-	mu       sync.RWMutex
-	current  *sql.DB
-	url      string
-	lastErr  error
+	mu      sync.RWMutex
+	current *sql.DB
+	url     string
+	lastErr error
 }
 
 func NewSwitchableDB(logger *slog.Logger, afterConnect PostConnectHook) *SwitchableDB {

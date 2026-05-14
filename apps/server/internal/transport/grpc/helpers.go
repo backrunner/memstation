@@ -118,13 +118,6 @@ func parseOptionalTimestamp(value *timestamppb.Timestamp, field string) (*time.T
 	return &parsed, nil
 }
 
-func toProtoBoolValue(value *bool) *wrapperspb.BoolValue {
-	if value == nil {
-		return nil
-	}
-	return wrapperspb.Bool(*value)
-}
-
 func fromProtoBoolValue(value *wrapperspb.BoolValue) *bool {
 	if value == nil {
 		return nil
@@ -248,19 +241,6 @@ func toProtoToolResults(items []domain.ToolResult) []*pb.ToolResult {
 			ToolCallId: item.ToolCallID,
 			Name:       item.Name,
 			Output:     toProtoValue(item.Output),
-		})
-	}
-	return out
-}
-
-func toProtoToolDefinitions(items []domain.ToolDefinition) []*pb.ToolDefinition {
-	out := make([]*pb.ToolDefinition, 0, len(items))
-	for _, item := range items {
-		out = append(out, &pb.ToolDefinition{
-			Name:        item.Name,
-			Description: item.Description,
-			InputSchema: toProtoStruct(item.InputSchema),
-			ReadOnly:    item.ReadOnly,
 		})
 	}
 	return out

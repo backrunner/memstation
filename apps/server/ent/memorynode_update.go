@@ -118,6 +118,40 @@ func (_u *MemoryNodeUpdate) AddDecayFactor(v float64) *MemoryNodeUpdate {
 	return _u
 }
 
+// SetActivityAt sets the "activity_at" field.
+func (_u *MemoryNodeUpdate) SetActivityAt(v time.Time) *MemoryNodeUpdate {
+	_u.mutation.SetActivityAt(v)
+	return _u
+}
+
+// SetNillableActivityAt sets the "activity_at" field if the given value is not nil.
+func (_u *MemoryNodeUpdate) SetNillableActivityAt(v *time.Time) *MemoryNodeUpdate {
+	if v != nil {
+		_u.SetActivityAt(*v)
+	}
+	return _u
+}
+
+// ClearActivityAt clears the value of the "activity_at" field.
+func (_u *MemoryNodeUpdate) ClearActivityAt() *MemoryNodeUpdate {
+	_u.mutation.ClearActivityAt()
+	return _u
+}
+
+// SetTimeTier sets the "time_tier" field.
+func (_u *MemoryNodeUpdate) SetTimeTier(v string) *MemoryNodeUpdate {
+	_u.mutation.SetTimeTier(v)
+	return _u
+}
+
+// SetNillableTimeTier sets the "time_tier" field if the given value is not nil.
+func (_u *MemoryNodeUpdate) SetNillableTimeTier(v *string) *MemoryNodeUpdate {
+	if v != nil {
+		_u.SetTimeTier(*v)
+	}
+	return _u
+}
+
 // SetEmbeddingStatus sets the "embedding_status" field.
 func (_u *MemoryNodeUpdate) SetEmbeddingStatus(v string) *MemoryNodeUpdate {
 	_u.mutation.SetEmbeddingStatus(v)
@@ -205,6 +239,15 @@ func (_u *MemoryNodeUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	}
 	if value, ok := _u.mutation.AddedDecayFactor(); ok {
 		_spec.AddField(memorynode.FieldDecayFactor, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.ActivityAt(); ok {
+		_spec.SetField(memorynode.FieldActivityAt, field.TypeTime, value)
+	}
+	if _u.mutation.ActivityAtCleared() {
+		_spec.ClearField(memorynode.FieldActivityAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.TimeTier(); ok {
+		_spec.SetField(memorynode.FieldTimeTier, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.EmbeddingStatus(); ok {
 		_spec.SetField(memorynode.FieldEmbeddingStatus, field.TypeString, value)
@@ -316,6 +359,40 @@ func (_u *MemoryNodeUpdateOne) SetNillableDecayFactor(v *float64) *MemoryNodeUpd
 // AddDecayFactor adds value to the "decay_factor" field.
 func (_u *MemoryNodeUpdateOne) AddDecayFactor(v float64) *MemoryNodeUpdateOne {
 	_u.mutation.AddDecayFactor(v)
+	return _u
+}
+
+// SetActivityAt sets the "activity_at" field.
+func (_u *MemoryNodeUpdateOne) SetActivityAt(v time.Time) *MemoryNodeUpdateOne {
+	_u.mutation.SetActivityAt(v)
+	return _u
+}
+
+// SetNillableActivityAt sets the "activity_at" field if the given value is not nil.
+func (_u *MemoryNodeUpdateOne) SetNillableActivityAt(v *time.Time) *MemoryNodeUpdateOne {
+	if v != nil {
+		_u.SetActivityAt(*v)
+	}
+	return _u
+}
+
+// ClearActivityAt clears the value of the "activity_at" field.
+func (_u *MemoryNodeUpdateOne) ClearActivityAt() *MemoryNodeUpdateOne {
+	_u.mutation.ClearActivityAt()
+	return _u
+}
+
+// SetTimeTier sets the "time_tier" field.
+func (_u *MemoryNodeUpdateOne) SetTimeTier(v string) *MemoryNodeUpdateOne {
+	_u.mutation.SetTimeTier(v)
+	return _u
+}
+
+// SetNillableTimeTier sets the "time_tier" field if the given value is not nil.
+func (_u *MemoryNodeUpdateOne) SetNillableTimeTier(v *string) *MemoryNodeUpdateOne {
+	if v != nil {
+		_u.SetTimeTier(*v)
+	}
 	return _u
 }
 
@@ -436,6 +513,15 @@ func (_u *MemoryNodeUpdateOne) sqlSave(ctx context.Context) (_node *MemoryNode, 
 	}
 	if value, ok := _u.mutation.AddedDecayFactor(); ok {
 		_spec.AddField(memorynode.FieldDecayFactor, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.ActivityAt(); ok {
+		_spec.SetField(memorynode.FieldActivityAt, field.TypeTime, value)
+	}
+	if _u.mutation.ActivityAtCleared() {
+		_spec.ClearField(memorynode.FieldActivityAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.TimeTier(); ok {
+		_spec.SetField(memorynode.FieldTimeTier, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.EmbeddingStatus(); ok {
 		_spec.SetField(memorynode.FieldEmbeddingStatus, field.TypeString, value)

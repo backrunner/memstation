@@ -3144,6 +3144,7 @@ var (
 		(*emptypb.Empty)(nil),                // 39: google.protobuf.Empty
 	}
 )
+
 var file_proto_memstation_v1_api_proto_depIdxs = []int32{
 	1,  // 0: memstation.v1.HealthStatusResponse.components:type_name -> memstation.v1.HealthComponent
 	2,  // 1: memstation.v1.ListModelsResponse.items:type_name -> memstation.v1.ModelCapability

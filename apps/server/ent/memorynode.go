@@ -31,6 +31,10 @@ type MemoryNode struct {
 	Importance float64 `json:"importance,omitempty"`
 	// DecayFactor holds the value of the "decay_factor" field.
 	DecayFactor float64 `json:"decay_factor,omitempty"`
+	// ActivityAt holds the value of the "activity_at" field.
+	ActivityAt time.Time `json:"activity_at,omitempty"`
+	// TimeTier holds the value of the "time_tier" field.
+	TimeTier string `json:"time_tier,omitempty"`
 	// EmbeddingStatus holds the value of the "embedding_status" field.
 	EmbeddingStatus string `json:"embedding_status,omitempty"`
 	selectValues    sql.SelectValues
@@ -45,9 +49,9 @@ func (*MemoryNode) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullFloat64)
 		case memorynode.FieldID:
 			values[i] = new(sql.NullInt64)
-		case memorynode.FieldUserID, memorynode.FieldNodeType, memorynode.FieldEntityID, memorynode.FieldEmbeddingStatus:
+		case memorynode.FieldUserID, memorynode.FieldNodeType, memorynode.FieldEntityID, memorynode.FieldTimeTier, memorynode.FieldEmbeddingStatus:
 			values[i] = new(sql.NullString)
-		case memorynode.FieldCreatedAt, memorynode.FieldUpdatedAt:
+		case memorynode.FieldCreatedAt, memorynode.FieldUpdatedAt, memorynode.FieldActivityAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -112,6 +116,18 @@ func (_m *MemoryNode) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.DecayFactor = value.Float64
 			}
+		case memorynode.FieldActivityAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field activity_at", values[i])
+			} else if value.Valid {
+				_m.ActivityAt = value.Time
+			}
+		case memorynode.FieldTimeTier:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field time_tier", values[i])
+			} else if value.Valid {
+				_m.TimeTier = value.String
+			}
 		case memorynode.FieldEmbeddingStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field embedding_status", values[i])
@@ -174,6 +190,12 @@ func (_m *MemoryNode) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("decay_factor=")
 	builder.WriteString(fmt.Sprintf("%v", _m.DecayFactor))
+	builder.WriteString(", ")
+	builder.WriteString("activity_at=")
+	builder.WriteString(_m.ActivityAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	builder.WriteString("time_tier=")
+	builder.WriteString(_m.TimeTier)
 	builder.WriteString(", ")
 	builder.WriteString("embedding_status=")
 	builder.WriteString(_m.EmbeddingStatus)

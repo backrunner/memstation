@@ -94,6 +94,34 @@ func (_c *MemoryNodeCreate) SetNillableDecayFactor(v *float64) *MemoryNodeCreate
 	return _c
 }
 
+// SetActivityAt sets the "activity_at" field.
+func (_c *MemoryNodeCreate) SetActivityAt(v time.Time) *MemoryNodeCreate {
+	_c.mutation.SetActivityAt(v)
+	return _c
+}
+
+// SetNillableActivityAt sets the "activity_at" field if the given value is not nil.
+func (_c *MemoryNodeCreate) SetNillableActivityAt(v *time.Time) *MemoryNodeCreate {
+	if v != nil {
+		_c.SetActivityAt(*v)
+	}
+	return _c
+}
+
+// SetTimeTier sets the "time_tier" field.
+func (_c *MemoryNodeCreate) SetTimeTier(v string) *MemoryNodeCreate {
+	_c.mutation.SetTimeTier(v)
+	return _c
+}
+
+// SetNillableTimeTier sets the "time_tier" field if the given value is not nil.
+func (_c *MemoryNodeCreate) SetNillableTimeTier(v *string) *MemoryNodeCreate {
+	if v != nil {
+		_c.SetTimeTier(*v)
+	}
+	return _c
+}
+
 // SetEmbeddingStatus sets the "embedding_status" field.
 func (_c *MemoryNodeCreate) SetEmbeddingStatus(v string) *MemoryNodeCreate {
 	_c.mutation.SetEmbeddingStatus(v)
@@ -159,6 +187,10 @@ func (_c *MemoryNodeCreate) defaults() {
 		v := memorynode.DefaultDecayFactor
 		_c.mutation.SetDecayFactor(v)
 	}
+	if _, ok := _c.mutation.TimeTier(); !ok {
+		v := memorynode.DefaultTimeTier
+		_c.mutation.SetTimeTier(v)
+	}
 	if _, ok := _c.mutation.EmbeddingStatus(); !ok {
 		v := memorynode.DefaultEmbeddingStatus
 		_c.mutation.SetEmbeddingStatus(v)
@@ -187,6 +219,9 @@ func (_c *MemoryNodeCreate) check() error {
 	}
 	if _, ok := _c.mutation.DecayFactor(); !ok {
 		return &ValidationError{Name: "decay_factor", err: errors.New(`ent: missing required field "MemoryNode.decay_factor"`)}
+	}
+	if _, ok := _c.mutation.TimeTier(); !ok {
+		return &ValidationError{Name: "time_tier", err: errors.New(`ent: missing required field "MemoryNode.time_tier"`)}
 	}
 	if _, ok := _c.mutation.EmbeddingStatus(); !ok {
 		return &ValidationError{Name: "embedding_status", err: errors.New(`ent: missing required field "MemoryNode.embedding_status"`)}
@@ -244,6 +279,14 @@ func (_c *MemoryNodeCreate) createSpec() (*MemoryNode, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.DecayFactor(); ok {
 		_spec.SetField(memorynode.FieldDecayFactor, field.TypeFloat64, value)
 		_node.DecayFactor = value
+	}
+	if value, ok := _c.mutation.ActivityAt(); ok {
+		_spec.SetField(memorynode.FieldActivityAt, field.TypeTime, value)
+		_node.ActivityAt = value
+	}
+	if value, ok := _c.mutation.TimeTier(); ok {
+		_spec.SetField(memorynode.FieldTimeTier, field.TypeString, value)
+		_node.TimeTier = value
 	}
 	if value, ok := _c.mutation.EmbeddingStatus(); ok {
 		_spec.SetField(memorynode.FieldEmbeddingStatus, field.TypeString, value)

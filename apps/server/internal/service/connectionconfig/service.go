@@ -119,12 +119,11 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (Snapshot, erro
 
 	s.mu.RLock()
 	currentOverride := s.overrideURL
-	currentUpdatedAt := cloneTimePtr(s.updatedAt)
 	currentError := s.lastError
 	s.mu.RUnlock()
 
-	nextOverride := currentOverride
-	nextUpdatedAt := currentUpdatedAt
+	var nextOverride string
+	var nextUpdatedAt *time.Time
 
 	switch {
 	case input.Clear:

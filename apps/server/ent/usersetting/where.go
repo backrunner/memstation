@@ -99,6 +99,11 @@ func EmbeddingAPIKeyEncrypted(v string) predicate.UserSetting {
 	return predicate.UserSetting(sql.FieldEQ(FieldEmbeddingAPIKeyEncrypted, v))
 }
 
+// RetainSourceMaterials applies equality check predicate on the "retain_source_materials" field. It's identical to RetainSourceMaterialsEQ.
+func RetainSourceMaterials(v bool) predicate.UserSetting {
+	return predicate.UserSetting(sql.FieldEQ(FieldRetainSourceMaterials, v))
+}
+
 // ToolWriteEnabled applies equality check predicate on the "tool_write_enabled" field. It's identical to ToolWriteEnabledEQ.
 func ToolWriteEnabled(v bool) predicate.UserSetting {
 	return predicate.UserSetting(sql.FieldEQ(FieldToolWriteEnabled, v))
@@ -702,6 +707,16 @@ func EmbeddingAPIKeyEncryptedEqualFold(v string) predicate.UserSetting {
 // EmbeddingAPIKeyEncryptedContainsFold applies the ContainsFold predicate on the "embedding_api_key_encrypted" field.
 func EmbeddingAPIKeyEncryptedContainsFold(v string) predicate.UserSetting {
 	return predicate.UserSetting(sql.FieldContainsFold(FieldEmbeddingAPIKeyEncrypted, v))
+}
+
+// RetainSourceMaterialsEQ applies the EQ predicate on the "retain_source_materials" field.
+func RetainSourceMaterialsEQ(v bool) predicate.UserSetting {
+	return predicate.UserSetting(sql.FieldEQ(FieldRetainSourceMaterials, v))
+}
+
+// RetainSourceMaterialsNEQ applies the NEQ predicate on the "retain_source_materials" field.
+func RetainSourceMaterialsNEQ(v bool) predicate.UserSetting {
+	return predicate.UserSetting(sql.FieldNEQ(FieldRetainSourceMaterials, v))
 }
 
 // ToolWriteEnabledEQ applies the EQ predicate on the "tool_write_enabled" field.

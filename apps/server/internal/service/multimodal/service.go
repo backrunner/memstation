@@ -281,9 +281,7 @@ func canonicalBlocks(message domain.UnifiedMessage) []domain.ContentBlock {
 			Text: strings.TrimSpace(message.Text),
 		})
 	} else {
-		for _, block := range message.Blocks {
-			blocks = append(blocks, block)
-		}
+		blocks = append(blocks, message.Blocks...)
 	}
 	for _, call := range message.ToolCalls {
 		raw, _ := json.Marshal(call.Arguments)

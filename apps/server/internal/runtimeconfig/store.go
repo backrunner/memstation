@@ -13,10 +13,10 @@ import (
 const stateVersion = 1
 
 type State struct {
-	Version     int                             `json:"version"`
-	System      map[string]json.RawMessage      `json:"system,omitempty"`
-	Providers   map[string]ProviderRecordState  `json:"providers,omitempty"`
-	Connections ConnectionState                 `json:"connections,omitempty"`
+	Version     int                            `json:"version"`
+	System      map[string]json.RawMessage     `json:"system,omitempty"`
+	Providers   map[string]ProviderRecordState `json:"providers,omitempty"`
+	Connections ConnectionState                `json:"connections,omitempty"`
 }
 
 type ProviderRecordState struct {

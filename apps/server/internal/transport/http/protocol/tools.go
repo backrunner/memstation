@@ -121,28 +121,6 @@ func marshalArguments(arguments any) string {
 	return string(raw)
 }
 
-func toolResultOutputMap(value any) map[string]any {
-	switch typed := value.(type) {
-	case nil:
-		return map[string]any{"content": ""}
-	case map[string]any:
-		return typed
-	case []any:
-		return map[string]any{"content": typed}
-	case string:
-		trimmed := strings.TrimSpace(typed)
-		if trimmed != "" && (strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")) {
-			var parsed any
-			if json.Unmarshal([]byte(trimmed), &parsed) == nil {
-				return toolResultOutputMap(parsed)
-			}
-		}
-		return map[string]any{"content": typed}
-	default:
-		return map[string]any{"content": typed}
-	}
-}
-
 func toolResultText(value any) string {
 	switch typed := value.(type) {
 	case nil:

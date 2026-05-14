@@ -27,6 +27,10 @@ const (
 	FieldImportance = "importance"
 	// FieldDecayFactor holds the string denoting the decay_factor field in the database.
 	FieldDecayFactor = "decay_factor"
+	// FieldActivityAt holds the string denoting the activity_at field in the database.
+	FieldActivityAt = "activity_at"
+	// FieldTimeTier holds the string denoting the time_tier field in the database.
+	FieldTimeTier = "time_tier"
 	// FieldEmbeddingStatus holds the string denoting the embedding_status field in the database.
 	FieldEmbeddingStatus = "embedding_status"
 	// Table holds the table name of the memorynode in the database.
@@ -43,6 +47,8 @@ var Columns = []string{
 	FieldEntityID,
 	FieldImportance,
 	FieldDecayFactor,
+	FieldActivityAt,
+	FieldTimeTier,
 	FieldEmbeddingStatus,
 }
 
@@ -67,6 +73,8 @@ var (
 	DefaultImportance float64
 	// DefaultDecayFactor holds the default value on creation for the "decay_factor" field.
 	DefaultDecayFactor float64
+	// DefaultTimeTier holds the default value on creation for the "time_tier" field.
+	DefaultTimeTier string
 	// DefaultEmbeddingStatus holds the default value on creation for the "embedding_status" field.
 	DefaultEmbeddingStatus string
 )
@@ -112,6 +120,16 @@ func ByImportance(opts ...sql.OrderTermOption) OrderOption {
 // ByDecayFactor orders the results by the decay_factor field.
 func ByDecayFactor(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDecayFactor, opts...).ToFunc()
+}
+
+// ByActivityAt orders the results by the activity_at field.
+func ByActivityAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldActivityAt, opts...).ToFunc()
+}
+
+// ByTimeTier orders the results by the time_tier field.
+func ByTimeTier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTimeTier, opts...).ToFunc()
 }
 
 // ByEmbeddingStatus orders the results by the embedding_status field.

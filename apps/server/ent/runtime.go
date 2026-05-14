@@ -206,8 +206,12 @@ func init() {
 	memorynodeDescDecayFactor := memorynodeFields[4].Descriptor()
 	// memorynode.DefaultDecayFactor holds the default value on creation for the decay_factor field.
 	memorynode.DefaultDecayFactor = memorynodeDescDecayFactor.Default.(float64)
+	// memorynodeDescTimeTier is the schema descriptor for time_tier field.
+	memorynodeDescTimeTier := memorynodeFields[6].Descriptor()
+	// memorynode.DefaultTimeTier holds the default value on creation for the time_tier field.
+	memorynode.DefaultTimeTier = memorynodeDescTimeTier.Default.(string)
 	// memorynodeDescEmbeddingStatus is the schema descriptor for embedding_status field.
-	memorynodeDescEmbeddingStatus := memorynodeFields[5].Descriptor()
+	memorynodeDescEmbeddingStatus := memorynodeFields[7].Descriptor()
 	// memorynode.DefaultEmbeddingStatus holds the default value on creation for the embedding_status field.
 	memorynode.DefaultEmbeddingStatus = memorynodeDescEmbeddingStatus.Default.(string)
 	memoryrelationMixin := schema.MemoryRelation{}.Mixin()
@@ -371,12 +375,16 @@ func init() {
 	usersetting.DefaultUpdatedAt = usersettingDescUpdatedAt.Default.(func() time.Time)
 	// usersetting.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	usersetting.UpdateDefaultUpdatedAt = usersettingDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// usersettingDescRetainSourceMaterials is the schema descriptor for retain_source_materials field.
+	usersettingDescRetainSourceMaterials := usersettingFields[7].Descriptor()
+	// usersetting.DefaultRetainSourceMaterials holds the default value on creation for the retain_source_materials field.
+	usersetting.DefaultRetainSourceMaterials = usersettingDescRetainSourceMaterials.Default.(bool)
 	// usersettingDescToolWriteEnabled is the schema descriptor for tool_write_enabled field.
-	usersettingDescToolWriteEnabled := usersettingFields[7].Descriptor()
+	usersettingDescToolWriteEnabled := usersettingFields[8].Descriptor()
 	// usersetting.DefaultToolWriteEnabled holds the default value on creation for the tool_write_enabled field.
 	usersetting.DefaultToolWriteEnabled = usersettingDescToolWriteEnabled.Default.(bool)
 	// usersettingDescMaxInjectionTokens is the schema descriptor for max_injection_tokens field.
-	usersettingDescMaxInjectionTokens := usersettingFields[8].Descriptor()
+	usersettingDescMaxInjectionTokens := usersettingFields[9].Descriptor()
 	// usersetting.DefaultMaxInjectionTokens holds the default value on creation for the max_injection_tokens field.
 	usersetting.DefaultMaxInjectionTokens = usersettingDescMaxInjectionTokens.Default.(int)
 }

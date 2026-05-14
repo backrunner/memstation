@@ -35,6 +35,8 @@ type UserSetting struct {
 	EmbeddingBaseURL string `json:"embedding_base_url,omitempty"`
 	// EmbeddingAPIKeyEncrypted holds the value of the "embedding_api_key_encrypted" field.
 	EmbeddingAPIKeyEncrypted string `json:"embedding_api_key_encrypted,omitempty"`
+	// RetainSourceMaterials holds the value of the "retain_source_materials" field.
+	RetainSourceMaterials bool `json:"retain_source_materials,omitempty"`
 	// ToolWriteEnabled holds the value of the "tool_write_enabled" field.
 	ToolWriteEnabled bool `json:"tool_write_enabled,omitempty"`
 	// MaxInjectionTokens holds the value of the "max_injection_tokens" field.
@@ -47,7 +49,7 @@ func (*UserSetting) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case usersetting.FieldToolWriteEnabled:
+		case usersetting.FieldRetainSourceMaterials, usersetting.FieldToolWriteEnabled:
 			values[i] = new(sql.NullBool)
 		case usersetting.FieldID, usersetting.FieldMaxInjectionTokens:
 			values[i] = new(sql.NullInt64)
@@ -130,6 +132,12 @@ func (_m *UserSetting) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.EmbeddingAPIKeyEncrypted = value.String
 			}
+		case usersetting.FieldRetainSourceMaterials:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field retain_source_materials", values[i])
+			} else if value.Valid {
+				_m.RetainSourceMaterials = value.Bool
+			}
 		case usersetting.FieldToolWriteEnabled:
 			if value, ok := values[i].(*sql.NullBool); !ok {
 				return fmt.Errorf("unexpected type %T for field tool_write_enabled", values[i])
@@ -204,6 +212,9 @@ func (_m *UserSetting) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("embedding_api_key_encrypted=")
 	builder.WriteString(_m.EmbeddingAPIKeyEncrypted)
+	builder.WriteString(", ")
+	builder.WriteString("retain_source_materials=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RetainSourceMaterials))
 	builder.WriteString(", ")
 	builder.WriteString("tool_write_enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ToolWriteEnabled))

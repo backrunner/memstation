@@ -31,6 +31,8 @@ const (
 	FieldEmbeddingBaseURL = "embedding_base_url"
 	// FieldEmbeddingAPIKeyEncrypted holds the string denoting the embedding_api_key_encrypted field in the database.
 	FieldEmbeddingAPIKeyEncrypted = "embedding_api_key_encrypted"
+	// FieldRetainSourceMaterials holds the string denoting the retain_source_materials field in the database.
+	FieldRetainSourceMaterials = "retain_source_materials"
 	// FieldToolWriteEnabled holds the string denoting the tool_write_enabled field in the database.
 	FieldToolWriteEnabled = "tool_write_enabled"
 	// FieldMaxInjectionTokens holds the string denoting the max_injection_tokens field in the database.
@@ -51,6 +53,7 @@ var Columns = []string{
 	FieldEmbeddingModel,
 	FieldEmbeddingBaseURL,
 	FieldEmbeddingAPIKeyEncrypted,
+	FieldRetainSourceMaterials,
 	FieldToolWriteEnabled,
 	FieldMaxInjectionTokens,
 }
@@ -72,6 +75,8 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultRetainSourceMaterials holds the default value on creation for the "retain_source_materials" field.
+	DefaultRetainSourceMaterials bool
 	// DefaultToolWriteEnabled holds the default value on creation for the "tool_write_enabled" field.
 	DefaultToolWriteEnabled bool
 	// DefaultMaxInjectionTokens holds the default value on creation for the "max_injection_tokens" field.
@@ -129,6 +134,11 @@ func ByEmbeddingBaseURL(opts ...sql.OrderTermOption) OrderOption {
 // ByEmbeddingAPIKeyEncrypted orders the results by the embedding_api_key_encrypted field.
 func ByEmbeddingAPIKeyEncrypted(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEmbeddingAPIKeyEncrypted, opts...).ToFunc()
+}
+
+// ByRetainSourceMaterials orders the results by the retain_source_materials field.
+func ByRetainSourceMaterials(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRetainSourceMaterials, opts...).ToFunc()
 }
 
 // ByToolWriteEnabled orders the results by the tool_write_enabled field.

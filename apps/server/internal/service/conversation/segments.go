@@ -507,10 +507,7 @@ func firstNonEmptyString(values ...string) string {
 
 func compactInts(values ...int) []int {
 	out := make([]int, 0, len(values))
-	for _, value := range values {
-		out = append(out, value)
-	}
-	return out
+	return append(out, values...)
 }
 
 func compactStrings(values ...string) []string {

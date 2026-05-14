@@ -178,6 +178,8 @@ var (
 		{Name: "entity_id", Type: field.TypeString},
 		{Name: "importance", Type: field.TypeFloat64, Default: 1},
 		{Name: "decay_factor", Type: field.TypeFloat64, Default: 1},
+		{Name: "activity_at", Type: field.TypeTime, Nullable: true},
+		{Name: "time_tier", Type: field.TypeString, Default: ""},
 		{Name: "embedding_status", Type: field.TypeString, Default: "pending"},
 	}
 	// MemoryNodesTable holds the schema information for the "memory_nodes" table.
@@ -314,6 +316,7 @@ var (
 		{Name: "embedding_model", Type: field.TypeString, Nullable: true},
 		{Name: "embedding_base_url", Type: field.TypeString, Nullable: true},
 		{Name: "embedding_api_key_encrypted", Type: field.TypeString, Nullable: true},
+		{Name: "retain_source_materials", Type: field.TypeBool, Default: true},
 		{Name: "tool_write_enabled", Type: field.TypeBool, Default: false},
 		{Name: "max_injection_tokens", Type: field.TypeInt, Default: 2048},
 	}

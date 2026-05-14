@@ -168,6 +168,20 @@ func (_u *UserSettingUpdate) ClearEmbeddingAPIKeyEncrypted() *UserSettingUpdate 
 	return _u
 }
 
+// SetRetainSourceMaterials sets the "retain_source_materials" field.
+func (_u *UserSettingUpdate) SetRetainSourceMaterials(v bool) *UserSettingUpdate {
+	_u.mutation.SetRetainSourceMaterials(v)
+	return _u
+}
+
+// SetNillableRetainSourceMaterials sets the "retain_source_materials" field if the given value is not nil.
+func (_u *UserSettingUpdate) SetNillableRetainSourceMaterials(v *bool) *UserSettingUpdate {
+	if v != nil {
+		_u.SetRetainSourceMaterials(*v)
+	}
+	return _u
+}
+
 // SetToolWriteEnabled sets the "tool_write_enabled" field.
 func (_u *UserSettingUpdate) SetToolWriteEnabled(v bool) *UserSettingUpdate {
 	_u.mutation.SetToolWriteEnabled(v)
@@ -294,6 +308,9 @@ func (_u *UserSettingUpdate) sqlSave(ctx context.Context) (_node int, err error)
 	}
 	if _u.mutation.EmbeddingAPIKeyEncryptedCleared() {
 		_spec.ClearField(usersetting.FieldEmbeddingAPIKeyEncrypted, field.TypeString)
+	}
+	if value, ok := _u.mutation.RetainSourceMaterials(); ok {
+		_spec.SetField(usersetting.FieldRetainSourceMaterials, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.ToolWriteEnabled(); ok {
 		_spec.SetField(usersetting.FieldToolWriteEnabled, field.TypeBool, value)
@@ -464,6 +481,20 @@ func (_u *UserSettingUpdateOne) ClearEmbeddingAPIKeyEncrypted() *UserSettingUpda
 	return _u
 }
 
+// SetRetainSourceMaterials sets the "retain_source_materials" field.
+func (_u *UserSettingUpdateOne) SetRetainSourceMaterials(v bool) *UserSettingUpdateOne {
+	_u.mutation.SetRetainSourceMaterials(v)
+	return _u
+}
+
+// SetNillableRetainSourceMaterials sets the "retain_source_materials" field if the given value is not nil.
+func (_u *UserSettingUpdateOne) SetNillableRetainSourceMaterials(v *bool) *UserSettingUpdateOne {
+	if v != nil {
+		_u.SetRetainSourceMaterials(*v)
+	}
+	return _u
+}
+
 // SetToolWriteEnabled sets the "tool_write_enabled" field.
 func (_u *UserSettingUpdateOne) SetToolWriteEnabled(v bool) *UserSettingUpdateOne {
 	_u.mutation.SetToolWriteEnabled(v)
@@ -620,6 +651,9 @@ func (_u *UserSettingUpdateOne) sqlSave(ctx context.Context) (_node *UserSetting
 	}
 	if _u.mutation.EmbeddingAPIKeyEncryptedCleared() {
 		_spec.ClearField(usersetting.FieldEmbeddingAPIKeyEncrypted, field.TypeString)
+	}
+	if value, ok := _u.mutation.RetainSourceMaterials(); ok {
+		_spec.SetField(usersetting.FieldRetainSourceMaterials, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.ToolWriteEnabled(); ok {
 		_spec.SetField(usersetting.FieldToolWriteEnabled, field.TypeBool, value)
