@@ -37,6 +37,9 @@ jobs:
           node-version: 24.11.1
           cache: pnpm
       - uses: ariga/setup-atlas@v0
+        with:
+          # Atlas v0.38+ requires Pro for migrate lint; keep CI on the last CE lint-capable release.
+          version: v0.37.0
       - name: Install dependencies
         run: pnpm install --frozen-lockfile=false
       - name: Go test
