@@ -485,19 +485,21 @@ v1.0 需要以下测试层级：
 - 集成测试：PostgreSQL、Redis、VectorStore、Ent migration
 - 协议契约测试：OpenAI Chat/Responses、Anthropic Messages
 - 端到端测试：Manager 登录、对话浏览、记忆检索、配置修改
-- Benchmark smoke：repo-native golden dataset 的 retrieval/ranking smoke、LOCOMO adapter smoke
-- Nightly benchmark：LOCOMO full benchmark、ranking ablation、benchmark artifact 导出
+- Benchmark smoke：repo-native golden dataset 的 retrieval/ranking smoke、LOCOMO adapter smoke；仅作为本地 / 手动 / 专用评测入口，不作为 CI 红线
+- 外部 benchmark：LOCOMO / LongMemEval benchmark、ranking ablation、benchmark artifact 导出；不作为默认 CI / nightly 判定依据
 - 压测：SSE 流式代理、并发记忆检索、Worker 堆积恢复
 - 备份恢复演练：PostgreSQL 逻辑备份、Redis 快照恢复、计数校验与 artifact 导出
 
 ### 12.3 记忆评测与 Benchmark 基线
 
-记忆 benchmark 是 v1.0 必做项，不是可选优化，也不属于 v1.1 才考虑的附加工作。
+记忆 benchmark 是 v1.0 必做项，不是可选优化，也不属于 v1.1 才考虑的附加工作。但 benchmark 结果在当前阶段只作为观察、诊断和回归分析信号，不作为 CI / nightly 红线门禁。
+
+CI / nightly 默认不执行 retrieval/ranking benchmark，不用 Recall、nDCG、stale fact rate 或 benchmark P95 判定红绿。评测脚本保留给本地、手动或专用评测环境；如确需临时启用硬门禁，必须显式设置 `MEMSTATION_ENFORCE_BENCHMARKS=true`，性能阈值还必须显式设置 `MEMSTATION_PERF_P95_MS`。
 
 Benchmark 基线固定采用 **LOCOMO-first 方法论 + 混合数据集落地**：
 
-- `MemStation-native golden dataset`：仓库内置、可分发、默认 CI 使用
-- `LOCOMO external benchmark`：外部下载、不可默认提交进仓库、用于本地和 nightly
+- `MemStation-native golden dataset`：仓库内置、可分发、默认本地 smoke 使用
+- `LOCOMO external benchmark`：外部下载、不可默认提交进仓库、用于本地 / 手动 / 专用评测环境
 
 数据集与分发策略固定为：
 
@@ -505,7 +507,7 @@ Benchmark 基线固定采用 **LOCOMO-first 方法论 + 混合数据集落地**�
 - 截至 `2026-03-15`，LOCOMO 上游公开数据许可证为 `CC BY-NC 4.0`
 - 因此原始 LOCOMO 数据不得默认提交到 MemStation 仓库
 - 仓库只提交 adapter、schema、导入脚本、说明文档，不提交原始 LOCOMO 数据文件
-- `MemStation-native golden dataset` 是默认 CI 数据源，`LOCOMO external benchmark` 是本地 / nightly 增强基线
+- `MemStation-native golden dataset` 是默认本地 smoke 数据源，`LOCOMO external benchmark` 是本地 / 手动 / 专用评测增强基线
 
 首期 benchmark 范围固定为 **召回 + 排序**，不把 answer quality / LLM judge 作为第一阶段门禁。
 
@@ -555,20 +557,19 @@ v1.0 完整 CI 至少执行下列门禁；当前仓库如未全部补齐，也�
 6. `pnpm test`
 7. manager Playwright E2E
 8. Atlas migration lint / dry-run
-9. retrieval/ranking benchmark smoke
-10. backup/restore drill dry-run
+9. backup/restore drill dry-run
+
+CI 基线不包含 retrieval/ranking benchmark、不执行 LOCOMO / LongMemEval benchmark，也不对 benchmark 指标设置红线。
 
 ### 12.5 Nightly 基线
 
-nightly 回归不是可选项，v1.0 必须预留并最终落地：
+nightly 回归不是可选项，v1.0 必须预留并最终落地，但 nightly CI 默认聚焦运维和可靠性回归，不执行 retrieval/ranking benchmark 红线：
 
-1. LOCOMO full benchmark
-2. ranking ablation 对比
-3. benchmark artifact 保存
-4. 性能 smoke 报表
-5. worker backlog / 恢复能力回归
-6. 模型与记忆排序变更前后的 benchmark 对比
-7. backup/restore drill 与恢复 artifact
+1. worker backlog / 恢复能力回归
+2. backup/restore drill 与恢复 artifact
+3. 任务积压、恢复耗时、备份恢复结果的机器可读 artifact
+
+LOCOMO full benchmark、ranking ablation、模型与记忆排序变更前后的 benchmark 对比，保留在本地 / 手动 / 专用评测环境运行，不作为 GitHub CI / nightly 的红绿判定。
 
 ### 12.6 代码质量规则
 
@@ -603,7 +604,7 @@ nightly 回归不是可选项，v1.0 必须预留并最终落地：
 | R3 Gateway Plane | 三种入站协议、三家上游适配、SSE、API key、usage 统计 | OpenAI Chat/Responses、Anthropic Messages 均通过契约测试 |
 | R4 Memory Plane | Summary、Keyword、Embedding、Impression、Fact、Key Memory、排序注入 | 对话结束后记忆全链路自动完成且可检索 |
 | R5 Admin Plane | GraphQL、Manager、统计、配置、审计、人工修正 | 管理面板可覆盖运营和排障主流程 |
-| R5.5 Benchmark & Eval | `MemStation-native golden dataset`、`LOCOMO adapter`、retrieval/ranking benchmark runner、CI smoke + nightly full benchmark | repo 内置 benchmark 可在 CI 跑通，LOCOMO benchmark 可在本地/夜间跑通，recall/ranking 指标与失败样例可导出 artifact，score breakdown 可追踪到 `semantic_score / importance / time_decay / relation expansion` |
+| R5.5 Benchmark & Eval | `MemStation-native golden dataset`、`LOCOMO adapter`、retrieval/ranking benchmark runner、本地 / 手动 / 专用评测入口 | repo 内置 benchmark 与 LOCOMO benchmark 可在本地或专用评测环境跑通，recall/ranking 指标与失败样例可导出 artifact，score breakdown 可追踪到 `semantic_score / importance / time_decay / relation expansion`；默认 CI / nightly 不以 benchmark 指标判红绿 |
 | R6 Hardening | 限流、加密、缓存、健康检查、备份恢复、压测、K8s 基线 | 达到 SLO、具备生产交付条件 |
 
 v1.x 后续路线：
@@ -615,7 +616,7 @@ v1.x 后续路线：
 
 ---
 
-## 14. 当前实现状态（as of 2026-04-25）
+## 14. 当前实现状态（as of 2026-05-15）
 
 本节用于重启时快速恢复上下文；如后续实现进度发生变化，必须同步更新本节，而不能只改代码不改状态。
 
@@ -632,8 +633,8 @@ v1.x 后续路线：
 - 本地可通过 `pnpm dev:container:portless` 继续把 server、manager、PostgreSQL、Redis 全部跑在 devcontainer 内，并用 Portless alias 暴露 `https://memstation-manager.localhost`
 - 本地 full-stack 调试可选通过 `pnpm dev:portless` 同时启动热重载 MemStation server 与 Portless Manager；后端已运行时仍可用 `pnpm dev:manager:portless` 只启动 Manager 代理
 - HTTP CORS 已统一覆盖 manager/admin API 与普通 API；`cors_allowed_origins` 为空时默认反射当前请求 `Origin`，配置后按白名单限制
-- LOCOMO benchmark 默认会从 Snap Research 官方公开地址下载 `locomo10.json`，仍允许通过环境变量覆盖数据源
-- CI 已补齐 `golangci-lint`、严格 generated diff 校验、Atlas migration lint/dry-run、benchmark smoke、manager Playwright、coverage gate
+- 手动 LOCOMO benchmark 默认会从 Snap Research 官方公开地址下载 `locomo10.json`，仍允许通过环境变量覆盖数据源
+- CI 已补齐 `golangci-lint`、严格 generated diff 校验、Atlas migration lint/dry-run、manager Playwright、coverage gate；retrieval/ranking benchmark 已从 CI / nightly 红线中移除，仅保留本地 / 手动评测入口
 - K8s baseline 已补齐 server / worker / scheduler deployment，以及 ConfigMap / Secret 示例清单
 - 根目录 `README.md` 已补齐，覆盖当前架构、接口、运行方式、测试入口和部署基线
 - `serve` 已并行暴露 HTTP/GraphQL 与独立 gRPC 端口，`apps/server/proto/memstation/v1/api.proto` 已落地 Gateway、Memory、Admin、Health 的正式 proto 定义与生成代码
@@ -648,7 +649,7 @@ v1.x 后续路线：
 ### 14.2 未完成
 
 - 当前没有已确认的 v1 功能缺口；R1-R6 与 R5.5 所要求的仓库内实现均已落地
-- 原始 LOCOMO 数据仍然不会提交进仓库；默认 benchmark 会从上游公开地址拉取，夜间和本地运行仍受外部网络与许可证约束
+- 原始 LOCOMO 数据仍然不会提交进仓库；手动 benchmark 可从上游公开地址拉取，运行仍受外部网络与许可证约束
 - backup/restore 实际演练仍要求运行环境具备 Docker Compose 与镜像拉取能力；在无 Docker 环境下只能执行 dry-run 形态校验
 - 压测与覆盖率门禁已具备基线实现，但后续仍应随着功能扩展逐步提高阈值，而不是长期停留在当前数值
 - 2026-04-25 本地复核中，`go test ./...` 与新增 benchmark smoke 已通过；`scripts/go/format.sh --check` 和 `scripts/go/lint.sh` 当前在未触及文件报告既有格式 / lint 问题，需要后续独立收敛后恢复门禁全绿
@@ -659,19 +660,19 @@ v1.x 后续路线：
 后续重启时默认按以下顺序恢复工作，而不是重新漫无目的盘点仓库：
 
 1. 在具备 Docker 的 CI / nightly 环境里持续观察 backup/restore 与 worker recovery artifact，按结果调高阈值
-2. 观察 repo-native smoke、LOCOMO nightly、perf smoke artifact，并按结果提升阈值
+2. 在本地或专用评测环境观察 repo-native smoke、LOCOMO / LongMemEval benchmark、perf smoke artifact；指标用于诊断与趋势分析，不作为 CI 红线
 3. 如果新增记忆类型、排序信号或 relation 规则，先更新 `apps/server/tests/eval/testdata/` 和 smoke expectations
 4. 如果新增 manager 核心模块，同步补 Vitest、Playwright 和 coverage gate
 5. 如果后续引入集群化或多节点恢复方案，把现有单实例 drill 扩展为跨节点恢复演练，而不是另起一套脚本
 
-### 14.4 当前开发计划（as of 2026-04-25）
+### 14.4 当前开发计划（as of 2026-05-15）
 
 当前开发计划不再以“补齐 v1 基础功能”为主，而是固定按以下顺序推进：
 
 1. 工程纪律优先：
    所有 Go 改动默认先跑 `scripts/go/format.sh --check`、`scripts/go/lint.sh`、`go test ./...`，所有提交信息统一遵循 `type: message`
 2. 质量门禁持续收紧：
-   持续观察 CI / nightly 结果，逐步提高 coverage、perf smoke、recovery、backup/restore 的阈值，而不是长期保守放行
+   持续观察 CI / nightly 结果，逐步提高 coverage、recovery、backup/restore 的阈值；benchmark 指标只在本地或专用评测环境观察，不进入默认 CI 红线
 3. 评测先行：
    凡是修改记忆类型、排序信号、relation expansion、注入逻辑或 temporal 规则，先同步更新 benchmark、smoke expectation 与相关回归测试
 4. 运维基线深化：
@@ -700,7 +701,7 @@ v1.x 后续路线：
 13. `embedding_model` 不做 per-user 自由切换，v1.0 统一为部署级配置。
 14. 记忆 benchmark 是 v1.0 必做项，且采用 `repo-native golden dataset + LOCOMO external benchmark` 的混合策略。
 15. 由于 LOCOMO 上游许可证限制，原始 LOCOMO 数据不得默认提交进仓库。
-16. CI 与 nightly 必须把 benchmark smoke / full benchmark 纳入正式门禁，而不是停留在人工脚本阶段。
+16. CI 与 nightly 不得默认把 benchmark smoke / full benchmark 纳入正式门禁；召回、排序和 benchmark 性能指标只作为本地 / 手动 / 专用评测信号，除非显式 opt-in，否则不得作为红绿判定。
 17. R6 的 worker backlog recovery 与 backup/restore drill 也必须进入正式回归，而不是只留文档说明。
 
 ---

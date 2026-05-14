@@ -6,18 +6,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  benchmark:
+  drills:
     runs-on: ubuntu-latest
     env:
-      LOCOMO_DATASET_URL: ${{ secrets.LOCOMO_DATASET_URL }}
-      LOCOMO_DATASET_PATH: ${{ vars.LOCOMO_DATASET_PATH }}
-      EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL }}
-      EMBEDDING_BASE_URL: ${{ secrets.EMBEDDING_BASE_URL }}
-      EMBEDDING_API_KEY: ${{ secrets.EMBEDDING_API_KEY }}
-      LONGMEMEVAL_QA_JUDGE_MODEL: ${{ secrets.LONGMEMEVAL_QA_JUDGE_MODEL }}
-      LONGMEMEVAL_QA_JUDGE_BASE_URL: ${{ secrets.LONGMEMEVAL_QA_JUDGE_BASE_URL }}
-      LONGMEMEVAL_QA_JUDGE_API_KEY: ${{ secrets.LONGMEMEVAL_QA_JUDGE_API_KEY }}
-      MEMSTATION_PERF_P95_MS: "50"
       MEMSTATION_RECOVERY_MAX_DRAIN: "20s"
     steps:
       - uses: actions/checkout@v4
@@ -33,10 +24,6 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile=false
-      - name: Run repo-native nightly eval bundle
-        run: bash ./scripts/eval/run-performance-smoke.sh "$RUNNER_TEMP/memstation-nightly-repo-native"
-      - name: Run LOCOMO nightly benchmark
-        run: bash ./scripts/eval/run-memory-nightly.sh "$RUNNER_TEMP/memstation-nightly"
       - name: Run worker recovery nightly drill
         run: bash ./scripts/ops/run-worker-recovery-nightly.sh "$RUNNER_TEMP/memstation-nightly-recovery"
       - name: Run backup/restore nightly drill
@@ -45,9 +32,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: memstation-nightly-eval-artifacts
+          name: memstation-nightly-ops-artifacts
           path: |
-            ${{ runner.temp }}/memstation-nightly-repo-native
-            ${{ runner.temp }}/memstation-nightly
             ${{ runner.temp }}/memstation-nightly-recovery
             ${{ runner.temp }}/memstation-backup-drill

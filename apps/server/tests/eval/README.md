@@ -3,7 +3,7 @@
 This directory holds the retrieval and ranking benchmark foundation for MemStation v1.
 
 Datasets
-- `testdata/repo_native_golden.json`: small repo-distributed golden dataset used by CI smoke.
+- `testdata/repo_native_golden.json`: small repo-distributed golden dataset used by local smoke runs.
   It now includes multimodal text-proxy fixtures for image OCR/caption, PDF parsing, audio transcription, and tool-output-derived evidence metadata.
 - `testdata/locomo_fixture.json`: tiny LOCOMO-shaped adapter fixture used only for parser smoke.
 - `testdata/longmemeval_fixture.json`: tiny LongMemEval-shaped adapter fixture used only for parser smoke.
@@ -25,7 +25,7 @@ LongMemEval policy
 
 Commands
 - Repo-native smoke: `./scripts/eval/run-memory-smoke.sh`
-  This always runs in explicit `deterministic` embedding mode for CI-safe regression smoke.
+  This always runs in explicit `deterministic` embedding mode for offline regression smoke.
 - External LOCOMO run: `./scripts/eval/run-memory-locomo.sh`
   By default this expects `provider` embedding mode and requires `EMBEDDING_MODEL`, `EMBEDDING_BASE_URL`, and `EMBEDDING_API_KEY`.
   Override the dataset source with `LOCOMO_DATASET_PATH` or `LOCOMO_DATASET_URL`.
@@ -39,8 +39,13 @@ Commands
 - Worker recovery nightly: `./scripts/ops/run-worker-recovery-nightly.sh`
 
 Embedding modes
-- `deterministic`: local deterministic vectors, only for smoke/regression and offline CI. This is not a real embedding-quality benchmark.
-- `provider`: OpenAI-compatible `/embeddings` evaluation using the configured model/endpoint/key. Use this for accuracy-sensitive local and nightly benchmark runs.
+- `deterministic`: local deterministic vectors, only for smoke/regression and offline manual runs. This is not a real embedding-quality benchmark.
+- `provider`: OpenAI-compatible `/embeddings` evaluation using the configured model/endpoint/key. Use this for accuracy-sensitive local, manual, or dedicated benchmark runs.
+
+CI policy
+- GitHub CI and nightly workflows do not run retrieval/ranking benchmark jobs and do not use Recall, nDCG, or benchmark latency as redlines.
+- Benchmark scripts still write artifacts for local, manual, or dedicated eval environments.
+- Hard benchmark enforcement is explicit opt-in via `MEMSTATION_ENFORCE_BENCHMARKS=true`; benchmark latency thresholds also require `MEMSTATION_PERF_P95_MS`.
 
 Next step
 - See `reliability_benchmark_plan.md` for the proposed source-replay, rebuild-equivalence, activation-safety, and injection-reliability benchmark layers.

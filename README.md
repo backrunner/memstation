@@ -83,8 +83,8 @@ memstation/
 
 ### Eval / Ops
 
-- Repo-native retrieval/ranking benchmark
-- LOCOMO adapter 与 nightly benchmark 脚本
+- Repo-native retrieval/ranking benchmark 脚本（本地 / 手动评测）
+- LOCOMO adapter 与外部 benchmark 脚本
 - Contract tests、Go E2E、Manager Playwright E2E
 - Worker backlog recovery smoke/nightly
 - Backup / export / restore drill
@@ -358,10 +358,10 @@ Embedding 已接入真实 provider 调用，采用 OpenAI-compatible embedding �
 - 协议契约测试
 - Server E2E
 - Manager Vitest + Playwright E2E
-- Retrieval / ranking benchmark smoke
-- LOCOMO external benchmark runner
+- Retrieval / ranking benchmark smoke（本地 / 手动评测，不作为 CI 红线）
+- LOCOMO external benchmark runner（不作为 CI 红线）
 - Gateway / Memory / Worker hot-path `Benchmark*`
-- Performance smoke
+- Performance smoke（本地 / 手动评测）
 - Worker backlog recovery drill
 - Backup / restore drill
 
@@ -371,6 +371,8 @@ Embedding 已接入真实 provider 调用，采用 OpenAI-compatible embedding �
 - `scripts/eval/run-memory-smoke.sh`
 - `scripts/eval/run-memory-locomo.sh`
 - `scripts/eval/run-memory-nightly.sh`
+
+CI / nightly 不执行 retrieval/ranking benchmark，也不基于 Recall、nDCG 或 benchmark P95 设置红线。评测脚本保留给本地、手动或专用评测环境；如确需临时执行硬门禁，必须显式设置 `MEMSTATION_ENFORCE_BENCHMARKS=true`，性能阈值需额外显式设置 `MEMSTATION_PERF_P95_MS`。
 
 ## 部署
 
@@ -386,3 +388,5 @@ Embedding 已接入真实 provider 调用，采用 OpenAI-compatible embedding �
 按当前仓库实现，R1-R6 与 R5.5 的代码范围均已落地，适合作为 v1.0 的开发和迭代基线继续推进。
 
 2026-04-25 本地复核：`go test ./...` 与新增 hot-path benchmark smoke 已通过；`scripts/go/format.sh --check` 和 `scripts/go/lint.sh` 当前在未触及文件报告既有格式 / lint 问题，需后续单独收敛后恢复门禁全绿。
+
+2026-05-15 更新：CI / nightly 已移除 retrieval/ranking benchmark 与 benchmark 性能红线；相关脚本仅作为本地、手动或专用评测入口保留。
