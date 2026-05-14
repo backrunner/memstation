@@ -229,7 +229,7 @@ services:
       - $BACKUP_DIR:/backups
   redis:
     image: redis:7
-    command: ["redis-server", "--save", "60", "1", "--appendonly", "yes"]
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "no"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
