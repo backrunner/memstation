@@ -21,6 +21,11 @@ type PostgresConversationRepository struct {
 	db *sqlpkg.DB
 }
 
+const (
+	memoryKeywordInsertBatchSize  = 128
+	memoryEvidenceInsertBatchSize = 256
+)
+
 func NewPostgresConversationRepository(db *sqlpkg.DB) *PostgresConversationRepository {
 	return &PostgresConversationRepository{db: db}
 }
@@ -637,16 +642,21 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
                 updated_at = EXCLUDED.updated_at
         `, doc.ID, doc.GenerationID, doc.UserID, doc.ConversationID, doc.NodeID, doc.Content, stringValue(doc.Metadata, "topic_label"), 1, 0, 1, doc.CreatedAt, doc.UpdatedAt)
 		if err == nil {
-			if _, err = tx.ExecContext(ctx, `DELETE FROM memory_keywords WHERE summary_id = $1 AND user_id = $2`, doc.ID, doc.UserID); err != nil {
-				return err
+			keywords := stringSlice(doc.Metadata, "keywords")
+			rows := make([]memoryKeywordRow, 0, len(keywords))
+			for idx, keyword := range keywords {
+				rows = append(rows, memoryKeywordRow{
+					ID:        fmt.Sprintf("%s:%d", doc.ID, idx),
+					UserID:    doc.UserID,
+					SummaryID: doc.ID,
+					Keyword:   keyword,
+					Weight:    1.0 - float64(idx)*0.1,
+					CreatedAt: doc.CreatedAt,
+					UpdatedAt: doc.UpdatedAt,
+				})
 			}
-			for idx, keyword := range stringSlice(doc.Metadata, "keywords") {
-				if _, err = tx.ExecContext(ctx, `
-                    INSERT INTO memory_keywords (id, user_id, summary_id, keyword, weight, created_at, updated_at)
-                    VALUES ($1,$2,$3,$4,$5,$6,$7)
-                `, fmt.Sprintf("%s:%d", doc.ID, idx), doc.UserID, doc.ID, keyword, 1.0-float64(idx)*0.1, doc.CreatedAt, doc.UpdatedAt); err != nil {
-					return err
-				}
+			if err = replaceMemoryKeywordsTx(ctx, tx, doc.UserID, doc.ID, rows); err != nil {
+				return err
 			}
 		}
 	case domain.MemoryTypeSegment:
@@ -1876,17 +1886,100 @@ func currentFactLineageHeadIDsTx(ctx context.Context, tx *sqlpkg.Tx, userID, gen
 
 func syncFactKeywordsTx(ctx context.Context, tx *sqlpkg.Tx, doc domain.MemoryDocument) error {
 	keywords := uniqueSortedStrings(append(stringSlice(doc.Metadata, "keywords"), factKeyFromMetadata(doc.Metadata)))
-	if len(keywords) == 0 {
+	rows := make([]memoryKeywordRow, 0, len(keywords))
+	for idx, keyword := range keywords {
+		rows = append(rows, memoryKeywordRow{
+			ID:        fmt.Sprintf("%s:fact:%d", doc.ID, idx),
+			UserID:    doc.UserID,
+			SummaryID: doc.ID,
+			Keyword:   keyword,
+			Weight:    1.0 - float64(idx)*0.08,
+			CreatedAt: doc.CreatedAt,
+			UpdatedAt: doc.UpdatedAt,
+		})
+	}
+	return replaceMemoryKeywordsTx(ctx, tx, doc.UserID, doc.ID, rows)
+}
+
+type memoryKeywordRow struct {
+	ID        string
+	UserID    string
+	SummaryID string
+	Keyword   string
+	Weight    float64
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+func replaceMemoryKeywordsTx(ctx context.Context, tx *sqlpkg.Tx, userID, summaryID string, rows []memoryKeywordRow) error {
+	if tx == nil || userID == "" || summaryID == "" {
 		return nil
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM memory_keywords WHERE summary_id = $1 AND user_id = $2`, doc.ID, doc.UserID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM memory_keywords WHERE summary_id = $1 AND user_id = $2`, summaryID, userID); err != nil {
 		return err
 	}
-	for idx, keyword := range keywords {
-		if _, err := tx.ExecContext(ctx, `
+	if len(rows) == 0 {
+		return nil
+	}
+	for start := 0; start < len(rows); start += memoryKeywordInsertBatchSize {
+		end := min(start+memoryKeywordInsertBatchSize, len(rows))
+		args := make([]any, 0, (end-start)*7)
+		valueGroups := make([]string, 0, end-start)
+		for _, row := range rows[start:end] {
+			base := len(args) + 1
+			valueGroups = append(valueGroups, fmt.Sprintf("($%d,$%d,$%d,$%d,$%d,$%d,$%d)", base, base+1, base+2, base+3, base+4, base+5, base+6))
+			args = append(args, row.ID, row.UserID, row.SummaryID, row.Keyword, row.Weight, row.CreatedAt, row.UpdatedAt)
+		}
+		query := `
             INSERT INTO memory_keywords (id, user_id, summary_id, keyword, weight, created_at, updated_at)
-            VALUES ($1,$2,$3,$4,$5,$6,$7)
-        `, fmt.Sprintf("%s:fact:%d", doc.ID, idx), doc.UserID, doc.ID, keyword, 1.0-float64(idx)*0.08, doc.CreatedAt, doc.UpdatedAt); err != nil {
+            VALUES ` + strings.Join(valueGroups, ",")
+		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func insertMemoryEvidencesTx(ctx context.Context, tx *sqlpkg.Tx, evidences []domain.MemoryEvidence) error {
+	if tx == nil || len(evidences) == 0 {
+		return nil
+	}
+	for start := 0; start < len(evidences); start += memoryEvidenceInsertBatchSize {
+		end := min(start+memoryEvidenceInsertBatchSize, len(evidences))
+		args := make([]any, 0, (end-start)*16)
+		valueGroups := make([]string, 0, end-start)
+		for _, evidence := range evidences[start:end] {
+			base := len(args) + 1
+			valueGroups = append(valueGroups, fmt.Sprintf(
+				"($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
+				base, base+1, base+2, base+3, base+4, base+5, base+6, base+7,
+				base+8, base+9, base+10, base+11, base+12, base+13, base+14, base+15,
+			))
+			args = append(args,
+				evidence.ID,
+				evidence.GenerationID,
+				evidence.UserID,
+				evidence.NodeID,
+				evidence.ConversationID,
+				evidence.SequenceNum,
+				nullString(evidence.PartID),
+				nullString(evidence.ArtifactID),
+				evidence.PageIndex,
+				evidence.StartMS,
+				evidence.EndMS,
+				evidence.EvidenceKind,
+				nullString(evidence.ExcerptText),
+				evidence.Weight,
+				marshalJSON(evidence.Metadata),
+				evidence.CreatedAt,
+			)
+		}
+		query := `
+            INSERT INTO memory_evidences (
+                id, generation_id, user_id, node_id, conversation_id, sequence_num, part_id, artifact_id,
+                page_index, start_ms, end_ms, evidence_kind, excerpt_text, weight, metadata, created_at
+            ) VALUES ` + strings.Join(valueGroups, ",")
+		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 			return err
 		}
 	}
@@ -2183,30 +2276,26 @@ func (r *PostgresMemoryRepository) ReplaceEvidences(ctx context.Context, userID,
 		return err
 	}
 	now := time.Now().UTC()
-	for _, evidence := range evidences {
-		if evidence.ID == "" {
-			evidence.ID = uuid.NewString()
+	normalized := append([]domain.MemoryEvidence(nil), evidences...)
+	for idx := range normalized {
+		if normalized[idx].ID == "" {
+			normalized[idx].ID = uuid.NewString()
 		}
-		if evidence.UserID == "" {
-			evidence.UserID = userID
+		if normalized[idx].UserID == "" {
+			normalized[idx].UserID = userID
 		}
-		if evidence.NodeID == "" {
-			evidence.NodeID = nodeID
+		if normalized[idx].NodeID == "" {
+			normalized[idx].NodeID = nodeID
 		}
-		if evidence.Weight == 0 {
-			evidence.Weight = 1
+		if normalized[idx].Weight == 0 {
+			normalized[idx].Weight = 1
 		}
-		if evidence.CreatedAt.IsZero() {
-			evidence.CreatedAt = now
+		if normalized[idx].CreatedAt.IsZero() {
+			normalized[idx].CreatedAt = now
 		}
-		if _, err = tx.ExecContext(ctx, `
-            INSERT INTO memory_evidences (
-                id, generation_id, user_id, node_id, conversation_id, sequence_num, part_id, artifact_id,
-                page_index, start_ms, end_ms, evidence_kind, excerpt_text, weight, metadata, created_at
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-        `, evidence.ID, evidence.GenerationID, evidence.UserID, evidence.NodeID, evidence.ConversationID, evidence.SequenceNum, nullString(evidence.PartID), nullString(evidence.ArtifactID), evidence.PageIndex, evidence.StartMS, evidence.EndMS, evidence.EvidenceKind, nullString(evidence.ExcerptText), evidence.Weight, marshalJSON(evidence.Metadata), evidence.CreatedAt); err != nil {
-			return err
-		}
+	}
+	if err = insertMemoryEvidencesTx(ctx, tx, normalized); err != nil {
+		return err
 	}
 	return tx.Commit()
 }
