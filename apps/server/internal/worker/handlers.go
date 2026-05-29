@@ -513,6 +513,12 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 			factDocs = []domain.MemoryDocument{result.Fact}
 		}
 		factDocs = append([]domain.MemoryDocument(nil), factDocs...)
+		var summaryEvidences []domain.MemoryEvidence
+		if summaryDoc.NodeID != "" {
+			if evidences, err := services.Memories.ListEvidences(ctx, payload.UserID, summaryDoc.NodeID); err == nil && len(evidences) > 0 {
+				summaryEvidences = evidences
+			}
+		}
 		for idx := range factDocs {
 			factDocs[idx] = applyGenerationToDocument(payload.UserID, payload.GenerationID, factDocs[idx])
 			applyDocumentScore(ctx, services.Scorer, &factDocs[idx], conversation.UpdatedAt)
@@ -520,8 +526,8 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 				markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
 				return err
 			}
-			if evidences, err := services.Memories.ListEvidences(ctx, payload.UserID, summaryDoc.NodeID); err == nil && len(evidences) > 0 {
-				factEvidences := cloneNodeEvidences(payload.UserID, payload.GenerationID, factDocs[idx].NodeID, evidences)
+			if len(summaryEvidences) > 0 {
+				factEvidences := cloneNodeEvidences(payload.UserID, payload.GenerationID, factDocs[idx].NodeID, summaryEvidences)
 				if err := services.Memories.ReplaceEvidences(ctx, payload.UserID, factDocs[idx].NodeID, factEvidences); err != nil {
 					markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
 					return err
@@ -537,8 +543,8 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
 			return err
 		}
-		if evidences, err := services.Memories.ListEvidences(ctx, payload.UserID, summaryDoc.NodeID); err == nil && len(evidences) > 0 {
-			impressionEvidences := cloneNodeEvidences(payload.UserID, payload.GenerationID, result.Impression.NodeID, evidences)
+		if len(summaryEvidences) > 0 {
+			impressionEvidences := cloneNodeEvidences(payload.UserID, payload.GenerationID, result.Impression.NodeID, summaryEvidences)
 			if err := services.Memories.ReplaceEvidences(ctx, payload.UserID, result.Impression.NodeID, impressionEvidences); err != nil {
 				markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
 				return err

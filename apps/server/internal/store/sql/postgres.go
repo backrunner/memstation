@@ -1041,16 +1041,14 @@ func (r *PostgresMemoryRepository) GetDocument(ctx context.Context, userID, id s
 }
 
 func (r *PostgresMemoryRepository) GetDocumentInGeneration(ctx context.Context, userID, generationID, id string, kind domain.MemoryType) (domain.MemoryDocument, error) {
-	docs, err := r.listByType(ctx, userID, generationID, kind, 1000)
+	docs, err := r.listByEntityIDsInGeneration(ctx, userID, generationID, kind, []string{id})
 	if err != nil {
 		return domain.MemoryDocument{}, err
 	}
-	for _, doc := range docs {
-		if doc.ID == id {
-			return doc, nil
-		}
+	if len(docs) == 0 {
+		return domain.MemoryDocument{}, errors.New("memory document not found")
 	}
-	return domain.MemoryDocument{}, errors.New("memory document not found")
+	return docs[0], nil
 }
 
 func (r *PostgresMemoryRepository) ListDocuments(ctx context.Context, userID string, memoryTypes []domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
@@ -1088,30 +1086,269 @@ func (r *PostgresMemoryRepository) ListDocumentsByNodeIDs(ctx context.Context, u
 }
 
 func (r *PostgresMemoryRepository) ListDocumentsByNodeIDsInGeneration(ctx context.Context, userID, generationID string, nodeIDs []string) ([]domain.MemoryDocument, error) {
+	nodeIDs = uniqueNonEmptyStrings(nodeIDs)
 	if len(nodeIDs) == 0 {
 		return nil, nil
 	}
-	allDocs, err := r.ListDocumentsInGeneration(ctx, userID, generationID, []domain.MemoryType{
-		domain.MemoryTypeSummary,
-		domain.MemoryTypeSegment,
-		domain.MemoryTypeImpression,
-		domain.MemoryTypeFact,
-		domain.MemoryTypeKeyMemory,
-	}, 1000)
+
+	args := make([]any, 0, len(nodeIDs)+2)
+	args = append(args, userID)
+	for _, nodeID := range nodeIDs {
+		args = append(args, nodeID)
+	}
+	inClause := placeholders(2, len(nodeIDs))
+	generationArgIndex := len(args) + 1
+	generationClause := generationFilterClause("n.generation_id", generationArgIndex, userID, generationID, false)
+	args = appendGenerationArg(args, userID, generationID)
+	query := fmt.Sprintf(`
+        SELECT id, node_id, generation_id, conversation_id, content, importance, decay_factor,
+               activity_at, time_tier, created_at, updated_at, metadata, memory_type
+        FROM (
+            SELECT s.id, s.node_id, s.generation_id, s.conversation_id, s.summary AS content,
+                   COALESCE(n.importance, 1) AS importance,
+                   COALESCE(n.decay_factor, 1) AS decay_factor,
+                   COALESCE(n.activity_at, s.updated_at) AS activity_at,
+                   COALESCE(n.time_tier, '') AS time_tier,
+                   s.created_at, s.updated_at,
+                   jsonb_build_object(
+                       'topic_label', s.topic_label,
+                       'keywords', COALESCE((
+                           SELECT jsonb_agg(k.keyword ORDER BY k.weight DESC)
+                           FROM memory_keywords k
+                           WHERE k.summary_id = s.id AND k.user_id = s.user_id
+                       ), '[]'::jsonb)
+                   ) AS metadata,
+                   'summary' AS memory_type
+            FROM memory_nodes n
+            JOIN memory_summaries s ON s.user_id = n.user_id AND s.node_id = n.id
+            WHERE n.user_id = $1 AND n.id IN (%[1]s) AND n.node_type = 'summary'%[2]s
+
+            UNION ALL
+
+            SELECT cs.id, n.id AS node_id, cs.generation_id, cs.conversation_id, cs.content,
+                   COALESCE(n.importance, 1) AS importance,
+                   COALESCE(n.decay_factor, 1) AS decay_factor,
+                   COALESCE(n.activity_at, cs.updated_at) AS activity_at,
+                   COALESCE(n.time_tier, '') AS time_tier,
+                   cs.created_at, cs.updated_at,
+                   jsonb_build_object(
+                       'segment_index', cs.segment_index,
+                       'start_sequence', cs.start_sequence,
+                       'end_sequence', cs.end_sequence,
+                       'message_count', cs.message_count,
+                       'overlap_from_sequence', cs.overlap_from_sequence,
+                       'overlap_message_count', cs.overlap_message_count,
+                       'content_hash', cs.content_hash
+                   ) || COALESCE(cs.metadata, '{}'::jsonb) AS metadata,
+                   'segment' AS memory_type
+            FROM memory_nodes n
+            JOIN conversation_segments cs
+              ON cs.user_id = n.user_id
+             AND cs.id = n.entity_id
+             AND n.node_type = 'segment'
+            WHERE n.user_id = $1 AND n.id IN (%[1]s)%[2]s
+
+            UNION ALL
+
+            SELECT i.id, i.node_id, i.generation_id, i.conversation_id, i.description AS content,
+                   COALESCE(n.importance, 1) AS importance,
+                   COALESCE(n.decay_factor, 1) AS decay_factor,
+                   COALESCE(n.activity_at, i.updated_at) AS activity_at,
+                   COALESCE(n.time_tier, '') AS time_tier,
+                   i.created_at, i.updated_at,
+                   jsonb_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity) AS metadata,
+                   'impression' AS memory_type
+            FROM memory_nodes n
+            JOIN impressions i ON i.user_id = n.user_id AND i.node_id = n.id
+            WHERE n.user_id = $1 AND n.id IN (%[1]s) AND n.node_type = 'impression'%[2]s
+
+            UNION ALL
+
+            SELECT f.id, f.node_id, f.generation_id, f.conversation_id, f.content,
+                   COALESCE(n.importance, 1) AS importance,
+                   COALESCE(n.decay_factor, 1) AS decay_factor,
+                   COALESCE(n.activity_at, f.updated_at) AS activity_at,
+                   COALESCE(n.time_tier, '') AS time_tier,
+                   f.created_at, f.updated_at,
+                   jsonb_build_object(
+                       'category', f.category,
+                       'subject', f.subject,
+                       'fact_key', f.fact_key,
+                       'lineage_group_id', f.lineage_group_id,
+                       'revision_seq', f.revision_seq,
+                       'confidence', f.confidence,
+                       'is_superseded', f.is_superseded,
+                       'valid_from', f.valid_from,
+                       'valid_to', f.valid_to,
+                       'superseded_by_id', f.superseded_by_id,
+                       'keywords', COALESCE((
+                           SELECT jsonb_agg(k.keyword ORDER BY k.weight DESC)
+                           FROM memory_keywords k
+                           WHERE k.summary_id = f.id AND k.user_id = f.user_id
+                       ), '[]'::jsonb)
+                   ) AS metadata,
+                   'fact' AS memory_type
+            FROM memory_nodes n
+            JOIN facts f ON f.user_id = n.user_id AND f.node_id = n.id
+            WHERE n.user_id = $1 AND n.id IN (%[1]s) AND n.node_type = 'fact'%[2]s
+
+            UNION ALL
+
+            SELECT k.id, k.node_id, '' AS generation_id, '' AS conversation_id, CONCAT(k.key, ': ', k.value) AS content,
+                   COALESCE(n.importance, 1) AS importance,
+                   COALESCE(n.decay_factor, 1) AS decay_factor,
+                   COALESCE(n.activity_at, k.updated_at) AS activity_at,
+                   COALESCE(n.time_tier, '') AS time_tier,
+                   k.created_at, k.updated_at,
+                   jsonb_build_object('key', k.key, 'value', k.value, 'category', k.category, 'source', k.source, 'review_status', k.review_status, 'last_confirmed_at', k.last_confirmed_at) AS metadata,
+                   'key_memory' AS memory_type
+            FROM memory_nodes n
+            JOIN key_memories k ON k.user_id = n.user_id AND k.node_id = n.id
+            WHERE n.user_id = $1 AND n.id IN (%[1]s) AND n.node_type = 'key_memory' AND k.deleted_at IS NULL
+        ) docs
+        ORDER BY updated_at DESC
+    `, inClause, generationClause)
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
-	allowed := map[string]struct{}{}
-	for _, nodeID := range nodeIDs {
-		allowed[nodeID] = struct{}{}
+	defer rows.Close()
+	return scanTypedMemoryDocumentRows(rows, userID)
+}
+
+func (r *PostgresMemoryRepository) listByEntityIDsInGeneration(ctx context.Context, userID, generationID string, kind domain.MemoryType, ids []string) ([]domain.MemoryDocument, error) {
+	ids = uniqueNonEmptyStrings(ids)
+	if len(ids) == 0 {
+		return nil, nil
 	}
-	out := make([]domain.MemoryDocument, 0, len(nodeIDs))
-	for _, doc := range allDocs {
-		if _, ok := allowed[doc.NodeID]; ok {
-			out = append(out, doc)
-		}
+
+	args := make([]any, 0, len(ids)+2)
+	args = append(args, userID)
+	for _, id := range ids {
+		args = append(args, id)
 	}
-	return out, nil
+	inClause := placeholders(2, len(ids))
+	generationArgIndex := len(args) + 1
+
+	var query string
+	switch kind {
+	case domain.MemoryTypeSummary:
+		generationClause := generationFilterClause("s.generation_id", generationArgIndex, userID, generationID, false)
+		args = appendGenerationArg(args, userID, generationID)
+		query = fmt.Sprintf(`
+            SELECT s.id, s.node_id, s.generation_id, s.conversation_id, s.summary AS content,
+                   COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1),
+                   COALESCE(n.activity_at, s.updated_at), COALESCE(n.time_tier, ''),
+                   s.created_at, s.updated_at,
+                   json_build_object(
+                       'topic_label', s.topic_label,
+                       'keywords', COALESCE((
+                           SELECT json_agg(k.keyword ORDER BY k.weight DESC)
+                           FROM memory_keywords k
+                           WHERE k.summary_id = s.id AND k.user_id = s.user_id
+                       ), '[]'::json)
+                   ),
+                   'summary'
+            FROM memory_summaries s
+            JOIN memory_nodes n ON n.user_id = s.user_id AND n.id = s.node_id
+            WHERE s.user_id = $1 AND s.id IN (%s)%s
+            ORDER BY s.updated_at DESC
+        `, inClause, generationClause)
+	case domain.MemoryTypeSegment:
+		generationClause := generationFilterClause("cs.generation_id", generationArgIndex, userID, generationID, false)
+		args = appendGenerationArg(args, userID, generationID)
+		query = fmt.Sprintf(`
+            SELECT cs.id, n.id AS node_id, cs.generation_id, cs.conversation_id, cs.content,
+                   COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1),
+                   COALESCE(n.activity_at, cs.updated_at), COALESCE(n.time_tier, ''),
+                   cs.created_at, cs.updated_at,
+                   jsonb_build_object(
+                       'segment_index', cs.segment_index,
+                       'start_sequence', cs.start_sequence,
+                       'end_sequence', cs.end_sequence,
+                       'message_count', cs.message_count,
+                       'overlap_from_sequence', cs.overlap_from_sequence,
+                       'overlap_message_count', cs.overlap_message_count,
+                       'content_hash', cs.content_hash
+                   ) || COALESCE(cs.metadata, '{}'::jsonb),
+                   'segment'
+            FROM conversation_segments cs
+            JOIN memory_nodes n
+              ON n.user_id = cs.user_id
+             AND n.entity_id = cs.id
+             AND n.node_type = 'segment'
+            WHERE cs.user_id = $1 AND cs.id IN (%s)%s
+            ORDER BY cs.updated_at DESC, cs.segment_index DESC
+        `, inClause, generationClause)
+	case domain.MemoryTypeImpression:
+		generationClause := generationFilterClause("i.generation_id", generationArgIndex, userID, generationID, false)
+		args = appendGenerationArg(args, userID, generationID)
+		query = fmt.Sprintf(`
+            SELECT i.id, i.node_id, i.generation_id, i.conversation_id, i.description AS content,
+                   COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1),
+                   COALESCE(n.activity_at, i.updated_at), COALESCE(n.time_tier, ''),
+                   i.created_at, i.updated_at,
+                   json_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity),
+                   'impression'
+            FROM impressions i
+            JOIN memory_nodes n ON n.user_id = i.user_id AND n.id = i.node_id
+            WHERE i.user_id = $1 AND i.id IN (%s)%s
+            ORDER BY i.updated_at DESC
+        `, inClause, generationClause)
+	case domain.MemoryTypeFact:
+		generationClause := generationFilterClause("f.generation_id", generationArgIndex, userID, generationID, false)
+		args = appendGenerationArg(args, userID, generationID)
+		query = fmt.Sprintf(`
+            SELECT f.id, f.node_id, f.generation_id, f.conversation_id, f.content,
+                   COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1),
+                   COALESCE(n.activity_at, f.updated_at), COALESCE(n.time_tier, ''),
+                   f.created_at, f.updated_at,
+                   json_build_object(
+                       'category', f.category,
+                       'subject', f.subject,
+                       'fact_key', f.fact_key,
+                       'lineage_group_id', f.lineage_group_id,
+                       'revision_seq', f.revision_seq,
+                       'confidence', f.confidence,
+                       'is_superseded', f.is_superseded,
+                       'valid_from', f.valid_from,
+                       'valid_to', f.valid_to,
+                       'superseded_by_id', f.superseded_by_id,
+                       'keywords', COALESCE((
+                           SELECT json_agg(k.keyword ORDER BY k.weight DESC)
+                           FROM memory_keywords k
+                           WHERE k.summary_id = f.id AND k.user_id = f.user_id
+                       ), '[]'::json)
+                   ),
+                   'fact'
+            FROM facts f
+            JOIN memory_nodes n ON n.user_id = f.user_id AND n.id = f.node_id
+            WHERE f.user_id = $1 AND f.id IN (%s)%s
+            ORDER BY f.updated_at DESC
+        `, inClause, generationClause)
+	case domain.MemoryTypeKeyMemory:
+		query = fmt.Sprintf(`
+            SELECT k.id, k.node_id, '' AS generation_id, '' AS conversation_id, CONCAT(k.key, ': ', k.value) AS content,
+                   COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1),
+                   COALESCE(n.activity_at, k.updated_at), COALESCE(n.time_tier, ''),
+                   k.created_at, k.updated_at,
+                   json_build_object('key', k.key, 'value', k.value, 'category', k.category, 'source', k.source, 'review_status', k.review_status, 'last_confirmed_at', k.last_confirmed_at),
+                   'key_memory'
+            FROM key_memories k
+            JOIN memory_nodes n ON n.user_id = k.user_id AND n.id = k.node_id
+            WHERE k.user_id = $1 AND k.id IN (%s) AND k.deleted_at IS NULL
+            ORDER BY k.updated_at DESC
+        `, inClause)
+	default:
+		return nil, fmt.Errorf("unsupported memory type: %s", kind)
+	}
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanTypedMemoryDocumentRows(rows, userID)
 }
 
 func (r *PostgresMemoryRepository) ListDocumentsByConversation(ctx context.Context, userID, conversationID string) ([]domain.MemoryDocument, error) {
@@ -2138,6 +2375,31 @@ func (r *PostgresMemoryRepository) listByType(ctx context.Context, userID, gener
 	return out, rows.Err()
 }
 
+func scanTypedMemoryDocumentRows(rows *sqlpkg.Rows, userID string) ([]domain.MemoryDocument, error) {
+	out := make([]domain.MemoryDocument, 0)
+	for rows.Next() {
+		var item domain.MemoryDocument
+		var metadataBytes []byte
+		var timeTier string
+		var memoryType string
+		item.UserID = userID
+		if err := rows.Scan(&item.ID, &item.NodeID, &item.GenerationID, &item.ConversationID, &item.Content, &item.Importance, &item.DecayFactor, &item.ActivityAt, &timeTier, &item.CreatedAt, &item.UpdatedAt, &metadataBytes, &memoryType); err != nil {
+			return nil, err
+		}
+		if len(metadataBytes) > 0 {
+			item.Metadata = map[string]any{}
+			if err := json.Unmarshal(metadataBytes, &item.Metadata); err != nil {
+				return nil, err
+			}
+		}
+		item.Type = domain.MemoryType(memoryType)
+		item.TimeTier = domain.ParseTimeTier(timeTier)
+		item = attachDocumentRuntimeMetadata(item)
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
 func syncTemporalRelationsTx(tx *sqlpkg.Tx, userID, generationID, nodeID string, activityAt time.Time, tier domain.TimeTier, updatedAt time.Time) error {
 	if tx == nil || userID == "" || nodeID == "" {
 		return nil
@@ -2720,6 +2982,26 @@ func placeholders(start, count int) string {
 		items = append(items, fmt.Sprintf("$%d", start+idx))
 	}
 	return strings.Join(items, ",")
+}
+
+func uniqueNonEmptyStrings(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(items))
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		out = append(out, item)
+	}
+	return out
 }
 
 func generationFilterArgs(userID, generationID string, args ...any) []any {

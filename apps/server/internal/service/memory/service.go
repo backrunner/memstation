@@ -49,8 +49,9 @@ func (s *Service) Search(ctx context.Context, input domain.SearchInput) (domain.
 	if err != nil {
 		return domain.SearchResult{}, err
 	}
+	lineageCache := make(map[string]domain.FactLineage)
 	for idx := range result.Memories {
-		s.hydrateFactLineage(ctx, &result.Memories[idx])
+		s.hydrateFactLineageWithCache(ctx, &result.Memories[idx], lineageCache)
 	}
 	return result, nil
 }
@@ -594,7 +595,7 @@ func (s *Service) hydrateRelatedDocuments(ctx context.Context, item *domain.Memo
 	if evidences, err := s.repo.ListEvidences(ctx, item.UserID, item.NodeID); err == nil && len(evidences) > 0 {
 		item.Evidences = evidences
 	}
-	s.hydrateFactLineage(ctx, item)
+	s.hydrateFactLineageWithCache(ctx, item, nil)
 	relations, err := s.repo.ListRelations(ctx, item.UserID, item.GenerationID, []string{item.NodeID}, 1)
 	if err != nil || len(relations) == 0 {
 		return
@@ -649,13 +650,52 @@ func (s *Service) hydrateRelatedDocuments(ctx context.Context, item *domain.Memo
 	item.Related = related
 }
 
-func (s *Service) hydrateFactLineage(ctx context.Context, item *domain.MemoryDocument) {
+func (s *Service) hydrateFactLineageWithCache(ctx context.Context, item *domain.MemoryDocument, cache map[string]domain.FactLineage) {
 	if item == nil || item.Type != domain.MemoryTypeFact {
 		return
 	}
-	lineage, err := s.repo.ListFactLineage(ctx, item.UserID, item.GenerationID, item.ID)
-	if err != nil || len(lineage.Entries) == 0 {
+	if s.repo == nil {
 		return
+	}
+	cacheKey := ""
+	lineageGroupID := ""
+	if item.Lineage != nil {
+		lineageGroupID = strings.TrimSpace(item.Lineage.LineageGroupID)
+	}
+	if lineageGroupID == "" {
+		lineageGroupID = strings.TrimSpace(stringMetadataValue(item.Metadata, "lineage_group_id"))
+	}
+	if lineageGroupID != "" {
+		cacheKey = "group:" + item.GenerationID + ":" + lineageGroupID
+	}
+
+	var lineage domain.FactLineage
+	if cache != nil && cacheKey != "" {
+		if cached, ok := cache[cacheKey]; ok {
+			lineage = cached
+		}
+	}
+	if len(lineage.Entries) == 0 {
+		var err error
+		if lineageGroupID != "" {
+			lineage, err = s.repo.ListFactLineageByKey(ctx, item.UserID, item.GenerationID, lineageGroupID)
+		} else {
+			cacheKey = "fact:" + item.GenerationID + ":" + item.ID
+			if cache != nil {
+				if cached, ok := cache[cacheKey]; ok {
+					lineage = cached
+				}
+			}
+			if len(lineage.Entries) == 0 {
+				lineage, err = s.repo.ListFactLineage(ctx, item.UserID, item.GenerationID, item.ID)
+			}
+		}
+		if err != nil || len(lineage.Entries) == 0 {
+			return
+		}
+		if cache != nil && cacheKey != "" {
+			cache[cacheKey] = lineage
+		}
 	}
 	aliases := make([]string, 0, len(lineage.Entries))
 	for _, entry := range lineage.Entries {
