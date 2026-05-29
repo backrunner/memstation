@@ -261,7 +261,14 @@ function snapshotConversationKeyMemories(payload?: ConversationMemoryPayload | n
 function snapshotPreviewDocuments(payload?: MemoryPreviewPayload | null): SnapshotItem[] {
   const snapshots: SnapshotItem[] = [];
   appendPreviewDocument(snapshots, 'summary', payload?.summary);
-  appendPreviewDocument(snapshots, 'fact', payload?.fact);
+  const facts = asArray(payload?.facts);
+  if (facts.length > 0) {
+    for (const fact of facts) {
+      appendPreviewDocument(snapshots, 'fact', asObject(fact));
+    }
+  } else {
+    appendPreviewDocument(snapshots, 'fact', payload?.fact);
+  }
   appendPreviewDocument(snapshots, 'impression', payload?.impression);
   return snapshots;
 }

@@ -61,7 +61,56 @@ func graphImpression(doc domain.MemoryDocument) *generated.Impression {
 }
 
 func graphFact(doc domain.MemoryDocument) *generated.Fact {
-	return &generated.Fact{ID: doc.ID, Content: doc.Content}
+	return &generated.Fact{ID: doc.ID, Content: doc.Content, Lineage: graphFactLineage(doc)}
+}
+
+func graphFactLineage(doc domain.MemoryDocument) *generated.FactLineage {
+	if doc.Lineage == nil {
+		if doc.Metadata == nil {
+			return nil
+		}
+		lineage := &domain.MemoryLineageMeta{
+			FactKey:        anyString(doc.Metadata["fact_key"]),
+			LineageGroupID: anyString(doc.Metadata["lineage_group_id"]),
+			RevisionSeq:    intValue(doc.Metadata["revision_seq"]),
+			GenerationID:   anyString(doc.Metadata["generation_id"]),
+			CurrentHeadID: firstNonEmptyString(
+				anyString(doc.Metadata["current_head_id"]),
+				doc.ID,
+			),
+		}
+		lineage.LineagePath = stringSliceValue(doc.Metadata["lineage_path"])
+		lineage.SupersededAliasNodeIDs = stringSliceValue(doc.Metadata["superseded_alias_node_ids"])
+		if depth := intValue(doc.Metadata["revision_depth"]); depth > 0 {
+			lineage.RevisionDepth = depth
+		}
+		if lineage.FactKey == "" && lineage.LineageGroupID == "" && lineage.RevisionSeq == 0 && len(lineage.LineagePath) == 0 {
+			return nil
+		}
+		doc.Lineage = lineage
+	}
+	if doc.Lineage == nil {
+		return nil
+	}
+	return &generated.FactLineage{
+		FactKey:                nullablePtr(doc.Lineage.FactKey),
+		LineageGroupID:         nullablePtr(doc.Lineage.LineageGroupID),
+		RevisionSeq:            doc.Lineage.RevisionSeq,
+		GenerationID:           nullablePtr(doc.Lineage.GenerationID),
+		LineagePath:            append([]string(nil), doc.Lineage.LineagePath...),
+		SupersededAliasNodeIDs: append([]string(nil), doc.Lineage.SupersededAliasNodeIDs...),
+		RevisionDepth:          doc.Lineage.RevisionDepth,
+		CurrentHeadID:          doc.Lineage.CurrentHeadID,
+	}
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if value != "" && value != "<nil>" && value != "%!v(<nil>)" {
+			return value
+		}
+	}
+	return ""
 }
 
 func nullablePtr(value string) *string {
@@ -101,6 +150,23 @@ func intValue(value any) int {
 		return int(typed)
 	default:
 		return 0
+	}
+}
+
+func stringSliceValue(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return append([]string(nil), typed...)
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if text := anyString(item); text != "" && text != "<nil>" && text != "%!v(<nil>)" {
+				out = append(out, text)
+			}
+		}
+		return out
+	default:
+		return nil
 	}
 }
 

@@ -56,6 +56,18 @@ type ComplexityRoot struct {
 	Fact struct {
 		Content func(childComplexity int) int
 		ID      func(childComplexity int) int
+		Lineage func(childComplexity int) int
+	}
+
+	FactLineage struct {
+		CurrentHeadID          func(childComplexity int) int
+		FactKey                func(childComplexity int) int
+		GenerationID           func(childComplexity int) int
+		LineageGroupID         func(childComplexity int) int
+		LineagePath            func(childComplexity int) int
+		RevisionDepth          func(childComplexity int) int
+		RevisionSeq            func(childComplexity int) int
+		SupersededAliasNodeIDs func(childComplexity int) int
 	}
 
 	Impression struct {
@@ -113,6 +125,7 @@ type ComplexityRoot struct {
 		Content        func(childComplexity int) int
 		EffectiveScore func(childComplexity int) int
 		ID             func(childComplexity int) int
+		Lineage        func(childComplexity int) int
 		Score          func(childComplexity int) int
 		Type           func(childComplexity int) int
 	}
@@ -259,6 +272,61 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Fact.ID(childComplexity), true
+	case "Fact.lineage":
+		if e.ComplexityRoot.Fact.Lineage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Fact.Lineage(childComplexity), true
+
+	case "FactLineage.currentHeadID":
+		if e.ComplexityRoot.FactLineage.CurrentHeadID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FactLineage.CurrentHeadID(childComplexity), true
+	case "FactLineage.factKey":
+		if e.ComplexityRoot.FactLineage.FactKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FactLineage.FactKey(childComplexity), true
+	case "FactLineage.generationID":
+		if e.ComplexityRoot.FactLineage.GenerationID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FactLineage.GenerationID(childComplexity), true
+	case "FactLineage.lineageGroupID":
+		if e.ComplexityRoot.FactLineage.LineageGroupID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FactLineage.LineageGroupID(childComplexity), true
+	case "FactLineage.lineagePath":
+		if e.ComplexityRoot.FactLineage.LineagePath == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FactLineage.LineagePath(childComplexity), true
+	case "FactLineage.revisionDepth":
+		if e.ComplexityRoot.FactLineage.RevisionDepth == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FactLineage.RevisionDepth(childComplexity), true
+	case "FactLineage.revisionSeq":
+		if e.ComplexityRoot.FactLineage.RevisionSeq == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FactLineage.RevisionSeq(childComplexity), true
+	case "FactLineage.supersededAliasNodeIDs":
+		if e.ComplexityRoot.FactLineage.SupersededAliasNodeIDs == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FactLineage.SupersededAliasNodeIDs(childComplexity), true
 
 	case "Impression.description":
 		if e.ComplexityRoot.Impression.Description == nil {
@@ -538,6 +606,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SearchMemoryItem.ID(childComplexity), true
+	case "SearchMemoryItem.lineage":
+		if e.ComplexityRoot.SearchMemoryItem.Lineage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SearchMemoryItem.Lineage(childComplexity), true
 	case "SearchMemoryItem.score":
 		if e.ComplexityRoot.SearchMemoryItem.Score == nil {
 			break
@@ -759,10 +833,20 @@ type UserSetting { chatModel: String, summaryModel: String, analysisModel: Strin
 type Conversation { id: ID!, finalizeStatus: String!, mode: String!, provider: String! }
 type MemorySummary { id: ID!, summary: String!, topicLabel: String }
 type Impression { id: ID!, description: String! }
-type Fact { id: ID!, content: String! }
+type Fact { id: ID!, content: String!, lineage: FactLineage }
 type KeyMemory { id: ID!, key: String!, value: String!, category: String }
 type AuditEvent { id: ID!, action: String!, targetType: String!, targetID: String! }
-type SearchMemoryItem { id: ID!, type: String!, content: String!, score: Float!, effectiveScore: Float! }
+type FactLineage {
+  factKey: String
+  lineageGroupID: String
+  revisionSeq: Int!
+  generationID: String
+  lineagePath: [ID!]!
+  supersededAliasNodeIDs: [ID!]!
+  revisionDepth: Int!
+  currentHeadID: ID!
+}
+type SearchMemoryItem { id: ID!, type: String!, content: String!, score: Float!, effectiveScore: Float!, lineage: FactLineage }
 type SearchMemoriesResult { memories: [SearchMemoryItem!]!, total: Int!, queryEmbeddingTokens: Int! }
 type TokenUsageStats { inputTokens: Int!, outputTokens: Int!, totalTokens: Int! }
 type SystemOverview { activeConversations: Int!, keyMemoryCount: Int!, recentAuditEvents: Int! }
@@ -1361,6 +1445,285 @@ func (ec *executionContext) fieldContext_Fact_content(_ context.Context, field g
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Fact_lineage(ctx context.Context, field graphql.CollectedField, obj *Fact) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Fact_lineage,
+		func(ctx context.Context) (any, error) {
+			return obj.Lineage, nil
+		},
+		nil,
+		ec.marshalOFactLineage2ᚖmemstationᚋappsᚋserverᚋgraphᚋgeneratedᚐFactLineage,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Fact_lineage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Fact",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "factKey":
+				return ec.fieldContext_FactLineage_factKey(ctx, field)
+			case "lineageGroupID":
+				return ec.fieldContext_FactLineage_lineageGroupID(ctx, field)
+			case "revisionSeq":
+				return ec.fieldContext_FactLineage_revisionSeq(ctx, field)
+			case "generationID":
+				return ec.fieldContext_FactLineage_generationID(ctx, field)
+			case "lineagePath":
+				return ec.fieldContext_FactLineage_lineagePath(ctx, field)
+			case "supersededAliasNodeIDs":
+				return ec.fieldContext_FactLineage_supersededAliasNodeIDs(ctx, field)
+			case "revisionDepth":
+				return ec.fieldContext_FactLineage_revisionDepth(ctx, field)
+			case "currentHeadID":
+				return ec.fieldContext_FactLineage_currentHeadID(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FactLineage", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FactLineage_factKey(ctx context.Context, field graphql.CollectedField, obj *FactLineage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FactLineage_factKey,
+		func(ctx context.Context) (any, error) {
+			return obj.FactKey, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FactLineage_factKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FactLineage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FactLineage_lineageGroupID(ctx context.Context, field graphql.CollectedField, obj *FactLineage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FactLineage_lineageGroupID,
+		func(ctx context.Context) (any, error) {
+			return obj.LineageGroupID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FactLineage_lineageGroupID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FactLineage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FactLineage_revisionSeq(ctx context.Context, field graphql.CollectedField, obj *FactLineage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FactLineage_revisionSeq,
+		func(ctx context.Context) (any, error) {
+			return obj.RevisionSeq, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FactLineage_revisionSeq(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FactLineage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FactLineage_generationID(ctx context.Context, field graphql.CollectedField, obj *FactLineage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FactLineage_generationID,
+		func(ctx context.Context) (any, error) {
+			return obj.GenerationID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FactLineage_generationID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FactLineage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FactLineage_lineagePath(ctx context.Context, field graphql.CollectedField, obj *FactLineage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FactLineage_lineagePath,
+		func(ctx context.Context) (any, error) {
+			return obj.LineagePath, nil
+		},
+		nil,
+		ec.marshalNID2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FactLineage_lineagePath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FactLineage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FactLineage_supersededAliasNodeIDs(ctx context.Context, field graphql.CollectedField, obj *FactLineage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FactLineage_supersededAliasNodeIDs,
+		func(ctx context.Context) (any, error) {
+			return obj.SupersededAliasNodeIDs, nil
+		},
+		nil,
+		ec.marshalNID2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FactLineage_supersededAliasNodeIDs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FactLineage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FactLineage_revisionDepth(ctx context.Context, field graphql.CollectedField, obj *FactLineage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FactLineage_revisionDepth,
+		func(ctx context.Context) (any, error) {
+			return obj.RevisionDepth, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FactLineage_revisionDepth(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FactLineage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FactLineage_currentHeadID(ctx context.Context, field graphql.CollectedField, obj *FactLineage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FactLineage_currentHeadID,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentHeadID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FactLineage_currentHeadID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FactLineage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
 		},
 	}
 	return fc, nil
@@ -2038,6 +2401,8 @@ func (ec *executionContext) fieldContext_Mutation_updateFact(ctx context.Context
 				return ec.fieldContext_Fact_id(ctx, field)
 			case "content":
 				return ec.fieldContext_Fact_content(ctx, field)
+			case "lineage":
+				return ec.fieldContext_Fact_lineage(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Fact", field.Name)
 		},
@@ -2306,6 +2671,8 @@ func (ec *executionContext) fieldContext_Query_facts(_ context.Context, field gr
 				return ec.fieldContext_Fact_id(ctx, field)
 			case "content":
 				return ec.fieldContext_Fact_content(ctx, field)
+			case "lineage":
+				return ec.fieldContext_Fact_lineage(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Fact", field.Name)
 		},
@@ -2656,6 +3023,8 @@ func (ec *executionContext) fieldContext_SearchMemoriesResult_memories(_ context
 				return ec.fieldContext_SearchMemoryItem_score(ctx, field)
 			case "effectiveScore":
 				return ec.fieldContext_SearchMemoryItem_effectiveScore(ctx, field)
+			case "lineage":
+				return ec.fieldContext_SearchMemoryItem_lineage(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type SearchMemoryItem", field.Name)
 		},
@@ -2861,6 +3230,53 @@ func (ec *executionContext) fieldContext_SearchMemoryItem_effectiveScore(_ conte
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SearchMemoryItem_lineage(ctx context.Context, field graphql.CollectedField, obj *SearchMemoryItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SearchMemoryItem_lineage,
+		func(ctx context.Context) (any, error) {
+			return obj.Lineage, nil
+		},
+		nil,
+		ec.marshalOFactLineage2ᚖmemstationᚋappsᚋserverᚋgraphᚋgeneratedᚐFactLineage,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_SearchMemoryItem_lineage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SearchMemoryItem",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "factKey":
+				return ec.fieldContext_FactLineage_factKey(ctx, field)
+			case "lineageGroupID":
+				return ec.fieldContext_FactLineage_lineageGroupID(ctx, field)
+			case "revisionSeq":
+				return ec.fieldContext_FactLineage_revisionSeq(ctx, field)
+			case "generationID":
+				return ec.fieldContext_FactLineage_generationID(ctx, field)
+			case "lineagePath":
+				return ec.fieldContext_FactLineage_lineagePath(ctx, field)
+			case "supersededAliasNodeIDs":
+				return ec.fieldContext_FactLineage_supersededAliasNodeIDs(ctx, field)
+			case "revisionDepth":
+				return ec.fieldContext_FactLineage_revisionDepth(ctx, field)
+			case "currentHeadID":
+				return ec.fieldContext_FactLineage_currentHeadID(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FactLineage", field.Name)
 		},
 	}
 	return fc, nil
@@ -4899,6 +5315,73 @@ func (ec *executionContext) _Fact(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "lineage":
+			out.Values[i] = ec._Fact_lineage(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var factLineageImplementors = []string{"FactLineage"}
+
+func (ec *executionContext) _FactLineage(ctx context.Context, sel ast.SelectionSet, obj *FactLineage) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, factLineageImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("FactLineage")
+		case "factKey":
+			out.Values[i] = ec._FactLineage_factKey(ctx, field, obj)
+		case "lineageGroupID":
+			out.Values[i] = ec._FactLineage_lineageGroupID(ctx, field, obj)
+		case "revisionSeq":
+			out.Values[i] = ec._FactLineage_revisionSeq(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "generationID":
+			out.Values[i] = ec._FactLineage_generationID(ctx, field, obj)
+		case "lineagePath":
+			out.Values[i] = ec._FactLineage_lineagePath(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "supersededAliasNodeIDs":
+			out.Values[i] = ec._FactLineage_supersededAliasNodeIDs(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "revisionDepth":
+			out.Values[i] = ec._FactLineage_revisionDepth(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "currentHeadID":
+			out.Values[i] = ec._FactLineage_currentHeadID(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -5552,6 +6035,8 @@ func (ec *executionContext) _SearchMemoryItem(ctx context.Context, sel ast.Selec
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "lineage":
+			out.Values[i] = ec._SearchMemoryItem_lineage(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -6248,6 +6733,36 @@ func (ec *executionContext) marshalNID2string(ctx context.Context, sel ast.Selec
 	return res
 }
 
+func (ec *executionContext) unmarshalNID2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]string, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNID2string(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNID2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNID2string(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
 func (ec *executionContext) marshalNImpression2memstationᚋappsᚋserverᚋgraphᚋgeneratedᚐImpression(ctx context.Context, sel ast.SelectionSet, v Impression) graphql.Marshaler {
 	return ec._Impression(ctx, sel, &v)
 }
@@ -6651,6 +7166,13 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	_ = ctx
 	res := graphql.MarshalBoolean(*v)
 	return res
+}
+
+func (ec *executionContext) marshalOFactLineage2ᚖmemstationᚋappsᚋserverᚋgraphᚋgeneratedᚐFactLineage(ctx context.Context, sel ast.SelectionSet, v *FactLineage) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._FactLineage(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOInt2ᚖint(ctx context.Context, v any) (*int, error) {

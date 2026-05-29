@@ -36,10 +36,20 @@ type UserSetting { chatModel: String, summaryModel: String, analysisModel: Strin
 type Conversation { id: ID!, finalizeStatus: String!, mode: String!, provider: String! }
 type MemorySummary { id: ID!, summary: String!, topicLabel: String }
 type Impression { id: ID!, description: String! }
-type Fact { id: ID!, content: String! }
+type Fact { id: ID!, content: String!, lineage: FactLineage }
 type KeyMemory { id: ID!, key: String!, value: String!, category: String }
 type AuditEvent { id: ID!, action: String!, targetType: String!, targetID: String! }
-type SearchMemoryItem { id: ID!, type: String!, content: String!, score: Float!, effectiveScore: Float! }
+type FactLineage {
+  factKey: String
+  lineageGroupID: String
+  revisionSeq: Int!
+  generationID: String
+  lineagePath: [ID!]!
+  supersededAliasNodeIDs: [ID!]!
+  revisionDepth: Int!
+  currentHeadID: ID!
+}
+type SearchMemoryItem { id: ID!, type: String!, content: String!, score: Float!, effectiveScore: Float!, lineage: FactLineage }
 type SearchMemoriesResult { memories: [SearchMemoryItem!]!, total: Int!, queryEmbeddingTokens: Int! }
 type TokenUsageStats { inputTokens: Int!, outputTokens: Int!, totalTokens: Int! }
 type SystemOverview { activeConversations: Int!, keyMemoryCount: Int!, recentAuditEvents: Int! }

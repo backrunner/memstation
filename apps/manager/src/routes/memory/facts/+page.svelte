@@ -5,6 +5,7 @@
   import { page } from '$app/stores';
 
   import { fetchAdminMemoryDocuments, updateAdminMemoryDocument } from '$lib/api/client';
+  import FactLineagePanel from '$lib/components/FactLineagePanel.svelte';
   import MemoryWorkspaceNav from '$lib/components/MemoryWorkspaceNav.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import { memoryDetailHref } from '$lib/memory/routes';
@@ -215,6 +216,12 @@
                 </div>
                 <div class="inline-group">
                   <StatusBadge tone="muted" label={fact.conversation_id ? 'conversation-linked' : 'manual'} />
+                  {#if fact.lineage}
+                    <StatusBadge
+                      tone={(fact.lineage.current_head_id ?? fact.id) === fact.id ? 'success' : 'warning'}
+                      label={(fact.lineage.current_head_id ?? fact.id) === fact.id ? 'current head' : 'historical'}
+                    />
+                  {/if}
                   <a class="btn-ghost btn-sm" href={memoryDetailHref('facts', fact.id, activeUserId)}>Open</a>
                   {#if editingId === fact.id}
                     <button class="btn-ghost btn-sm" type="button" on:click={cancelEdit}>Cancel</button>
@@ -231,6 +238,7 @@
               {:else}
                 <div class="message-body">{fact.content}</div>
               {/if}
+              <FactLineagePanel lineage={fact.lineage} currentFactId={fact.id} userId={activeUserId} compact />
             </article>
           {/each}
         </div>

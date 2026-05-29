@@ -4,6 +4,7 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
 
+  import FactLineagePanel from '$lib/components/FactLineagePanel.svelte';
   import MemoryWorkspaceNav from '$lib/components/MemoryWorkspaceNav.svelte';
   import MemoryKeywordSignals from '$lib/components/MemoryKeywordSignals.svelte';
   import { memoryDetailHref } from '$lib/memory/routes';
@@ -217,6 +218,12 @@
                       label={`${matchedKeywordsFromMetadata(memory.metadata).length} keyword hit${matchedKeywordsFromMetadata(memory.metadata).length === 1 ? '' : 's'}`}
                     />
                   {/if}
+                  {#if memory.lineage}
+                    <StatusBadge
+                      tone={(memory.lineage.current_head_id ?? memory.id) === memory.id ? 'success' : 'warning'}
+                      label={(memory.lineage.current_head_id ?? memory.id) === memory.id ? 'current head' : 'historical'}
+                    />
+                  {/if}
                 </div>
                 {#if memory.type === 'summary' || memory.type === 'impression' || memory.type === 'fact'}
                   <a
@@ -234,6 +241,9 @@
                 matchedKeywords={matchedKeywordsFromMetadata(memory.metadata)}
                 sourceKeywords={sourceKeywordsFromMetadata(memory.metadata)}
               />
+              {#if memory.type === 'fact'}
+                <FactLineagePanel lineage={memory.lineage} currentFactId={memory.id} userId={activeUserId} compact />
+              {/if}
               <div class="helper-text mono">
                 raw {memory.score?.toFixed?.(3) ?? memory.score} · effective {memory.effectiveScore?.toFixed?.(3) ?? memory.effectiveScore} · tier {memory.time_tier ?? 'n/a'} · activity {dateTimeLabel(memory.activity_at)}
               </div>

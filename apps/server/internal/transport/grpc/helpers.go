@@ -419,6 +419,23 @@ func toProtoMemoryDocument(item domain.MemoryDocument) *pb.MemoryDocument {
 		Related:        toProtoRelatedMemories(item.Related),
 		CreatedAt:      toProtoTimestamp(item.CreatedAt),
 		UpdatedAt:      toProtoTimestamp(item.UpdatedAt),
+		Lineage:        toProtoFactLineage(item.Lineage),
+	}
+}
+
+func toProtoFactLineage(item *domain.MemoryLineageMeta) *pb.FactLineage {
+	if item == nil {
+		return nil
+	}
+	return &pb.FactLineage{
+		FactKey:                item.FactKey,
+		LineageGroupId:         item.LineageGroupID,
+		RevisionSeq:            int32(item.RevisionSeq),
+		GenerationId:           item.GenerationID,
+		LineagePath:            append([]string(nil), item.LineagePath...),
+		SupersededAliasNodeIds: append([]string(nil), item.SupersededAliasNodeIDs...),
+		RevisionDepth:          int32(item.RevisionDepth),
+		CurrentHeadId:          item.CurrentHeadID,
 	}
 }
 

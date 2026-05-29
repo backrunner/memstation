@@ -287,6 +287,7 @@ func (r *queryResolver) SearchMemories(ctx context.Context, query string, topN *
 			Content:        item.Content,
 			Score:          item.Score,
 			EffectiveScore: item.EffectiveScore,
+			Lineage:        graphFactLineage(item),
 		})
 	}
 	return &generated.SearchMemoriesResult{Memories: items, Total: result.Total, QueryEmbeddingTokens: result.QueryEmbeddingTokens}, nil

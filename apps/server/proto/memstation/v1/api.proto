@@ -183,6 +183,18 @@ message MemoryDocument {
   repeated RelatedMemory related = 15;
   google.protobuf.Timestamp created_at = 16;
   google.protobuf.Timestamp updated_at = 17;
+  FactLineage lineage = 18;
+}
+
+message FactLineage {
+  string fact_key = 1;
+  string lineage_group_id = 2;
+  int32 revision_seq = 3;
+  string generation_id = 4;
+  repeated string lineage_path = 5;
+  repeated string superseded_alias_node_ids = 6;
+  int32 revision_depth = 7;
+  string current_head_id = 8;
 }
 
 message RelatedMemory {

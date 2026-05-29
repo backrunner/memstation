@@ -22,8 +22,20 @@ type Conversation struct {
 }
 
 type Fact struct {
-	ID      string `json:"id"`
-	Content string `json:"content"`
+	ID      string       `json:"id"`
+	Content string       `json:"content"`
+	Lineage *FactLineage `json:"lineage,omitempty"`
+}
+
+type FactLineage struct {
+	FactKey                *string  `json:"factKey,omitempty"`
+	LineageGroupID         *string  `json:"lineageGroupID,omitempty"`
+	RevisionSeq            int      `json:"revisionSeq"`
+	GenerationID           *string  `json:"generationID,omitempty"`
+	LineagePath            []string `json:"lineagePath"`
+	SupersededAliasNodeIDs []string `json:"supersededAliasNodeIDs"`
+	RevisionDepth          int      `json:"revisionDepth"`
+	CurrentHeadID          string   `json:"currentHeadID"`
 }
 
 type Impression struct {
@@ -57,11 +69,12 @@ type SearchMemoriesResult struct {
 }
 
 type SearchMemoryItem struct {
-	ID             string  `json:"id"`
-	Type           string  `json:"type"`
-	Content        string  `json:"content"`
-	Score          float64 `json:"score"`
-	EffectiveScore float64 `json:"effectiveScore"`
+	ID             string       `json:"id"`
+	Type           string       `json:"type"`
+	Content        string       `json:"content"`
+	Score          float64      `json:"score"`
+	EffectiveScore float64      `json:"effectiveScore"`
+	Lineage        *FactLineage `json:"lineage,omitempty"`
 }
 
 type SystemOverview struct {

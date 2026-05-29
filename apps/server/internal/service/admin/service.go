@@ -61,6 +61,7 @@ type MemoryPreview struct {
 	Keywords       []string         `json:"keywords,omitempty"`
 	Summary        map[string]any   `json:"summary,omitempty"`
 	Fact           map[string]any   `json:"fact,omitempty"`
+	Facts          []map[string]any `json:"facts,omitempty"`
 	Impression     map[string]any   `json:"impression,omitempty"`
 	KeyMemories    []map[string]any `json:"key_memories,omitempty"`
 	Metadata       map[string]any   `json:"metadata,omitempty"`
@@ -262,6 +263,11 @@ func (s *Service) PreviewMemory(ctx context.Context, userID, conversationID stri
 		})
 	}
 
+	factPreviews := make([]map[string]any, 0, len(result.Facts))
+	for _, fact := range result.Facts {
+		factPreviews = append(factPreviews, previewFactMap(fact, now))
+	}
+
 	return MemoryPreview{
 		ConversationID: conversationID,
 		SummaryStatus:  "preview",
@@ -278,17 +284,8 @@ func (s *Service) PreviewMemory(ctx context.Context, userID, conversationID stri
 			"time_tier":       domain.ClassifyTimeTier(now, now),
 			"effective_score": 1.0,
 		},
-		Fact: map[string]any{
-			"id":              result.Fact.ID,
-			"type":            result.Fact.Type,
-			"content":         result.Fact.Content,
-			"metadata":        result.Fact.Metadata,
-			"importance":      result.Fact.Importance,
-			"decay_factor":    result.Fact.DecayFactor,
-			"activity_at":     now,
-			"time_tier":       domain.ClassifyTimeTier(now, now),
-			"effective_score": result.Fact.Importance * domain.TimeDecay(domain.MemoryTypeFact, now, result.Fact.DecayFactor, result.Fact.Importance, now),
-		},
+		Fact:  previewFactMap(result.Fact, now),
+		Facts: factPreviews,
 		Impression: map[string]any{
 			"id":              result.Impression.ID,
 			"type":            result.Impression.Type,
@@ -305,6 +302,20 @@ func (s *Service) PreviewMemory(ctx context.Context, userID, conversationID stri
 			"message_count": len(messages),
 		},
 	}, nil
+}
+
+func previewFactMap(fact domain.MemoryDocument, now time.Time) map[string]any {
+	return map[string]any{
+		"id":              fact.ID,
+		"type":            fact.Type,
+		"content":         fact.Content,
+		"metadata":        fact.Metadata,
+		"importance":      fact.Importance,
+		"decay_factor":    fact.DecayFactor,
+		"activity_at":     now,
+		"time_tier":       domain.ClassifyTimeTier(now, now),
+		"effective_score": fact.Importance * domain.TimeDecay(domain.MemoryTypeFact, now, fact.DecayFactor, fact.Importance, now),
+	}
 }
 
 func (s *Service) ListUsers(ctx context.Context) ([]UserSummary, error) {

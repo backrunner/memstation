@@ -15,6 +15,7 @@
     updateAdminMemoryDocument
   } from '$lib/api/client';
   import ChatMessageCard from '$lib/components/ChatMessageCard.svelte';
+  import FactLineagePanel from '$lib/components/FactLineagePanel.svelte';
   import JsonView from '$lib/components/JsonView.svelte';
   import MemoryKeywordSignals from '$lib/components/MemoryKeywordSignals.svelte';
   import MemoryRelationGraph from '$lib/components/MemoryRelationGraph.svelte';
@@ -463,6 +464,12 @@
             <StatusBadge tone="brand" label={itemTitle} />
             {#if documentItem}
               <StatusBadge tone="muted" label={documentItem.conversation_id ? 'conversation-linked' : 'manual'} />
+              {#if documentItem.type === 'fact' && documentItem.lineage}
+                <StatusBadge
+                  tone={(documentItem.lineage.current_head_id ?? documentItem.id) === documentItem.id ? 'success' : 'warning'}
+                  label={(documentItem.lineage.current_head_id ?? documentItem.id) === documentItem.id ? 'current head' : 'historical'}
+                />
+              {/if}
             {/if}
             {#if keyMemoryItem}
               <StatusBadge tone={reviewTone(keyMemoryItem.review_status)} label={keyMemoryItem.review_status ?? 'pending'} />
@@ -512,6 +519,10 @@
             </div>
 
             <TextareaField label="Content" bind:value={draftContent} rows={10} />
+
+            {#if documentItem.type === 'fact'}
+              <FactLineagePanel lineage={documentItem.lineage} currentFactId={documentItem.id} userId={activeUserId ?? documentItem.user_id} />
+            {/if}
 
             <div class="debug-block">
               <div class="page-header">

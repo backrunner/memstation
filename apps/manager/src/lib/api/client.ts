@@ -22,6 +22,7 @@ import type {
   MemoryDocument,
   MemoryGeneration,
   MemoryGenerationSource,
+  MemoryLineage,
   JSONValue,
   MemoryRebuildDetailPayload,
   MemorySourceSnapshot,
@@ -1194,6 +1195,7 @@ function normalizeMessage(payload: Record<string, unknown>, baseUrl?: string): C
 }
 
 function normalizeMemoryDocument(payload: Record<string, unknown>): MemoryDocument {
+  const lineage = lineageOrUndefined(payload.lineage) ?? lineageFromMetadata(objectOrUndefined(payload.metadata));
   return {
     id: String(payload.id ?? ''),
     node_id: stringOrUndefined(payload.node_id) ?? '',
@@ -1209,6 +1211,7 @@ function normalizeMemoryDocument(payload: Record<string, unknown>): MemoryDocume
     activity_at: stringOrUndefined(payload.activity_at),
     time_tier: stringOrUndefined(payload.time_tier),
     metadata: objectOrUndefined(payload.metadata),
+    lineage,
     related: Array.isArray(payload.related)
       ? payload.related
           .map((value) => value as Record<string, unknown>)
@@ -1348,6 +1351,7 @@ function normalizeSearchMemoryItem(payload: Record<string, unknown>) {
     activity_at: item.activity_at,
     time_tier: item.time_tier,
     metadata: item.metadata,
+    lineage: item.lineage,
     related: item.related
   };
 }
@@ -1444,6 +1448,45 @@ function objectOrUndefined(value: unknown): Record<string, unknown> | undefined 
     return undefined;
   }
   return value as Record<string, unknown>;
+}
+
+function lineageOrUndefined(value: unknown): MemoryLineage | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const lineage = lineageFromMetadata(record);
+  return lineage && Object.values(lineage).some((entry) => entry !== undefined && entry !== null && entry !== '' && !(Array.isArray(entry) && entry.length === 0))
+    ? lineage
+    : undefined;
+}
+
+function lineageFromMetadata(metadata?: Record<string, unknown>): MemoryLineage | undefined {
+  if (!metadata) {
+    return undefined;
+  }
+  const lineagePath = asStringArray(metadata.lineage_path ?? metadata.lineagePath);
+  const aliases = asStringArray(metadata.superseded_alias_node_ids ?? metadata.supersededAliasNodeIDs);
+  const lineage: MemoryLineage = {
+    fact_key: stringOrUndefined(metadata.fact_key ?? metadata.factKey),
+    lineage_group_id: stringOrUndefined(metadata.lineage_group_id ?? metadata.lineageGroupID),
+    revision_seq: numberOrUndefined(metadata.revision_seq ?? metadata.revisionSeq),
+    generation_id: stringOrUndefined(metadata.generation_id ?? metadata.generationID),
+    lineage_path: lineagePath.length > 0 ? lineagePath : undefined,
+    superseded_alias_node_ids: aliases.length > 0 ? aliases : undefined,
+    revision_depth: numberOrUndefined(metadata.revision_depth ?? metadata.revisionDepth),
+    current_head_id: stringOrUndefined(metadata.current_head_id ?? metadata.currentHeadID)
+  };
+  return Object.values(lineage).some((entry) => entry !== undefined && entry !== null && entry !== '' && !(Array.isArray(entry) && entry.length === 0))
+    ? lineage
+    : undefined;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
 }
 
 function absoluteUrl(value: string | undefined, baseUrl?: string): string | undefined {

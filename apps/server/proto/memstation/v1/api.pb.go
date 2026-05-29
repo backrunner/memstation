@@ -1313,6 +1313,7 @@ type MemoryDocument struct {
 	Related        []*RelatedMemory       `protobuf:"bytes,15,rep,name=related,proto3" json:"related,omitempty"`
 	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt      *timestamppb.Timestamp `protobuf:"bytes,17,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Lineage        *FactLineage           `protobuf:"bytes,18,opt,name=lineage,proto3" json:"lineage,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1466,6 +1467,113 @@ func (x *MemoryDocument) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *MemoryDocument) GetLineage() *FactLineage {
+	if x != nil {
+		return x.Lineage
+	}
+	return nil
+}
+
+type FactLineage struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	FactKey                string                 `protobuf:"bytes,1,opt,name=fact_key,json=factKey,proto3" json:"fact_key,omitempty"`
+	LineageGroupId         string                 `protobuf:"bytes,2,opt,name=lineage_group_id,json=lineageGroupId,proto3" json:"lineage_group_id,omitempty"`
+	RevisionSeq            int32                  `protobuf:"varint,3,opt,name=revision_seq,json=revisionSeq,proto3" json:"revision_seq,omitempty"`
+	GenerationId           string                 `protobuf:"bytes,4,opt,name=generation_id,json=generationId,proto3" json:"generation_id,omitempty"`
+	LineagePath            []string               `protobuf:"bytes,5,rep,name=lineage_path,json=lineagePath,proto3" json:"lineage_path,omitempty"`
+	SupersededAliasNodeIds []string               `protobuf:"bytes,6,rep,name=superseded_alias_node_ids,json=supersededAliasNodeIds,proto3" json:"superseded_alias_node_ids,omitempty"`
+	RevisionDepth          int32                  `protobuf:"varint,7,opt,name=revision_depth,json=revisionDepth,proto3" json:"revision_depth,omitempty"`
+	CurrentHeadId          string                 `protobuf:"bytes,8,opt,name=current_head_id,json=currentHeadId,proto3" json:"current_head_id,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *FactLineage) Reset() {
+	*x = FactLineage{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FactLineage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FactLineage) ProtoMessage() {}
+
+func (x *FactLineage) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FactLineage.ProtoReflect.Descriptor instead.
+func (*FactLineage) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *FactLineage) GetFactKey() string {
+	if x != nil {
+		return x.FactKey
+	}
+	return ""
+}
+
+func (x *FactLineage) GetLineageGroupId() string {
+	if x != nil {
+		return x.LineageGroupId
+	}
+	return ""
+}
+
+func (x *FactLineage) GetRevisionSeq() int32 {
+	if x != nil {
+		return x.RevisionSeq
+	}
+	return 0
+}
+
+func (x *FactLineage) GetGenerationId() string {
+	if x != nil {
+		return x.GenerationId
+	}
+	return ""
+}
+
+func (x *FactLineage) GetLineagePath() []string {
+	if x != nil {
+		return x.LineagePath
+	}
+	return nil
+}
+
+func (x *FactLineage) GetSupersededAliasNodeIds() []string {
+	if x != nil {
+		return x.SupersededAliasNodeIds
+	}
+	return nil
+}
+
+func (x *FactLineage) GetRevisionDepth() int32 {
+	if x != nil {
+		return x.RevisionDepth
+	}
+	return 0
+}
+
+func (x *FactLineage) GetCurrentHeadId() string {
+	if x != nil {
+		return x.CurrentHeadId
+	}
+	return ""
+}
+
 type RelatedMemory struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1477,7 +1585,7 @@ type RelatedMemory struct {
 
 func (x *RelatedMemory) Reset() {
 	*x = RelatedMemory{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[18]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1489,7 +1597,7 @@ func (x *RelatedMemory) String() string {
 func (*RelatedMemory) ProtoMessage() {}
 
 func (x *RelatedMemory) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[18]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1502,7 +1610,7 @@ func (x *RelatedMemory) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RelatedMemory.ProtoReflect.Descriptor instead.
 func (*RelatedMemory) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{18}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *RelatedMemory) GetId() string {
@@ -1539,7 +1647,7 @@ type ListKeyMemoriesRequest struct {
 
 func (x *ListKeyMemoriesRequest) Reset() {
 	*x = ListKeyMemoriesRequest{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[19]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1551,7 +1659,7 @@ func (x *ListKeyMemoriesRequest) String() string {
 func (*ListKeyMemoriesRequest) ProtoMessage() {}
 
 func (x *ListKeyMemoriesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[19]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1564,7 +1672,7 @@ func (x *ListKeyMemoriesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListKeyMemoriesRequest.ProtoReflect.Descriptor instead.
 func (*ListKeyMemoriesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{19}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListKeyMemoriesRequest) GetQuery() string {
@@ -1611,7 +1719,7 @@ type ListKeyMemoriesResponse struct {
 
 func (x *ListKeyMemoriesResponse) Reset() {
 	*x = ListKeyMemoriesResponse{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[20]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1623,7 +1731,7 @@ func (x *ListKeyMemoriesResponse) String() string {
 func (*ListKeyMemoriesResponse) ProtoMessage() {}
 
 func (x *ListKeyMemoriesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[20]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1636,7 +1744,7 @@ func (x *ListKeyMemoriesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListKeyMemoriesResponse.ProtoReflect.Descriptor instead.
 func (*ListKeyMemoriesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{20}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ListKeyMemoriesResponse) GetItems() []*KeyMemory {
@@ -1670,7 +1778,7 @@ type KeyMemory struct {
 
 func (x *KeyMemory) Reset() {
 	*x = KeyMemory{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[21]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1682,7 +1790,7 @@ func (x *KeyMemory) String() string {
 func (*KeyMemory) ProtoMessage() {}
 
 func (x *KeyMemory) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[21]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1695,7 +1803,7 @@ func (x *KeyMemory) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyMemory.ProtoReflect.Descriptor instead.
 func (*KeyMemory) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{21}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *KeyMemory) GetId() string {
@@ -1825,7 +1933,7 @@ type UpsertKeyMemoryRequest struct {
 
 func (x *UpsertKeyMemoryRequest) Reset() {
 	*x = UpsertKeyMemoryRequest{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[22]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1837,7 +1945,7 @@ func (x *UpsertKeyMemoryRequest) String() string {
 func (*UpsertKeyMemoryRequest) ProtoMessage() {}
 
 func (x *UpsertKeyMemoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[22]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1850,7 +1958,7 @@ func (x *UpsertKeyMemoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpsertKeyMemoryRequest.ProtoReflect.Descriptor instead.
 func (*UpsertKeyMemoryRequest) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{22}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *UpsertKeyMemoryRequest) GetKey() string {
@@ -1911,7 +2019,7 @@ type DeleteKeyMemoryRequest struct {
 
 func (x *DeleteKeyMemoryRequest) Reset() {
 	*x = DeleteKeyMemoryRequest{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[23]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1923,7 +2031,7 @@ func (x *DeleteKeyMemoryRequest) String() string {
 func (*DeleteKeyMemoryRequest) ProtoMessage() {}
 
 func (x *DeleteKeyMemoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[23]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1936,7 +2044,7 @@ func (x *DeleteKeyMemoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteKeyMemoryRequest.ProtoReflect.Descriptor instead.
 func (*DeleteKeyMemoryRequest) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{23}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *DeleteKeyMemoryRequest) GetKey() string {
@@ -1955,7 +2063,7 @@ type DeleteKeyMemoryResponse struct {
 
 func (x *DeleteKeyMemoryResponse) Reset() {
 	*x = DeleteKeyMemoryResponse{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[24]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1967,7 +2075,7 @@ func (x *DeleteKeyMemoryResponse) String() string {
 func (*DeleteKeyMemoryResponse) ProtoMessage() {}
 
 func (x *DeleteKeyMemoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[24]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1980,7 +2088,7 @@ func (x *DeleteKeyMemoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteKeyMemoryResponse.ProtoReflect.Descriptor instead.
 func (*DeleteKeyMemoryResponse) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{24}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *DeleteKeyMemoryResponse) GetDeleted() bool {
@@ -1999,7 +2107,7 @@ type OverviewRequest struct {
 
 func (x *OverviewRequest) Reset() {
 	*x = OverviewRequest{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[25]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2011,7 +2119,7 @@ func (x *OverviewRequest) String() string {
 func (*OverviewRequest) ProtoMessage() {}
 
 func (x *OverviewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[25]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2024,7 +2132,7 @@ func (x *OverviewRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OverviewRequest.ProtoReflect.Descriptor instead.
 func (*OverviewRequest) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{25}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *OverviewRequest) GetUserId() string {
@@ -2043,7 +2151,7 @@ type OverviewResponse struct {
 
 func (x *OverviewResponse) Reset() {
 	*x = OverviewResponse{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[26]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2055,7 +2163,7 @@ func (x *OverviewResponse) String() string {
 func (*OverviewResponse) ProtoMessage() {}
 
 func (x *OverviewResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[26]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2068,7 +2176,7 @@ func (x *OverviewResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OverviewResponse.ProtoReflect.Descriptor instead.
 func (*OverviewResponse) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{26}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *OverviewResponse) GetOverview() *structpb.Struct {
@@ -2088,7 +2196,7 @@ type ListConversationsRequest struct {
 
 func (x *ListConversationsRequest) Reset() {
 	*x = ListConversationsRequest{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[27]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2100,7 +2208,7 @@ func (x *ListConversationsRequest) String() string {
 func (*ListConversationsRequest) ProtoMessage() {}
 
 func (x *ListConversationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[27]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2113,7 +2221,7 @@ func (x *ListConversationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConversationsRequest.ProtoReflect.Descriptor instead.
 func (*ListConversationsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{27}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ListConversationsRequest) GetUserId() string {
@@ -2139,7 +2247,7 @@ type ListConversationsResponse struct {
 
 func (x *ListConversationsResponse) Reset() {
 	*x = ListConversationsResponse{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[28]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2151,7 +2259,7 @@ func (x *ListConversationsResponse) String() string {
 func (*ListConversationsResponse) ProtoMessage() {}
 
 func (x *ListConversationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[28]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2164,7 +2272,7 @@ func (x *ListConversationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConversationsResponse.ProtoReflect.Descriptor instead.
 func (*ListConversationsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{28}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ListConversationsResponse) GetItems() []*ConversationListItem {
@@ -2194,7 +2302,7 @@ type ConversationListItem struct {
 
 func (x *ConversationListItem) Reset() {
 	*x = ConversationListItem{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[29]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2206,7 +2314,7 @@ func (x *ConversationListItem) String() string {
 func (*ConversationListItem) ProtoMessage() {}
 
 func (x *ConversationListItem) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[29]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2219,7 +2327,7 @@ func (x *ConversationListItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConversationListItem.ProtoReflect.Descriptor instead.
 func (*ConversationListItem) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{29}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ConversationListItem) GetConversationId() string {
@@ -2317,7 +2425,7 @@ type GetConversationRequest struct {
 
 func (x *GetConversationRequest) Reset() {
 	*x = GetConversationRequest{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[30]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2329,7 +2437,7 @@ func (x *GetConversationRequest) String() string {
 func (*GetConversationRequest) ProtoMessage() {}
 
 func (x *GetConversationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[30]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2342,7 +2450,7 @@ func (x *GetConversationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConversationRequest.ProtoReflect.Descriptor instead.
 func (*GetConversationRequest) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{30}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetConversationRequest) GetUserId() string {
@@ -2389,7 +2497,7 @@ type ConversationRecord struct {
 
 func (x *ConversationRecord) Reset() {
 	*x = ConversationRecord{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[31]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2401,7 +2509,7 @@ func (x *ConversationRecord) String() string {
 func (*ConversationRecord) ProtoMessage() {}
 
 func (x *ConversationRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[31]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2414,7 +2522,7 @@ func (x *ConversationRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConversationRecord.ProtoReflect.Descriptor instead.
 func (*ConversationRecord) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{31}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ConversationRecord) GetConversationId() string {
@@ -2545,7 +2653,7 @@ type ConversationSegment struct {
 
 func (x *ConversationSegment) Reset() {
 	*x = ConversationSegment{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[32]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2557,7 +2665,7 @@ func (x *ConversationSegment) String() string {
 func (*ConversationSegment) ProtoMessage() {}
 
 func (x *ConversationSegment) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[32]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2570,7 +2678,7 @@ func (x *ConversationSegment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConversationSegment.ProtoReflect.Descriptor instead.
 func (*ConversationSegment) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{32}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ConversationSegment) GetId() string {
@@ -2689,7 +2797,7 @@ type GetConversationMemoryRequest struct {
 
 func (x *GetConversationMemoryRequest) Reset() {
 	*x = GetConversationMemoryRequest{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[33]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2701,7 +2809,7 @@ func (x *GetConversationMemoryRequest) String() string {
 func (*GetConversationMemoryRequest) ProtoMessage() {}
 
 func (x *GetConversationMemoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[33]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2714,7 +2822,7 @@ func (x *GetConversationMemoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConversationMemoryRequest.ProtoReflect.Descriptor instead.
 func (*GetConversationMemoryRequest) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{33}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *GetConversationMemoryRequest) GetUserId() string {
@@ -2750,7 +2858,7 @@ type ConversationMemoryResponse struct {
 
 func (x *ConversationMemoryResponse) Reset() {
 	*x = ConversationMemoryResponse{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[34]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2762,7 +2870,7 @@ func (x *ConversationMemoryResponse) String() string {
 func (*ConversationMemoryResponse) ProtoMessage() {}
 
 func (x *ConversationMemoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[34]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2775,7 +2883,7 @@ func (x *ConversationMemoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConversationMemoryResponse.ProtoReflect.Descriptor instead.
 func (*ConversationMemoryResponse) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{34}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ConversationMemoryResponse) GetConversationId() string {
@@ -2922,7 +3030,7 @@ const file_proto_memstation_v1_api_proto_rawDesc = "" +
 	"\x16query_embedding_tokens\x18\x03 \x01(\x05R\x14queryEmbeddingTokens\"^\n" +
 	"\x0fInjectionResult\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x125\n" +
-	"\x06search\x18\x02 \x01(\v2\x1d.memstation.v1.SearchResponseR\x06search\"\x8d\x05\n" +
+	"\x06search\x18\x02 \x01(\v2\x1d.memstation.v1.SearchResponseR\x06search\"\xc3\x05\n" +
 	"\x0eMemoryDocument\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\anode_id\x18\x02 \x01(\tR\x06nodeId\x12#\n" +
@@ -2946,7 +3054,17 @@ const file_proto_memstation_v1_api_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"K\n" +
+	"updated_at\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x124\n" +
+	"\alineage\x18\x12 \x01(\v2\x1a.memstation.v1.FactLineageR\alineage\"\xc7\x02\n" +
+	"\vFactLineage\x12\x19\n" +
+	"\bfact_key\x18\x01 \x01(\tR\afactKey\x12(\n" +
+	"\x10lineage_group_id\x18\x02 \x01(\tR\x0elineageGroupId\x12!\n" +
+	"\frevision_seq\x18\x03 \x01(\x05R\vrevisionSeq\x12#\n" +
+	"\rgeneration_id\x18\x04 \x01(\tR\fgenerationId\x12!\n" +
+	"\flineage_path\x18\x05 \x03(\tR\vlineagePath\x129\n" +
+	"\x19superseded_alias_node_ids\x18\x06 \x03(\tR\x16supersededAliasNodeIds\x12%\n" +
+	"\x0erevision_depth\x18\a \x01(\x05R\rrevisionDepth\x12&\n" +
+	"\x0fcurrent_head_id\x18\b \x01(\tR\rcurrentHeadId\"K\n" +
 	"\rRelatedMemory\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x16\n" +
@@ -3100,7 +3218,7 @@ func file_proto_memstation_v1_api_proto_rawDescGZIP() []byte {
 }
 
 var (
-	file_proto_memstation_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
+	file_proto_memstation_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 	file_proto_memstation_v1_api_proto_goTypes  = []any{
 		(*HealthStatusResponse)(nil),         // 0: memstation.v1.HealthStatusResponse
 		(*HealthComponent)(nil),              // 1: memstation.v1.HealthComponent
@@ -3120,28 +3238,29 @@ var (
 		(*SearchResponse)(nil),               // 15: memstation.v1.SearchResponse
 		(*InjectionResult)(nil),              // 16: memstation.v1.InjectionResult
 		(*MemoryDocument)(nil),               // 17: memstation.v1.MemoryDocument
-		(*RelatedMemory)(nil),                // 18: memstation.v1.RelatedMemory
-		(*ListKeyMemoriesRequest)(nil),       // 19: memstation.v1.ListKeyMemoriesRequest
-		(*ListKeyMemoriesResponse)(nil),      // 20: memstation.v1.ListKeyMemoriesResponse
-		(*KeyMemory)(nil),                    // 21: memstation.v1.KeyMemory
-		(*UpsertKeyMemoryRequest)(nil),       // 22: memstation.v1.UpsertKeyMemoryRequest
-		(*DeleteKeyMemoryRequest)(nil),       // 23: memstation.v1.DeleteKeyMemoryRequest
-		(*DeleteKeyMemoryResponse)(nil),      // 24: memstation.v1.DeleteKeyMemoryResponse
-		(*OverviewRequest)(nil),              // 25: memstation.v1.OverviewRequest
-		(*OverviewResponse)(nil),             // 26: memstation.v1.OverviewResponse
-		(*ListConversationsRequest)(nil),     // 27: memstation.v1.ListConversationsRequest
-		(*ListConversationsResponse)(nil),    // 28: memstation.v1.ListConversationsResponse
-		(*ConversationListItem)(nil),         // 29: memstation.v1.ConversationListItem
-		(*GetConversationRequest)(nil),       // 30: memstation.v1.GetConversationRequest
-		(*ConversationRecord)(nil),           // 31: memstation.v1.ConversationRecord
-		(*ConversationSegment)(nil),          // 32: memstation.v1.ConversationSegment
-		(*GetConversationMemoryRequest)(nil), // 33: memstation.v1.GetConversationMemoryRequest
-		(*ConversationMemoryResponse)(nil),   // 34: memstation.v1.ConversationMemoryResponse
-		(*wrapperspb.BoolValue)(nil),         // 35: google.protobuf.BoolValue
-		(*structpb.Struct)(nil),              // 36: google.protobuf.Struct
-		(*timestamppb.Timestamp)(nil),        // 37: google.protobuf.Timestamp
-		(*structpb.Value)(nil),               // 38: google.protobuf.Value
-		(*emptypb.Empty)(nil),                // 39: google.protobuf.Empty
+		(*FactLineage)(nil),                  // 18: memstation.v1.FactLineage
+		(*RelatedMemory)(nil),                // 19: memstation.v1.RelatedMemory
+		(*ListKeyMemoriesRequest)(nil),       // 20: memstation.v1.ListKeyMemoriesRequest
+		(*ListKeyMemoriesResponse)(nil),      // 21: memstation.v1.ListKeyMemoriesResponse
+		(*KeyMemory)(nil),                    // 22: memstation.v1.KeyMemory
+		(*UpsertKeyMemoryRequest)(nil),       // 23: memstation.v1.UpsertKeyMemoryRequest
+		(*DeleteKeyMemoryRequest)(nil),       // 24: memstation.v1.DeleteKeyMemoryRequest
+		(*DeleteKeyMemoryResponse)(nil),      // 25: memstation.v1.DeleteKeyMemoryResponse
+		(*OverviewRequest)(nil),              // 26: memstation.v1.OverviewRequest
+		(*OverviewResponse)(nil),             // 27: memstation.v1.OverviewResponse
+		(*ListConversationsRequest)(nil),     // 28: memstation.v1.ListConversationsRequest
+		(*ListConversationsResponse)(nil),    // 29: memstation.v1.ListConversationsResponse
+		(*ConversationListItem)(nil),         // 30: memstation.v1.ConversationListItem
+		(*GetConversationRequest)(nil),       // 31: memstation.v1.GetConversationRequest
+		(*ConversationRecord)(nil),           // 32: memstation.v1.ConversationRecord
+		(*ConversationSegment)(nil),          // 33: memstation.v1.ConversationSegment
+		(*GetConversationMemoryRequest)(nil), // 34: memstation.v1.GetConversationMemoryRequest
+		(*ConversationMemoryResponse)(nil),   // 35: memstation.v1.ConversationMemoryResponse
+		(*wrapperspb.BoolValue)(nil),         // 36: google.protobuf.BoolValue
+		(*structpb.Struct)(nil),              // 37: google.protobuf.Struct
+		(*timestamppb.Timestamp)(nil),        // 38: google.protobuf.Timestamp
+		(*structpb.Value)(nil),               // 39: google.protobuf.Value
+		(*emptypb.Empty)(nil),                // 40: google.protobuf.Empty
 	}
 )
 
@@ -3151,87 +3270,88 @@ var file_proto_memstation_v1_api_proto_depIdxs = []int32{
 	6,  // 2: memstation.v1.CompleteRequest.request:type_name -> memstation.v1.UnifiedRequest
 	7,  // 3: memstation.v1.CompleteResponse.response:type_name -> memstation.v1.UnifiedResponse
 	16, // 4: memstation.v1.CompleteResponse.injection:type_name -> memstation.v1.InjectionResult
-	35, // 5: memstation.v1.UnifiedRequest.memory_persist:type_name -> google.protobuf.BoolValue
-	35, // 6: memstation.v1.UnifiedRequest.source_retain:type_name -> google.protobuf.BoolValue
+	36, // 5: memstation.v1.UnifiedRequest.memory_persist:type_name -> google.protobuf.BoolValue
+	36, // 6: memstation.v1.UnifiedRequest.source_retain:type_name -> google.protobuf.BoolValue
 	8,  // 7: memstation.v1.UnifiedRequest.messages:type_name -> memstation.v1.UnifiedMessage
 	10, // 8: memstation.v1.UnifiedRequest.tools:type_name -> memstation.v1.ToolDefinition
-	36, // 9: memstation.v1.UnifiedRequest.provider_metadata:type_name -> google.protobuf.Struct
-	36, // 10: memstation.v1.UnifiedRequest.request_metadata:type_name -> google.protobuf.Struct
-	37, // 11: memstation.v1.UnifiedRequest.received_at:type_name -> google.protobuf.Timestamp
+	37, // 9: memstation.v1.UnifiedRequest.provider_metadata:type_name -> google.protobuf.Struct
+	37, // 10: memstation.v1.UnifiedRequest.request_metadata:type_name -> google.protobuf.Struct
+	38, // 11: memstation.v1.UnifiedRequest.received_at:type_name -> google.protobuf.Timestamp
 	8,  // 12: memstation.v1.UnifiedResponse.message:type_name -> memstation.v1.UnifiedMessage
 	13, // 13: memstation.v1.UnifiedResponse.usage:type_name -> memstation.v1.UsageRecord
-	37, // 14: memstation.v1.UnifiedResponse.created_at:type_name -> google.protobuf.Timestamp
-	36, // 15: memstation.v1.UnifiedResponse.raw:type_name -> google.protobuf.Struct
+	38, // 14: memstation.v1.UnifiedResponse.created_at:type_name -> google.protobuf.Timestamp
+	37, // 15: memstation.v1.UnifiedResponse.raw:type_name -> google.protobuf.Struct
 	9,  // 16: memstation.v1.UnifiedMessage.blocks:type_name -> memstation.v1.ContentBlock
 	11, // 17: memstation.v1.UnifiedMessage.tool_calls:type_name -> memstation.v1.ToolCall
 	12, // 18: memstation.v1.UnifiedMessage.tool_results:type_name -> memstation.v1.ToolResult
-	36, // 19: memstation.v1.UnifiedMessage.metadata:type_name -> google.protobuf.Struct
-	36, // 20: memstation.v1.ContentBlock.metadata:type_name -> google.protobuf.Struct
-	36, // 21: memstation.v1.ToolDefinition.input_schema:type_name -> google.protobuf.Struct
-	38, // 22: memstation.v1.ToolCall.arguments:type_name -> google.protobuf.Value
-	38, // 23: memstation.v1.ToolResult.output:type_name -> google.protobuf.Value
-	37, // 24: memstation.v1.SearchRequest.date_from:type_name -> google.protobuf.Timestamp
-	37, // 25: memstation.v1.SearchRequest.date_to:type_name -> google.protobuf.Timestamp
+	37, // 19: memstation.v1.UnifiedMessage.metadata:type_name -> google.protobuf.Struct
+	37, // 20: memstation.v1.ContentBlock.metadata:type_name -> google.protobuf.Struct
+	37, // 21: memstation.v1.ToolDefinition.input_schema:type_name -> google.protobuf.Struct
+	39, // 22: memstation.v1.ToolCall.arguments:type_name -> google.protobuf.Value
+	39, // 23: memstation.v1.ToolResult.output:type_name -> google.protobuf.Value
+	38, // 24: memstation.v1.SearchRequest.date_from:type_name -> google.protobuf.Timestamp
+	38, // 25: memstation.v1.SearchRequest.date_to:type_name -> google.protobuf.Timestamp
 	17, // 26: memstation.v1.SearchResponse.memories:type_name -> memstation.v1.MemoryDocument
 	15, // 27: memstation.v1.InjectionResult.search:type_name -> memstation.v1.SearchResponse
-	37, // 28: memstation.v1.MemoryDocument.activity_at:type_name -> google.protobuf.Timestamp
-	36, // 29: memstation.v1.MemoryDocument.metadata:type_name -> google.protobuf.Struct
-	18, // 30: memstation.v1.MemoryDocument.related:type_name -> memstation.v1.RelatedMemory
-	37, // 31: memstation.v1.MemoryDocument.created_at:type_name -> google.protobuf.Timestamp
-	37, // 32: memstation.v1.MemoryDocument.updated_at:type_name -> google.protobuf.Timestamp
-	37, // 33: memstation.v1.ListKeyMemoriesRequest.date_from:type_name -> google.protobuf.Timestamp
-	37, // 34: memstation.v1.ListKeyMemoriesRequest.date_to:type_name -> google.protobuf.Timestamp
-	21, // 35: memstation.v1.ListKeyMemoriesResponse.items:type_name -> memstation.v1.KeyMemory
-	37, // 36: memstation.v1.KeyMemory.last_confirmed_at:type_name -> google.protobuf.Timestamp
-	37, // 37: memstation.v1.KeyMemory.activity_at:type_name -> google.protobuf.Timestamp
-	36, // 38: memstation.v1.KeyMemory.metadata:type_name -> google.protobuf.Struct
-	37, // 39: memstation.v1.KeyMemory.created_at:type_name -> google.protobuf.Timestamp
-	37, // 40: memstation.v1.KeyMemory.updated_at:type_name -> google.protobuf.Timestamp
-	37, // 41: memstation.v1.UpsertKeyMemoryRequest.last_confirmed_at:type_name -> google.protobuf.Timestamp
-	36, // 42: memstation.v1.UpsertKeyMemoryRequest.metadata:type_name -> google.protobuf.Struct
-	36, // 43: memstation.v1.OverviewResponse.overview:type_name -> google.protobuf.Struct
-	29, // 44: memstation.v1.ListConversationsResponse.items:type_name -> memstation.v1.ConversationListItem
-	37, // 45: memstation.v1.ConversationListItem.updated_at:type_name -> google.protobuf.Timestamp
-	36, // 46: memstation.v1.ConversationListItem.metadata:type_name -> google.protobuf.Struct
-	8,  // 47: memstation.v1.ConversationRecord.messages:type_name -> memstation.v1.UnifiedMessage
-	32, // 48: memstation.v1.ConversationRecord.segments:type_name -> memstation.v1.ConversationSegment
-	7,  // 49: memstation.v1.ConversationRecord.response:type_name -> memstation.v1.UnifiedResponse
-	13, // 50: memstation.v1.ConversationRecord.usage:type_name -> memstation.v1.UsageRecord
-	36, // 51: memstation.v1.ConversationRecord.metadata:type_name -> google.protobuf.Struct
-	37, // 52: memstation.v1.ConversationRecord.created_at:type_name -> google.protobuf.Timestamp
-	37, // 53: memstation.v1.ConversationRecord.updated_at:type_name -> google.protobuf.Timestamp
-	36, // 54: memstation.v1.ConversationSegment.metadata:type_name -> google.protobuf.Struct
-	37, // 55: memstation.v1.ConversationSegment.created_at:type_name -> google.protobuf.Timestamp
-	37, // 56: memstation.v1.ConversationSegment.updated_at:type_name -> google.protobuf.Timestamp
-	17, // 57: memstation.v1.ConversationMemoryResponse.documents:type_name -> memstation.v1.MemoryDocument
-	21, // 58: memstation.v1.ConversationMemoryResponse.key_memories:type_name -> memstation.v1.KeyMemory
-	39, // 59: memstation.v1.HealthService.GetStatus:input_type -> google.protobuf.Empty
-	39, // 60: memstation.v1.GatewayService.ListModels:input_type -> google.protobuf.Empty
-	4,  // 61: memstation.v1.GatewayService.Complete:input_type -> memstation.v1.CompleteRequest
-	14, // 62: memstation.v1.MemoryService.Search:input_type -> memstation.v1.SearchRequest
-	19, // 63: memstation.v1.MemoryService.ListKeyMemories:input_type -> memstation.v1.ListKeyMemoriesRequest
-	22, // 64: memstation.v1.MemoryService.UpsertKeyMemory:input_type -> memstation.v1.UpsertKeyMemoryRequest
-	23, // 65: memstation.v1.MemoryService.DeleteKeyMemory:input_type -> memstation.v1.DeleteKeyMemoryRequest
-	25, // 66: memstation.v1.AdminService.Overview:input_type -> memstation.v1.OverviewRequest
-	27, // 67: memstation.v1.AdminService.ListConversations:input_type -> memstation.v1.ListConversationsRequest
-	30, // 68: memstation.v1.AdminService.GetConversation:input_type -> memstation.v1.GetConversationRequest
-	33, // 69: memstation.v1.AdminService.GetConversationMemory:input_type -> memstation.v1.GetConversationMemoryRequest
-	0,  // 70: memstation.v1.HealthService.GetStatus:output_type -> memstation.v1.HealthStatusResponse
-	3,  // 71: memstation.v1.GatewayService.ListModels:output_type -> memstation.v1.ListModelsResponse
-	5,  // 72: memstation.v1.GatewayService.Complete:output_type -> memstation.v1.CompleteResponse
-	15, // 73: memstation.v1.MemoryService.Search:output_type -> memstation.v1.SearchResponse
-	20, // 74: memstation.v1.MemoryService.ListKeyMemories:output_type -> memstation.v1.ListKeyMemoriesResponse
-	21, // 75: memstation.v1.MemoryService.UpsertKeyMemory:output_type -> memstation.v1.KeyMemory
-	24, // 76: memstation.v1.MemoryService.DeleteKeyMemory:output_type -> memstation.v1.DeleteKeyMemoryResponse
-	26, // 77: memstation.v1.AdminService.Overview:output_type -> memstation.v1.OverviewResponse
-	28, // 78: memstation.v1.AdminService.ListConversations:output_type -> memstation.v1.ListConversationsResponse
-	31, // 79: memstation.v1.AdminService.GetConversation:output_type -> memstation.v1.ConversationRecord
-	34, // 80: memstation.v1.AdminService.GetConversationMemory:output_type -> memstation.v1.ConversationMemoryResponse
-	70, // [70:81] is the sub-list for method output_type
-	59, // [59:70] is the sub-list for method input_type
-	59, // [59:59] is the sub-list for extension type_name
-	59, // [59:59] is the sub-list for extension extendee
-	0,  // [0:59] is the sub-list for field type_name
+	38, // 28: memstation.v1.MemoryDocument.activity_at:type_name -> google.protobuf.Timestamp
+	37, // 29: memstation.v1.MemoryDocument.metadata:type_name -> google.protobuf.Struct
+	19, // 30: memstation.v1.MemoryDocument.related:type_name -> memstation.v1.RelatedMemory
+	38, // 31: memstation.v1.MemoryDocument.created_at:type_name -> google.protobuf.Timestamp
+	38, // 32: memstation.v1.MemoryDocument.updated_at:type_name -> google.protobuf.Timestamp
+	18, // 33: memstation.v1.MemoryDocument.lineage:type_name -> memstation.v1.FactLineage
+	38, // 34: memstation.v1.ListKeyMemoriesRequest.date_from:type_name -> google.protobuf.Timestamp
+	38, // 35: memstation.v1.ListKeyMemoriesRequest.date_to:type_name -> google.protobuf.Timestamp
+	22, // 36: memstation.v1.ListKeyMemoriesResponse.items:type_name -> memstation.v1.KeyMemory
+	38, // 37: memstation.v1.KeyMemory.last_confirmed_at:type_name -> google.protobuf.Timestamp
+	38, // 38: memstation.v1.KeyMemory.activity_at:type_name -> google.protobuf.Timestamp
+	37, // 39: memstation.v1.KeyMemory.metadata:type_name -> google.protobuf.Struct
+	38, // 40: memstation.v1.KeyMemory.created_at:type_name -> google.protobuf.Timestamp
+	38, // 41: memstation.v1.KeyMemory.updated_at:type_name -> google.protobuf.Timestamp
+	38, // 42: memstation.v1.UpsertKeyMemoryRequest.last_confirmed_at:type_name -> google.protobuf.Timestamp
+	37, // 43: memstation.v1.UpsertKeyMemoryRequest.metadata:type_name -> google.protobuf.Struct
+	37, // 44: memstation.v1.OverviewResponse.overview:type_name -> google.protobuf.Struct
+	30, // 45: memstation.v1.ListConversationsResponse.items:type_name -> memstation.v1.ConversationListItem
+	38, // 46: memstation.v1.ConversationListItem.updated_at:type_name -> google.protobuf.Timestamp
+	37, // 47: memstation.v1.ConversationListItem.metadata:type_name -> google.protobuf.Struct
+	8,  // 48: memstation.v1.ConversationRecord.messages:type_name -> memstation.v1.UnifiedMessage
+	33, // 49: memstation.v1.ConversationRecord.segments:type_name -> memstation.v1.ConversationSegment
+	7,  // 50: memstation.v1.ConversationRecord.response:type_name -> memstation.v1.UnifiedResponse
+	13, // 51: memstation.v1.ConversationRecord.usage:type_name -> memstation.v1.UsageRecord
+	37, // 52: memstation.v1.ConversationRecord.metadata:type_name -> google.protobuf.Struct
+	38, // 53: memstation.v1.ConversationRecord.created_at:type_name -> google.protobuf.Timestamp
+	38, // 54: memstation.v1.ConversationRecord.updated_at:type_name -> google.protobuf.Timestamp
+	37, // 55: memstation.v1.ConversationSegment.metadata:type_name -> google.protobuf.Struct
+	38, // 56: memstation.v1.ConversationSegment.created_at:type_name -> google.protobuf.Timestamp
+	38, // 57: memstation.v1.ConversationSegment.updated_at:type_name -> google.protobuf.Timestamp
+	17, // 58: memstation.v1.ConversationMemoryResponse.documents:type_name -> memstation.v1.MemoryDocument
+	22, // 59: memstation.v1.ConversationMemoryResponse.key_memories:type_name -> memstation.v1.KeyMemory
+	40, // 60: memstation.v1.HealthService.GetStatus:input_type -> google.protobuf.Empty
+	40, // 61: memstation.v1.GatewayService.ListModels:input_type -> google.protobuf.Empty
+	4,  // 62: memstation.v1.GatewayService.Complete:input_type -> memstation.v1.CompleteRequest
+	14, // 63: memstation.v1.MemoryService.Search:input_type -> memstation.v1.SearchRequest
+	20, // 64: memstation.v1.MemoryService.ListKeyMemories:input_type -> memstation.v1.ListKeyMemoriesRequest
+	23, // 65: memstation.v1.MemoryService.UpsertKeyMemory:input_type -> memstation.v1.UpsertKeyMemoryRequest
+	24, // 66: memstation.v1.MemoryService.DeleteKeyMemory:input_type -> memstation.v1.DeleteKeyMemoryRequest
+	26, // 67: memstation.v1.AdminService.Overview:input_type -> memstation.v1.OverviewRequest
+	28, // 68: memstation.v1.AdminService.ListConversations:input_type -> memstation.v1.ListConversationsRequest
+	31, // 69: memstation.v1.AdminService.GetConversation:input_type -> memstation.v1.GetConversationRequest
+	34, // 70: memstation.v1.AdminService.GetConversationMemory:input_type -> memstation.v1.GetConversationMemoryRequest
+	0,  // 71: memstation.v1.HealthService.GetStatus:output_type -> memstation.v1.HealthStatusResponse
+	3,  // 72: memstation.v1.GatewayService.ListModels:output_type -> memstation.v1.ListModelsResponse
+	5,  // 73: memstation.v1.GatewayService.Complete:output_type -> memstation.v1.CompleteResponse
+	15, // 74: memstation.v1.MemoryService.Search:output_type -> memstation.v1.SearchResponse
+	21, // 75: memstation.v1.MemoryService.ListKeyMemories:output_type -> memstation.v1.ListKeyMemoriesResponse
+	22, // 76: memstation.v1.MemoryService.UpsertKeyMemory:output_type -> memstation.v1.KeyMemory
+	25, // 77: memstation.v1.MemoryService.DeleteKeyMemory:output_type -> memstation.v1.DeleteKeyMemoryResponse
+	27, // 78: memstation.v1.AdminService.Overview:output_type -> memstation.v1.OverviewResponse
+	29, // 79: memstation.v1.AdminService.ListConversations:output_type -> memstation.v1.ListConversationsResponse
+	32, // 80: memstation.v1.AdminService.GetConversation:output_type -> memstation.v1.ConversationRecord
+	35, // 81: memstation.v1.AdminService.GetConversationMemory:output_type -> memstation.v1.ConversationMemoryResponse
+	71, // [71:82] is the sub-list for method output_type
+	60, // [60:71] is the sub-list for method input_type
+	60, // [60:60] is the sub-list for extension type_name
+	60, // [60:60] is the sub-list for extension extendee
+	0,  // [0:60] is the sub-list for field type_name
 }
 
 func init() { file_proto_memstation_v1_api_proto_init() }
@@ -3245,7 +3365,7 @@ func file_proto_memstation_v1_api_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_memstation_v1_api_proto_rawDesc), len(file_proto_memstation_v1_api_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   35,
+			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   4,
 		},

@@ -217,10 +217,22 @@ export interface MemoryDocument {
   activity_at?: string;
   time_tier?: string;
   metadata?: Record<string, unknown>;
+  lineage?: MemoryLineage;
   related?: Array<{ id: string; type: string; weight: number }>;
   evidences?: MemoryEvidence[];
   created_at?: string;
   updated_at?: string;
+}
+
+export interface MemoryLineage {
+  fact_key?: string;
+  lineage_group_id?: string;
+  revision_seq?: number;
+  generation_id?: string;
+  lineage_path?: string[];
+  superseded_alias_node_ids?: string[];
+  revision_depth?: number;
+  current_head_id?: string;
 }
 
 export interface MemorySummaryRecord {
@@ -271,6 +283,7 @@ export interface SearchMemoryItem {
   activity_at?: string;
   time_tier?: string;
   metadata?: Record<string, unknown>;
+  lineage?: MemoryLineage;
   related?: Array<{ id: string; type: string; weight: number }>;
 }
 
@@ -370,6 +383,7 @@ export interface MemoryPreviewPayload {
   keywords?: string[];
   summary?: Record<string, unknown>;
   fact?: Record<string, unknown>;
+  facts?: Array<Record<string, unknown>>;
   impression?: Record<string, unknown>;
   key_memories?: Array<Record<string, unknown>>;
   metadata?: Record<string, unknown>;
