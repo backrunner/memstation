@@ -48,6 +48,20 @@ func BenchmarkMemorySearchLargeCorpus(b *testing.B) {
 	}
 }
 
+// BenchmarkMemorySearchWithConversation measures the search path when
+// conversation expansion is enabled. This exercises the hydrated conversation
+// candidate path that now uses a single repository call per conversation.
+func BenchmarkMemorySearchWithConversation(b *testing.B) {
+	engine, input := setupEngineBench(b, 500)
+	input.IncludeConversation = true
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := engine.Search(context.Background(), input); err != nil {
+			b.Fatalf("search with conversation: %v", err)
+		}
+	}
+}
+
 // BenchmarkInject measures the full inject pipeline (recall + system-prompt
 // assembly + tool injection) per the inject-mode hot path in memory-system.md.
 func BenchmarkInject(b *testing.B) {
