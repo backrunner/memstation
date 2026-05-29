@@ -51,7 +51,8 @@ memstation/
 - 时间能力：`importance * time_decay` 排序、`activity_at`、`time_tier`、temporal graph
 - 记忆检索：向量候选 + SQL hydrate + 1-2 hop relation expansion + 混合 key memory 注入
 - 记忆注入：结构化 User Profile / Relevant Memories / Relevant Facts / Relevant Impressions，上下文装包按 Key Memory、Summary、Fact、Impression 优先级执行
-- Fact 写入：fallback extraction 使用规范化 category taxonomy，并在新 fact 显式 supersede 旧 fact 时同步 `is_superseded`、`superseded_by_id` 与 `supersedes` 图边
+- Fact 写入：fallback extraction 使用规范化 category taxonomy 和轻量多事实输出，按 `fact_key` / `lineage_group_id` / `revision_seq` 聚合版本；supersession 写入必须带明确 lineage 锚点和可解析目标，并在新 fact supersede 旧 fact 时同步 current head、`superseded_by_id` 与专用 `supersedes` 图边
+- Fact 检索与管理：默认折叠到 current head，搜索 / GraphQL / gRPC / Manager 均返回 lineage metadata，包括 `lineage_path`、`superseded_alias_node_ids` 与 `revision_depth`
 - Summary 写入：长上下文按 `summary_chunk_max_tokens=6000`、`summary_chunk_overlap=600` 进行 chunking，并保留 chunk metadata
 - Memory REST：
   - `POST /api/v1/memory/search`

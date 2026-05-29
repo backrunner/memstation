@@ -641,7 +641,8 @@ v1.x 后续路线：
 - Go 代码质量门禁已统一为 `scripts/go/format.sh` + `scripts/go/lint.sh`，并接入 `apps/server` 本地脚本与 CI 的 format check / golangci-lint
 - 记忆切片 rewrite 的 stale segment 清理链路已补强，能够按 `conversation_id + keep set` 删除残留 segment graph node、relation 与 vector，避免重试或侧表已覆盖后的脏数据残留
 - 记忆注入已补强为结构化 User Profile / Relevant Memories / Relevant Facts / Relevant Impressions 格式，并按 Key Memory、Summary、Fact、Impression 的固定优先级装包
-- Fact fallback extraction 已使用规范化 category taxonomy，并通过 `fact_key + supersedes_fact_ids` 在写入侧同步旧 fact 的 `is_superseded / superseded_by_id` 与 `supersedes` relation
+- Fact fallback extraction 已使用规范化 category taxonomy 和轻量多事实输出，并通过 `fact_key / lineage_group_id / revision_seq + supersedes_fact_ids` 在写入侧同步旧 fact 的 `is_superseded / superseded_by_id` 与专用 `supersedes` lineage relation；supersession 写入已收紧为必须携带明确 lineage 锚点和可解析目标，不再从旧事实指针或旧 topic ID 反推
+- Fact lineage 已产品化到存储、检索和管理面板：搜索默认折叠到 current head，GraphQL / gRPC / REST / Manager 返回或展示 `lineage_path`、`superseded_alias_node_ids`、`revision_depth` 与 current-head 状态
 - Summary worker 已加入 `summary_chunk_max_tokens=6000`、`summary_chunk_overlap=600` 的长上下文 chunking 入口，并写入 chunk metadata
 - Gateway / Memory / Worker 热路径已补充 Go `Benchmark*` 函数，`go test -bench=.` 可发现并执行非流式代理、流式代理、注入、记忆检索、outbox relay 等基准
 - 此前已确认通过的本地门禁包括：`pnpm lint`、`pnpm --filter @memstation/server format:check`、`pnpm --filter @memstation/server lint`、`go test ./...`
