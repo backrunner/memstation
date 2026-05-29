@@ -604,8 +604,11 @@ func (r *InMemoryMemoryRepository) UpdateDocument(_ context.Context, userID, id 
 	if !ok || doc.Type != kind {
 		return domain.MemoryDocument{}, errors.New("memory document not found")
 	}
+	now := time.Now().UTC()
 	doc.Content = content
-	doc.UpdatedAt = time.Now().UTC()
+	doc.ActivityAt = now
+	doc.TimeTier = domain.ClassifyTimeTier(now, now)
+	doc.UpdatedAt = now
 	doc.Metadata = cloneMetadata(doc.Metadata)
 	r.documents[key(userID, id)] = doc
 	return attachDocumentRuntimeMetadata(doc), nil
@@ -945,6 +948,42 @@ func (r *InMemoryMemoryRepository) ListEvidences(_ context.Context, userID, node
 			return items[i].StartMS < items[j].StartMS
 		}
 		return items[i].SequenceNum < items[j].SequenceNum
+	})
+	return items, nil
+}
+
+func (r *InMemoryMemoryRepository) ListEvidencesByNodeIDs(_ context.Context, userID string, nodeIDs []string) ([]domain.MemoryEvidence, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if len(nodeIDs) == 0 {
+		return nil, nil
+	}
+	allowed := map[string]struct{}{}
+	for _, nodeID := range nodeIDs {
+		nodeID = strings.TrimSpace(nodeID)
+		if nodeID == "" {
+			continue
+		}
+		allowed[nodeID] = struct{}{}
+	}
+	if len(allowed) == 0 {
+		return nil, nil
+	}
+	items := make([]domain.MemoryEvidence, 0)
+	for nodeID := range allowed {
+		items = append(items, r.evidences[key(userID, nodeID)]...)
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].NodeID == items[j].NodeID {
+			if items[i].SequenceNum == items[j].SequenceNum {
+				if items[i].StartMS == items[j].StartMS {
+					return items[i].CreatedAt.Before(items[j].CreatedAt)
+				}
+				return items[i].StartMS < items[j].StartMS
+			}
+			return items[i].SequenceNum < items[j].SequenceNum
+		}
+		return items[i].NodeID < items[j].NodeID
 	})
 	return items, nil
 }

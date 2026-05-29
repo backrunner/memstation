@@ -86,9 +86,7 @@ func (s *Service) ListDocumentsInGeneration(ctx context.Context, userID, generat
 	if err != nil {
 		return nil, err
 	}
-	for idx := range items {
-		s.hydrateRelatedDocuments(ctx, &items[idx])
-	}
+	s.hydrateRelatedDocumentsBatch(ctx, memoryDocumentPointers(items))
 	return items, nil
 }
 
@@ -101,10 +99,28 @@ func (s *Service) ListDocumentsByConversationInGeneration(ctx context.Context, u
 	if err != nil {
 		return nil, err
 	}
-	for idx := range items {
-		s.hydrateRelatedDocuments(ctx, &items[idx])
-	}
+	s.hydrateRelatedDocumentsBatch(ctx, memoryDocumentPointers(items))
 	return items, nil
+}
+
+func memoryDocumentPointers(items []domain.MemoryDocument) []*domain.MemoryDocument {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]*domain.MemoryDocument, 0, len(items))
+	for idx := range items {
+		out = append(out, &items[idx])
+	}
+	return out
+}
+
+func isTemporalRelationTypeForHydration(relationType string) bool {
+	switch relationType {
+	case "indexed_in_tier", "occurred_on_day", "day_in_month", "month_in_year", domain.MemoryRelationSupersedes:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) UpdateDocument(ctx context.Context, userID, id string, kind domain.MemoryType, content string) (domain.MemoryDocument, error) {
@@ -589,65 +605,170 @@ func firstNonEmptyString(values ...string) string {
 }
 
 func (s *Service) hydrateRelatedDocuments(ctx context.Context, item *domain.MemoryDocument) {
-	if s.repo == nil || item == nil || item.NodeID == "" || item.UserID == "" {
-		return
-	}
-	if evidences, err := s.repo.ListEvidences(ctx, item.UserID, item.NodeID); err == nil && len(evidences) > 0 {
-		item.Evidences = evidences
-	}
-	s.hydrateFactLineageWithCache(ctx, item, nil)
-	relations, err := s.repo.ListRelations(ctx, item.UserID, item.GenerationID, []string{item.NodeID}, 1)
-	if err != nil || len(relations) == 0 {
-		return
-	}
+	s.hydrateRelatedDocumentsBatch(ctx, []*domain.MemoryDocument{item})
+}
 
-	relatedNodeIDs := make([]string, 0, len(relations))
-	weights := map[string]float64{}
-	for _, relation := range relations {
-		if relation.RelationType == domain.MemoryRelationSupersedes {
+func (s *Service) hydrateRelatedDocumentsBatch(ctx context.Context, items []*domain.MemoryDocument) {
+	if s.repo == nil || len(items) == 0 {
+		return
+	}
+	lineageCache := make(map[string]domain.FactLineage)
+	type batchGroup struct {
+		userID       string
+		generationID string
+		items        []*domain.MemoryDocument
+	}
+	type batchGroupKey struct {
+		userID       string
+		generationID string
+	}
+	groups := make(map[batchGroupKey]*batchGroup)
+	groupOrder := make([]batchGroupKey, 0)
+	for _, item := range items {
+		if item == nil || item.NodeID == "" || item.UserID == "" {
 			continue
 		}
-		otherNodeID := relation.SrcNodeID
-		if otherNodeID == item.NodeID {
-			otherNodeID = relation.DstNodeID
+		key := batchGroupKey{userID: item.UserID, generationID: item.GenerationID}
+		group, ok := groups[key]
+		if !ok {
+			group = &batchGroup{userID: item.UserID, generationID: item.GenerationID}
+			groups[key] = group
+			groupOrder = append(groupOrder, key)
 		}
-		if otherNodeID == "" || otherNodeID == item.NodeID {
+		group.items = append(group.items, item)
+	}
+	for _, key := range groupOrder {
+		group := groups[key]
+		if group == nil || len(group.items) == 0 {
 			continue
 		}
-		relatedNodeIDs = append(relatedNodeIDs, otherNodeID)
-		if relation.Weight > weights[otherNodeID] {
-			weights[otherNodeID] = relation.Weight
+
+		seedNodeIDs := make([]string, 0, len(group.items))
+		seedSet := make(map[string]struct{}, len(group.items))
+		docByNodeID := make(map[string]domain.MemoryDocument, len(group.items))
+		for _, item := range group.items {
+			if item == nil || item.NodeID == "" {
+				continue
+			}
+			seedNodeIDs = append(seedNodeIDs, item.NodeID)
+			seedSet[item.NodeID] = struct{}{}
+			docByNodeID[item.NodeID] = *item
 		}
-	}
-	if len(relatedNodeIDs) == 0 {
-		return
-	}
-
-	documents, err := s.repo.ListDocumentsByNodeIDsInGeneration(ctx, item.UserID, item.GenerationID, relatedNodeIDs)
-	if err != nil || len(documents) == 0 {
-		return
-	}
-
-	related := make([]domain.RelatedMemory, 0, len(documents))
-	seen := map[string]struct{}{}
-	for _, document := range documents {
-		if _, ok := seen[document.ID]; ok {
+		if len(seedNodeIDs) == 0 {
 			continue
 		}
-		seen[document.ID] = struct{}{}
-		related = append(related, domain.RelatedMemory{
-			ID:     document.ID,
-			Type:   string(document.Type),
-			Weight: weights[document.NodeID],
-		})
-	}
-	sort.Slice(related, func(i, j int) bool {
-		if related[i].Weight == related[j].Weight {
-			return related[i].ID < related[j].ID
+		seedNodeIDs = seedNodeIDs[:0]
+		for nodeID := range seedSet {
+			seedNodeIDs = append(seedNodeIDs, nodeID)
 		}
-		return related[i].Weight > related[j].Weight
-	})
-	item.Related = related
+		sort.Strings(seedNodeIDs)
+
+		if evidences, err := s.repo.ListEvidencesByNodeIDs(ctx, group.userID, seedNodeIDs); err == nil && len(evidences) > 0 {
+			evidenceByNodeID := make(map[string][]domain.MemoryEvidence, len(seedNodeIDs))
+			for _, evidence := range evidences {
+				if evidence.NodeID == "" {
+					continue
+				}
+				evidenceByNodeID[evidence.NodeID] = append(evidenceByNodeID[evidence.NodeID], evidence)
+			}
+			for _, item := range group.items {
+				if item == nil || item.NodeID == "" {
+					continue
+				}
+				if nodeEvidences, ok := evidenceByNodeID[item.NodeID]; ok {
+					item.Evidences = nodeEvidences
+				}
+			}
+		}
+
+		for _, item := range group.items {
+			s.hydrateFactLineageWithCache(ctx, item, lineageCache)
+		}
+
+		relations, err := s.repo.ListRelations(ctx, group.userID, group.generationID, seedNodeIDs, 1)
+		if err != nil || len(relations) == 0 {
+			continue
+		}
+
+		relatedWeightsBySeed := make(map[string]map[string]float64, len(seedNodeIDs))
+		relatedNodeIDs := make(map[string]struct{})
+		for _, relation := range relations {
+			if isTemporalRelationTypeForHydration(relation.RelationType) {
+				continue
+			}
+			if _, ok := seedSet[relation.SrcNodeID]; ok && relation.DstNodeID != "" && relation.DstNodeID != relation.SrcNodeID {
+				weights := relatedWeightsBySeed[relation.SrcNodeID]
+				if weights == nil {
+					weights = map[string]float64{}
+					relatedWeightsBySeed[relation.SrcNodeID] = weights
+				}
+				if relation.Weight > weights[relation.DstNodeID] {
+					weights[relation.DstNodeID] = relation.Weight
+				}
+				if _, ok := seedSet[relation.DstNodeID]; !ok {
+					relatedNodeIDs[relation.DstNodeID] = struct{}{}
+				}
+			}
+			if _, ok := seedSet[relation.DstNodeID]; ok && relation.SrcNodeID != "" && relation.SrcNodeID != relation.DstNodeID {
+				weights := relatedWeightsBySeed[relation.DstNodeID]
+				if weights == nil {
+					weights = map[string]float64{}
+					relatedWeightsBySeed[relation.DstNodeID] = weights
+				}
+				if relation.Weight > weights[relation.SrcNodeID] {
+					weights[relation.SrcNodeID] = relation.Weight
+				}
+				if _, ok := seedSet[relation.SrcNodeID]; !ok {
+					relatedNodeIDs[relation.SrcNodeID] = struct{}{}
+				}
+			}
+		}
+
+		if len(relatedNodeIDs) > 0 {
+			lookupIDs := make([]string, 0, len(relatedNodeIDs))
+			for nodeID := range relatedNodeIDs {
+				lookupIDs = append(lookupIDs, nodeID)
+			}
+			if documents, err := s.repo.ListDocumentsByNodeIDsInGeneration(ctx, group.userID, group.generationID, lookupIDs); err == nil && len(documents) > 0 {
+				for _, document := range documents {
+					if document.NodeID == "" {
+						continue
+					}
+					docByNodeID[document.NodeID] = document
+				}
+			}
+		}
+
+		for _, item := range group.items {
+			if item == nil || item.NodeID == "" {
+				continue
+			}
+			weights := relatedWeightsBySeed[item.NodeID]
+			if len(weights) == 0 {
+				item.Related = nil
+				continue
+			}
+			related := make([]domain.RelatedMemory, 0, len(weights))
+			for nodeID, weight := range weights {
+				document, ok := docByNodeID[nodeID]
+				if !ok || document.ID == "" {
+					continue
+				}
+				related = append(related, domain.RelatedMemory{
+					ID:     document.ID,
+					Type:   string(document.Type),
+					Weight: weight,
+				})
+			}
+			sort.Slice(related, func(i, j int) bool {
+				if related[i].Weight == related[j].Weight {
+					return related[i].ID < related[j].ID
+				}
+				return related[i].Weight > related[j].Weight
+			})
+			item.Related = related
+		}
+	}
 }
 
 func (s *Service) hydrateFactLineageWithCache(ctx context.Context, item *domain.MemoryDocument, cache map[string]domain.FactLineage) {

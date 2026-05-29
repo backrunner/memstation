@@ -339,6 +339,13 @@ func (r *HybridMemoryRepository) ListEvidences(ctx context.Context, userID, node
 	return r.fallback.ListEvidences(ctx, userID, nodeID)
 }
 
+func (r *HybridMemoryRepository) ListEvidencesByNodeIDs(ctx context.Context, userID string, nodeIDs []string) ([]domain.MemoryEvidence, error) {
+	if db := currentDB(r.db); db != nil {
+		return NewPostgresMemoryRepository(db).ListEvidencesByNodeIDs(ctx, userID, nodeIDs)
+	}
+	return r.fallback.ListEvidencesByNodeIDs(ctx, userID, nodeIDs)
+}
+
 type HybridOutboxRepository struct {
 	db       runtimeconfig.DBHandle
 	fallback *InMemoryOutboxRepository

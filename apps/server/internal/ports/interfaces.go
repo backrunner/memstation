@@ -85,6 +85,7 @@ type MemoryRepository interface {
 	ListRelations(ctx context.Context, userID, generationID string, nodeIDs []string, depth int) ([]domain.MemoryRelation, error)
 	ReplaceEvidences(ctx context.Context, userID, nodeID string, evidences []domain.MemoryEvidence) error
 	ListEvidences(ctx context.Context, userID, nodeID string) ([]domain.MemoryEvidence, error)
+	ListEvidencesByNodeIDs(ctx context.Context, userID string, nodeIDs []string) ([]domain.MemoryEvidence, error)
 }
 
 type OutboxRepository interface {
