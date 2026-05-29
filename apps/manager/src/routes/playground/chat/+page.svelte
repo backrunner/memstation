@@ -100,11 +100,6 @@
     latestTurnToken: string;
   };
 
-  type LegacyChatPlaygroundDraft = Omit<
-    ChatPlaygroundThreadDraft,
-    'threadId' | 'error' | 'status' | 'pendingRequestToken' | 'latestTurnToken'
-  >;
-
   type ChatPlaygroundDraft = {
     activeThreadId: string;
     threads: ChatPlaygroundThreadDraft[];
@@ -181,7 +176,7 @@
   $: if (chatDraftKey !== activeDraftKey) {
     activeDraftKey = chatDraftKey;
     hydratingDraft = true;
-    applyPlaygroundDraft(readSessionDraft<ChatPlaygroundDraft | LegacyChatPlaygroundDraft>(chatDraftKey, chatDraftVersion));
+    applyPlaygroundDraft(readSessionDraft<ChatPlaygroundDraft>(chatDraftKey, chatDraftVersion));
     hydratingDraft = false;
     draftReady = true;
   }
@@ -327,9 +322,7 @@
     };
   }
 
-  function normalizePlaygroundDraft(
-    draft: ChatPlaygroundDraft | LegacyChatPlaygroundDraft | null
-  ): ChatPlaygroundDraft {
+  function normalizePlaygroundDraft(draft: ChatPlaygroundDraft | null): ChatPlaygroundDraft {
     if (draft && typeof draft === 'object' && Array.isArray((draft as ChatPlaygroundDraft).threads)) {
       const nextThreads = (draft as ChatPlaygroundDraft).threads.map((thread) => normalizeLoadedThreadDraft(thread));
       const fallback = nextThreads[0] ?? createThreadDraft();
@@ -338,14 +331,6 @@
           nextThreads.find((thread) => thread.threadId === (draft as ChatPlaygroundDraft).activeThreadId)?.threadId ??
           fallback.threadId,
         threads: nextThreads.length > 0 ? nextThreads : [fallback]
-      };
-    }
-
-    if (draft && typeof draft === 'object') {
-      const legacyThread = normalizeLoadedThreadDraft(draft as LegacyChatPlaygroundDraft);
-      return {
-        activeThreadId: legacyThread.threadId,
-        threads: [legacyThread]
       };
     }
 
@@ -463,7 +448,7 @@
     lastMessageCount = messages.length;
   }
 
-  function applyPlaygroundDraft(draft: ChatPlaygroundDraft | LegacyChatPlaygroundDraft | null): void {
+  function applyPlaygroundDraft(draft: ChatPlaygroundDraft | null): void {
     const next = normalizePlaygroundDraft(draft);
     const activeThread =
       next.threads.find((thread) => thread.threadId === next.activeThreadId) ??

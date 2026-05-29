@@ -50,23 +50,11 @@ func TestStoredToolResultPayloadRoundTripsWrappedMetadataAndArrayOutput(t *testi
 	}
 }
 
-func TestDecodeStoredToolResultAcceptsLegacyRawOutput(t *testing.T) {
+func TestDecodeStoredToolResultRejectsUnwrappedRawOutput(t *testing.T) {
 	t.Parallel()
 
 	raw := []byte(`{"content":[{"type":"document","source_url":"https://example.com/report.pdf"}]}`)
-	result, ok := DecodeStoredToolResult(raw)
-	if !ok {
-		t.Fatalf("expected legacy raw output to decode")
-	}
-	if result.ToolCallID != "" || result.Name != "" {
-		t.Fatalf("expected no wrapper metadata for legacy output, got %+v", result)
-	}
-	output, ok := result.Output.(map[string]any)
-	if !ok {
-		t.Fatalf("expected object output, got %#v", result.Output)
-	}
-	content, ok := output["content"].([]any)
-	if !ok || len(content) != 1 {
-		t.Fatalf("expected nested content array, got %#v", output["content"])
+	if result, ok := DecodeStoredToolResult(raw); ok {
+		t.Fatalf("expected unwrapped raw output to be rejected, got %+v", result)
 	}
 }

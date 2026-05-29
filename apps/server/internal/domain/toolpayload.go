@@ -22,8 +22,7 @@ func StoredToolResultPayload(items []ToolResult) any {
 	return payload
 }
 
-// DecodeStoredToolResult restores a persisted tool result wrapper. It also tolerates
-// older raw-output payloads by treating the whole JSON value as output when no wrapper fields exist.
+// DecodeStoredToolResult restores a persisted tool result wrapper.
 func DecodeStoredToolResult(raw []byte) (ToolResult, bool) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
@@ -40,22 +39,20 @@ func DecodeStoredToolResult(raw []byte) (ToolResult, bool) {
 		if len(value) == 0 {
 			return ToolResult{}, false
 		}
-		if hasStoredToolResultFields(value) {
-			result := ToolResult{
-				ToolCallID: stringJSONValue(value["tool_call_id"]),
-				Name:       stringJSONValue(value["name"]),
-			}
-			if output, ok := value["output"]; ok {
-				result.Output = output
-			}
-			if result.ToolCallID != "" || result.Name != "" || result.Output != nil {
-				return result, true
-			}
+		if !hasStoredToolResultFields(value) {
 			return ToolResult{}, false
 		}
-		return ToolResult{Output: value}, true
-	case []any, string, float64, bool:
-		return ToolResult{Output: value}, true
+		result := ToolResult{
+			ToolCallID: stringJSONValue(value["tool_call_id"]),
+			Name:       stringJSONValue(value["name"]),
+		}
+		if output, ok := value["output"]; ok {
+			result.Output = output
+		}
+		if result.ToolCallID != "" || result.Name != "" || result.Output != nil {
+			return result, true
+		}
+		return ToolResult{}, false
 	default:
 		return ToolResult{}, false
 	}

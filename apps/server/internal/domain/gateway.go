@@ -68,6 +68,10 @@ const (
 )
 
 const (
+	MemoryRelationSupersedes = "supersedes"
+)
+
+const (
 	StreamEventResponseStart StreamEventType = "response.start"
 	StreamEventTextDelta     StreamEventType = "text.delta"
 	StreamEventUsage         StreamEventType = "usage"
@@ -197,7 +201,7 @@ func NormalizeProvider(value string) Provider {
 	switch normalized {
 	case "", "default":
 		return ""
-	case "openai", "openai_compatible", "openai_compat", "chat_completions":
+	case "openai", "openai_compatible":
 		return ProviderOpenAICompatible
 	case "openai_responses", "responses", "response":
 		return ProviderOpenAIResponses
