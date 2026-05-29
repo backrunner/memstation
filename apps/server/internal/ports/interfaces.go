@@ -74,6 +74,8 @@ type MemoryRepository interface {
 	ListConversationDocumentsInGeneration(ctx context.Context, userID, generationID, conversationID string, includeSegments bool) ([]domain.MemoryDocument, error)
 	SearchKeywordMatches(ctx context.Context, userID, generationID, query string, limit int) ([]domain.KeywordMatch, error)
 	UpdateDocument(ctx context.Context, userID, id string, kind domain.MemoryType, content string) (domain.MemoryDocument, error)
+	ListFactLineage(ctx context.Context, userID, generationID, factID string) (domain.FactLineage, error)
+	ListFactLineageByKey(ctx context.Context, userID, generationID, factKey string) (domain.FactLineage, error)
 	ListKeyMemories(ctx context.Context, userID string, limit int) ([]domain.KeyMemory, error)
 	SearchKeyMemories(ctx context.Context, input domain.KeyMemoryQuery) ([]domain.KeyMemory, error)
 	UpsertKeyMemory(ctx context.Context, km domain.KeyMemory) error

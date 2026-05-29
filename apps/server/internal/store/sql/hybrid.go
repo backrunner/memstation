@@ -262,6 +262,20 @@ func (r *HybridMemoryRepository) UpdateDocument(ctx context.Context, userID, id 
 	return r.fallback.UpdateDocument(ctx, userID, id, kind, content)
 }
 
+func (r *HybridMemoryRepository) ListFactLineage(ctx context.Context, userID, generationID, factID string) (domain.FactLineage, error) {
+	if db := currentDB(r.db); db != nil {
+		return NewPostgresMemoryRepository(db).ListFactLineage(ctx, userID, generationID, factID)
+	}
+	return r.fallback.ListFactLineage(ctx, userID, generationID, factID)
+}
+
+func (r *HybridMemoryRepository) ListFactLineageByKey(ctx context.Context, userID, generationID, factKey string) (domain.FactLineage, error) {
+	if db := currentDB(r.db); db != nil {
+		return NewPostgresMemoryRepository(db).ListFactLineageByKey(ctx, userID, generationID, factKey)
+	}
+	return r.fallback.ListFactLineageByKey(ctx, userID, generationID, factKey)
+}
+
 func (r *HybridMemoryRepository) ListKeyMemories(ctx context.Context, userID string, limit int) ([]domain.KeyMemory, error) {
 	if db := currentDB(r.db); db != nil {
 		return NewPostgresMemoryRepository(db).ListKeyMemories(ctx, userID, limit)

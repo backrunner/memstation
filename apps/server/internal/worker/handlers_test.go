@@ -1148,8 +1148,8 @@ func TestAnalysisExtractHandlerSelectsSummaryDocumentByType(t *testing.T) {
 		t.Fatalf("store summary: %v", err)
 	}
 	if err := memories.StoreDocument(ctx, domain.MemoryDocument{
-		ID:             "fact:conv-typed-summary:recent-topic",
-		NodeID:         "node:fact:conv-typed-summary:recent-topic",
+		ID:             "fact:conv-typed-summary:prior-derived",
+		NodeID:         "node:fact:conv-typed-summary:prior-derived",
 		UserID:         "user-1",
 		ConversationID: "conv-typed-summary",
 		Type:           domain.MemoryTypeFact,

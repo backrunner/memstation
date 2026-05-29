@@ -554,6 +554,8 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 	if doc.Type != domain.MemoryTypeKeyMemory && strings.TrimSpace(doc.GenerationID) == "" {
 		doc.GenerationID = currentGenerationIDForSQL(doc.UserID)
 	}
+	hadExplicitID := strings.TrimSpace(doc.ID) != ""
+	hadExplicitNodeID := strings.TrimSpace(doc.NodeID) != ""
 	if doc.ID == "" {
 		doc.ID = uuid.NewString()
 	}
@@ -578,6 +580,17 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 		doc.TimeTier = domain.ClassifyTimeTier(doc.ActivityAt, now)
 	}
 	doc.Metadata = cloneMetadata(doc.Metadata)
+	if doc.Type == domain.MemoryTypeFact {
+		doc = ensureFactLineageMetadata(doc)
+		if groupID := factLineageGroupIDFromMetadata(doc.Metadata); groupID != "" {
+			if !hadExplicitID {
+				doc.ID = lineageRevisionID(doc)
+			}
+			if !hadExplicitNodeID {
+				doc.NodeID = "node:" + doc.ID
+			}
+		}
+	}
 	doc.Metadata["activity_at"] = doc.ActivityAt.Format(time.RFC3339)
 	doc.Metadata["time_tier"] = doc.TimeTier
 	if doc.GenerationID != "" {
@@ -676,37 +689,105 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 		supersededByIDValue := strings.TrimSpace(stringValue(doc.Metadata, "superseded_by_id"))
 		supersessionStateSpecified := metadataHasKey(doc.Metadata, "superseded_by_id") || metadataHasKey(doc.Metadata, "is_superseded")
 		incomingIsSuperseded := supersededByIDValue != "" || boolValue(doc.Metadata, "is_superseded")
-		var supersededByID any
-		if supersededByIDValue != "" {
-			supersededByID = supersededByIDValue
-		}
 		validFromSpecified := metadataHasKey(doc.Metadata, "valid_from")
 		validToSpecified := metadataHasKey(doc.Metadata, "valid_to")
 		validFrom := nullableTimeValue(doc.Metadata, "valid_from")
 		validTo := nullableTimeValue(doc.Metadata, "valid_to")
+		factKey := factKeyFromMetadata(doc.Metadata)
+		lineageGroupID := factLineageGroupID(doc.UserID, doc)
+		supersededIDs := supersededFactIDsFromMetadata(doc.Metadata)
+		if lineageGroupID == "" && (supersededByIDValue != "" || len(supersededIDs) > 0) {
+			return errors.New("fact supersession requires fact_key or lineage_group_id")
+		}
+		if err = lockFactLineageTx(ctx, tx, doc.UserID, doc.GenerationID, lineageGroupID); err != nil {
+			return err
+		}
+		if !supersessionStateSpecified {
+			existingIsSuperseded, existingSupersededByID, stateErr := existingFactSupersessionStateTx(ctx, tx, doc.UserID, doc.GenerationID, doc.ID)
+			if stateErr != nil {
+				return stateErr
+			}
+			if existingIsSuperseded || existingSupersededByID != "" {
+				incomingIsSuperseded = true
+				supersededByIDValue = existingSupersededByID
+			}
+		}
+		var supersededByID any
+		if supersededByIDValue != "" {
+			supersededByID = supersededByIDValue
+		}
+		revisionSeq := factLineageRevisionSeqFromMetadata(doc.Metadata)
+		if revisionSeq <= 0 {
+			nextSeq, seqErr := nextFactRevisionSeqTx(ctx, tx, doc.UserID, doc.GenerationID, lineageGroupID, doc.ID, doc.CreatedAt)
+			if seqErr != nil {
+				return seqErr
+			}
+			revisionSeq = nextSeq
+			doc.Metadata["revision_seq"] = revisionSeq
+		}
+		if effectiveSupersedingID := supersededByIDValue; effectiveSupersedingID != "" {
+			cycle, cycleErr := factSupersessionWouldCycleTx(ctx, tx, doc.UserID, doc.GenerationID, effectiveSupersedingID, doc.ID)
+			if cycleErr != nil {
+				return cycleErr
+			}
+			if cycle {
+				return errors.New("fact supersession cycle detected")
+			}
+		}
+		if !supersessionStateSpecified && !incomingIsSuperseded && lineageGroupID != "" && len(supersededIDs) == 0 {
+			lineageHeadIDs, headErr := currentFactLineageHeadIDsTx(ctx, tx, doc.UserID, doc.GenerationID, lineageGroupID, doc.ID)
+			if headErr != nil {
+				return headErr
+			}
+			supersededIDs = lineageHeadIDs
+			if len(supersededIDs) > 0 {
+				doc.Metadata["supersedes_fact_ids"] = supersededIDs
+			}
+		}
 		var effectiveSupersededByID string
 		err = tx.QueryRowContext(ctx, `
-            INSERT INTO facts (id, generation_id, user_id, conversation_id, node_id, category, subject, content, confidence, is_superseded, superseded_by_id, valid_from, valid_to, created_at, updated_at)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+            INSERT INTO facts (
+                id, generation_id, user_id, conversation_id, node_id,
+                category, subject, fact_key, lineage_group_id, revision_seq,
+                content, confidence, is_superseded, superseded_by_id,
+                valid_from, valid_to, created_at, updated_at
+            )
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
             ON CONFLICT (id) DO UPDATE SET
                 generation_id = EXCLUDED.generation_id,
                 content = EXCLUDED.content,
                 category = EXCLUDED.category,
                 subject = EXCLUDED.subject,
+                fact_key = COALESCE(NULLIF(EXCLUDED.fact_key, ''), facts.fact_key),
+                lineage_group_id = COALESCE(NULLIF(EXCLUDED.lineage_group_id, ''), facts.lineage_group_id),
+                revision_seq = CASE WHEN EXCLUDED.revision_seq > 0 THEN EXCLUDED.revision_seq ELSE facts.revision_seq END,
                 confidence = EXCLUDED.confidence,
-                is_superseded = CASE WHEN $16 THEN EXCLUDED.is_superseded ELSE facts.is_superseded OR EXCLUDED.is_superseded END,
-                superseded_by_id = CASE WHEN $16 THEN EXCLUDED.superseded_by_id ELSE COALESCE(facts.superseded_by_id, EXCLUDED.superseded_by_id) END,
-                valid_from = CASE WHEN $17 THEN EXCLUDED.valid_from ELSE COALESCE(EXCLUDED.valid_from, facts.valid_from) END,
-                valid_to = CASE WHEN $18 THEN EXCLUDED.valid_to ELSE COALESCE(EXCLUDED.valid_to, facts.valid_to) END,
+                is_superseded = CASE WHEN $19 THEN EXCLUDED.is_superseded ELSE facts.is_superseded OR EXCLUDED.is_superseded END,
+                superseded_by_id = CASE WHEN $19 THEN EXCLUDED.superseded_by_id ELSE COALESCE(facts.superseded_by_id, EXCLUDED.superseded_by_id) END,
+                valid_from = CASE WHEN $20 THEN EXCLUDED.valid_from ELSE COALESCE(EXCLUDED.valid_from, facts.valid_from) END,
+                valid_to = CASE WHEN $21 THEN EXCLUDED.valid_to ELSE COALESCE(EXCLUDED.valid_to, facts.valid_to) END,
                 updated_at = EXCLUDED.updated_at
             RETURNING COALESCE(superseded_by_id, '')
-		`, doc.ID, doc.GenerationID, doc.UserID, doc.ConversationID, doc.NodeID, stringValue(doc.Metadata, "category"), stringValue(doc.Metadata, "subject"), doc.Content, floatValue(doc.Metadata, "confidence", 0.8), incomingIsSuperseded, supersededByID, validFrom, validTo, doc.CreatedAt, doc.UpdatedAt, supersessionStateSpecified, validFromSpecified, validToSpecified).Scan(&effectiveSupersededByID)
+		`, doc.ID, doc.GenerationID, doc.UserID, doc.ConversationID, doc.NodeID, stringValue(doc.Metadata, "category"), stringValue(doc.Metadata, "subject"), factKey, lineageGroupID, revisionSeq, doc.Content, floatValue(doc.Metadata, "confidence", 0.8), incomingIsSuperseded, supersededByID, validFrom, validTo, doc.CreatedAt, doc.UpdatedAt, supersessionStateSpecified, validFromSpecified, validToSpecified).Scan(&effectiveSupersededByID)
 		if err == nil {
-			for _, supersededFactID := range supersededFactIDsFromMetadata(doc.Metadata) {
-				if supersededFactID == "" || supersededFactID == doc.ID {
+			if err = syncFactKeywordsTx(ctx, tx, doc); err != nil {
+				return err
+			}
+			for _, supersededFactID := range supersededIDs {
+				if supersededFactID == "" {
 					continue
 				}
-				if _, err = tx.ExecContext(ctx, `
+				if supersededFactID == doc.ID {
+					return errors.New("fact supersession cycle detected")
+				}
+				cycle, cycleErr := factSupersessionWouldCycleTx(ctx, tx, doc.UserID, doc.GenerationID, doc.ID, supersededFactID)
+				if cycleErr != nil {
+					return cycleErr
+				}
+				if cycle {
+					return errors.New("fact supersession cycle detected")
+				}
+				result, execErr := tx.ExecContext(ctx, `
                     UPDATE facts
                     SET is_superseded = TRUE,
                         superseded_by_id = $4,
@@ -716,77 +797,94 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
                       AND generation_id = $2
                       AND id = $3
                       AND id <> $4
-                `, doc.UserID, doc.GenerationID, supersededFactID, doc.ID, doc.ActivityAt, doc.UpdatedAt); err != nil {
-					return err
+                      AND COALESCE(lineage_group_id, '') = $7
+                `, doc.UserID, doc.GenerationID, supersededFactID, doc.ID, doc.ActivityAt, doc.UpdatedAt, lineageGroupID)
+				if execErr != nil {
+					return execErr
+				}
+				rowsAffected, affectedErr := result.RowsAffected()
+				if affectedErr != nil {
+					return affectedErr
+				}
+				if rowsAffected != 1 {
+					return fmt.Errorf("fact supersession target %q not found in lineage %q", supersededFactID, lineageGroupID)
 				}
 			}
 			if _, err = tx.ExecContext(ctx, `
                 DELETE FROM memory_relations
-                WHERE user_id = $1 AND relation_type = 'supersedes' AND (dst_node_id = $2 OR src_node_id = $2)
-            `, doc.UserID, doc.NodeID); err != nil {
+                WHERE user_id = $1 AND relation_type = $2 AND generation_id = $3 AND (dst_node_id = $4 OR src_node_id = $4)
+            `, doc.UserID, domain.MemoryRelationSupersedes, doc.GenerationID, doc.NodeID); err != nil {
 				return err
 			}
 
 			if effectiveSupersededByID != "" {
 				var supersedingNodeID string
 				switch scanErr := tx.QueryRowContext(ctx, `
-                    SELECT node_id FROM facts WHERE user_id = $1 AND generation_id = $2 AND id = $3
-                `, doc.UserID, doc.GenerationID, effectiveSupersededByID).Scan(&supersedingNodeID); scanErr {
+                    SELECT node_id FROM facts WHERE user_id = $1 AND generation_id = $2 AND id = $3 AND COALESCE(lineage_group_id, '') = $4
+                `, doc.UserID, doc.GenerationID, effectiveSupersededByID, lineageGroupID).Scan(&supersedingNodeID); scanErr {
 				case nil:
 					if _, err = tx.ExecContext(ctx, `
                         INSERT INTO memory_relations (id, generation_id, user_id, src_node_id, dst_node_id, relation_type, weight, source, metadata, created_at, updated_at)
-                        VALUES ($1,$2,$3,$4,$5,'supersedes',1,'fact_supersession',$6,$7,$7)
+                        VALUES ($1,$2,$3,$4,$5,$6,1,'fact_supersession',$7,$8,$8)
                         ON CONFLICT (user_id, src_node_id, dst_node_id, relation_type) DO UPDATE SET
                             generation_id = EXCLUDED.generation_id,
                             weight = EXCLUDED.weight,
                             source = EXCLUDED.source,
                             metadata = EXCLUDED.metadata,
                             updated_at = EXCLUDED.updated_at
-					`, uuid.NewString(), doc.GenerationID, doc.UserID, supersedingNodeID, doc.NodeID, marshalJSON(map[string]any{
+					`, uuid.NewString(), doc.GenerationID, doc.UserID, supersedingNodeID, doc.NodeID, domain.MemoryRelationSupersedes, marshalJSON(map[string]any{
 						"superseded_fact_id":  doc.ID,
 						"superseding_fact_id": effectiveSupersededByID,
+						"fact_key":            factKey,
+						"lineage_group_id":    lineageGroupID,
 					}), doc.UpdatedAt); err != nil {
 						return err
 					}
 				case sqlpkg.ErrNoRows:
+					return fmt.Errorf("fact supersession target %q not found in lineage %q", effectiveSupersededByID, lineageGroupID)
 				default:
 					return scanErr
 				}
 			}
 
-			rows, queryErr := tx.QueryContext(ctx, `
-                SELECT id, node_id
-                FROM facts
-                WHERE user_id = $1 AND generation_id = $2 AND superseded_by_id = $3 AND id <> $4
-            `, doc.UserID, doc.GenerationID, doc.ID, doc.ID)
-			if queryErr != nil {
-				return queryErr
-			}
-			defer rows.Close()
-			for rows.Next() {
-				var supersededFactID string
-				var supersededNodeID string
-				if err = rows.Scan(&supersededFactID, &supersededNodeID); err != nil {
+			if lineageGroupID != "" {
+				rows, queryErr := tx.QueryContext(ctx, `
+                    SELECT id, node_id
+                    FROM facts
+                    WHERE user_id = $1 AND generation_id = $2 AND superseded_by_id = $3 AND id <> $4
+                      AND COALESCE(lineage_group_id, '') = $5
+                `, doc.UserID, doc.GenerationID, doc.ID, doc.ID, lineageGroupID)
+				if queryErr != nil {
+					return queryErr
+				}
+				defer rows.Close()
+				for rows.Next() {
+					var supersededFactID string
+					var supersededNodeID string
+					if err = rows.Scan(&supersededFactID, &supersededNodeID); err != nil {
+						return err
+					}
+					if _, err = tx.ExecContext(ctx, `
+                        INSERT INTO memory_relations (id, generation_id, user_id, src_node_id, dst_node_id, relation_type, weight, source, metadata, created_at, updated_at)
+                        VALUES ($1,$2,$3,$4,$5,$6,1,'fact_supersession',$7,$8,$8)
+                        ON CONFLICT (user_id, src_node_id, dst_node_id, relation_type) DO UPDATE SET
+                            generation_id = EXCLUDED.generation_id,
+                            weight = EXCLUDED.weight,
+                            source = EXCLUDED.source,
+                            metadata = EXCLUDED.metadata,
+                            updated_at = EXCLUDED.updated_at
+                    `, uuid.NewString(), doc.GenerationID, doc.UserID, doc.NodeID, supersededNodeID, domain.MemoryRelationSupersedes, marshalJSON(map[string]any{
+						"superseded_fact_id":  supersededFactID,
+						"superseding_fact_id": doc.ID,
+						"fact_key":            factKey,
+						"lineage_group_id":    lineageGroupID,
+					}), doc.UpdatedAt); err != nil {
+						return err
+					}
+				}
+				if err = rows.Err(); err != nil {
 					return err
 				}
-				if _, err = tx.ExecContext(ctx, `
-                    INSERT INTO memory_relations (id, generation_id, user_id, src_node_id, dst_node_id, relation_type, weight, source, metadata, created_at, updated_at)
-                    VALUES ($1,$2,$3,$4,$5,'supersedes',1,'fact_supersession',$6,$7,$7)
-                    ON CONFLICT (user_id, src_node_id, dst_node_id, relation_type) DO UPDATE SET
-                        generation_id = EXCLUDED.generation_id,
-                        weight = EXCLUDED.weight,
-                        source = EXCLUDED.source,
-                        metadata = EXCLUDED.metadata,
-                        updated_at = EXCLUDED.updated_at
-                `, uuid.NewString(), doc.GenerationID, doc.UserID, doc.NodeID, supersededNodeID, marshalJSON(map[string]any{
-					"superseded_fact_id":  supersededFactID,
-					"superseding_fact_id": doc.ID,
-				}), doc.UpdatedAt); err != nil {
-					return err
-				}
-			}
-			if err = rows.Err(); err != nil {
-				return err
 			}
 		}
 	default:
@@ -1102,7 +1200,23 @@ func (r *PostgresMemoryRepository) listConversationByType(ctx context.Context, u
 	case domain.MemoryTypeFact:
 		query = `
 	            SELECT f.id, f.node_id, f.generation_id, f.conversation_id, f.content, COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, f.updated_at), COALESCE(n.time_tier, ''), f.created_at, f.updated_at,
-	                   json_build_object('category', f.category, 'confidence', f.confidence, 'is_superseded', f.is_superseded, 'valid_from', f.valid_from, 'valid_to', f.valid_to, 'superseded_by_id', f.superseded_by_id)
+	                   json_build_object(
+	                       'category', f.category,
+	                       'subject', f.subject,
+	                       'fact_key', f.fact_key,
+	                       'lineage_group_id', f.lineage_group_id,
+	                       'revision_seq', f.revision_seq,
+	                       'confidence', f.confidence,
+	                       'is_superseded', f.is_superseded,
+	                       'valid_from', f.valid_from,
+	                       'valid_to', f.valid_to,
+	                       'superseded_by_id', f.superseded_by_id,
+	                       'keywords', COALESCE((
+	                           SELECT json_agg(k.keyword ORDER BY k.weight DESC)
+	                           FROM memory_keywords k
+	                           WHERE k.summary_id = f.id AND k.user_id = f.user_id
+	                       ), '[]'::json)
+	                   )
             FROM facts f
             LEFT JOIN memory_nodes n ON n.id = f.node_id
             WHERE f.user_id = $1 AND f.conversation_id = $2` + generationFilterClause("f.generation_id", 4, userID, generationID, false) + `
@@ -1137,15 +1251,7 @@ func (r *PostgresMemoryRepository) listConversationByType(ctx context.Context, u
 			}
 		}
 		item.TimeTier = domain.ParseTimeTier(timeTier)
-		if item.Metadata == nil {
-			item.Metadata = map[string]any{}
-		}
-		item.Metadata["activity_at"] = item.ActivityAt.Format(time.RFC3339)
-		item.Metadata["time_tier"] = item.TimeTier
-		item.Metadata["temporal"] = temporalMetadata(item.UserID, item.ActivityAt, item.TimeTier)
-		if item.GenerationID != "" {
-			item.Metadata["generation_id"] = item.GenerationID
-		}
+		item = attachDocumentRuntimeMetadata(item)
 		out = append(out, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -1171,11 +1277,13 @@ func (r *PostgresMemoryRepository) SearchKeywordMatches(ctx context.Context, use
 	args := make([]any, 0, len(terms)+4)
 	args = append(args, userID)
 	termPlaceholders := make([]string, 0, len(terms))
-	contentPredicates := make([]string, 0, len(terms))
+	summaryPredicates := make([]string, 0, len(terms))
+	factPredicates := make([]string, 0, len(terms))
 	for _, term := range terms {
 		placeholder := fmt.Sprintf("$%d", len(args)+1)
 		termPlaceholders = append(termPlaceholders, placeholder)
-		contentPredicates = append(contentPredicates, fmt.Sprintf("LOWER(s.summary) LIKE '%%' || %s || '%%'", placeholder))
+		summaryPredicates = append(summaryPredicates, fmt.Sprintf("LOWER(s.summary) LIKE '%%' || %s || '%%'", placeholder))
+		factPredicates = append(factPredicates, fmt.Sprintf("LOWER(COALESCE(f.fact_key, '')) LIKE '%%' || %s || '%%'", placeholder))
 		args = append(args, term)
 	}
 
@@ -1197,27 +1305,58 @@ func (r *PostgresMemoryRepository) SearchKeywordMatches(ctx context.Context, use
             )
         `, strings.Join(termPlaceholders, ","))
 	}
-	contentPredicate := "FALSE"
-	if len(contentPredicates) > 0 {
-		contentPredicate = strings.Join(contentPredicates, " OR ")
+	summaryPredicate := "FALSE"
+	if len(summaryPredicates) > 0 {
+		summaryPredicate = strings.Join(summaryPredicates, " OR ")
+	}
+	factPredicate := "FALSE"
+	if len(factPredicates) > 0 {
+		factPredicate = strings.Join(factPredicates, " OR ")
 	}
 
 	querySQL := fmt.Sprintf(`
-        SELECT
-            s.node_id,
-            s.summary,
-            COALESCE((
-                SELECT json_agg(k.keyword ORDER BY k.weight DESC)
-                FROM memory_keywords k
-                WHERE k.summary_id = s.id AND k.user_id = s.user_id
-            ), '[]'::json)
-        FROM memory_summaries s
-        WHERE s.user_id = $1
-          %s
-          AND ((%s) OR (%s))
-        ORDER BY s.updated_at DESC
+        SELECT node_id, content, keywords
+        FROM (
+            SELECT
+                s.node_id,
+                s.summary AS content,
+                COALESCE((
+                    SELECT json_agg(k.keyword ORDER BY k.weight DESC)
+                    FROM memory_keywords k
+                    WHERE k.summary_id = s.id AND k.user_id = s.user_id
+                ), '[]'::json) AS keywords,
+                s.updated_at AS sort_time
+            FROM memory_summaries s
+            WHERE s.user_id = $1
+              %s
+              AND ((%s) OR (%s))
+            UNION ALL
+            SELECT
+                f.node_id,
+                f.content,
+                COALESCE((
+                    SELECT json_agg(k.keyword ORDER BY k.weight DESC)
+                    FROM memory_keywords k
+                    WHERE k.summary_id = f.id AND k.user_id = f.user_id
+                ), CASE
+                    WHEN f.fact_key IS NULL OR f.fact_key = '' THEN '[]'::json
+                    ELSE json_build_array(f.fact_key)
+                END) AS keywords,
+                f.updated_at AS sort_time
+            FROM facts f
+            WHERE f.user_id = $1
+              %s
+              AND ((%s) OR EXISTS (
+                  SELECT 1
+                  FROM memory_keywords mk
+                  WHERE mk.user_id = f.user_id
+                    AND mk.summary_id = f.id
+                    AND mk.keyword IN (%s)
+              ))
+        ) matches
+        ORDER BY sort_time DESC
         LIMIT $%d
-    `, generationClause, keywordPredicate, contentPredicate, limitPosition)
+    `, generationClause, keywordPredicate, summaryPredicate, generationFilterClause("f.generation_id", generationStart, userID, generationID, false), factPredicate, strings.Join(termPlaceholders, ","), limitPosition)
 
 	rows, err := r.db.QueryContext(ctx, querySQL, args...)
 	if err != nil {
@@ -1276,6 +1415,267 @@ func (r *PostgresMemoryRepository) UpdateDocument(ctx context.Context, userID, i
 		return domain.MemoryDocument{}, err
 	}
 	return r.GetDocument(ctx, userID, id, kind)
+}
+
+func (r *PostgresMemoryRepository) ListFactLineage(ctx context.Context, userID, generationID, factID string) (domain.FactLineage, error) {
+	anchor, err := r.GetDocumentInGeneration(ctx, userID, generationID, factID, domain.MemoryTypeFact)
+	if err != nil {
+		return domain.FactLineage{}, err
+	}
+	lineageGroupID := factLineageGroupIDFromMetadata(anchor.Metadata)
+	if lineageGroupID == "" {
+		entry := factLineageEntryFromDocument(anchor)
+		entry.IsHead = true
+		return domain.FactLineage{
+			CurrentHeadID:  anchor.ID,
+			FactKey:        factKeyFromMetadata(anchor.Metadata),
+			LineageGroupID: lineageGroupID,
+			Entries:        []domain.FactLineageEntry{entry},
+			RevisionDepth:  1,
+			LineagePath:    []string{anchor.ID},
+		}, nil
+	}
+	return r.ListFactLineageByKey(ctx, userID, anchor.GenerationID, lineageGroupID)
+}
+
+func (r *PostgresMemoryRepository) ListFactLineageByKey(ctx context.Context, userID, generationID, factKey string) (domain.FactLineage, error) {
+	lineageGroupID := strings.TrimSpace(factKey)
+	if !strings.HasPrefix(lineageGroupID, "fact-lineage:") {
+		lineageGroupID = "fact-lineage:" + strings.TrimSpace(userID) + ":" + sanitizeLineageKey(factKey)
+	}
+	docs, err := r.listFactsByLineageGroup(ctx, userID, generationID, lineageGroupID)
+	if err != nil {
+		return domain.FactLineage{}, err
+	}
+	entries := make([]domain.FactLineageEntry, 0, len(docs))
+	for _, doc := range docs {
+		entries = append(entries, factLineageEntryFromDocument(doc))
+	}
+	lineage := factLineageFromEntries(entries)
+	for idx := range lineage.Entries {
+		lineage.Entries[idx].IsHead = lineage.Entries[idx].FactID == lineage.CurrentHeadID
+	}
+	return lineage, nil
+}
+
+func (r *PostgresMemoryRepository) listFactsByLineageGroup(ctx context.Context, userID, generationID, lineageGroupID string) ([]domain.MemoryDocument, error) {
+	query := `
+        SELECT f.id, f.node_id, f.generation_id, f.conversation_id, f.content,
+               COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1),
+               COALESCE(n.activity_at, f.updated_at), COALESCE(n.time_tier, ''),
+               f.created_at, f.updated_at,
+               json_build_object(
+                   'category', f.category,
+                   'subject', f.subject,
+                   'fact_key', f.fact_key,
+                   'lineage_group_id', f.lineage_group_id,
+                   'revision_seq', f.revision_seq,
+                   'confidence', f.confidence,
+                   'is_superseded', f.is_superseded,
+                   'valid_from', f.valid_from,
+                   'valid_to', f.valid_to,
+                   'superseded_by_id', f.superseded_by_id,
+                   'keywords', COALESCE((
+                       SELECT json_agg(k.keyword ORDER BY k.weight DESC)
+                       FROM memory_keywords k
+                       WHERE k.summary_id = f.id AND k.user_id = f.user_id
+                   ), '[]'::json)
+               )
+        FROM facts f
+        LEFT JOIN memory_nodes n ON n.id = f.node_id
+        WHERE f.user_id = $1 AND COALESCE(f.lineage_group_id, '') = $2` + generationFilterClause("f.generation_id", 3, userID, generationID, false) + `
+        ORDER BY f.revision_seq ASC, f.created_at ASC, f.id ASC
+    `
+	args := []any{userID, lineageGroupID}
+	args = appendGenerationArg(args, userID, generationID)
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]domain.MemoryDocument, 0)
+	for rows.Next() {
+		var item domain.MemoryDocument
+		var metadataBytes []byte
+		var timeTier string
+		item.UserID = userID
+		item.Type = domain.MemoryTypeFact
+		if err := rows.Scan(&item.ID, &item.NodeID, &item.GenerationID, &item.ConversationID, &item.Content, &item.Importance, &item.DecayFactor, &item.ActivityAt, &timeTier, &item.CreatedAt, &item.UpdatedAt, &metadataBytes); err != nil {
+			return nil, err
+		}
+		if len(metadataBytes) > 0 {
+			item.Metadata = map[string]any{}
+			if err := json.Unmarshal(metadataBytes, &item.Metadata); err != nil {
+				return nil, err
+			}
+		}
+		item.TimeTier = domain.ParseTimeTier(timeTier)
+		item = attachDocumentRuntimeMetadata(item)
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func nextFactRevisionSeqTx(ctx context.Context, tx *sqlpkg.Tx, userID, generationID, lineageGroupID, factID string, createdAt time.Time) (int, error) {
+	if lineageGroupID == "" {
+		return 1, nil
+	}
+	var existingSeq int
+	switch err := tx.QueryRowContext(ctx, `
+        SELECT COALESCE(revision_seq, 0)
+        FROM facts
+        WHERE user_id = $1 AND generation_id = $2 AND id = $3 AND COALESCE(lineage_group_id, '') = $4
+    `, userID, generationID, factID, lineageGroupID).Scan(&existingSeq); err {
+	case nil:
+		if existingSeq > 0 {
+			return existingSeq, nil
+		}
+	case sqlpkg.ErrNoRows:
+	default:
+		return 0, err
+	}
+
+	var maxSeq int
+	if err := tx.QueryRowContext(ctx, `
+        SELECT COALESCE(MAX(revision_seq), 0)
+        FROM facts
+        WHERE user_id = $1 AND generation_id = $2 AND COALESCE(lineage_group_id, '') = $3
+    `, userID, generationID, lineageGroupID).Scan(&maxSeq); err != nil {
+		return 0, err
+	}
+	if maxSeq <= 0 && !createdAt.IsZero() {
+		return 1, nil
+	}
+	return maxSeq + 1, nil
+}
+
+func lockFactLineageTx(ctx context.Context, tx *sqlpkg.Tx, userID, generationID, lineageGroupID string) error {
+	if tx == nil || strings.TrimSpace(lineageGroupID) == "" {
+		return nil
+	}
+	_, err := tx.ExecContext(ctx, `
+        SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))
+	`, strings.TrimSpace(userID)+"\x1f"+strings.TrimSpace(generationID), strings.TrimSpace(lineageGroupID))
+	return err
+}
+
+func existingFactSupersessionStateTx(ctx context.Context, tx *sqlpkg.Tx, userID, generationID, factID string) (bool, string, error) {
+	var isSuperseded bool
+	var supersededByID string
+	switch err := tx.QueryRowContext(ctx, `
+        SELECT is_superseded, COALESCE(superseded_by_id, '')
+        FROM facts
+        WHERE user_id = $1 AND generation_id = $2 AND id = $3
+    `, userID, generationID, factID).Scan(&isSuperseded, &supersededByID); err {
+	case nil:
+		return isSuperseded, supersededByID, nil
+	case sqlpkg.ErrNoRows:
+		return false, "", nil
+	default:
+		return false, "", err
+	}
+}
+
+func factSupersessionWouldCycleTx(ctx context.Context, tx *sqlpkg.Tx, userID, generationID, newerFactID, olderFactID string) (bool, error) {
+	newerFactID = strings.TrimSpace(newerFactID)
+	olderFactID = strings.TrimSpace(olderFactID)
+	if newerFactID == "" || olderFactID == "" {
+		return false, nil
+	}
+	if newerFactID == olderFactID {
+		return true, nil
+	}
+	var exists bool
+	err := tx.QueryRowContext(ctx, `
+        WITH RECURSIVE chain(id, superseded_by_id, depth) AS (
+            SELECT id, superseded_by_id, 0
+            FROM facts
+            WHERE user_id = $1 AND generation_id = $2 AND id = $3
+            UNION ALL
+            SELECT f.id, f.superseded_by_id, chain.depth + 1
+            FROM facts f
+            JOIN chain ON f.id = chain.superseded_by_id
+            WHERE f.user_id = $1
+              AND f.generation_id = $2
+              AND chain.depth < 128
+              AND chain.superseded_by_id IS NOT NULL
+              AND chain.superseded_by_id <> ''
+        )
+        SELECT EXISTS(SELECT 1 FROM chain WHERE id = $4)
+    `, userID, generationID, newerFactID, olderFactID).Scan(&exists)
+	return exists, err
+}
+
+func currentFactLineageHeadIDsTx(ctx context.Context, tx *sqlpkg.Tx, userID, generationID, lineageGroupID, excludeFactID string) ([]string, error) {
+	if lineageGroupID == "" {
+		return nil, nil
+	}
+	rows, err := tx.QueryContext(ctx, `
+        SELECT id
+        FROM facts
+        WHERE user_id = $1
+          AND generation_id = $2
+          AND COALESCE(lineage_group_id, '') = $3
+          AND id <> $4
+          AND is_superseded = FALSE
+          AND superseded_by_id IS NULL
+        ORDER BY revision_seq DESC, updated_at DESC
+    `, userID, generationID, lineageGroupID, excludeFactID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func syncFactKeywordsTx(ctx context.Context, tx *sqlpkg.Tx, doc domain.MemoryDocument) error {
+	keywords := uniqueSortedStrings(append(stringSlice(doc.Metadata, "keywords"), factKeyFromMetadata(doc.Metadata)))
+	if len(keywords) == 0 {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM memory_keywords WHERE summary_id = $1 AND user_id = $2`, doc.ID, doc.UserID); err != nil {
+		return err
+	}
+	for idx, keyword := range keywords {
+		if _, err := tx.ExecContext(ctx, `
+            INSERT INTO memory_keywords (id, user_id, summary_id, keyword, weight, created_at, updated_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7)
+        `, fmt.Sprintf("%s:fact:%d", doc.ID, idx), doc.UserID, doc.ID, keyword, 1.0-float64(idx)*0.08, doc.CreatedAt, doc.UpdatedAt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func attachDocumentRuntimeMetadata(item domain.MemoryDocument) domain.MemoryDocument {
+	if item.Metadata == nil {
+		item.Metadata = map[string]any{}
+	}
+	item.Metadata["activity_at"] = item.ActivityAt.Format(time.RFC3339)
+	item.Metadata["time_tier"] = item.TimeTier
+	item.Metadata["temporal"] = temporalMetadata(item.UserID, item.ActivityAt, item.TimeTier)
+	if item.GenerationID != "" {
+		item.Metadata["generation_id"] = item.GenerationID
+	}
+	if item.Type == domain.MemoryTypeFact {
+		item.Lineage = &domain.MemoryLineageMeta{
+			FactKey:        factKeyFromMetadata(item.Metadata),
+			LineageGroupID: factLineageGroupIDFromMetadata(item.Metadata),
+			RevisionSeq:    factLineageRevisionSeqFromMetadata(item.Metadata),
+			GenerationID:   item.GenerationID,
+			CurrentHeadID:  item.ID,
+		}
+	}
+	return item
 }
 
 func (r *PostgresMemoryRepository) ListKeyMemories(ctx context.Context, userID string, limit int) ([]domain.KeyMemory, error) {
@@ -1671,7 +2071,23 @@ func (r *PostgresMemoryRepository) listByType(ctx context.Context, userID, gener
 	case domain.MemoryTypeFact:
 		query = `
 	            SELECT f.id, f.node_id, f.generation_id, f.conversation_id, f.content, COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, f.updated_at), COALESCE(n.time_tier, ''), f.created_at, f.updated_at,
-	                   json_build_object('category', f.category, 'confidence', f.confidence, 'is_superseded', f.is_superseded, 'valid_from', f.valid_from, 'valid_to', f.valid_to, 'superseded_by_id', f.superseded_by_id)
+	                   json_build_object(
+	                       'category', f.category,
+	                       'subject', f.subject,
+	                       'fact_key', f.fact_key,
+	                       'lineage_group_id', f.lineage_group_id,
+	                       'revision_seq', f.revision_seq,
+	                       'confidence', f.confidence,
+	                       'is_superseded', f.is_superseded,
+	                       'valid_from', f.valid_from,
+	                       'valid_to', f.valid_to,
+	                       'superseded_by_id', f.superseded_by_id,
+	                       'keywords', COALESCE((
+	                           SELECT json_agg(k.keyword ORDER BY k.weight DESC)
+	                           FROM memory_keywords k
+	                           WHERE k.summary_id = f.id AND k.user_id = f.user_id
+	                       ), '[]'::json)
+	                   )
             FROM facts f
             LEFT JOIN memory_nodes n ON n.id = f.node_id
             WHERE f.user_id = $1` + generationFilterClause("f.generation_id", 3, userID, generationID, false) + `
@@ -1716,15 +2132,7 @@ func (r *PostgresMemoryRepository) listByType(ctx context.Context, userID, gener
 			}
 		}
 		item.TimeTier = domain.ParseTimeTier(timeTier)
-		if item.Metadata == nil {
-			item.Metadata = map[string]any{}
-		}
-		item.Metadata["activity_at"] = item.ActivityAt.Format(time.RFC3339)
-		item.Metadata["time_tier"] = item.TimeTier
-		item.Metadata["temporal"] = temporalMetadata(item.UserID, item.ActivityAt, item.TimeTier)
-		if item.GenerationID != "" {
-			item.Metadata["generation_id"] = item.GenerationID
-		}
+		item = attachDocumentRuntimeMetadata(item)
 		out = append(out, item)
 	}
 	return out, rows.Err()

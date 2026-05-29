@@ -35,8 +35,20 @@ func TestAnalyzeConversationBuildsFactImpressionAndRelations(t *testing.T) {
 		t.Fatalf("analyze conversation: %v", err)
 	}
 
-	if result.Fact.ID != FactDocumentID("conv-1") {
+	if !strings.HasPrefix(result.Fact.ID, "fact:conv_1:") {
 		t.Fatalf("unexpected fact id: %s", result.Fact.ID)
+	}
+	if result.Fact.Metadata["fact_key"] == "" {
+		t.Fatalf("expected fact key metadata, got %+v", result.Fact.Metadata)
+	}
+	if result.Fact.Metadata["lineage_group_id"] == "" {
+		t.Fatalf("expected lineage group metadata, got %+v", result.Fact.Metadata)
+	}
+	if !strings.HasPrefix(result.Fact.Metadata["lineage_group_id"].(string), "fact-lineage:user-1:") {
+		t.Fatalf("expected unsanitized user id in lineage group, got %+v", result.Fact.Metadata)
+	}
+	if result.Fact.Metadata["lineage_revision_key"] == "" {
+		t.Fatalf("expected lineage revision metadata, got %+v", result.Fact.Metadata)
 	}
 	if !strings.Contains(strings.ToLower(result.Fact.Content), "memstation") {
 		t.Fatalf("expected fact content to reference summary topic, got %q", result.Fact.Content)
@@ -103,9 +115,87 @@ func TestAnalyzeConversationMarksConflictingLocationFact(t *testing.T) {
 	if result.Fact.Metadata["category"] != "location" {
 		t.Fatalf("expected location category, got %+v", result.Fact.Metadata)
 	}
+	if result.Fact.Metadata["lineage_group_id"] == "" {
+		t.Fatalf("expected lineage group metadata, got %+v", result.Fact.Metadata)
+	}
 	ids, ok := result.Fact.Metadata["supersedes_fact_ids"].([]string)
 	if !ok || len(ids) != 1 || ids[0] != "fact-old-location" {
 		t.Fatalf("expected old location fact to be superseded, got %+v", result.Fact.Metadata)
+	}
+}
+
+func TestAnalyzeConversationExtractsMultipleStructuredFacts(t *testing.T) {
+	t.Parallel()
+
+	service := NewService()
+	result, err := service.AnalyzeConversation(context.Background(), Input{
+		UserID:         "user-1",
+		ConversationID: "conv-preference-plan",
+		Summary: domain.MemoryDocument{
+			ID:      "summary:conv-preference-plan:v1",
+			NodeID:  "node:summary:conv-preference-plan:v1",
+			UserID:  "user-1",
+			Type:    domain.MemoryTypeSummary,
+			Content: "The user prefers a light UI theme and plans to move to Shanghai next month.",
+		},
+	})
+	if err != nil {
+		t.Fatalf("analyze conversation: %v", err)
+	}
+	if len(result.Facts) < 2 {
+		t.Fatalf("expected multiple structured facts, got %+v", result.Facts)
+	}
+	keys := map[string]struct{}{}
+	for _, fact := range result.Facts {
+		key, _ := fact.Metadata["fact_key"].(string)
+		keys[key] = struct{}{}
+		if fact.Metadata["lineage_group_id"] == "" || fact.Metadata["lineage_revision_key"] == "" {
+			t.Fatalf("expected lineage metadata on fact %+v", fact.Metadata)
+		}
+	}
+	if _, ok := keys["preference_ui_theme"]; !ok {
+		t.Fatalf("expected preference fact, got keys %+v", keys)
+	}
+	if _, ok := keys["plan_relocation"]; !ok {
+		t.Fatalf("expected plan fact, got keys %+v", keys)
+	}
+	if len(result.Relations) != len(result.Facts)*2+1 {
+		t.Fatalf("expected summary/fact/impression relations for all facts, got %d relations for %d facts", len(result.Relations), len(result.Facts))
+	}
+}
+
+func TestAnalyzeConversationKeepsDistinctFactKeysForUnrelatedPreferenceAndPlans(t *testing.T) {
+	t.Parallel()
+
+	service := NewService()
+	result, err := service.AnalyzeConversation(context.Background(), Input{
+		UserID:         "user-1",
+		ConversationID: "conv-distinct-facts",
+		Summary: domain.MemoryDocument{
+			ID:      "summary:conv-distinct-facts:v1",
+			NodeID:  "node:summary:conv-distinct-facts:v1",
+			UserID:  "user-1",
+			Type:    domain.MemoryTypeSummary,
+			Content: "The user prefers a compact UI layout. The user plans to renew their passport. The gateway service deadline is next week.",
+		},
+	})
+	if err != nil {
+		t.Fatalf("analyze conversation: %v", err)
+	}
+	keys := map[string]struct{}{}
+	for _, fact := range result.Facts {
+		if key, _ := fact.Metadata["fact_key"].(string); key != "" {
+			keys[key] = struct{}{}
+		}
+	}
+	if _, ok := keys["preference_ui_layout"]; !ok {
+		t.Fatalf("expected layout preference key, got %+v", keys)
+	}
+	if _, ok := keys["user_plan_passport"]; !ok {
+		t.Fatalf("expected scoped passport plan key, got %+v", keys)
+	}
+	if _, ok := keys["work_schedule_gateway"]; !ok {
+		t.Fatalf("expected scoped gateway schedule key, got %+v", keys)
 	}
 }
 

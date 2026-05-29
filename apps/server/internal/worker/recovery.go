@@ -238,8 +238,8 @@ func ValidateRecoveryReport(report RecoveryReport, maxDrain time.Duration) error
 	if report.SummaryDocuments != report.Conversations {
 		return fmt.Errorf("expected %d summary docs, got %d", report.Conversations, report.SummaryDocuments)
 	}
-	if report.FactDocuments != report.Conversations {
-		return fmt.Errorf("expected %d fact docs, got %d", report.Conversations, report.FactDocuments)
+	if report.FactDocuments < report.Conversations {
+		return fmt.Errorf("expected at least %d fact docs, got %d", report.Conversations, report.FactDocuments)
 	}
 	if report.ImpressionDocuments != report.Conversations {
 		return fmt.Errorf("expected %d impression docs, got %d", report.Conversations, report.ImpressionDocuments)

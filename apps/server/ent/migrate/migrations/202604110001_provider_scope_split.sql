@@ -77,10 +77,10 @@ INSERT INTO provider_credentials_v2 (
 SELECT
   'embedding',
   'openai_compatible',
-  legacy.embedding_api_key_encrypted,
-  legacy.embedding_base_url,
-  legacy.created_at,
-  legacy.updated_at
+  previous_embedding.embedding_api_key_encrypted,
+  previous_embedding.embedding_base_url,
+  previous_embedding.created_at,
+  previous_embedding.updated_at
 FROM (
   SELECT
     embedding_api_key_encrypted,
@@ -92,7 +92,7 @@ FROM (
      OR COALESCE(BTRIM(embedding_api_key_encrypted), '') <> ''
   ORDER BY updated_at DESC, created_at DESC
   LIMIT 1
-) AS legacy
+) AS previous_embedding
 ON CONFLICT (scope, provider) DO NOTHING;
 
 DROP TABLE provider_credentials;

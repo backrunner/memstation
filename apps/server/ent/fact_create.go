@@ -94,6 +94,48 @@ func (_c *FactCreate) SetNillableSubject(v *string) *FactCreate {
 	return _c
 }
 
+// SetFactKey sets the "fact_key" field.
+func (_c *FactCreate) SetFactKey(v string) *FactCreate {
+	_c.mutation.SetFactKey(v)
+	return _c
+}
+
+// SetNillableFactKey sets the "fact_key" field if the given value is not nil.
+func (_c *FactCreate) SetNillableFactKey(v *string) *FactCreate {
+	if v != nil {
+		_c.SetFactKey(*v)
+	}
+	return _c
+}
+
+// SetLineageGroupID sets the "lineage_group_id" field.
+func (_c *FactCreate) SetLineageGroupID(v string) *FactCreate {
+	_c.mutation.SetLineageGroupID(v)
+	return _c
+}
+
+// SetNillableLineageGroupID sets the "lineage_group_id" field if the given value is not nil.
+func (_c *FactCreate) SetNillableLineageGroupID(v *string) *FactCreate {
+	if v != nil {
+		_c.SetLineageGroupID(*v)
+	}
+	return _c
+}
+
+// SetRevisionSeq sets the "revision_seq" field.
+func (_c *FactCreate) SetRevisionSeq(v int) *FactCreate {
+	_c.mutation.SetRevisionSeq(v)
+	return _c
+}
+
+// SetNillableRevisionSeq sets the "revision_seq" field if the given value is not nil.
+func (_c *FactCreate) SetNillableRevisionSeq(v *int) *FactCreate {
+	if v != nil {
+		_c.SetRevisionSeq(*v)
+	}
+	return _c
+}
+
 // SetContent sets the "content" field.
 func (_c *FactCreate) SetContent(v string) *FactCreate {
 	_c.mutation.SetContent(v)
@@ -213,6 +255,10 @@ func (_c *FactCreate) defaults() {
 		v := fact.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.RevisionSeq(); !ok {
+		v := fact.DefaultRevisionSeq
+		_c.mutation.SetRevisionSeq(v)
+	}
 	if _, ok := _c.mutation.Confidence(); !ok {
 		v := fact.DefaultConfidence
 		_c.mutation.SetConfidence(v)
@@ -239,6 +285,9 @@ func (_c *FactCreate) check() error {
 	}
 	if _, ok := _c.mutation.NodeID(); !ok {
 		return &ValidationError{Name: "node_id", err: errors.New(`ent: missing required field "Fact.node_id"`)}
+	}
+	if _, ok := _c.mutation.RevisionSeq(); !ok {
+		return &ValidationError{Name: "revision_seq", err: errors.New(`ent: missing required field "Fact.revision_seq"`)}
 	}
 	if _, ok := _c.mutation.Content(); !ok {
 		return &ValidationError{Name: "content", err: errors.New(`ent: missing required field "Fact.content"`)}
@@ -302,6 +351,18 @@ func (_c *FactCreate) createSpec() (*Fact, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Subject(); ok {
 		_spec.SetField(fact.FieldSubject, field.TypeString, value)
 		_node.Subject = value
+	}
+	if value, ok := _c.mutation.FactKey(); ok {
+		_spec.SetField(fact.FieldFactKey, field.TypeString, value)
+		_node.FactKey = value
+	}
+	if value, ok := _c.mutation.LineageGroupID(); ok {
+		_spec.SetField(fact.FieldLineageGroupID, field.TypeString, value)
+		_node.LineageGroupID = value
+	}
+	if value, ok := _c.mutation.RevisionSeq(); ok {
+		_spec.SetField(fact.FieldRevisionSeq, field.TypeInt, value)
+		_node.RevisionSeq = value
 	}
 	if value, ok := _c.mutation.Content(); ok {
 		_spec.SetField(fact.FieldContent, field.TypeString, value)

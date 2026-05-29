@@ -89,6 +89,21 @@ func Subject(v string) predicate.Fact {
 	return predicate.Fact(sql.FieldEQ(FieldSubject, v))
 }
 
+// FactKey applies equality check predicate on the "fact_key" field. It's identical to FactKeyEQ.
+func FactKey(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldEQ(FieldFactKey, v))
+}
+
+// LineageGroupID applies equality check predicate on the "lineage_group_id" field. It's identical to LineageGroupIDEQ.
+func LineageGroupID(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldEQ(FieldLineageGroupID, v))
+}
+
+// RevisionSeq applies equality check predicate on the "revision_seq" field. It's identical to RevisionSeqEQ.
+func RevisionSeq(v int) predicate.Fact {
+	return predicate.Fact(sql.FieldEQ(FieldRevisionSeq, v))
+}
+
 // Content applies equality check predicate on the "content" field. It's identical to ContentEQ.
 func Content(v string) predicate.Fact {
 	return predicate.Fact(sql.FieldEQ(FieldContent, v))
@@ -542,6 +557,196 @@ func SubjectEqualFold(v string) predicate.Fact {
 // SubjectContainsFold applies the ContainsFold predicate on the "subject" field.
 func SubjectContainsFold(v string) predicate.Fact {
 	return predicate.Fact(sql.FieldContainsFold(FieldSubject, v))
+}
+
+// FactKeyEQ applies the EQ predicate on the "fact_key" field.
+func FactKeyEQ(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldEQ(FieldFactKey, v))
+}
+
+// FactKeyNEQ applies the NEQ predicate on the "fact_key" field.
+func FactKeyNEQ(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldNEQ(FieldFactKey, v))
+}
+
+// FactKeyIn applies the In predicate on the "fact_key" field.
+func FactKeyIn(vs ...string) predicate.Fact {
+	return predicate.Fact(sql.FieldIn(FieldFactKey, vs...))
+}
+
+// FactKeyNotIn applies the NotIn predicate on the "fact_key" field.
+func FactKeyNotIn(vs ...string) predicate.Fact {
+	return predicate.Fact(sql.FieldNotIn(FieldFactKey, vs...))
+}
+
+// FactKeyGT applies the GT predicate on the "fact_key" field.
+func FactKeyGT(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldGT(FieldFactKey, v))
+}
+
+// FactKeyGTE applies the GTE predicate on the "fact_key" field.
+func FactKeyGTE(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldGTE(FieldFactKey, v))
+}
+
+// FactKeyLT applies the LT predicate on the "fact_key" field.
+func FactKeyLT(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldLT(FieldFactKey, v))
+}
+
+// FactKeyLTE applies the LTE predicate on the "fact_key" field.
+func FactKeyLTE(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldLTE(FieldFactKey, v))
+}
+
+// FactKeyContains applies the Contains predicate on the "fact_key" field.
+func FactKeyContains(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldContains(FieldFactKey, v))
+}
+
+// FactKeyHasPrefix applies the HasPrefix predicate on the "fact_key" field.
+func FactKeyHasPrefix(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldHasPrefix(FieldFactKey, v))
+}
+
+// FactKeyHasSuffix applies the HasSuffix predicate on the "fact_key" field.
+func FactKeyHasSuffix(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldHasSuffix(FieldFactKey, v))
+}
+
+// FactKeyIsNil applies the IsNil predicate on the "fact_key" field.
+func FactKeyIsNil() predicate.Fact {
+	return predicate.Fact(sql.FieldIsNull(FieldFactKey))
+}
+
+// FactKeyNotNil applies the NotNil predicate on the "fact_key" field.
+func FactKeyNotNil() predicate.Fact {
+	return predicate.Fact(sql.FieldNotNull(FieldFactKey))
+}
+
+// FactKeyEqualFold applies the EqualFold predicate on the "fact_key" field.
+func FactKeyEqualFold(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldEqualFold(FieldFactKey, v))
+}
+
+// FactKeyContainsFold applies the ContainsFold predicate on the "fact_key" field.
+func FactKeyContainsFold(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldContainsFold(FieldFactKey, v))
+}
+
+// LineageGroupIDEQ applies the EQ predicate on the "lineage_group_id" field.
+func LineageGroupIDEQ(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldEQ(FieldLineageGroupID, v))
+}
+
+// LineageGroupIDNEQ applies the NEQ predicate on the "lineage_group_id" field.
+func LineageGroupIDNEQ(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldNEQ(FieldLineageGroupID, v))
+}
+
+// LineageGroupIDIn applies the In predicate on the "lineage_group_id" field.
+func LineageGroupIDIn(vs ...string) predicate.Fact {
+	return predicate.Fact(sql.FieldIn(FieldLineageGroupID, vs...))
+}
+
+// LineageGroupIDNotIn applies the NotIn predicate on the "lineage_group_id" field.
+func LineageGroupIDNotIn(vs ...string) predicate.Fact {
+	return predicate.Fact(sql.FieldNotIn(FieldLineageGroupID, vs...))
+}
+
+// LineageGroupIDGT applies the GT predicate on the "lineage_group_id" field.
+func LineageGroupIDGT(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldGT(FieldLineageGroupID, v))
+}
+
+// LineageGroupIDGTE applies the GTE predicate on the "lineage_group_id" field.
+func LineageGroupIDGTE(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldGTE(FieldLineageGroupID, v))
+}
+
+// LineageGroupIDLT applies the LT predicate on the "lineage_group_id" field.
+func LineageGroupIDLT(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldLT(FieldLineageGroupID, v))
+}
+
+// LineageGroupIDLTE applies the LTE predicate on the "lineage_group_id" field.
+func LineageGroupIDLTE(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldLTE(FieldLineageGroupID, v))
+}
+
+// LineageGroupIDContains applies the Contains predicate on the "lineage_group_id" field.
+func LineageGroupIDContains(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldContains(FieldLineageGroupID, v))
+}
+
+// LineageGroupIDHasPrefix applies the HasPrefix predicate on the "lineage_group_id" field.
+func LineageGroupIDHasPrefix(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldHasPrefix(FieldLineageGroupID, v))
+}
+
+// LineageGroupIDHasSuffix applies the HasSuffix predicate on the "lineage_group_id" field.
+func LineageGroupIDHasSuffix(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldHasSuffix(FieldLineageGroupID, v))
+}
+
+// LineageGroupIDIsNil applies the IsNil predicate on the "lineage_group_id" field.
+func LineageGroupIDIsNil() predicate.Fact {
+	return predicate.Fact(sql.FieldIsNull(FieldLineageGroupID))
+}
+
+// LineageGroupIDNotNil applies the NotNil predicate on the "lineage_group_id" field.
+func LineageGroupIDNotNil() predicate.Fact {
+	return predicate.Fact(sql.FieldNotNull(FieldLineageGroupID))
+}
+
+// LineageGroupIDEqualFold applies the EqualFold predicate on the "lineage_group_id" field.
+func LineageGroupIDEqualFold(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldEqualFold(FieldLineageGroupID, v))
+}
+
+// LineageGroupIDContainsFold applies the ContainsFold predicate on the "lineage_group_id" field.
+func LineageGroupIDContainsFold(v string) predicate.Fact {
+	return predicate.Fact(sql.FieldContainsFold(FieldLineageGroupID, v))
+}
+
+// RevisionSeqEQ applies the EQ predicate on the "revision_seq" field.
+func RevisionSeqEQ(v int) predicate.Fact {
+	return predicate.Fact(sql.FieldEQ(FieldRevisionSeq, v))
+}
+
+// RevisionSeqNEQ applies the NEQ predicate on the "revision_seq" field.
+func RevisionSeqNEQ(v int) predicate.Fact {
+	return predicate.Fact(sql.FieldNEQ(FieldRevisionSeq, v))
+}
+
+// RevisionSeqIn applies the In predicate on the "revision_seq" field.
+func RevisionSeqIn(vs ...int) predicate.Fact {
+	return predicate.Fact(sql.FieldIn(FieldRevisionSeq, vs...))
+}
+
+// RevisionSeqNotIn applies the NotIn predicate on the "revision_seq" field.
+func RevisionSeqNotIn(vs ...int) predicate.Fact {
+	return predicate.Fact(sql.FieldNotIn(FieldRevisionSeq, vs...))
+}
+
+// RevisionSeqGT applies the GT predicate on the "revision_seq" field.
+func RevisionSeqGT(v int) predicate.Fact {
+	return predicate.Fact(sql.FieldGT(FieldRevisionSeq, v))
+}
+
+// RevisionSeqGTE applies the GTE predicate on the "revision_seq" field.
+func RevisionSeqGTE(v int) predicate.Fact {
+	return predicate.Fact(sql.FieldGTE(FieldRevisionSeq, v))
+}
+
+// RevisionSeqLT applies the LT predicate on the "revision_seq" field.
+func RevisionSeqLT(v int) predicate.Fact {
+	return predicate.Fact(sql.FieldLT(FieldRevisionSeq, v))
+}
+
+// RevisionSeqLTE applies the LTE predicate on the "revision_seq" field.
+func RevisionSeqLTE(v int) predicate.Fact {
+	return predicate.Fact(sql.FieldLTE(FieldRevisionSeq, v))
 }
 
 // ContentEQ applies the EQ predicate on the "content" field.

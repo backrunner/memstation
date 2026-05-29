@@ -45,7 +45,14 @@ func (s *Service) SetGenerationService(service *memorygenservice.Service) {
 }
 
 func (s *Service) Search(ctx context.Context, input domain.SearchInput) (domain.SearchResult, error) {
-	return s.engine.Search(ctx, input)
+	result, err := s.engine.Search(ctx, input)
+	if err != nil {
+		return domain.SearchResult{}, err
+	}
+	for idx := range result.Memories {
+		s.hydrateFactLineage(ctx, &result.Memories[idx])
+	}
+	return result, nil
 }
 
 func (s *Service) GetDocument(ctx context.Context, userID, id string, kind domain.MemoryType) (domain.MemoryDocument, error) {
@@ -100,7 +107,12 @@ func (s *Service) ListDocumentsByConversationInGeneration(ctx context.Context, u
 }
 
 func (s *Service) UpdateDocument(ctx context.Context, userID, id string, kind domain.MemoryType, content string) (domain.MemoryDocument, error) {
-	return s.repo.UpdateDocument(ctx, userID, id, kind, content)
+	item, err := s.repo.UpdateDocument(ctx, userID, id, kind, content)
+	if err != nil {
+		return domain.MemoryDocument{}, err
+	}
+	s.hydrateRelatedDocuments(ctx, &item)
+	return item, nil
 }
 
 func (s *Service) ListKeyMemories(ctx context.Context, userID string, limit int) ([]domain.KeyMemory, error) {
@@ -582,6 +594,7 @@ func (s *Service) hydrateRelatedDocuments(ctx context.Context, item *domain.Memo
 	if evidences, err := s.repo.ListEvidences(ctx, item.UserID, item.NodeID); err == nil && len(evidences) > 0 {
 		item.Evidences = evidences
 	}
+	s.hydrateFactLineage(ctx, item)
 	relations, err := s.repo.ListRelations(ctx, item.UserID, item.GenerationID, []string{item.NodeID}, 1)
 	if err != nil || len(relations) == 0 {
 		return
@@ -590,6 +603,9 @@ func (s *Service) hydrateRelatedDocuments(ctx context.Context, item *domain.Memo
 	relatedNodeIDs := make([]string, 0, len(relations))
 	weights := map[string]float64{}
 	for _, relation := range relations {
+		if relation.RelationType == domain.MemoryRelationSupersedes {
+			continue
+		}
 		otherNodeID := relation.SrcNodeID
 		if otherNodeID == item.NodeID {
 			otherNodeID = relation.DstNodeID
@@ -631,6 +647,47 @@ func (s *Service) hydrateRelatedDocuments(ctx context.Context, item *domain.Memo
 		return related[i].Weight > related[j].Weight
 	})
 	item.Related = related
+}
+
+func (s *Service) hydrateFactLineage(ctx context.Context, item *domain.MemoryDocument) {
+	if item == nil || item.Type != domain.MemoryTypeFact {
+		return
+	}
+	lineage, err := s.repo.ListFactLineage(ctx, item.UserID, item.GenerationID, item.ID)
+	if err != nil || len(lineage.Entries) == 0 {
+		return
+	}
+	aliases := make([]string, 0, len(lineage.Entries))
+	for _, entry := range lineage.Entries {
+		if entry.NodeID != "" && entry.NodeID != item.NodeID && (entry.IsSuperseded || entry.SupersededByID != "") {
+			aliases = appendUniqueString(aliases, entry.NodeID)
+		}
+	}
+	meta := &domain.MemoryLineageMeta{
+		FactKey:                lineage.FactKey,
+		LineageGroupID:         lineage.LineageGroupID,
+		RevisionDepth:          lineage.RevisionDepth,
+		LineagePath:            append([]string(nil), lineage.LineagePath...),
+		SupersededAliasNodeIDs: aliases,
+		CurrentHeadID:          lineage.CurrentHeadID,
+		GenerationID:           item.GenerationID,
+	}
+	for _, entry := range lineage.Entries {
+		if entry.FactID == item.ID {
+			meta.RevisionSeq = entry.RevisionSeq
+			break
+		}
+	}
+	item.Lineage = meta
+	if item.Metadata == nil {
+		item.Metadata = map[string]any{}
+	}
+	item.Metadata["lineage_path"] = meta.LineagePath
+	item.Metadata["revision_depth"] = meta.RevisionDepth
+	item.Metadata["current_head_id"] = meta.CurrentHeadID
+	if len(meta.SupersededAliasNodeIDs) > 0 {
+		item.Metadata["superseded_alias_node_ids"] = meta.SupersededAliasNodeIDs
+	}
 }
 
 func (s *Service) resolveGenerationID(ctx context.Context, userID, generationID string) (string, error) {

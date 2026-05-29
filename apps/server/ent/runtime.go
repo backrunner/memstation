@@ -103,12 +103,16 @@ func init() {
 	fact.DefaultUpdatedAt = factDescUpdatedAt.Default.(func() time.Time)
 	// fact.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	fact.UpdateDefaultUpdatedAt = factDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// factDescRevisionSeq is the schema descriptor for revision_seq field.
+	factDescRevisionSeq := factFields[7].Descriptor()
+	// fact.DefaultRevisionSeq holds the default value on creation for the revision_seq field.
+	fact.DefaultRevisionSeq = factDescRevisionSeq.Default.(int)
 	// factDescConfidence is the schema descriptor for confidence field.
-	factDescConfidence := factFields[6].Descriptor()
+	factDescConfidence := factFields[9].Descriptor()
 	// fact.DefaultConfidence holds the default value on creation for the confidence field.
 	fact.DefaultConfidence = factDescConfidence.Default.(float64)
 	// factDescIsSuperseded is the schema descriptor for is_superseded field.
-	factDescIsSuperseded := factFields[7].Descriptor()
+	factDescIsSuperseded := factFields[10].Descriptor()
 	// fact.DefaultIsSuperseded holds the default value on creation for the is_superseded field.
 	fact.DefaultIsSuperseded = factDescIsSuperseded.Default.(bool)
 	impressionMixin := schema.Impression{}.Mixin()

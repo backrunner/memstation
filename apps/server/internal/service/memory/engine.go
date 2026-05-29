@@ -445,7 +445,7 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 			return DebugSearchResult{}, err
 		}
 	}
-	scoreMap, supersessionBoosts, supersessionAliases, err := e.canonicalizeSupersededScores(ctx, input, scoreMap, relations)
+	scoreMap, supersessionBoosts, supersessionLineage, err := e.canonicalizeSupersededScores(ctx, input, scoreMap, relations)
 	if err != nil {
 		return DebugSearchResult{}, err
 	}
@@ -500,10 +500,8 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 				"matched_keywords": match.Keywords,
 			})
 		}
-		if aliases := supersessionAliases[doc.NodeID]; len(aliases) > 0 {
-			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
-				"superseded_alias_node_ids": aliases,
-			})
+		if meta, ok := supersessionLineage[doc.NodeID]; ok {
+			doc = mergeLineageSearchMetadata(doc, meta)
 		}
 		if candidate.SupersessionBoost > 0 {
 			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
@@ -591,7 +589,7 @@ func (e *Engine) searchWithoutVectors(ctx context.Context, input domain.SearchIn
 			scoreMap[nodeID] = score
 		}
 	}
-	scoreMap, supersessionBoosts, supersessionAliases, err := e.canonicalizeSupersededScores(ctx, input, scoreMap, nil)
+	scoreMap, supersessionBoosts, supersessionLineage, err := e.canonicalizeSupersededScores(ctx, input, scoreMap, nil)
 	if err != nil {
 		return DebugSearchResult{}, err
 	}
@@ -634,10 +632,8 @@ func (e *Engine) searchWithoutVectors(ctx context.Context, input domain.SearchIn
 			rerankWeight = rerankConfig.BlendWeight
 		}
 		components := scoreDocumentAt(doc, candidate.BaseSemanticScore, 0, 0, candidate.SupersessionBoost, candidate.ConversationBoost, rerankScore, rerankWeight, now, cfg)
-		if aliases := supersessionAliases[doc.NodeID]; len(aliases) > 0 {
-			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
-				"superseded_alias_node_ids": aliases,
-			})
+		if meta, ok := supersessionLineage[doc.NodeID]; ok {
+			doc = mergeLineageSearchMetadata(doc, meta)
 		}
 		if candidate.SupersessionBoost > 0 {
 			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
@@ -709,6 +705,68 @@ func mergeSearchMetadata(current map[string]any, extra map[string]any) map[strin
 		merged[key] = value
 	}
 	return merged
+}
+
+func lineageGroupIDFromMetadata(metadata map[string]any) string {
+	if metadata == nil {
+		return ""
+	}
+	value, ok := metadata["lineage_group_id"]
+	if !ok || value == nil {
+		return ""
+	}
+	if text, ok := value.(string); ok {
+		return strings.TrimSpace(text)
+	}
+	return strings.TrimSpace(fmt.Sprintf("%v", value))
+}
+
+func mergeLineageSearchMetadata(doc domain.MemoryDocument, meta domain.MemoryLineageMeta) domain.MemoryDocument {
+	if len(meta.SupersededAliasNodeIDs) == 0 && len(meta.LineagePath) == 0 && meta.CurrentHeadID == "" {
+		return doc
+	}
+	extra := map[string]any{}
+	if len(meta.SupersededAliasNodeIDs) > 0 {
+		extra["superseded_alias_node_ids"] = meta.SupersededAliasNodeIDs
+	}
+	if len(meta.LineagePath) > 0 {
+		extra["lineage_path"] = meta.LineagePath
+	}
+	if meta.RevisionDepth > 0 {
+		extra["revision_depth"] = meta.RevisionDepth
+	}
+	if meta.CurrentHeadID != "" {
+		extra["current_head_id"] = meta.CurrentHeadID
+		if doc.ID == meta.CurrentHeadID {
+			extra["current_head_node_id"] = doc.NodeID
+		}
+	}
+	doc.Metadata = mergeSearchMetadata(doc.Metadata, extra)
+	if doc.Lineage == nil {
+		doc.Lineage = &meta
+	} else {
+		if len(doc.Lineage.SupersededAliasNodeIDs) == 0 {
+			doc.Lineage.SupersededAliasNodeIDs = meta.SupersededAliasNodeIDs
+		}
+		if len(doc.Lineage.LineagePath) == 0 {
+			doc.Lineage.LineagePath = meta.LineagePath
+		}
+		if doc.Lineage.RevisionDepth == 0 {
+			doc.Lineage.RevisionDepth = meta.RevisionDepth
+		}
+		if meta.CurrentHeadID != "" {
+			doc.Lineage.CurrentHeadID = meta.CurrentHeadID
+		} else if doc.Lineage.CurrentHeadID == "" {
+			doc.Lineage.CurrentHeadID = doc.ID
+		}
+		if doc.Lineage.FactKey == "" {
+			doc.Lineage.FactKey = meta.FactKey
+		}
+		if doc.Lineage.LineageGroupID == "" {
+			doc.Lineage.LineageGroupID = meta.LineageGroupID
+		}
+	}
+	return doc
 }
 
 func matchesRequestedTypes(value domain.MemoryType, filters []domain.MemoryType) bool {
@@ -925,7 +983,7 @@ func (cfg RelationRecallConfig) hopPenalty(hop int) float64 {
 	return clamp(math.Exp(-cfg.HopDecayLambda*math.Pow(distance, cfg.HopDecayExponent)), 0, 1)
 }
 
-func (e *Engine) canonicalizeSupersededScores(ctx context.Context, input domain.SearchInput, scoreMap map[string]float64, relations []domain.MemoryRelation) (map[string]float64, map[string]float64, map[string][]string, error) {
+func (e *Engine) canonicalizeSupersededScores(ctx context.Context, input domain.SearchInput, scoreMap map[string]float64, relations []domain.MemoryRelation) (map[string]float64, map[string]float64, map[string]domain.MemoryLineageMeta, error) {
 	if e.repo == nil || len(scoreMap) == 0 {
 		return scoreMap, nil, nil, nil
 	}
@@ -934,39 +992,65 @@ func (e *Engine) canonicalizeSupersededScores(ctx context.Context, input domain.
 	for nodeID := range scoreMap {
 		nodeIDs = append(nodeIDs, nodeID)
 	}
-	currentRelations := append([]domain.MemoryRelation{}, relations...)
-	queriedRelations, err := e.repo.ListRelations(ctx, input.UserID, input.GenerationID, nodeIDs, 3)
+	docs, err := e.repo.ListDocumentsByNodeIDsInGeneration(ctx, input.UserID, input.GenerationID, nodeIDs)
 	if err != nil {
 		return nil, nil, nil, err
-	}
-	currentRelations = append(currentRelations, queriedRelations...)
-
-	newerByOlder := map[string]string{}
-	for _, relation := range currentRelations {
-		if relation.RelationType != "supersedes" || relation.SrcNodeID == "" || relation.DstNodeID == "" {
-			continue
-		}
-		newerByOlder[relation.DstNodeID] = relation.SrcNodeID
-	}
-	if len(newerByOlder) == 0 {
-		return scoreMap, nil, nil, nil
 	}
 
 	originalScores := cloneScoreMap(scoreMap)
 	canonicalizedScores := cloneScoreMap(scoreMap)
 	inheritedScores := map[string]float64{}
-	aliases := map[string][]string{}
-	for nodeID, score := range originalScores {
-		canonicalNodeID := resolveCanonicalNodeID(nodeID, newerByOlder)
-		if canonicalNodeID == nodeID {
+	lineageMeta := map[string]domain.MemoryLineageMeta{}
+	lineageCache := map[string]domain.FactLineage{}
+	for _, doc := range docs {
+		if doc.Type != domain.MemoryTypeFact || doc.NodeID == "" {
 			continue
 		}
-		if score > inheritedScores[canonicalNodeID] {
-			inheritedScores[canonicalNodeID] = score
+		score, ok := originalScores[doc.NodeID]
+		if !ok {
+			continue
 		}
-		aliases[canonicalNodeID] = appendUniqueString(aliases[canonicalNodeID], nodeID)
-		delete(canonicalizedScores, nodeID)
+		lineageGroupID := lineageGroupIDFromMetadata(doc.Metadata)
+		if lineageGroupID == "" {
+			continue
+		}
+		lineage, ok := lineageCache[lineageGroupID]
+		if !ok {
+			lineageValue, lineageErr := e.repo.ListFactLineageByKey(ctx, input.UserID, doc.GenerationID, lineageGroupID)
+			if lineageErr != nil || len(lineageValue.Entries) < 2 || lineageValue.CurrentHeadID == "" {
+				continue
+			}
+			lineage = lineageValue
+			lineageCache[lineageGroupID] = lineage
+		}
+		var head domain.FactLineageEntry
+		for _, entry := range lineage.Entries {
+			if entry.FactID == lineage.CurrentHeadID {
+				head = entry
+				break
+			}
+		}
+		if head.NodeID == "" || head.NodeID == doc.NodeID {
+			continue
+		}
+		if score > inheritedScores[head.NodeID] {
+			inheritedScores[head.NodeID] = score
+		}
+		meta := lineageMeta[head.NodeID]
+		meta.FactKey = lineage.FactKey
+		meta.LineageGroupID = lineage.LineageGroupID
+		meta.CurrentHeadID = lineage.CurrentHeadID
+		meta.SupersededAliasNodeIDs = appendUniqueString(meta.SupersededAliasNodeIDs, doc.NodeID)
+		meta.LineagePath = append([]string(nil), lineage.LineagePath...)
+		meta.RevisionDepth = max(meta.RevisionDepth, len(meta.LineagePath))
+		if lineage.RevisionDepth > meta.RevisionDepth {
+			meta.RevisionDepth = lineage.RevisionDepth
+		}
+		meta.GenerationID = doc.GenerationID
+		lineageMeta[head.NodeID] = meta
+		delete(canonicalizedScores, doc.NodeID)
 	}
+	_ = relations
 
 	boosts := map[string]float64{}
 	for nodeID, inherited := range inheritedScores {
@@ -977,7 +1061,7 @@ func (e *Engine) canonicalizeSupersededScores(ctx context.Context, input domain.
 			boosts[nodeID] = inherited - originalScores[nodeID]
 		}
 	}
-	return canonicalizedScores, boosts, aliases, nil
+	return canonicalizedScores, boosts, lineageMeta, nil
 }
 
 func (e *Engine) expandConversationCandidates(ctx context.Context, input domain.SearchInput, scoreMap map[string]float64, docs []domain.MemoryDocument) (map[string]float64, map[string]float64, []domain.MemoryDocument, error) {
@@ -1158,22 +1242,6 @@ func conversationCompanionFactor(memoryType domain.MemoryType) float64 {
 	}
 }
 
-func resolveCanonicalNodeID(nodeID string, newerByOlder map[string]string) string {
-	seen := map[string]struct{}{}
-	current := nodeID
-	for {
-		next, ok := newerByOlder[current]
-		if !ok || next == "" {
-			return current
-		}
-		if _, cycle := seen[next]; cycle {
-			return current
-		}
-		seen[current] = struct{}{}
-		current = next
-	}
-}
-
 func appendUniqueString(items []string, value string) []string {
 	for _, item := range items {
 		if item == value {
@@ -1307,7 +1375,7 @@ func matchesTemporalSearchInput(doc domain.MemoryDocument, input domain.SearchIn
 
 func isTemporalRelationType(relationType string) bool {
 	switch relationType {
-	case "indexed_in_tier", "occurred_on_day", "day_in_month", "month_in_year", "supersedes":
+	case "indexed_in_tier", "occurred_on_day", "day_in_month", "month_in_year", domain.MemoryRelationSupersedes:
 		return true
 	default:
 		return false

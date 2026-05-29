@@ -27,6 +27,12 @@ const (
 	FieldCategory = "category"
 	// FieldSubject holds the string denoting the subject field in the database.
 	FieldSubject = "subject"
+	// FieldFactKey holds the string denoting the fact_key field in the database.
+	FieldFactKey = "fact_key"
+	// FieldLineageGroupID holds the string denoting the lineage_group_id field in the database.
+	FieldLineageGroupID = "lineage_group_id"
+	// FieldRevisionSeq holds the string denoting the revision_seq field in the database.
+	FieldRevisionSeq = "revision_seq"
 	// FieldContent holds the string denoting the content field in the database.
 	FieldContent = "content"
 	// FieldConfidence holds the string denoting the confidence field in the database.
@@ -53,6 +59,9 @@ var Columns = []string{
 	FieldNodeID,
 	FieldCategory,
 	FieldSubject,
+	FieldFactKey,
+	FieldLineageGroupID,
+	FieldRevisionSeq,
 	FieldContent,
 	FieldConfidence,
 	FieldIsSuperseded,
@@ -78,6 +87,8 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultRevisionSeq holds the default value on creation for the "revision_seq" field.
+	DefaultRevisionSeq int
 	// DefaultConfidence holds the default value on creation for the "confidence" field.
 	DefaultConfidence float64
 	// DefaultIsSuperseded holds the default value on creation for the "is_superseded" field.
@@ -125,6 +136,21 @@ func ByCategory(opts ...sql.OrderTermOption) OrderOption {
 // BySubject orders the results by the subject field.
 func BySubject(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSubject, opts...).ToFunc()
+}
+
+// ByFactKey orders the results by the fact_key field.
+func ByFactKey(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFactKey, opts...).ToFunc()
+}
+
+// ByLineageGroupID orders the results by the lineage_group_id field.
+func ByLineageGroupID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLineageGroupID, opts...).ToFunc()
+}
+
+// ByRevisionSeq orders the results by the revision_seq field.
+func ByRevisionSeq(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRevisionSeq, opts...).ToFunc()
 }
 
 // ByContent orders the results by the content field.

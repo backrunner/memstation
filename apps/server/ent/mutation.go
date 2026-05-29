@@ -2630,6 +2630,10 @@ type FactMutation struct {
 	node_id          *string
 	category         *string
 	subject          *string
+	fact_key         *string
+	lineage_group_id *string
+	revision_seq     *int
+	addrevision_seq  *int
 	content          *string
 	confidence       *float64
 	addconfidence    *float64
@@ -3019,6 +3023,160 @@ func (m *FactMutation) ResetSubject() {
 	delete(m.clearedFields, fact.FieldSubject)
 }
 
+// SetFactKey sets the "fact_key" field.
+func (m *FactMutation) SetFactKey(s string) {
+	m.fact_key = &s
+}
+
+// FactKey returns the value of the "fact_key" field in the mutation.
+func (m *FactMutation) FactKey() (r string, exists bool) {
+	v := m.fact_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFactKey returns the old "fact_key" field's value of the Fact entity.
+// If the Fact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *FactMutation) OldFactKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFactKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFactKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFactKey: %w", err)
+	}
+	return oldValue.FactKey, nil
+}
+
+// ClearFactKey clears the value of the "fact_key" field.
+func (m *FactMutation) ClearFactKey() {
+	m.fact_key = nil
+	m.clearedFields[fact.FieldFactKey] = struct{}{}
+}
+
+// FactKeyCleared returns if the "fact_key" field was cleared in this mutation.
+func (m *FactMutation) FactKeyCleared() bool {
+	_, ok := m.clearedFields[fact.FieldFactKey]
+	return ok
+}
+
+// ResetFactKey resets all changes to the "fact_key" field.
+func (m *FactMutation) ResetFactKey() {
+	m.fact_key = nil
+	delete(m.clearedFields, fact.FieldFactKey)
+}
+
+// SetLineageGroupID sets the "lineage_group_id" field.
+func (m *FactMutation) SetLineageGroupID(s string) {
+	m.lineage_group_id = &s
+}
+
+// LineageGroupID returns the value of the "lineage_group_id" field in the mutation.
+func (m *FactMutation) LineageGroupID() (r string, exists bool) {
+	v := m.lineage_group_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLineageGroupID returns the old "lineage_group_id" field's value of the Fact entity.
+// If the Fact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *FactMutation) OldLineageGroupID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLineageGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLineageGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLineageGroupID: %w", err)
+	}
+	return oldValue.LineageGroupID, nil
+}
+
+// ClearLineageGroupID clears the value of the "lineage_group_id" field.
+func (m *FactMutation) ClearLineageGroupID() {
+	m.lineage_group_id = nil
+	m.clearedFields[fact.FieldLineageGroupID] = struct{}{}
+}
+
+// LineageGroupIDCleared returns if the "lineage_group_id" field was cleared in this mutation.
+func (m *FactMutation) LineageGroupIDCleared() bool {
+	_, ok := m.clearedFields[fact.FieldLineageGroupID]
+	return ok
+}
+
+// ResetLineageGroupID resets all changes to the "lineage_group_id" field.
+func (m *FactMutation) ResetLineageGroupID() {
+	m.lineage_group_id = nil
+	delete(m.clearedFields, fact.FieldLineageGroupID)
+}
+
+// SetRevisionSeq sets the "revision_seq" field.
+func (m *FactMutation) SetRevisionSeq(i int) {
+	m.revision_seq = &i
+	m.addrevision_seq = nil
+}
+
+// RevisionSeq returns the value of the "revision_seq" field in the mutation.
+func (m *FactMutation) RevisionSeq() (r int, exists bool) {
+	v := m.revision_seq
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRevisionSeq returns the old "revision_seq" field's value of the Fact entity.
+// If the Fact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *FactMutation) OldRevisionSeq(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRevisionSeq is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRevisionSeq requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRevisionSeq: %w", err)
+	}
+	return oldValue.RevisionSeq, nil
+}
+
+// AddRevisionSeq adds i to the "revision_seq" field.
+func (m *FactMutation) AddRevisionSeq(i int) {
+	if m.addrevision_seq != nil {
+		*m.addrevision_seq += i
+	} else {
+		m.addrevision_seq = &i
+	}
+}
+
+// AddedRevisionSeq returns the value that was added to the "revision_seq" field in this mutation.
+func (m *FactMutation) AddedRevisionSeq() (r int, exists bool) {
+	v := m.addrevision_seq
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRevisionSeq resets all changes to the "revision_seq" field.
+func (m *FactMutation) ResetRevisionSeq() {
+	m.revision_seq = nil
+	m.addrevision_seq = nil
+}
+
 // SetContent sets the "content" field.
 func (m *FactMutation) SetContent(s string) {
 	m.content = &s
@@ -3328,7 +3486,7 @@ func (m *FactMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *FactMutation) Fields() []string {
-	fields := make([]string, 0, 13)
+	fields := make([]string, 0, 16)
 	if m.created_at != nil {
 		fields = append(fields, fact.FieldCreatedAt)
 	}
@@ -3349,6 +3507,15 @@ func (m *FactMutation) Fields() []string {
 	}
 	if m.subject != nil {
 		fields = append(fields, fact.FieldSubject)
+	}
+	if m.fact_key != nil {
+		fields = append(fields, fact.FieldFactKey)
+	}
+	if m.lineage_group_id != nil {
+		fields = append(fields, fact.FieldLineageGroupID)
+	}
+	if m.revision_seq != nil {
+		fields = append(fields, fact.FieldRevisionSeq)
 	}
 	if m.content != nil {
 		fields = append(fields, fact.FieldContent)
@@ -3390,6 +3557,12 @@ func (m *FactMutation) Field(name string) (ent.Value, bool) {
 		return m.Category()
 	case fact.FieldSubject:
 		return m.Subject()
+	case fact.FieldFactKey:
+		return m.FactKey()
+	case fact.FieldLineageGroupID:
+		return m.LineageGroupID()
+	case fact.FieldRevisionSeq:
+		return m.RevisionSeq()
 	case fact.FieldContent:
 		return m.Content()
 	case fact.FieldConfidence:
@@ -3425,6 +3598,12 @@ func (m *FactMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldCategory(ctx)
 	case fact.FieldSubject:
 		return m.OldSubject(ctx)
+	case fact.FieldFactKey:
+		return m.OldFactKey(ctx)
+	case fact.FieldLineageGroupID:
+		return m.OldLineageGroupID(ctx)
+	case fact.FieldRevisionSeq:
+		return m.OldRevisionSeq(ctx)
 	case fact.FieldContent:
 		return m.OldContent(ctx)
 	case fact.FieldConfidence:
@@ -3495,6 +3674,27 @@ func (m *FactMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetSubject(v)
 		return nil
+	case fact.FieldFactKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFactKey(v)
+		return nil
+	case fact.FieldLineageGroupID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLineageGroupID(v)
+		return nil
+	case fact.FieldRevisionSeq:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRevisionSeq(v)
+		return nil
 	case fact.FieldContent:
 		v, ok := value.(string)
 		if !ok {
@@ -3545,6 +3745,9 @@ func (m *FactMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *FactMutation) AddedFields() []string {
 	var fields []string
+	if m.addrevision_seq != nil {
+		fields = append(fields, fact.FieldRevisionSeq)
+	}
 	if m.addconfidence != nil {
 		fields = append(fields, fact.FieldConfidence)
 	}
@@ -3556,6 +3759,8 @@ func (m *FactMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *FactMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case fact.FieldRevisionSeq:
+		return m.AddedRevisionSeq()
 	case fact.FieldConfidence:
 		return m.AddedConfidence()
 	}
@@ -3567,6 +3772,13 @@ func (m *FactMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *FactMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case fact.FieldRevisionSeq:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRevisionSeq(v)
+		return nil
 	case fact.FieldConfidence:
 		v, ok := value.(float64)
 		if !ok {
@@ -3587,6 +3799,12 @@ func (m *FactMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(fact.FieldSubject) {
 		fields = append(fields, fact.FieldSubject)
+	}
+	if m.FieldCleared(fact.FieldFactKey) {
+		fields = append(fields, fact.FieldFactKey)
+	}
+	if m.FieldCleared(fact.FieldLineageGroupID) {
+		fields = append(fields, fact.FieldLineageGroupID)
 	}
 	if m.FieldCleared(fact.FieldSupersededByID) {
 		fields = append(fields, fact.FieldSupersededByID)
@@ -3616,6 +3834,12 @@ func (m *FactMutation) ClearField(name string) error {
 		return nil
 	case fact.FieldSubject:
 		m.ClearSubject()
+		return nil
+	case fact.FieldFactKey:
+		m.ClearFactKey()
+		return nil
+	case fact.FieldLineageGroupID:
+		m.ClearLineageGroupID()
 		return nil
 	case fact.FieldSupersededByID:
 		m.ClearSupersededByID()
@@ -3654,6 +3878,15 @@ func (m *FactMutation) ResetField(name string) error {
 		return nil
 	case fact.FieldSubject:
 		m.ResetSubject()
+		return nil
+	case fact.FieldFactKey:
+		m.ResetFactKey()
+		return nil
+	case fact.FieldLineageGroupID:
+		m.ResetLineageGroupID()
+		return nil
+	case fact.FieldRevisionSeq:
+		m.ResetRevisionSeq()
 		return nil
 	case fact.FieldContent:
 		m.ResetContent()

@@ -125,6 +125,318 @@ func TestInMemoryMemoryRepositoryListRelationsDoesNotExpandThroughTemporalNodes(
 	}
 }
 
+func TestInMemoryMemoryRepositoryStoresFactSupersedesRelations(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := NewInMemoryMemoryRepository()
+	now := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
+
+	older := domain.MemoryDocument{
+		ID:        "fact-old",
+		NodeID:    "node-fact-old",
+		UserID:    "user-1",
+		Type:      domain.MemoryTypeFact,
+		Content:   "The user lives in Hangzhou.",
+		CreatedAt: now,
+		UpdatedAt: now,
+		Metadata: map[string]any{
+			"fact_key":         "home_location",
+			"superseded_by_id": "fact-new",
+			"lineage_group_id": "fact-lineage:user-1:home_location",
+			"revision_seq":     1,
+		},
+	}
+	newer := domain.MemoryDocument{
+		ID:        "fact-new",
+		NodeID:    "node-fact-new",
+		UserID:    "user-1",
+		Type:      domain.MemoryTypeFact,
+		Content:   "The user now lives in Shanghai.",
+		CreatedAt: now,
+		UpdatedAt: now,
+		Metadata: map[string]any{
+			"fact_key":         "home_location",
+			"lineage_group_id": "fact-lineage:user-1:home_location",
+			"revision_seq":     2,
+		},
+	}
+
+	if err := repo.StoreDocument(ctx, newer); err != nil {
+		t.Fatalf("store newer fact: %v", err)
+	}
+	if err := repo.StoreDocument(ctx, older); err != nil {
+		t.Fatalf("store older fact: %v", err)
+	}
+
+	relations, err := repo.ListRelations(ctx, "user-1", "", []string{newer.NodeID}, 1)
+	if err != nil {
+		t.Fatalf("list relations: %v", err)
+	}
+	found := false
+	for _, relation := range relations {
+		if relation.RelationType == domain.MemoryRelationSupersedes && relation.SrcNodeID == newer.NodeID && relation.DstNodeID == older.NodeID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected supersedes relation, got %+v", relations)
+	}
+
+	lineage, err := repo.ListFactLineage(ctx, "user-1", currentGenerationID("user-1"), newer.ID)
+	if err != nil {
+		t.Fatalf("list fact lineage: %v", err)
+	}
+	if lineage.CurrentHeadID != newer.ID || len(lineage.Entries) != 2 {
+		t.Fatalf("expected 2-entry lineage with new head, got %+v", lineage)
+	}
+}
+
+func TestInMemoryMemoryRepositoryRejectsDanglingFactSupersessionTargets(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := NewInMemoryMemoryRepository()
+	doc := domain.MemoryDocument{
+		ID:      "fact-location-current",
+		NodeID:  "node-fact-location-current",
+		UserID:  "user-1",
+		Type:    domain.MemoryTypeFact,
+		Content: "The user now lives in Shanghai.",
+		Metadata: map[string]any{
+			"fact_key":            "home_location",
+			"supersedes_fact_ids": []string{"fact-location-missing"},
+		},
+	}
+	if err := repo.StoreDocument(ctx, doc); err == nil {
+		t.Fatal("expected dangling supersession target to fail")
+	}
+	if _, err := repo.GetDocument(ctx, "user-1", doc.ID, domain.MemoryTypeFact); err == nil {
+		t.Fatal("expected failed supersession write to roll back the fact")
+	}
+}
+
+func TestInMemoryMemoryRepositoryAutoSupersedesLineageHead(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := NewInMemoryMemoryRepository()
+	now := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
+
+	older := domain.MemoryDocument{
+		ID:        "fact-home-old",
+		NodeID:    "node-fact-home-old",
+		UserID:    "user-1",
+		Type:      domain.MemoryTypeFact,
+		Content:   "The user lives in Hangzhou.",
+		CreatedAt: now,
+		UpdatedAt: now,
+		Metadata: map[string]any{
+			"fact_key": "home_location",
+		},
+	}
+	newer := domain.MemoryDocument{
+		ID:        "fact-home-new",
+		NodeID:    "node-fact-home-new",
+		UserID:    "user-1",
+		Type:      domain.MemoryTypeFact,
+		Content:   "The user now lives in Shanghai.",
+		CreatedAt: now.Add(time.Minute),
+		UpdatedAt: now.Add(time.Minute),
+		Metadata: map[string]any{
+			"fact_key": "home_location",
+		},
+	}
+	otherKey := domain.MemoryDocument{
+		ID:        "fact-work-owner",
+		NodeID:    "node-fact-work-owner",
+		UserID:    "user-1",
+		Type:      domain.MemoryTypeFact,
+		Content:   "Alice owns the rollout.",
+		CreatedAt: now.Add(2 * time.Minute),
+		UpdatedAt: now.Add(2 * time.Minute),
+		Metadata: map[string]any{
+			"fact_key": "work_owner",
+		},
+	}
+
+	for _, doc := range []domain.MemoryDocument{older, newer, otherKey} {
+		if err := repo.StoreDocument(ctx, doc); err != nil {
+			t.Fatalf("store %s: %v", doc.ID, err)
+		}
+	}
+
+	updatedOlder, err := repo.GetDocument(ctx, "user-1", older.ID, domain.MemoryTypeFact)
+	if err != nil {
+		t.Fatalf("get older fact: %v", err)
+	}
+	if updatedOlder.Metadata["superseded_by_id"] != newer.ID {
+		t.Fatalf("expected older fact to be superseded by new lineage head, got %+v", updatedOlder.Metadata)
+	}
+	updatedOtherKey, err := repo.GetDocument(ctx, "user-1", otherKey.ID, domain.MemoryTypeFact)
+	if err != nil {
+		t.Fatalf("get other-key fact: %v", err)
+	}
+	if updatedOtherKey.Metadata["superseded_by_id"] != nil && updatedOtherKey.Metadata["superseded_by_id"] != "" {
+		t.Fatalf("expected other fact key to remain independent, got %+v", updatedOtherKey.Metadata)
+	}
+
+	lineage, err := repo.ListFactLineage(ctx, "user-1", currentGenerationID("user-1"), older.ID)
+	if err != nil {
+		t.Fatalf("list fact lineage: %v", err)
+	}
+	if lineage.CurrentHeadID != newer.ID || lineage.RevisionDepth != 2 {
+		t.Fatalf("expected new fact as lineage head, got %+v", lineage)
+	}
+}
+
+func TestInMemoryMemoryRepositoryLineageDoesNotCrossUsers(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := NewInMemoryMemoryRepository()
+
+	userOne := domain.MemoryDocument{
+		ID:      "fact-user-one-location",
+		NodeID:  "node-fact-user-one-location",
+		UserID:  "user-1",
+		Type:    domain.MemoryTypeFact,
+		Content: "User one lives in Hangzhou.",
+		Metadata: map[string]any{
+			"fact_key": "home_location",
+		},
+	}
+	userTwo := domain.MemoryDocument{
+		ID:      "fact-user-two-location",
+		NodeID:  "node-fact-user-two-location",
+		UserID:  "user-2",
+		Type:    domain.MemoryTypeFact,
+		Content: "User two lives in Shanghai.",
+		Metadata: map[string]any{
+			"fact_key": "home_location",
+		},
+	}
+	if err := repo.StoreDocument(ctx, userOne); err != nil {
+		t.Fatalf("store user one fact: %v", err)
+	}
+	if err := repo.StoreDocument(ctx, userTwo); err != nil {
+		t.Fatalf("store user two fact: %v", err)
+	}
+	updatedUserOne, err := repo.GetDocument(ctx, "user-1", userOne.ID, domain.MemoryTypeFact)
+	if err != nil {
+		t.Fatalf("get user one fact: %v", err)
+	}
+	if updatedUserOne.Metadata["superseded_by_id"] != nil && updatedUserOne.Metadata["superseded_by_id"] != "" {
+		t.Fatalf("expected cross-user fact to be isolated, got %+v", updatedUserOne.Metadata)
+	}
+}
+
+func TestInMemoryMemoryRepositoryNormalizesInvalidLineageGroup(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := NewInMemoryMemoryRepository()
+	oldLocation := domain.MemoryDocument{
+		ID:      "fact-location-old",
+		NodeID:  "node-fact-location-old",
+		UserID:  "user-1",
+		Type:    domain.MemoryTypeFact,
+		Content: "The user lives in Hangzhou.",
+		Metadata: map[string]any{
+			"fact_key":         "home_location",
+			"lineage_group_id": "fact-lineage:user-2:home_location",
+		},
+	}
+	newLocation := domain.MemoryDocument{
+		ID:      "fact-location-new",
+		NodeID:  "node-fact-location-new",
+		UserID:  "user-1",
+		Type:    domain.MemoryTypeFact,
+		Content: "The user now lives in Shanghai.",
+		Metadata: map[string]any{
+			"fact_key": "home_location",
+		},
+	}
+	workOwner := domain.MemoryDocument{
+		ID:      "fact-work-owner",
+		NodeID:  "node-fact-work-owner",
+		UserID:  "user-1",
+		Type:    domain.MemoryTypeFact,
+		Content: "Alice owns the rollout.",
+		Metadata: map[string]any{
+			"fact_key":         "work_owner",
+			"lineage_group_id": "fact-lineage:user-1:home_location",
+		},
+	}
+	for _, doc := range []domain.MemoryDocument{oldLocation, newLocation, workOwner} {
+		if err := repo.StoreDocument(ctx, doc); err != nil {
+			t.Fatalf("store %s: %v", doc.ID, err)
+		}
+	}
+	updatedOld, err := repo.GetDocument(ctx, "user-1", oldLocation.ID, domain.MemoryTypeFact)
+	if err != nil {
+		t.Fatalf("get old location: %v", err)
+	}
+	if got := updatedOld.Metadata["lineage_group_id"]; got != "fact-lineage:user-1:home_location" {
+		t.Fatalf("expected canonical location lineage group, got %+v", updatedOld.Metadata)
+	}
+	if got := updatedOld.Metadata["superseded_by_id"]; got != newLocation.ID {
+		t.Fatalf("expected canonicalized old location to be superseded, got %+v", updatedOld.Metadata)
+	}
+	updatedWork, err := repo.GetDocument(ctx, "user-1", workOwner.ID, domain.MemoryTypeFact)
+	if err != nil {
+		t.Fatalf("get work owner: %v", err)
+	}
+	if got := updatedWork.Metadata["lineage_group_id"]; got != "fact-lineage:user-1:work_owner" {
+		t.Fatalf("expected fact_key to override mismatched explicit group, got %+v", updatedWork.Metadata)
+	}
+	if got := updatedWork.Metadata["superseded_by_id"]; got != nil && got != "" {
+		t.Fatalf("expected unrelated key not to be superseded, got %+v", updatedWork.Metadata)
+	}
+}
+
+func TestInMemoryMemoryRepositoryRejectsFactSupersessionCycles(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := NewInMemoryMemoryRepository()
+	first := domain.MemoryDocument{
+		ID:      "fact-cycle-a",
+		NodeID:  "node-fact-cycle-a",
+		UserID:  "user-1",
+		Type:    domain.MemoryTypeFact,
+		Content: "First location fact.",
+		Metadata: map[string]any{
+			"fact_key": "home_location",
+		},
+	}
+	second := domain.MemoryDocument{
+		ID:      "fact-cycle-b",
+		NodeID:  "node-fact-cycle-b",
+		UserID:  "user-1",
+		Type:    domain.MemoryTypeFact,
+		Content: "Second location fact.",
+		Metadata: map[string]any{
+			"fact_key":         "home_location",
+			"superseded_by_id": first.ID,
+		},
+	}
+	if err := repo.StoreDocument(ctx, first); err != nil {
+		t.Fatalf("store first fact: %v", err)
+	}
+	if err := repo.StoreDocument(ctx, second); err != nil {
+		t.Fatalf("store second fact: %v", err)
+	}
+	first.Metadata = map[string]any{
+		"fact_key":         "home_location",
+		"superseded_by_id": second.ID,
+	}
+	if err := repo.StoreDocument(ctx, first); err == nil {
+		t.Fatal("expected cycle write to fail")
+	}
+}
+
 func TestInMemoryMemoryRepositorySearchKeywordMatchesUsesSummaryContent(t *testing.T) {
 	t.Parallel()
 
@@ -156,6 +468,37 @@ func TestInMemoryMemoryRepositorySearchKeywordMatchesUsesSummaryContent(t *testi
 	}
 	if len(matches[0].Keywords) == 0 || matches[0].Keywords[0] != "浅色主题" {
 		t.Fatalf("expected matched lexical keyword, got %+v", matches[0])
+	}
+}
+
+func TestInMemoryMemoryRepositorySearchKeywordMatchesUsesFactKeys(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := NewInMemoryMemoryRepository()
+	now := time.Date(2026, 4, 9, 9, 0, 0, 0, time.UTC)
+
+	if err := repo.StoreDocument(ctx, domain.MemoryDocument{
+		ID:        "fact-home-location",
+		NodeID:    "node-fact-home-location",
+		UserID:    "user-1",
+		Type:      domain.MemoryTypeFact,
+		Content:   "The user now lives in Shanghai.",
+		CreatedAt: now,
+		UpdatedAt: now,
+		Metadata: map[string]any{
+			"fact_key": "home_location",
+		},
+	}); err != nil {
+		t.Fatalf("store fact: %v", err)
+	}
+
+	matches, err := repo.SearchKeywordMatches(ctx, "user-1", currentGenerationID("user-1"), "home_location", 10)
+	if err != nil {
+		t.Fatalf("search keyword matches: %v", err)
+	}
+	if len(matches) != 1 || matches[0].NodeID != "node-fact-home-location" {
+		t.Fatalf("expected fact-key match, got %+v", matches)
 	}
 }
 

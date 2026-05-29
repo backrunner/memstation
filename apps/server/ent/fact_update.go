@@ -116,6 +116,67 @@ func (_u *FactUpdate) ClearSubject() *FactUpdate {
 	return _u
 }
 
+// SetFactKey sets the "fact_key" field.
+func (_u *FactUpdate) SetFactKey(v string) *FactUpdate {
+	_u.mutation.SetFactKey(v)
+	return _u
+}
+
+// SetNillableFactKey sets the "fact_key" field if the given value is not nil.
+func (_u *FactUpdate) SetNillableFactKey(v *string) *FactUpdate {
+	if v != nil {
+		_u.SetFactKey(*v)
+	}
+	return _u
+}
+
+// ClearFactKey clears the value of the "fact_key" field.
+func (_u *FactUpdate) ClearFactKey() *FactUpdate {
+	_u.mutation.ClearFactKey()
+	return _u
+}
+
+// SetLineageGroupID sets the "lineage_group_id" field.
+func (_u *FactUpdate) SetLineageGroupID(v string) *FactUpdate {
+	_u.mutation.SetLineageGroupID(v)
+	return _u
+}
+
+// SetNillableLineageGroupID sets the "lineage_group_id" field if the given value is not nil.
+func (_u *FactUpdate) SetNillableLineageGroupID(v *string) *FactUpdate {
+	if v != nil {
+		_u.SetLineageGroupID(*v)
+	}
+	return _u
+}
+
+// ClearLineageGroupID clears the value of the "lineage_group_id" field.
+func (_u *FactUpdate) ClearLineageGroupID() *FactUpdate {
+	_u.mutation.ClearLineageGroupID()
+	return _u
+}
+
+// SetRevisionSeq sets the "revision_seq" field.
+func (_u *FactUpdate) SetRevisionSeq(v int) *FactUpdate {
+	_u.mutation.ResetRevisionSeq()
+	_u.mutation.SetRevisionSeq(v)
+	return _u
+}
+
+// SetNillableRevisionSeq sets the "revision_seq" field if the given value is not nil.
+func (_u *FactUpdate) SetNillableRevisionSeq(v *int) *FactUpdate {
+	if v != nil {
+		_u.SetRevisionSeq(*v)
+	}
+	return _u
+}
+
+// AddRevisionSeq adds value to the "revision_seq" field.
+func (_u *FactUpdate) AddRevisionSeq(v int) *FactUpdate {
+	_u.mutation.AddRevisionSeq(v)
+	return _u
+}
+
 // SetContent sets the "content" field.
 func (_u *FactUpdate) SetContent(v string) *FactUpdate {
 	_u.mutation.SetContent(v)
@@ -299,6 +360,24 @@ func (_u *FactUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.SubjectCleared() {
 		_spec.ClearField(fact.FieldSubject, field.TypeString)
 	}
+	if value, ok := _u.mutation.FactKey(); ok {
+		_spec.SetField(fact.FieldFactKey, field.TypeString, value)
+	}
+	if _u.mutation.FactKeyCleared() {
+		_spec.ClearField(fact.FieldFactKey, field.TypeString)
+	}
+	if value, ok := _u.mutation.LineageGroupID(); ok {
+		_spec.SetField(fact.FieldLineageGroupID, field.TypeString, value)
+	}
+	if _u.mutation.LineageGroupIDCleared() {
+		_spec.ClearField(fact.FieldLineageGroupID, field.TypeString)
+	}
+	if value, ok := _u.mutation.RevisionSeq(); ok {
+		_spec.SetField(fact.FieldRevisionSeq, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedRevisionSeq(); ok {
+		_spec.AddField(fact.FieldRevisionSeq, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.Content(); ok {
 		_spec.SetField(fact.FieldContent, field.TypeString, value)
 	}
@@ -434,6 +513,67 @@ func (_u *FactUpdateOne) SetNillableSubject(v *string) *FactUpdateOne {
 // ClearSubject clears the value of the "subject" field.
 func (_u *FactUpdateOne) ClearSubject() *FactUpdateOne {
 	_u.mutation.ClearSubject()
+	return _u
+}
+
+// SetFactKey sets the "fact_key" field.
+func (_u *FactUpdateOne) SetFactKey(v string) *FactUpdateOne {
+	_u.mutation.SetFactKey(v)
+	return _u
+}
+
+// SetNillableFactKey sets the "fact_key" field if the given value is not nil.
+func (_u *FactUpdateOne) SetNillableFactKey(v *string) *FactUpdateOne {
+	if v != nil {
+		_u.SetFactKey(*v)
+	}
+	return _u
+}
+
+// ClearFactKey clears the value of the "fact_key" field.
+func (_u *FactUpdateOne) ClearFactKey() *FactUpdateOne {
+	_u.mutation.ClearFactKey()
+	return _u
+}
+
+// SetLineageGroupID sets the "lineage_group_id" field.
+func (_u *FactUpdateOne) SetLineageGroupID(v string) *FactUpdateOne {
+	_u.mutation.SetLineageGroupID(v)
+	return _u
+}
+
+// SetNillableLineageGroupID sets the "lineage_group_id" field if the given value is not nil.
+func (_u *FactUpdateOne) SetNillableLineageGroupID(v *string) *FactUpdateOne {
+	if v != nil {
+		_u.SetLineageGroupID(*v)
+	}
+	return _u
+}
+
+// ClearLineageGroupID clears the value of the "lineage_group_id" field.
+func (_u *FactUpdateOne) ClearLineageGroupID() *FactUpdateOne {
+	_u.mutation.ClearLineageGroupID()
+	return _u
+}
+
+// SetRevisionSeq sets the "revision_seq" field.
+func (_u *FactUpdateOne) SetRevisionSeq(v int) *FactUpdateOne {
+	_u.mutation.ResetRevisionSeq()
+	_u.mutation.SetRevisionSeq(v)
+	return _u
+}
+
+// SetNillableRevisionSeq sets the "revision_seq" field if the given value is not nil.
+func (_u *FactUpdateOne) SetNillableRevisionSeq(v *int) *FactUpdateOne {
+	if v != nil {
+		_u.SetRevisionSeq(*v)
+	}
+	return _u
+}
+
+// AddRevisionSeq adds value to the "revision_seq" field.
+func (_u *FactUpdateOne) AddRevisionSeq(v int) *FactUpdateOne {
+	_u.mutation.AddRevisionSeq(v)
 	return _u
 }
 
@@ -649,6 +789,24 @@ func (_u *FactUpdateOne) sqlSave(ctx context.Context) (_node *Fact, err error) {
 	}
 	if _u.mutation.SubjectCleared() {
 		_spec.ClearField(fact.FieldSubject, field.TypeString)
+	}
+	if value, ok := _u.mutation.FactKey(); ok {
+		_spec.SetField(fact.FieldFactKey, field.TypeString, value)
+	}
+	if _u.mutation.FactKeyCleared() {
+		_spec.ClearField(fact.FieldFactKey, field.TypeString)
+	}
+	if value, ok := _u.mutation.LineageGroupID(); ok {
+		_spec.SetField(fact.FieldLineageGroupID, field.TypeString, value)
+	}
+	if _u.mutation.LineageGroupIDCleared() {
+		_spec.ClearField(fact.FieldLineageGroupID, field.TypeString)
+	}
+	if value, ok := _u.mutation.RevisionSeq(); ok {
+		_spec.SetField(fact.FieldRevisionSeq, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedRevisionSeq(); ok {
+		_spec.AddField(fact.FieldRevisionSeq, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.Content(); ok {
 		_spec.SetField(fact.FieldContent, field.TypeString, value)

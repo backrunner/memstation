@@ -508,22 +508,31 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
 			return err
 		}
-		result.Fact = applyGenerationToDocument(payload.UserID, payload.GenerationID, result.Fact)
-		result.Impression = applyGenerationToDocument(payload.UserID, payload.GenerationID, result.Impression)
-		result.Relations = applyGenerationToRelations(payload.UserID, payload.GenerationID, result.Relations)
-		applyDocumentScore(ctx, services.Scorer, &result.Fact, conversation.UpdatedAt)
-		applyDocumentScore(ctx, services.Scorer, &result.Impression, conversation.UpdatedAt)
-		if err := services.Memories.StoreDocument(ctx, result.Fact); err != nil {
-			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
-			return err
+		factDocs := result.Facts
+		if len(factDocs) == 0 {
+			factDocs = []domain.MemoryDocument{result.Fact}
 		}
-		if evidences, err := services.Memories.ListEvidences(ctx, payload.UserID, summaryDoc.NodeID); err == nil && len(evidences) > 0 {
-			factEvidences := cloneNodeEvidences(payload.UserID, payload.GenerationID, result.Fact.NodeID, evidences)
-			if err := services.Memories.ReplaceEvidences(ctx, payload.UserID, result.Fact.NodeID, factEvidences); err != nil {
+		factDocs = append([]domain.MemoryDocument(nil), factDocs...)
+		for idx := range factDocs {
+			factDocs[idx] = applyGenerationToDocument(payload.UserID, payload.GenerationID, factDocs[idx])
+			applyDocumentScore(ctx, services.Scorer, &factDocs[idx], conversation.UpdatedAt)
+			if err := services.Memories.StoreDocument(ctx, factDocs[idx]); err != nil {
 				markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
 				return err
 			}
+			if evidences, err := services.Memories.ListEvidences(ctx, payload.UserID, summaryDoc.NodeID); err == nil && len(evidences) > 0 {
+				factEvidences := cloneNodeEvidences(payload.UserID, payload.GenerationID, factDocs[idx].NodeID, evidences)
+				if err := services.Memories.ReplaceEvidences(ctx, payload.UserID, factDocs[idx].NodeID, factEvidences); err != nil {
+					markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
+					return err
+				}
+			}
 		}
+		result.Fact = factDocs[0]
+		result.Facts = factDocs
+		result.Impression = applyGenerationToDocument(payload.UserID, payload.GenerationID, result.Impression)
+		result.Relations = applyGenerationToRelations(payload.UserID, payload.GenerationID, result.Relations)
+		applyDocumentScore(ctx, services.Scorer, &result.Impression, conversation.UpdatedAt)
 		if err := services.Memories.StoreDocument(ctx, result.Impression); err != nil {
 			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
 			return err
@@ -549,6 +558,7 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 			AnalysisStatus: &completed,
 			Metadata: map[string]any{
 				"analysis_fact_id":       result.Fact.ID,
+				"analysis_fact_ids":      factDocumentIDs(result.Facts),
 				"analysis_impression_id": result.Impression.ID,
 				"memory_generation_id":   payload.GenerationID,
 			},
@@ -556,20 +566,6 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 			return err
 		}
 		followups := []domain.TaskMessage{
-			{
-				Type:      TypeEmbeddingGenerate,
-				Queue:     QueueDefault,
-				UniqueKey: TypeEmbeddingGenerate + ":" + payload.GenerationID + ":" + result.Fact.NodeID + ":" + itoa(payload.EmbeddingVersion),
-				Payload: map[string]any{
-					"user_id":           payload.UserID,
-					"generation_id":     payload.GenerationID,
-					"node_id":           result.Fact.NodeID,
-					"node_type":         string(result.Fact.Type),
-					"embedding_version": payload.EmbeddingVersion,
-					"embedding_model":   payload.EmbeddingModel,
-					"content":           result.Fact.Content,
-				},
-			},
 			{
 				Type:      TypeEmbeddingGenerate,
 				Queue:     QueueDefault,
@@ -584,6 +580,22 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 					"content":           result.Impression.Content,
 				},
 			},
+		}
+		for _, factDoc := range result.Facts {
+			followups = append([]domain.TaskMessage{{
+				Type:      TypeEmbeddingGenerate,
+				Queue:     QueueDefault,
+				UniqueKey: TypeEmbeddingGenerate + ":" + payload.GenerationID + ":" + factDoc.NodeID + ":" + itoa(payload.EmbeddingVersion),
+				Payload: map[string]any{
+					"user_id":           payload.UserID,
+					"generation_id":     payload.GenerationID,
+					"node_id":           factDoc.NodeID,
+					"node_type":         string(factDoc.Type),
+					"embedding_version": payload.EmbeddingVersion,
+					"embedding_model":   payload.EmbeddingModel,
+					"content":           factDoc.Content,
+				},
+			}}, followups...)
 		}
 		if generation.IsActive {
 			followups = append(followups, domain.TaskMessage{
@@ -609,6 +621,20 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 		}
 		return nil
 	}
+}
+
+func factDocumentIDs(items []domain.MemoryDocument) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if strings.TrimSpace(item.ID) == "" {
+			continue
+		}
+		out = append(out, item.ID)
+	}
+	return out
 }
 
 func handleKeyMemoryReconcile(logger *slog.Logger, services Services) func(context.Context, *asynq.Task) error {

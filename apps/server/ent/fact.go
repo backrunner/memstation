@@ -31,6 +31,12 @@ type Fact struct {
 	Category string `json:"category,omitempty"`
 	// Subject holds the value of the "subject" field.
 	Subject string `json:"subject,omitempty"`
+	// FactKey holds the value of the "fact_key" field.
+	FactKey string `json:"fact_key,omitempty"`
+	// LineageGroupID holds the value of the "lineage_group_id" field.
+	LineageGroupID string `json:"lineage_group_id,omitempty"`
+	// RevisionSeq holds the value of the "revision_seq" field.
+	RevisionSeq int `json:"revision_seq,omitempty"`
 	// Content holds the value of the "content" field.
 	Content string `json:"content,omitempty"`
 	// Confidence holds the value of the "confidence" field.
@@ -55,9 +61,9 @@ func (*Fact) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case fact.FieldConfidence:
 			values[i] = new(sql.NullFloat64)
-		case fact.FieldID:
+		case fact.FieldID, fact.FieldRevisionSeq:
 			values[i] = new(sql.NullInt64)
-		case fact.FieldUserID, fact.FieldConversationID, fact.FieldNodeID, fact.FieldCategory, fact.FieldSubject, fact.FieldContent, fact.FieldSupersededByID:
+		case fact.FieldUserID, fact.FieldConversationID, fact.FieldNodeID, fact.FieldCategory, fact.FieldSubject, fact.FieldFactKey, fact.FieldLineageGroupID, fact.FieldContent, fact.FieldSupersededByID:
 			values[i] = new(sql.NullString)
 		case fact.FieldCreatedAt, fact.FieldUpdatedAt, fact.FieldValidFrom, fact.FieldValidTo:
 			values[i] = new(sql.NullTime)
@@ -123,6 +129,24 @@ func (_m *Fact) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field subject", values[i])
 			} else if value.Valid {
 				_m.Subject = value.String
+			}
+		case fact.FieldFactKey:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field fact_key", values[i])
+			} else if value.Valid {
+				_m.FactKey = value.String
+			}
+		case fact.FieldLineageGroupID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field lineage_group_id", values[i])
+			} else if value.Valid {
+				_m.LineageGroupID = value.String
+			}
+		case fact.FieldRevisionSeq:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field revision_seq", values[i])
+			} else if value.Valid {
+				_m.RevisionSeq = int(value.Int64)
 			}
 		case fact.FieldContent:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -218,6 +242,15 @@ func (_m *Fact) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("subject=")
 	builder.WriteString(_m.Subject)
+	builder.WriteString(", ")
+	builder.WriteString("fact_key=")
+	builder.WriteString(_m.FactKey)
+	builder.WriteString(", ")
+	builder.WriteString("lineage_group_id=")
+	builder.WriteString(_m.LineageGroupID)
+	builder.WriteString(", ")
+	builder.WriteString("revision_seq=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RevisionSeq))
 	builder.WriteString(", ")
 	builder.WriteString("content=")
 	builder.WriteString(_m.Content)

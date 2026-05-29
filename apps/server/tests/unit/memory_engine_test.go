@@ -653,6 +653,7 @@ func TestMemoryEngineCanonicalizesSupersededFactMatches(t *testing.T) {
 		Importance:     1,
 		DecayFactor:    1,
 		Metadata: map[string]any{
+			"fact_key":         "home_location",
 			"superseded_by_id": "fact-city-current",
 		},
 	}
@@ -665,12 +666,15 @@ func TestMemoryEngineCanonicalizesSupersededFactMatches(t *testing.T) {
 		Content:        "The user now lives in Shanghai.",
 		Importance:     1.1,
 		DecayFactor:    1,
-	}
-	if err := repo.StoreDocument(ctx, older); err != nil {
-		t.Fatalf("store older fact: %v", err)
+		Metadata: map[string]any{
+			"fact_key": "home_location",
+		},
 	}
 	if err := repo.StoreDocument(ctx, current); err != nil {
 		t.Fatalf("store current fact: %v", err)
+	}
+	if err := repo.StoreDocument(ctx, older); err != nil {
+		t.Fatalf("store older fact: %v", err)
 	}
 
 	result, err := engine.Search(ctx, domain.SearchInput{
@@ -724,6 +728,7 @@ func TestMemoryEngineGraphExpansionCanonicalizesSupersededFacts(t *testing.T) {
 		Importance:     1,
 		DecayFactor:    1,
 		Metadata: map[string]any{
+			"fact_key":         "home_location",
 			"superseded_by_id": "fact-city-history-current",
 		},
 	}
@@ -736,8 +741,11 @@ func TestMemoryEngineGraphExpansionCanonicalizesSupersededFacts(t *testing.T) {
 		Content:        "The user now lives in Shanghai.",
 		Importance:     1.1,
 		DecayFactor:    1,
+		Metadata: map[string]any{
+			"fact_key": "home_location",
+		},
 	}
-	for _, doc := range []domain.MemoryDocument{summary, older, current} {
+	for _, doc := range []domain.MemoryDocument{summary, current, older} {
 		if err := repo.StoreDocument(ctx, doc); err != nil {
 			t.Fatalf("store graph doc %s: %v", doc.ID, err)
 		}

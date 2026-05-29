@@ -170,17 +170,26 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 	if err != nil {
 		return 0, err
 	}
-	result.Fact = applyGenerationToDocument(snapshot.UserID, generation.GenerationID, result.Fact)
+	factDocs := result.Facts
+	if len(factDocs) == 0 {
+		factDocs = []domain.MemoryDocument{result.Fact}
+	}
+	factDocs = append([]domain.MemoryDocument(nil), factDocs...)
+	for idx := range factDocs {
+		factDocs[idx] = applyGenerationToDocument(snapshot.UserID, generation.GenerationID, factDocs[idx])
+		factDocs[idx].Metadata = mergeMetadata(factDocs[idx].Metadata, snapshotMetadata(snapshot))
+		applyDocumentScore(ctx, services.Scorer, &factDocs[idx], conversation.UpdatedAt)
+		if err := services.Memories.StoreDocument(ctx, factDocs[idx]); err != nil {
+			return 0, err
+		}
+	}
+	result.Fact = factDocs[0]
+	result.Facts = factDocs
 	result.Impression = applyGenerationToDocument(snapshot.UserID, generation.GenerationID, result.Impression)
-	result.Fact.Metadata = mergeMetadata(result.Fact.Metadata, snapshotMetadata(snapshot))
 	result.Impression.Metadata = mergeMetadata(result.Impression.Metadata, snapshotMetadata(snapshot))
 	result.Relations = applySnapshotMetadataToRelations(snapshot, applyGenerationToRelations(snapshot.UserID, generation.GenerationID, result.Relations))
-	applyDocumentScore(ctx, services.Scorer, &result.Fact, conversation.UpdatedAt)
 	applyDocumentScore(ctx, services.Scorer, &result.Impression, conversation.UpdatedAt)
 	if err := ensureCurrentGenerationSource(ctx, services, snapshot.UserID, generation.GenerationID, snapshot.SnapshotID); err != nil {
-		return 0, err
-	}
-	if err := services.Memories.StoreDocument(ctx, result.Fact); err != nil {
 		return 0, err
 	}
 	if err := services.Memories.StoreDocument(ctx, result.Impression); err != nil {
@@ -192,10 +201,11 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 		}
 	}
 
-	docs := make([]domain.MemoryDocument, 0, 2+len(segmentDocs))
+	docs := make([]domain.MemoryDocument, 0, 1+len(segmentDocs)+len(factDocs)+1)
 	docs = append(docs, summaryDoc)
 	docs = append(docs, segmentDocs...)
-	docs = append(docs, result.Fact, result.Impression)
+	docs = append(docs, factDocs...)
+	docs = append(docs, result.Impression)
 	return upsertStoredDocumentEmbeddings(ctx, services, generation, snapshot, docs)
 }
 

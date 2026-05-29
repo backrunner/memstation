@@ -291,11 +291,15 @@ CREATE TABLE IF NOT EXISTS impressions (
 
 CREATE TABLE IF NOT EXISTS facts (
   id TEXT PRIMARY KEY,
+  generation_id TEXT NOT NULL DEFAULT '',
   user_id TEXT NOT NULL,
   conversation_id TEXT NOT NULL,
   node_id TEXT NOT NULL UNIQUE,
   category TEXT,
   subject TEXT,
+  fact_key TEXT,
+  lineage_group_id TEXT,
+  revision_seq INTEGER NOT NULL DEFAULT 1,
   content TEXT NOT NULL,
   confidence DOUBLE PRECISION NOT NULL DEFAULT 0.8,
   is_superseded BOOLEAN NOT NULL DEFAULT FALSE,
@@ -305,6 +309,13 @@ CREATE TABLE IF NOT EXISTS facts (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_facts_lineage_group
+  ON facts (user_id, generation_id, lineage_group_id, revision_seq);
+
+CREATE INDEX IF NOT EXISTS idx_facts_current_head
+  ON facts (user_id, generation_id, lineage_group_id, updated_at DESC)
+  WHERE is_superseded = FALSE AND superseded_by_id IS NULL;
 
 CREATE TABLE IF NOT EXISTS key_memories (
   id TEXT PRIMARY KEY,

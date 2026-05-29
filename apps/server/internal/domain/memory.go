@@ -22,25 +22,61 @@ type RelatedMemory struct {
 	Weight float64 `json:"weight"`
 }
 
+type MemoryLineageMeta struct {
+	FactKey                string   `json:"fact_key,omitempty"`
+	LineageGroupID         string   `json:"lineage_group_id,omitempty"`
+	RevisionSeq            int      `json:"revision_seq,omitempty"`
+	GenerationID           string   `json:"generation_id,omitempty"`
+	LineagePath            []string `json:"lineage_path,omitempty"`
+	SupersededAliasNodeIDs []string `json:"superseded_alias_node_ids,omitempty"`
+	RevisionDepth          int      `json:"revision_depth,omitempty"`
+	CurrentHeadID          string   `json:"current_head_id,omitempty"`
+}
+
 type MemoryDocument struct {
-	ID             string           `json:"id"`
-	NodeID         string           `json:"node_id"`
-	GenerationID   string           `json:"generation_id,omitempty"`
-	UserID         string           `json:"user_id"`
-	ConversationID string           `json:"conversation_id,omitempty"`
-	Type           MemoryType       `json:"type"`
-	Content        string           `json:"content"`
-	Score          float64          `json:"score"`
-	EffectiveScore float64          `json:"effective_score"`
-	Importance     float64          `json:"importance"`
-	DecayFactor    float64          `json:"decay_factor"`
-	ActivityAt     time.Time        `json:"activity_at"`
-	TimeTier       TimeTier         `json:"time_tier,omitempty"`
-	Metadata       map[string]any   `json:"metadata,omitempty"`
-	Related        []RelatedMemory  `json:"related,omitempty"`
-	Evidences      []MemoryEvidence `json:"evidences,omitempty"`
-	CreatedAt      time.Time        `json:"created_at"`
-	UpdatedAt      time.Time        `json:"updated_at"`
+	ID             string             `json:"id"`
+	NodeID         string             `json:"node_id"`
+	GenerationID   string             `json:"generation_id,omitempty"`
+	UserID         string             `json:"user_id"`
+	ConversationID string             `json:"conversation_id,omitempty"`
+	Type           MemoryType         `json:"type"`
+	Content        string             `json:"content"`
+	Score          float64            `json:"score"`
+	EffectiveScore float64            `json:"effective_score"`
+	Importance     float64            `json:"importance"`
+	DecayFactor    float64            `json:"decay_factor"`
+	ActivityAt     time.Time          `json:"activity_at"`
+	TimeTier       TimeTier           `json:"time_tier,omitempty"`
+	Metadata       map[string]any     `json:"metadata,omitempty"`
+	Lineage        *MemoryLineageMeta `json:"lineage,omitempty"`
+	Related        []RelatedMemory    `json:"related,omitempty"`
+	Evidences      []MemoryEvidence   `json:"evidences,omitempty"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      time.Time          `json:"updated_at"`
+}
+
+type FactLineageEntry struct {
+	FactID         string     `json:"fact_id"`
+	NodeID         string     `json:"node_id"`
+	FactKey        string     `json:"fact_key,omitempty"`
+	LineageGroupID string     `json:"lineage_group_id,omitempty"`
+	RevisionSeq    int        `json:"revision_seq"`
+	IsHead         bool       `json:"is_head"`
+	IsSuperseded   bool       `json:"is_superseded"`
+	SupersededByID string     `json:"superseded_by_id,omitempty"`
+	ValidFrom      *time.Time `json:"valid_from,omitempty"`
+	ValidTo        *time.Time `json:"valid_to,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+type FactLineage struct {
+	CurrentHeadID  string             `json:"current_head_id"`
+	FactKey        string             `json:"fact_key,omitempty"`
+	LineageGroupID string             `json:"lineage_group_id,omitempty"`
+	Entries        []FactLineageEntry `json:"entries"`
+	RevisionDepth  int                `json:"revision_depth"`
+	LineagePath    []string           `json:"lineage_path,omitempty"`
 }
 
 type SearchResult struct {

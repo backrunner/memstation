@@ -3,6 +3,7 @@ package sql
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -299,6 +300,8 @@ func (r *InMemoryMemoryRepository) StoreDocument(_ context.Context, doc domain.M
 	if doc.Type != domain.MemoryTypeKeyMemory && strings.TrimSpace(doc.GenerationID) == "" {
 		doc.GenerationID = currentGenerationID(doc.UserID)
 	}
+	hadExplicitID := strings.TrimSpace(doc.ID) != ""
+	hadExplicitNodeID := strings.TrimSpace(doc.NodeID) != ""
 	if doc.ID == "" {
 		doc.ID = uuid.NewString()
 	}
@@ -322,20 +325,51 @@ func (r *InMemoryMemoryRepository) StoreDocument(_ context.Context, doc domain.M
 	doc.ActivityAt = domain.DeriveActivityAt(doc.ActivityAt, doc.UpdatedAt, doc.CreatedAt)
 	doc.TimeTier = domain.ClassifyTimeTier(doc.ActivityAt, now)
 	doc.Metadata = cloneMetadata(doc.Metadata)
-	doc.Metadata["activity_at"] = doc.ActivityAt.Format(time.RFC3339)
-	doc.Metadata["time_tier"] = doc.TimeTier
-	if doc.GenerationID != "" {
-		doc.Metadata["generation_id"] = doc.GenerationID
+	if doc.Type == domain.MemoryTypeFact {
+		doc = ensureFactLineageMetadata(doc)
+		if groupID := factLineageGroupIDFromMetadata(doc.Metadata); groupID != "" {
+			if !hadExplicitID {
+				doc.ID = lineageRevisionID(doc)
+			}
+			if !hadExplicitNodeID {
+				doc.NodeID = "node:" + doc.ID
+			}
+		}
+		if seq := factLineageRevisionSeqFromMetadata(doc.Metadata); seq <= 0 {
+			doc.Metadata["revision_seq"] = r.nextFactRevisionSeqLocked(doc)
+		}
 	}
-	if existing, ok := r.documents[key(doc.UserID, doc.ID)]; ok {
+	documentKey := key(doc.UserID, doc.ID)
+	existing, existed := r.documents[documentKey]
+	if existed {
 		if shouldKeepExistingSnapshot(existing.Metadata, doc.Metadata) {
 			return nil
 		}
 		doc = preserveFactSupersessionMetadata(doc, existing)
 	}
-	r.documents[key(doc.UserID, doc.ID)] = doc
 	if doc.Type == domain.MemoryTypeFact {
-		r.syncFactSupersedesLocked(doc)
+		supersessionStateSpecified := metadataContainsKey(doc.Metadata, "superseded_by_id") || metadataContainsKey(doc.Metadata, "is_superseded")
+		if !supersessionStateSpecified && !boolMetadataValue(doc.Metadata, "is_superseded") && stringMetadataValue(doc.Metadata, "superseded_by_id") == "" && len(supersededFactIDsFromMetadata(doc.Metadata)) == 0 {
+			if heads := r.currentFactLineageHeadIDsLocked(doc); len(heads) > 0 {
+				doc.Metadata["supersedes_fact_ids"] = heads
+			}
+		}
+	}
+	doc.Metadata["activity_at"] = doc.ActivityAt.Format(time.RFC3339)
+	doc.Metadata["time_tier"] = doc.TimeTier
+	if doc.GenerationID != "" {
+		doc.Metadata["generation_id"] = doc.GenerationID
+	}
+	r.documents[documentKey] = doc
+	if doc.Type == domain.MemoryTypeFact {
+		if err := r.syncFactSupersedesLocked(doc); err != nil {
+			if existed {
+				r.documents[documentKey] = existing
+			} else {
+				delete(r.documents, documentKey)
+			}
+			return err
+		}
 	}
 	r.syncTemporalRelationsLocked(doc.UserID, doc.GenerationID, doc.NodeID, doc.ActivityAt)
 	return nil
@@ -431,7 +465,7 @@ func (r *InMemoryMemoryRepository) GetDocumentInGeneration(_ context.Context, us
 	if !ok || doc.Type != kind || !matchesDocumentGeneration(userID, generationID, doc) {
 		return domain.MemoryDocument{}, errors.New("memory document not found")
 	}
-	return doc, nil
+	return attachDocumentRuntimeMetadata(doc), nil
 }
 
 func (r *InMemoryMemoryRepository) ListDocuments(_ context.Context, userID string, memoryTypes []domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
@@ -452,7 +486,7 @@ func (r *InMemoryMemoryRepository) ListDocumentsInGeneration(_ context.Context, 
 		if !matchesMemoryType(doc.Type, memoryTypes) {
 			continue
 		}
-		out = append(out, doc)
+		out = append(out, attachDocumentRuntimeMetadata(doc))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })
 	if limit > 0 && len(out) > limit {
@@ -484,7 +518,7 @@ func (r *InMemoryMemoryRepository) ListDocumentsByNodeIDsInGeneration(_ context.
 			continue
 		}
 		if _, ok := allowed[doc.NodeID]; ok {
-			out = append(out, doc)
+			out = append(out, attachDocumentRuntimeMetadata(doc))
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })
@@ -504,13 +538,19 @@ func (r *InMemoryMemoryRepository) SearchKeywordMatches(_ context.Context, userI
 
 	matches := make([]domain.KeywordMatch, 0)
 	for _, doc := range r.documents {
-		if doc.UserID != userID || doc.Type != domain.MemoryTypeSummary {
+		if doc.UserID != userID || (doc.Type != domain.MemoryTypeSummary && doc.Type != domain.MemoryTypeFact) {
 			continue
 		}
 		if !matchesDocumentGeneration(userID, generationID, doc) {
 			continue
 		}
-		match, ok := buildSummaryKeywordMatch(doc.NodeID, query, doc.Content, stringSliceMetadataValue(doc.Metadata, "keywords"))
+		keywords := stringSliceMetadataValue(doc.Metadata, "keywords")
+		content := doc.Content
+		if doc.Type == domain.MemoryTypeFact {
+			keywords = append(keywords, factKeyFromMetadata(doc.Metadata))
+			content = strings.Join(keywords, " ")
+		}
+		match, ok := buildSummaryKeywordMatch(doc.NodeID, query, content, keywords)
 		if !ok {
 			continue
 		}
@@ -551,7 +591,7 @@ func (r *InMemoryMemoryRepository) ListConversationDocumentsInGeneration(_ conte
 		if !matchesDocumentGeneration(userID, generationID, doc) {
 			continue
 		}
-		out = append(out, doc)
+		out = append(out, attachDocumentRuntimeMetadata(doc))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })
 	return out, nil
@@ -568,7 +608,58 @@ func (r *InMemoryMemoryRepository) UpdateDocument(_ context.Context, userID, id 
 	doc.UpdatedAt = time.Now().UTC()
 	doc.Metadata = cloneMetadata(doc.Metadata)
 	r.documents[key(userID, id)] = doc
-	return doc, nil
+	return attachDocumentRuntimeMetadata(doc), nil
+}
+
+func (r *InMemoryMemoryRepository) ListFactLineage(_ context.Context, userID, generationID, factID string) (domain.FactLineage, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	doc, ok := r.documents[key(userID, factID)]
+	if !ok || doc.Type != domain.MemoryTypeFact || !matchesDocumentGeneration(userID, generationID, doc) {
+		return domain.FactLineage{}, errors.New("memory document not found")
+	}
+	lineageGroupID := factLineageGroupIDFromMetadata(doc.Metadata)
+	if lineageGroupID == "" {
+		entry := factLineageEntryFromDocument(doc)
+		entry.IsHead = true
+		return domain.FactLineage{
+			CurrentHeadID:  doc.ID,
+			FactKey:        factKeyFromMetadata(doc.Metadata),
+			LineageGroupID: lineageGroupID,
+			Entries:        []domain.FactLineageEntry{entry},
+			RevisionDepth:  1,
+			LineagePath:    []string{doc.ID},
+		}, nil
+	}
+	return r.factLineageByGroupLocked(userID, generationID, lineageGroupID), nil
+}
+
+func (r *InMemoryMemoryRepository) ListFactLineageByKey(_ context.Context, userID, generationID, factKey string) (domain.FactLineage, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	lineageGroupID := strings.TrimSpace(factKey)
+	if !strings.HasPrefix(lineageGroupID, "fact-lineage:") {
+		lineageGroupID = "fact-lineage:" + strings.TrimSpace(userID) + ":" + sanitizeLineageKey(factKey)
+	}
+	return r.factLineageByGroupLocked(userID, generationID, lineageGroupID), nil
+}
+
+func (r *InMemoryMemoryRepository) factLineageByGroupLocked(userID, generationID, lineageGroupID string) domain.FactLineage {
+	entries := make([]domain.FactLineageEntry, 0)
+	for _, doc := range r.documents {
+		if doc.UserID != userID || doc.Type != domain.MemoryTypeFact || !matchesDocumentGeneration(userID, generationID, doc) {
+			continue
+		}
+		if lineageGroupID != "" && factLineageGroupIDFromMetadata(doc.Metadata) != lineageGroupID {
+			continue
+		}
+		entries = append(entries, factLineageEntryFromDocument(doc))
+	}
+	lineage := factLineageFromEntries(entries)
+	for idx := range lineage.Entries {
+		lineage.Entries[idx].IsHead = lineage.Entries[idx].FactID == lineage.CurrentHeadID
+	}
+	return lineage
 }
 
 func (r *InMemoryMemoryRepository) ListKeyMemories(_ context.Context, userID string, limit int) ([]domain.KeyMemory, error) {
@@ -858,10 +949,15 @@ func (r *InMemoryMemoryRepository) ListEvidences(_ context.Context, userID, node
 	return items, nil
 }
 
-func (r *InMemoryMemoryRepository) syncFactSupersedesLocked(doc domain.MemoryDocument) {
-	filtered := r.relations[:0]
+func (r *InMemoryMemoryRepository) syncFactSupersedesLocked(doc domain.MemoryDocument) error {
+	factKey := factKeyFromMetadata(doc.Metadata)
+	lineageGroupID := factLineageGroupIDFromMetadata(doc.Metadata)
+	if lineageGroupID == "" && (stringMetadataValue(doc.Metadata, "superseded_by_id") != "" || len(supersededFactIDsFromMetadata(doc.Metadata)) > 0) {
+		return errors.New("fact supersession requires fact_key or lineage_group_id")
+	}
+	filtered := make([]domain.MemoryRelation, 0, len(r.relations))
 	for _, relation := range r.relations {
-		if relation.UserID == doc.UserID && relation.RelationType == "supersedes" && (relation.DstNodeID == doc.NodeID || relation.SrcNodeID == doc.NodeID) {
+		if relation.UserID == doc.UserID && relation.GenerationID == doc.GenerationID && relation.RelationType == domain.MemoryRelationSupersedes && (relation.DstNodeID == doc.NodeID || relation.SrcNodeID == doc.NodeID) {
 			continue
 		}
 		filtered = append(filtered, relation)
@@ -872,29 +968,47 @@ func (r *InMemoryMemoryRepository) syncFactSupersedesLocked(doc domain.MemoryDoc
 	doc.Metadata["is_superseded"] = supersededByID != "" || boolMetadataValue(doc.Metadata, "is_superseded")
 	r.documents[key(doc.UserID, doc.ID)] = doc
 
-	if supersedingNodeID := r.resolveFactNodeIDLocked(doc.UserID, supersededByID); supersedingNodeID != "" {
+	if supersededByID != "" {
+		supersedingNodeID := r.resolveFactNodeIDLocked(doc.UserID, doc.GenerationID, lineageGroupID, supersededByID)
+		if supersedingNodeID == "" {
+			return fmt.Errorf("fact supersession target %q not found in lineage %q", supersededByID, lineageGroupID)
+		}
+		if r.factSupersessionWouldCycleLocked(doc.UserID, doc.GenerationID, supersededByID, doc.ID) {
+			return errors.New("fact supersession cycle detected")
+		}
 		r.upsertRelationLocked(domain.MemoryRelation{
 			GenerationID: doc.GenerationID,
 			UserID:       doc.UserID,
 			SrcNodeID:    supersedingNodeID,
 			DstNodeID:    doc.NodeID,
-			RelationType: "supersedes",
+			RelationType: domain.MemoryRelationSupersedes,
 			Weight:       1,
 			Source:       "fact_supersession",
 			Metadata: map[string]any{
 				"superseded_fact_id":  doc.ID,
 				"superseding_fact_id": supersededByID,
+				"fact_key":            factKey,
+				"lineage_group_id":    lineageGroupID,
 			},
 		})
 	}
 
 	for _, supersededID := range supersededFactIDsFromMetadata(doc.Metadata) {
-		if supersededID == "" || supersededID == doc.ID {
+		if supersededID == "" {
 			continue
+		}
+		if supersededID == doc.ID {
+			return errors.New("fact supersession cycle detected")
+		}
+		if r.factSupersessionWouldCycleLocked(doc.UserID, doc.GenerationID, doc.ID, supersededID) {
+			return errors.New("fact supersession cycle detected")
 		}
 		candidate, ok := r.documents[key(doc.UserID, supersededID)]
 		if !ok || candidate.Type != domain.MemoryTypeFact || candidate.GenerationID != doc.GenerationID {
-			continue
+			return fmt.Errorf("fact supersession target %q not found in generation %q", supersededID, doc.GenerationID)
+		}
+		if lineageGroupID != "" && factLineageGroupIDFromMetadata(candidate.Metadata) != lineageGroupID {
+			return fmt.Errorf("fact supersession target %q not found in lineage %q", supersededID, lineageGroupID)
 		}
 		candidate.Metadata = cloneMetadata(candidate.Metadata)
 		candidate.Metadata["superseded_by_id"] = doc.ID
@@ -909,21 +1023,29 @@ func (r *InMemoryMemoryRepository) syncFactSupersedesLocked(doc domain.MemoryDoc
 			UserID:       doc.UserID,
 			SrcNodeID:    doc.NodeID,
 			DstNodeID:    candidate.NodeID,
-			RelationType: "supersedes",
+			RelationType: domain.MemoryRelationSupersedes,
 			Weight:       1,
 			Source:       "fact_supersession",
 			Metadata: map[string]any{
 				"superseded_fact_id":  candidate.ID,
 				"superseding_fact_id": doc.ID,
+				"fact_key":            factKey,
+				"lineage_group_id":    lineageGroupID,
 			},
 		})
 	}
 
+	if lineageGroupID == "" {
+		return nil
+	}
 	for _, candidate := range r.documents {
 		if candidate.UserID != doc.UserID || candidate.Type != domain.MemoryTypeFact {
 			continue
 		}
 		if candidate.GenerationID != doc.GenerationID {
+			continue
+		}
+		if lineageGroupID != "" && factLineageGroupIDFromMetadata(candidate.Metadata) != lineageGroupID {
 			continue
 		}
 		if stringMetadataValue(candidate.Metadata, "superseded_by_id") != doc.ID {
@@ -934,15 +1056,18 @@ func (r *InMemoryMemoryRepository) syncFactSupersedesLocked(doc domain.MemoryDoc
 			UserID:       doc.UserID,
 			SrcNodeID:    doc.NodeID,
 			DstNodeID:    candidate.NodeID,
-			RelationType: "supersedes",
+			RelationType: domain.MemoryRelationSupersedes,
 			Weight:       1,
 			Source:       "fact_supersession",
 			Metadata: map[string]any{
 				"superseded_fact_id":  candidate.ID,
 				"superseding_fact_id": doc.ID,
+				"fact_key":            factKey,
+				"lineage_group_id":    lineageGroupID,
 			},
 		})
 	}
+	return nil
 }
 
 func supersededFactIDsFromMetadata(metadata map[string]any) []string {
@@ -1000,7 +1125,7 @@ func metadataContainsKey(metadata map[string]any, key string) bool {
 	return ok
 }
 
-func (r *InMemoryMemoryRepository) resolveFactNodeIDLocked(userID, factID string) string {
+func (r *InMemoryMemoryRepository) resolveFactNodeIDLocked(userID, generationID, lineageGroupID, factID string) string {
 	if factID == "" {
 		return ""
 	}
@@ -1008,7 +1133,98 @@ func (r *InMemoryMemoryRepository) resolveFactNodeIDLocked(userID, factID string
 	if !ok || doc.Type != domain.MemoryTypeFact {
 		return ""
 	}
+	if doc.GenerationID != generationID || factLineageGroupIDFromMetadata(doc.Metadata) != lineageGroupID {
+		return ""
+	}
 	return doc.NodeID
+}
+
+func (r *InMemoryMemoryRepository) factSupersessionWouldCycleLocked(userID, generationID, newerFactID, olderFactID string) bool {
+	newerFactID = strings.TrimSpace(newerFactID)
+	olderFactID = strings.TrimSpace(olderFactID)
+	if newerFactID == "" || olderFactID == "" {
+		return false
+	}
+	if newerFactID == olderFactID {
+		return true
+	}
+	seen := map[string]struct{}{}
+	current := newerFactID
+	for depth := 0; depth < 128 && current != ""; depth++ {
+		if current == olderFactID {
+			return true
+		}
+		if _, ok := seen[current]; ok {
+			return true
+		}
+		seen[current] = struct{}{}
+		doc, ok := r.documents[key(userID, current)]
+		if !ok || doc.Type != domain.MemoryTypeFact || doc.GenerationID != generationID {
+			return false
+		}
+		current = stringMetadataValue(doc.Metadata, "superseded_by_id")
+	}
+	return current != ""
+}
+
+func (r *InMemoryMemoryRepository) nextFactRevisionSeqLocked(doc domain.MemoryDocument) int {
+	lineageGroupID := factLineageGroupIDFromMetadata(doc.Metadata)
+	if lineageGroupID == "" {
+		return 1
+	}
+	if existing, ok := r.documents[key(doc.UserID, doc.ID)]; ok {
+		if seq := factLineageRevisionSeqFromMetadata(existing.Metadata); seq > 0 {
+			return seq
+		}
+	}
+	maxSeq := 0
+	for _, candidate := range r.documents {
+		if candidate.UserID != doc.UserID || candidate.GenerationID != doc.GenerationID || candidate.Type != domain.MemoryTypeFact {
+			continue
+		}
+		if factLineageGroupIDFromMetadata(candidate.Metadata) != lineageGroupID {
+			continue
+		}
+		if seq := factLineageRevisionSeqFromMetadata(candidate.Metadata); seq > maxSeq {
+			maxSeq = seq
+		}
+	}
+	return maxSeq + 1
+}
+
+func (r *InMemoryMemoryRepository) currentFactLineageHeadIDsLocked(doc domain.MemoryDocument) []string {
+	lineageGroupID := factLineageGroupIDFromMetadata(doc.Metadata)
+	if lineageGroupID == "" {
+		return nil
+	}
+	type head struct {
+		id  string
+		seq int
+	}
+	heads := make([]head, 0)
+	for _, candidate := range r.documents {
+		if candidate.UserID != doc.UserID || candidate.GenerationID != doc.GenerationID || candidate.Type != domain.MemoryTypeFact || candidate.ID == doc.ID {
+			continue
+		}
+		if factLineageGroupIDFromMetadata(candidate.Metadata) != lineageGroupID {
+			continue
+		}
+		if boolMetadataValue(candidate.Metadata, "is_superseded") || stringMetadataValue(candidate.Metadata, "superseded_by_id") != "" {
+			continue
+		}
+		heads = append(heads, head{id: candidate.ID, seq: factLineageRevisionSeqFromMetadata(candidate.Metadata)})
+	}
+	sort.Slice(heads, func(i, j int) bool {
+		if heads[i].seq == heads[j].seq {
+			return heads[i].id < heads[j].id
+		}
+		return heads[i].seq > heads[j].seq
+	})
+	out := make([]string, 0, len(heads))
+	for _, item := range heads {
+		out = append(out, item.id)
+	}
+	return out
 }
 
 func (r *InMemoryMemoryRepository) upsertRelationLocked(relation domain.MemoryRelation) {
@@ -1040,7 +1256,7 @@ func (r *InMemoryMemoryRepository) syncTemporalRelationsLocked(userID, generatio
 	tier := domain.ClassifyTimeTier(activityAt, time.Now().UTC())
 	filtered := r.relations[:0]
 	for _, relation := range r.relations {
-		if relation.UserID == userID && relation.SrcNodeID == nodeID && relation.GenerationID == generationID && isTemporalRelationType(relation.RelationType) {
+		if relation.UserID == userID && relation.SrcNodeID == nodeID && relation.GenerationID == generationID && isTemporalIndexRelationType(relation.RelationType) {
 			continue
 		}
 		filtered = append(filtered, relation)
@@ -1119,6 +1335,15 @@ func cloneMetadata(metadata map[string]any) map[string]any {
 }
 
 func isTemporalRelationType(relationType string) bool {
+	switch relationType {
+	case "indexed_in_tier", "occurred_on_day", "day_in_month", "month_in_year", domain.MemoryRelationSupersedes:
+		return true
+	default:
+		return false
+	}
+}
+
+func isTemporalIndexRelationType(relationType string) bool {
 	switch relationType {
 	case "indexed_in_tier", "occurred_on_day", "day_in_month", "month_in_year":
 		return true
