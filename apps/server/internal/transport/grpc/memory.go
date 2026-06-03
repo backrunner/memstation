@@ -108,14 +108,10 @@ func (s *memoryServiceServer) UpsertKeyMemory(ctx context.Context, req *pb.Upser
 
 	userID := security.UserIDFromContext(ctx)
 	action := "create_key_memory"
-	items, err := s.memory.ListKeyMemories(ctx, userID, 200)
-	if err == nil {
-		for _, item := range items {
-			if item.Key == key {
-				action = "update_key_memory"
-				break
-			}
-		}
+	if existing, ok, err := s.memory.GetKeyMemory(ctx, userID, key); err != nil {
+		return nil, mapError(err)
+	} else if ok && existing.ID != "" {
+		action = "update_key_memory"
 	}
 
 	lastConfirmedAt, err := parseOptionalTimestamp(req.GetLastConfirmedAt(), "last_confirmed_at")

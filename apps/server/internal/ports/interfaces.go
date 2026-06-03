@@ -76,6 +76,9 @@ type MemoryRepository interface {
 	UpdateDocument(ctx context.Context, userID, id string, kind domain.MemoryType, content string) (domain.MemoryDocument, error)
 	ListFactLineage(ctx context.Context, userID, generationID, factID string) (domain.FactLineage, error)
 	ListFactLineageByKey(ctx context.Context, userID, generationID, factKey string) (domain.FactLineage, error)
+	GetKeyMemory(ctx context.Context, userID, key string) (domain.KeyMemory, bool, error)
+	GetKeyMemoryByID(ctx context.Context, userID, id string) (domain.KeyMemory, bool, error)
+	CountKeyMemories(ctx context.Context, userID string) (int, error)
 	ListKeyMemories(ctx context.Context, userID string, limit int) ([]domain.KeyMemory, error)
 	SearchKeyMemories(ctx context.Context, input domain.KeyMemoryQuery) ([]domain.KeyMemory, error)
 	UpsertKeyMemory(ctx context.Context, km domain.KeyMemory) error

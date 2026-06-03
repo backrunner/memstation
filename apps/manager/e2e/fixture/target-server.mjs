@@ -385,8 +385,8 @@ function findDocument(kind, id) {
   return (state.memory_documents[kind] || []).find((item) => item.id === id) || null;
 }
 
-function findKeyMemory(id) {
-  return state.key_memories.find((item) => item.id === id) || null;
+function findKeyMemory(id, userId = '') {
+  return state.key_memories.find((item) => item.id === id && (!userId || item.user_id === userId)) || null;
 }
 
 function filteredAudit(searchParams) {
@@ -2135,7 +2135,8 @@ const server = http.createServer(async (req, res) => {
   const keyMemoryMatch = url.pathname.match(/^\/api\/admin\/memory\/keys\/([^/]+)$/);
   if (keyMemoryMatch) {
     const id = decodeURIComponent(keyMemoryMatch[1]);
-    const item = findKeyMemory(id);
+    const userId = url.searchParams.get('user_id') || '';
+    const item = findKeyMemory(id, userId);
     if (!item) {
       json(req, res, { error: { message: 'key memory not found' } }, 404);
       return;

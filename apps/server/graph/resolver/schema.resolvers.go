@@ -64,6 +64,12 @@ func (r *mutationResolver) UpdateUserSetting(ctx context.Context, chatModel *str
 
 // CreateKeyMemory is the resolver for the createKeyMemory field.
 func (r *mutationResolver) CreateKeyMemory(ctx context.Context, key string, value string, category *string) (*generated.KeyMemory, error) {
+	action := "create_key_memory"
+	if existing, ok, err := r.MemoryService.GetKeyMemory(ctx, userIDFromContext(ctx), key); err != nil {
+		return nil, err
+	} else if ok && existing.ID != "" {
+		action = "update_key_memory"
+	}
 	km, err := r.MemoryService.UpsertKeyMemory(ctx, domain.KeyMemory{
 		UserID:   userIDFromContext(ctx),
 		Key:      key,
@@ -74,47 +80,43 @@ func (r *mutationResolver) CreateKeyMemory(ctx context.Context, key string, valu
 	if err != nil {
 		return nil, err
 	}
-	r.recordAudit(ctx, "create_key_memory", "key_memory", km.ID, map[string]any{"key": key})
+	r.recordAudit(ctx, action, "key_memory", km.ID, map[string]any{"key": key})
 	return graphKeyMemory(km), nil
 }
 
 // UpdateKeyMemory is the resolver for the updateKeyMemory field.
 func (r *mutationResolver) UpdateKeyMemory(ctx context.Context, id string, value string) (*generated.KeyMemory, error) {
-	memories, err := r.MemoryService.ListKeyMemories(ctx, userIDFromContext(ctx), 200)
+	item, ok, err := r.MemoryService.GetKeyMemoryByID(ctx, userIDFromContext(ctx), id)
 	if err != nil {
 		return nil, err
 	}
-	for _, item := range memories {
-		if item.ID == id {
-			item.Value = value
-			item.Source = "graphql"
-			updated, err := r.MemoryService.UpsertKeyMemory(ctx, item)
-			if err != nil {
-				return nil, err
-			}
-			r.recordAudit(ctx, "update_key_memory", "key_memory", id, map[string]any{"key": item.Key})
-			return graphKeyMemory(updated), nil
-		}
+	if !ok {
+		return nil, fmt.Errorf("key memory not found: %s", id)
 	}
-	return nil, fmt.Errorf("key memory not found: %s", id)
+	item.Value = value
+	item.Source = "graphql"
+	updated, err := r.MemoryService.UpsertKeyMemory(ctx, item)
+	if err != nil {
+		return nil, err
+	}
+	r.recordAudit(ctx, "update_key_memory", "key_memory", id, map[string]any{"key": item.Key})
+	return graphKeyMemory(updated), nil
 }
 
 // DeleteKeyMemory is the resolver for the deleteKeyMemory field.
 func (r *mutationResolver) DeleteKeyMemory(ctx context.Context, id string) (bool, error) {
-	memories, err := r.MemoryService.ListKeyMemories(ctx, userIDFromContext(ctx), 200)
+	item, ok, err := r.MemoryService.GetKeyMemoryByID(ctx, userIDFromContext(ctx), id)
 	if err != nil {
 		return false, err
 	}
-	for _, item := range memories {
-		if item.ID == id {
-			if err := r.MemoryService.DeleteKeyMemory(ctx, userIDFromContext(ctx), item.Key); err != nil {
-				return false, err
-			}
-			r.recordAudit(ctx, "delete_key_memory", "key_memory", id, map[string]any{"key": item.Key})
-			return true, nil
-		}
+	if !ok {
+		return false, fmt.Errorf("key memory not found: %s", id)
 	}
-	return false, fmt.Errorf("key memory not found: %s", id)
+	if err := r.MemoryService.DeleteKeyMemory(ctx, userIDFromContext(ctx), item.Key); err != nil {
+		return false, err
+	}
+	r.recordAudit(ctx, "delete_key_memory", "key_memory", id, map[string]any{"key": item.Key})
+	return true, nil
 }
 
 // UpdateMemorySummary is the resolver for the updateMemorySummary field.

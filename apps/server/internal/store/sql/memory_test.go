@@ -502,6 +502,52 @@ func TestInMemoryMemoryRepositorySearchKeywordMatchesUsesFactKeys(t *testing.T) 
 	}
 }
 
+func TestInMemoryMemoryRepositoryUpsertKeyMemoryReplacesDocumentForSameKey(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := NewInMemoryMemoryRepository()
+
+	if err := repo.UpsertKeyMemory(ctx, domain.KeyMemory{
+		ID:     "km-original",
+		UserID: "user-1",
+		Key:    "preferred_editor",
+		Value:  "neovim",
+		Metadata: map[string]any{
+			"node_id": "node-km-original",
+		},
+	}); err != nil {
+		t.Fatalf("upsert original key memory: %v", err)
+	}
+	if err := repo.UpsertKeyMemory(ctx, domain.KeyMemory{
+		ID:     "km-conflicting",
+		UserID: "user-1",
+		Key:    "preferred_editor",
+		Value:  "zed",
+		Metadata: map[string]any{
+			"node_id": "node-km-conflicting",
+		},
+	}); err != nil {
+		t.Fatalf("upsert replacement key memory: %v", err)
+	}
+
+	memories, err := repo.ListKeyMemories(ctx, "user-1", 10)
+	if err != nil {
+		t.Fatalf("list key memories: %v", err)
+	}
+	if len(memories) != 1 || memories[0].ID != "km-original" || memories[0].Value != "zed" {
+		t.Fatalf("expected replacement to reuse original identity, got %+v", memories)
+	}
+
+	docs, err := repo.ListDocuments(ctx, "user-1", []domain.MemoryType{domain.MemoryTypeKeyMemory}, 10)
+	if err != nil {
+		t.Fatalf("list key-memory documents: %v", err)
+	}
+	if len(docs) != 1 || docs[0].ID != "km-original" || docs[0].NodeID != "node-km-original" || docs[0].Content != "preferred_editor: zed" {
+		t.Fatalf("expected exactly one replacement document, got %+v", docs)
+	}
+}
+
 func TestSegmentEntityPrefixPatternEscapesLikeWildcards(t *testing.T) {
 	t.Parallel()
 

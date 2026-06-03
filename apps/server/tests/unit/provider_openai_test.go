@@ -196,6 +196,200 @@ func TestOpenAIAdapterCompleteParsesToolCalls(t *testing.T) {
 	}
 }
 
+func TestOpenAIAdapterStreamChatCompletionsParsesToolCalls(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, _ := w.(http.Flusher)
+		events := []string{
+			fmt.Sprintf("data: %s\n\n", `{"id":"chatcmpl_stream_tool","created":1710000000,"model":"gpt-4.1-mini","choices":[{"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call-1","type":"function","function":{"name":"recall_memory","arguments":""}}]}}]}`),
+			fmt.Sprintf("data: %s\n\n", `{"id":"chatcmpl_stream_tool","created":1710000000,"model":"gpt-4.1-mini","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"query\":\"alpha\"}"}}]}}]}`),
+			fmt.Sprintf("data: %s\n\n", `{"id":"chatcmpl_stream_tool","created":1710000000,"model":"gpt-4.1-mini","choices":[],"usage":{"prompt_tokens":12,"completion_tokens":4,"total_tokens":16}}`),
+			"data: [DONE]\n\n",
+		}
+		for _, event := range events {
+			if _, err := w.Write([]byte(event)); err != nil {
+				t.Fatalf("write event: %v", err)
+			}
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+	}))
+	defer server.Close()
+
+	adapter := openaiprovider.NewAdapter(provider.StaticConfigResolver{
+		domain.ProviderOpenAI: {APIKey: "sk-test", BaseURL: server.URL},
+	}, 5*time.Second)
+
+	response, err := adapter.Stream(context.Background(), domain.UnifiedRequest{
+		Protocol: domain.ProtocolOpenAIChat,
+		Model:    "gpt-4.1-mini",
+		Stream:   true,
+		Tools:    []domain.ToolDefinition{{Name: "recall_memory"}},
+		Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "hello"}},
+	}, func(domain.StreamEvent) error { return nil })
+	if err != nil {
+		t.Fatalf("stream: %v", err)
+	}
+	if len(response.Message.ToolCalls) != 1 {
+		t.Fatalf("expected streamed tool call, got %+v", response.Message.ToolCalls)
+	}
+	call := response.Message.ToolCalls[0]
+	if call.ID != "call-1" || call.Name != "recall_memory" {
+		t.Fatalf("unexpected tool call: %+v", call)
+	}
+	arguments, ok := call.Arguments.(map[string]any)
+	if !ok || arguments["query"] != "alpha" {
+		t.Fatalf("unexpected tool arguments: %+v", call.Arguments)
+	}
+}
+
+func TestOpenAIResponsesAdapterStreamParsesToolCalls(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, _ := w.(http.Flusher)
+		events := []string{
+			fmt.Sprintf("data: %s\n\n", `{"type":"response.created","response":{"id":"resp_stream_tool","model":"gpt-4.1-mini"}}`),
+			fmt.Sprintf("data: %s\n\n", `{"type":"response.output_item.added","output_index":0,"item":{"id":"fc-1","type":"function_call","call_id":"call-1","name":"recall_memory","arguments":""}}`),
+			fmt.Sprintf("data: %s\n\n", `{"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\"query\":\"alpha\"}"}`),
+			fmt.Sprintf("data: %s\n\n", `{"type":"response.completed","response":{"id":"resp_stream_tool","model":"gpt-4.1-mini","usage":{"input_tokens":12,"output_tokens":4,"total_tokens":16}}}`),
+		}
+		for _, event := range events {
+			if _, err := w.Write([]byte(event)); err != nil {
+				t.Fatalf("write event: %v", err)
+			}
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+	}))
+	defer server.Close()
+
+	adapter := openaiprovider.NewResponsesAdapter(provider.StaticConfigResolver{
+		domain.ProviderOpenAIResponses: {APIKey: "sk-test", BaseURL: server.URL},
+	}, 5*time.Second)
+
+	response, err := adapter.Stream(context.Background(), domain.UnifiedRequest{
+		Protocol: domain.ProtocolOpenAIResponses,
+		Model:    "gpt-4.1-mini",
+		Stream:   true,
+		Tools:    []domain.ToolDefinition{{Name: "recall_memory"}},
+		Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "hello"}},
+	}, func(domain.StreamEvent) error { return nil })
+	if err != nil {
+		t.Fatalf("stream responses: %v", err)
+	}
+	if len(response.Message.ToolCalls) != 1 {
+		t.Fatalf("expected streamed tool call, got %+v", response.Message.ToolCalls)
+	}
+	call := response.Message.ToolCalls[0]
+	if call.ID != "call-1" || call.Name != "recall_memory" {
+		t.Fatalf("unexpected tool call: %+v", call)
+	}
+	arguments, ok := call.Arguments.(map[string]any)
+	if !ok || arguments["query"] != "alpha" {
+		t.Fatalf("unexpected tool arguments: %+v", call.Arguments)
+	}
+}
+
+func TestOpenAIResponsesAdapterStreamParsesToolCallArgumentDoneByItemID(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, _ := w.(http.Flusher)
+		events := []string{
+			fmt.Sprintf("data: %s\n\n", `{"type":"response.created","response":{"id":"resp_stream_tool_done","model":"gpt-4.1-mini"}}`),
+			fmt.Sprintf("data: %s\n\n", `{"type":"response.output_item.added","output_index":0,"item":{"id":"fc-1","type":"function_call","call_id":"call-1","name":"recall_memory","arguments":""}}`),
+			fmt.Sprintf("data: %s\n\n", `{"type":"response.function_call_arguments.done","item_id":"fc-1","arguments":"{\"query\":\"alpha\",\"limit\":3}"}`),
+			fmt.Sprintf("data: %s\n\n", `{"type":"response.completed","response":{"id":"resp_stream_tool_done","model":"gpt-4.1-mini","usage":{"input_tokens":12,"output_tokens":4,"total_tokens":16}}}`),
+		}
+		for _, event := range events {
+			if _, err := w.Write([]byte(event)); err != nil {
+				t.Fatalf("write event: %v", err)
+			}
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+	}))
+	defer server.Close()
+
+	adapter := openaiprovider.NewResponsesAdapter(provider.StaticConfigResolver{
+		domain.ProviderOpenAIResponses: {APIKey: "sk-test", BaseURL: server.URL},
+	}, 5*time.Second)
+
+	response, err := adapter.Stream(context.Background(), domain.UnifiedRequest{
+		Protocol: domain.ProtocolOpenAIResponses,
+		Model:    "gpt-4.1-mini",
+		Stream:   true,
+		Tools:    []domain.ToolDefinition{{Name: "recall_memory"}},
+		Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "hello"}},
+	}, func(domain.StreamEvent) error { return nil })
+	if err != nil {
+		t.Fatalf("stream responses: %v", err)
+	}
+	if len(response.Message.ToolCalls) != 1 {
+		t.Fatalf("expected streamed tool call, got %+v", response.Message.ToolCalls)
+	}
+	call := response.Message.ToolCalls[0]
+	if call.ID != "call-1" || call.Name != "recall_memory" {
+		t.Fatalf("unexpected tool call: %+v", call)
+	}
+	arguments, ok := call.Arguments.(map[string]any)
+	if !ok || arguments["query"] != "alpha" || arguments["limit"] != float64(3) {
+		t.Fatalf("unexpected tool arguments: %+v", call.Arguments)
+	}
+}
+
+func TestOpenAIResponsesAdapterStreamIgnoresMessageOutputItemsForToolCalls(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, _ := w.(http.Flusher)
+		events := []string{
+			fmt.Sprintf("data: %s\n\n", `{"type":"response.created","response":{"id":"resp_stream_text","model":"gpt-4.1-mini"}}`),
+			fmt.Sprintf("data: %s\n\n", `{"type":"response.output_item.added","output_index":0,"item":{"id":"msg-1","type":"message"}}`),
+			fmt.Sprintf("data: %s\n\n", `{"type":"response.output_text.delta","delta":"hello"}`),
+			fmt.Sprintf("data: %s\n\n", `{"type":"response.completed","response":{"id":"resp_stream_text","model":"gpt-4.1-mini","output":[{"id":"msg-1","type":"message","role":"assistant","content":[{"type":"output_text","text":"hello"}]}],"usage":{"input_tokens":5,"output_tokens":1,"total_tokens":6}}}`),
+		}
+		for _, event := range events {
+			if _, err := w.Write([]byte(event)); err != nil {
+				t.Fatalf("write event: %v", err)
+			}
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+	}))
+	defer server.Close()
+
+	adapter := openaiprovider.NewResponsesAdapter(provider.StaticConfigResolver{
+		domain.ProviderOpenAIResponses: {APIKey: "sk-test", BaseURL: server.URL},
+	}, 5*time.Second)
+
+	response, err := adapter.Stream(context.Background(), domain.UnifiedRequest{
+		Protocol: domain.ProtocolOpenAIResponses,
+		Model:    "gpt-4.1-mini",
+		Stream:   true,
+		Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "hello"}},
+	}, func(domain.StreamEvent) error { return nil })
+	if err != nil {
+		t.Fatalf("stream responses: %v", err)
+	}
+	if response.Message.Text != "hello" {
+		t.Fatalf("expected streamed text, got %q", response.Message.Text)
+	}
+	if len(response.Message.ToolCalls) != 0 {
+		t.Fatalf("expected no tool calls for message output item, got %+v", response.Message.ToolCalls)
+	}
+}
+
 func TestOpenAIAdapterCompleteRetriesTransientStatus(t *testing.T) {
 	t.Parallel()
 

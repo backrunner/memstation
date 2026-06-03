@@ -124,6 +124,7 @@ func (a *Adapter) Stream(ctx context.Context, req domain.UnifiedRequest, emit fu
 	model := req.Model
 	role := domain.RoleAssistant
 	accumulatedText := ""
+	toolCalls := []domain.ToolCall{}
 	usage := domain.UsageRecord{}
 	started := false
 	emitStart := func() error {
@@ -151,8 +152,9 @@ func (a *Adapter) Stream(ctx context.Context, req domain.UnifiedRequest, emit fu
 			return err
 		}
 		model = firstNonEmpty(chunk.ModelVersion, model)
-		chunkRole, current, _ := chunk.message()
+		chunkRole, current, chunkToolCalls := chunk.message()
 		role = chunkRole
+		toolCalls = mergeToolCalls(toolCalls, chunkToolCalls)
 		if err := emitStart(); err != nil {
 			return err
 		}
@@ -205,8 +207,9 @@ func (a *Adapter) Stream(ctx context.Context, req domain.UnifiedRequest, emit fu
 		Provider:   domain.ProviderGemini,
 		Model:      model,
 		Message: domain.UnifiedMessage{
-			Role: role,
-			Text: accumulatedText,
+			Role:      role,
+			Text:      accumulatedText,
+			ToolCalls: toolCalls,
 			Blocks: []domain.ContentBlock{{
 				Type: domain.ContentBlockText,
 				Text: accumulatedText,
@@ -301,6 +304,33 @@ func (r geminiResponse) message() (domain.MessageRole, string, []domain.ToolCall
 		}
 	}
 	return role, strings.Join(parts, "\n"), toolCalls
+}
+
+func mergeToolCalls(existing, next []domain.ToolCall) []domain.ToolCall {
+	if len(next) == 0 {
+		return existing
+	}
+	out := append([]domain.ToolCall(nil), existing...)
+	seen := map[string]struct{}{}
+	for _, call := range out {
+		key := firstNonEmpty(call.ID, call.Name)
+		if strings.TrimSpace(key) != "" {
+			seen[key] = struct{}{}
+		}
+	}
+	for _, call := range next {
+		key := firstNonEmpty(call.ID, call.Name)
+		if strings.TrimSpace(key) == "" {
+			out = append(out, call)
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, call)
+	}
+	return out
 }
 
 func buildContents(messages []domain.UnifiedMessage) []map[string]any {

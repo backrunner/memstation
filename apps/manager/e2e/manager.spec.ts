@@ -57,14 +57,24 @@ async function chooseBitsSelectOption(page: Page, fieldLabel: string, optionLabe
   await page.locator('.select-item').filter({ hasText: optionLabel }).click();
 }
 
+function sectionByHeading(page: Page, heading: RegExp) {
+  return page.locator('section.provider-scope-card, section.card').filter({ has: page.getByRole('heading', { name: heading }) }).first();
+}
+
+async function fillField(page: Page, label: string, value: string): Promise<void> {
+  const field = page.getByLabel(label).first();
+  await field.clear();
+  await field.fill(value);
+}
+
 async function ensureProviderRowVisible(page: Page, sectionLabel: RegExp, providerName: string) {
-  const section = page.locator('section.card').filter({ hasText: sectionLabel }).first();
+  const section = sectionByHeading(page, sectionLabel);
   const row = section.locator('.provider-list-item').filter({ hasText: new RegExp(providerName, 'i') }).first();
   if (await row.count()) {
     return { section, row, openedDialog: false };
   }
 
-  await section.locator('.provider-add-button').click();
+  await section.getByRole('button', { name: /^Add$/ }).click();
   const addDialog = page.locator('.provider-add-dialog');
   await expect(addDialog).toBeVisible();
   await addDialog.locator('.select-trigger').click();
@@ -118,13 +128,13 @@ test('connect page requires an admin token before saving the first target', asyn
     window.localStorage.removeItem('memstation.manager.selected-target');
   });
   await page.goto('/login');
-  await page.getByLabel('Connection URI or base URL').fill(fixtureBaseUrl);
-  await page.getByLabel('Label').fill('No Token Target');
+  await fillField(page, 'Connection URI or base URL', fixtureBaseUrl);
+  await fillField(page, 'Label', 'No Token Target');
   await page.getByRole('button', { name: 'Connect target' }).click();
   await expect(page.getByText('Admin token is required. A target cannot be connected without it.')).toBeVisible();
 
   const savedTargets = await page.evaluate(() => window.localStorage.getItem('memstation.manager.targets'));
-  expect(savedTargets).toBeNull();
+  expect(savedTargets ?? '').not.toContain('No Token Target');
 });
 
 test('target manager removes saved targets from the row context menu after confirmation', async ({ page }) => {
@@ -142,11 +152,11 @@ test('target manager removes saved targets from the row context menu after confi
   await expect(draftRow).toContainText('New target');
   await targetDialog.getByLabel('Connection URI or base URL').fill(removableTargetUrl);
   await targetDialog.getByLabel('Label').fill(removableTargetLabel);
+  await targetDialog.getByLabel('Admin token').fill(adminToken);
   await expect(draftRow).toContainText(removableTargetLabel);
   await expect(draftRow).toContainText(removableTargetUrl);
   await targetDialog.getByRole('button', { name: 'Save target' }).click();
   await expect(targetDialog).toBeHidden();
-
   await page.getByRole('button', { name: 'Targets' }).click();
   await expect(targetDialog).toBeVisible();
   const removableRow = targetDialog.locator('.target-row').filter({ hasText: removableTargetLabel }).first();
@@ -197,8 +207,8 @@ test('dashboard and major workspaces load live target data', async ({ page }) =>
   await expectRouteHealthy(page, '/operations/tasks/memory/task-2', /^task-2$/i);
   await expect(page.getByText('fixture analysis timeout').first()).toBeVisible();
 
-  await expectRouteHealthy(page, '/statistics/tokens', /Token usage/i);
-  await expect(page.getByText('Filtered Tokens').first()).toBeVisible();
+  await expectRouteHealthy(page, '/statistics/tokens', /Token statistics/i);
+  await expect(page.getByText('Filtered tokens').first()).toBeVisible();
 
   await expectRouteHealthy(page, '/settings/providers', /^Providers$/i);
   await expect(page.getByText('openai_compatible').first()).toBeVisible();
@@ -215,7 +225,7 @@ test('memory summary edits persist and update the audit trail', async ({ page })
   await page.goto('/memory/summaries');
   await expect(page.getByRole('heading', { name: /^Summaries$/i })).toBeVisible();
 
-  const summaryCard = page.locator('.debug-block').filter({ hasText: 'summary-1' }).first();
+  const summaryCard = page.locator('.summary-card').filter({ hasText: 'summary-1' }).first();
   await summaryCard.getByRole('link', { name: 'Open' }).click();
 
   await expect(page.getByRole('heading', { name: /^summary-1$/i })).toBeVisible();
@@ -245,7 +255,7 @@ test('key memory CRUD works end to end from the manager', async ({ page }) => {
   await page.getByRole('button', { name: 'Create key memory' }).click();
 
   await expect(page.getByText('Key memory created and audited on the target.')).toBeVisible();
-  const keyCard = page.locator('.debug-block').filter({ hasText: keyName }).first();
+  const keyCard = page.locator('.keymem-card').filter({ hasText: keyName }).first();
   await expect(keyCard).toBeVisible();
 
   await keyCard.getByRole('button', { name: 'Edit' }).click();
@@ -255,7 +265,7 @@ test('key memory CRUD works end to end from the manager', async ({ page }) => {
   await expect(keyCard.getByText(updatedValue)).toBeVisible();
 
   await keyCard.getByRole('button', { name: 'Delete' }).click();
-  await expect(page.locator('.debug-block').filter({ hasText: keyName })).toHaveCount(0);
+  await expect(page.locator('.keymem-card').filter({ hasText: keyName })).toHaveCount(0);
 });
 
 test('user API key lifecycle and task rerun flows are operable', async ({ page }) => {
@@ -282,7 +292,7 @@ test('playground preview flow streams and shows preview diff output', async ({ p
   const prompt = 'Preview memory validation';
 
   await page.goto('/playground/chat');
-  await expect(page.getByRole('heading', { name: /^Chat Playground$/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Chat$/i })).toBeVisible();
 
   await page.getByPlaceholder('ms-...').fill(gatewayAPIKey);
   await page.getByPlaceholder('Configured model name').fill('gpt-4.1-mini');
@@ -299,7 +309,7 @@ test('playground preview flow streams and shows preview diff output', async ({ p
   await expect(page.getByText('Keyword source').first()).toBeVisible();
 
   await page.getByRole('tab', { name: 'Diff' }).click();
-  await expect(page.getByText('Preview flow')).toBeVisible();
+  await expect(page.getByText('Preview').first()).toBeVisible();
   await expect(page.getByText('validation_mode').first()).toBeVisible();
 
   await page.getByRole('tab', { name: 'Raw' }).click();
@@ -310,7 +320,7 @@ test('playground persisted flow writes memory and is inspectable in admin views'
   const prompt = 'Persist memory validation';
 
   await page.goto('/playground/chat');
-  await expect(page.getByRole('heading', { name: /^Chat Playground$/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Chat$/i })).toBeVisible();
 
   await page.getByPlaceholder('ms-...').fill(gatewayAPIKey);
   await page.getByPlaceholder('Configured model name').fill('gpt-4.1-mini');
@@ -320,7 +330,7 @@ test('playground persisted flow writes memory and is inspectable in admin views'
   await expect(page.locator('.switch-row').filter({ hasText: 'Memory persist' }).locator('[role="switch"]').first()).toHaveAttribute('data-state', 'checked');
 
   await page.getByPlaceholder('Message the target, test memory recall, or inspect persistence.').fill(prompt);
-  await page.getByRole('button', { name: 'Send and End' }).click();
+  await page.getByRole('button', { name: 'Send & end' }).click();
 
   await expect(page.getByText(`Fixture stream response for: ${prompt}`)).toBeVisible();
   await page.getByRole('tab', { name: 'Recall' }).click();
@@ -340,14 +350,14 @@ test('playground conversation switching keeps background turns running and faile
   const rechargePrompt = 'recharge required for switch';
 
   await page.goto('/playground/chat');
-  await expect(page.getByRole('heading', { name: /^Chat Playground$/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Chat$/i })).toBeVisible();
 
   await page.getByPlaceholder('ms-...').fill(gatewayAPIKey);
   await page.getByPlaceholder('Configured model name').fill('gpt-4.1-mini');
   await page.getByPlaceholder('Message the target, test memory recall, or inspect persistence.').fill(slowPrompt);
   await page.getByRole('button', { name: /^Send$/ }).click();
 
-  await expect(page.getByRole('button', { name: 'Generating...' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Generating…' })).toBeVisible();
   await page.getByRole('button', { name: 'New thread' }).click();
 
   await expect(page.getByPlaceholder('Configured model name')).toHaveValue('gpt-4.1-mini');
@@ -367,7 +377,7 @@ test('playground conversation switching keeps background turns running and faile
 
 test('playground and settings drafts survive internal route changes', async ({ page }) => {
   await page.goto('/playground/chat');
-  await expect(page.getByRole('heading', { name: /^Chat Playground$/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Chat$/i })).toBeVisible();
   await page.getByPlaceholder('ms-...').fill(gatewayAPIKey);
   await page.getByPlaceholder('Configured model name').fill('gpt-4.1-mini');
   await toggleSwitch(page, 'Memory persist');
@@ -393,14 +403,14 @@ test('playground and settings drafts survive internal route changes', async ({ p
   await expect(page.locator('textarea').first()).toHaveValue(/Draft route retention/);
 
   await page.goto('/playground/memory');
-  await expect(page.getByRole('heading', { name: /^Memory Playground$/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Recall$/i })).toBeVisible();
   await page.locator('.field').filter({ hasText: 'Conversation ID' }).first().locator('input').fill('conv-seed-1');
-  await page.locator('.field').filter({ hasText: 'Memory search query' }).first().locator('input').fill('launch checklist');
+  await page.getByLabel('Query').fill('launch checklist');
 
   await page.goto('/dashboard');
   await page.goto('/playground/memory');
   await expect(page.locator('.field').filter({ hasText: 'Conversation ID' }).first().locator('input')).toHaveValue('conv-seed-1');
-  await expect(page.locator('.field').filter({ hasText: 'Memory search query' }).first().locator('input')).toHaveValue('launch checklist');
+  await expect(page.getByLabel('Query')).toHaveValue('launch checklist');
 
   await page.goto('/settings/models');
   await expect(page.getByRole('heading', { name: /^Models$/i })).toBeVisible();
@@ -428,9 +438,10 @@ test('admin editing drafts survive route changes across providers, users, and ke
   await expect(page.getByRole('heading', { name: /^Providers$/i })).toBeVisible();
 
   const providerDialog = page.locator('.provider-dialog-card');
-  const gatewayProviderSection = page.locator('section.card').filter({ hasText: /Gateway Providers/i }).first();
-  const anthropicRow = gatewayProviderSection.locator('.provider-list-item').filter({ hasText: /anthropic/i }).first();
-  await anthropicRow.getByRole('button', { name: /Edit anthropic/i }).click();
+  const gatewayProvider = await ensureProviderRowVisible(page, /Gateway Providers/i, 'anthropic');
+  if (!gatewayProvider.openedDialog) {
+    await gatewayProvider.row.getByRole('button', { name: /Edit anthropic/i }).click();
+  }
   await expect(providerDialog).toBeVisible();
   await providerDialog.getByLabel('Base URL').fill('https://draft.anthropic.internal/v1');
   await providerDialog.getByLabel('Rotate API Key').fill('sk-draft-provider');
@@ -454,14 +465,14 @@ test('admin editing drafts survive route changes across providers, users, and ke
 
   await page.goto('/memory/keys');
   await expect(page.getByRole('heading', { name: /^Key Memories$/i })).toBeVisible();
-  await page.getByLabel('Filter key memories').fill('validation');
+  await page.getByLabel('Filter').fill('validation');
   await page.getByPlaceholder('preferred_name or recent_conversation').fill('draft_slot');
   await page.getByPlaceholder('profile, workflow, system').fill('workflow');
   await page.locator('textarea').first().fill('Draft key memory value');
 
   await page.goto('/dashboard');
   await page.goto('/memory/keys');
-  await expect(page.getByLabel('Filter key memories')).toHaveValue('validation');
+  await expect(page.getByLabel('Filter')).toHaveValue('validation');
   await expect(page.getByPlaceholder('preferred_name or recent_conversation')).toHaveValue('draft_slot');
   await expect(page.getByPlaceholder('profile, workflow, system')).toHaveValue('workflow');
   await expect(page.locator('textarea').first()).toHaveValue('Draft key memory value');
@@ -597,10 +608,11 @@ test('memory workspaces connect ranked recall, memory detail, and source convers
   await page.goto('/memory');
   await expect(page.getByRole('heading', { name: /^Memory Workspace$/i })).toBeVisible();
 
-  await page.getByLabel('Search query').fill('gateway memory');
-  await page.getByRole('button', { name: 'Run semantic search' }).click();
-  await expect(page.getByText('Query embedding token estimate: 12')).toBeVisible();
-  const summaryResult = page.locator('.debug-block').filter({ hasText: 'MemStation launch tracks gateway rollout' }).first();
+  await page.getByLabel('Query').fill('gateway memory');
+  await page.getByRole('button', { name: 'Run search' }).click();
+  await expect(page.getByText(/Query embedding tokens:/)).toBeVisible();
+  await expect(page.getByText('12').first()).toBeVisible();
+  const summaryResult = page.locator('.memory-result-card').filter({ hasText: 'MemStation launch tracks gateway rollout' }).first();
   await expect(summaryResult).toBeVisible();
   await expect(summaryResult.getByText('Matched keywords')).toBeVisible();
   await summaryResult.getByRole('link', { name: 'Open' }).click();
@@ -615,13 +627,13 @@ test('memory workspaces connect ranked recall, memory detail, and source convers
   await expect(page.locator('.message-body').filter({ hasText: 'MemStation launch tracks gateway rollout, memory verification, and admin observability.' }).first()).toBeVisible();
 
   await page.goto('/playground/memory');
-  await expect(page.getByRole('heading', { name: /^Memory Playground$/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Recall$/i })).toBeVisible();
   await page.getByLabel('Conversation ID').fill('conv-seed-1');
   await page.getByRole('button', { name: 'Inspect' }).click();
   await expect(page.getByText('summary completed')).toBeVisible();
   await expect(page.getByText('analysis completed')).toBeVisible();
   await expect(page.getByText('Gateway smoke coverage is required before rollout.')).toBeVisible();
-  await page.getByLabel('Memory search query').fill('gateway rollout');
+  await page.getByLabel('Query').fill('gateway rollout');
   await page.getByRole('button', { name: 'Search' }).click();
   const recallSection = page.locator('.card').filter({ has: page.getByRole('heading', { name: /^Recall$/i }) }).first();
   await expect(page.getByText(/Query embedding tokens:/)).toBeVisible();

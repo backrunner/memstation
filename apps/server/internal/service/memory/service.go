@@ -214,7 +214,56 @@ func (s *Service) SearchKeyMemories(ctx context.Context, input domain.KeyMemoryQ
 	return filtered, nil
 }
 
+func (s *Service) GetKeyMemory(ctx context.Context, userID, memoryKey string) (domain.KeyMemory, bool, error) {
+	if s == nil || s.repo == nil || strings.TrimSpace(userID) == "" || strings.TrimSpace(memoryKey) == "" {
+		return domain.KeyMemory{}, false, nil
+	}
+	return s.repo.GetKeyMemory(ctx, userID, strings.TrimSpace(memoryKey))
+}
+
+func (s *Service) GetKeyMemoryByID(ctx context.Context, userID, id string) (domain.KeyMemory, bool, error) {
+	if s == nil || s.repo == nil || strings.TrimSpace(userID) == "" || strings.TrimSpace(id) == "" {
+		return domain.KeyMemory{}, false, nil
+	}
+	return s.repo.GetKeyMemoryByID(ctx, userID, strings.TrimSpace(id))
+}
+
 func (s *Service) UpsertKeyMemory(ctx context.Context, km domain.KeyMemory) (domain.KeyMemory, error) {
+	km.Key = strings.TrimSpace(km.Key)
+	existing, hasExisting, err := s.GetKeyMemory(ctx, km.UserID, km.Key)
+	if err != nil {
+		return domain.KeyMemory{}, err
+	}
+	if hasExisting {
+		km.ID = existing.ID
+		if km.CreatedAt.IsZero() {
+			km.CreatedAt = existing.CreatedAt
+		}
+		if km.Metadata == nil {
+			km.Metadata = cloneMetadata(existing.Metadata)
+		} else if existing.Metadata != nil {
+			merged := cloneMetadata(existing.Metadata)
+			for key, value := range km.Metadata {
+				merged[key] = value
+			}
+			km.Metadata = merged
+		}
+		if existingNodeID := stringMetadataValue(existing.Metadata, "node_id"); existingNodeID != "" {
+			km.Metadata["node_id"] = existingNodeID
+		}
+		if km.Category == "" {
+			km.Category = existing.Category
+		}
+		if km.Source == "" {
+			km.Source = existing.Source
+		}
+		if km.ReviewStatus == "" {
+			km.ReviewStatus = existing.ReviewStatus
+		}
+		if km.LastConfirmedAt == nil {
+			km.LastConfirmedAt = existing.LastConfirmedAt
+		}
+	}
 	if km.ID == "" {
 		km.ID = uuid.NewString()
 	}
@@ -235,6 +284,14 @@ func (s *Service) UpsertKeyMemory(ctx context.Context, km domain.KeyMemory) (dom
 	if err := s.repo.UpsertKeyMemory(ctx, km); err != nil {
 		return domain.KeyMemory{}, err
 	}
+	if stored, ok, err := s.GetKeyMemory(ctx, km.UserID, km.Key); err != nil {
+		return domain.KeyMemory{}, err
+	} else if ok {
+		km = stored
+		if storedNodeID := stringMetadataValue(km.Metadata, "node_id"); storedNodeID != "" {
+			nodeID = storedNodeID
+		}
+	}
 	if s.vectors != nil {
 		if err := s.vectors.Upsert(ctx, domain.VectorUpsertRequest{
 			UserID:           km.UserID,
@@ -254,11 +311,22 @@ func (s *Service) UpsertKeyMemory(ctx context.Context, km domain.KeyMemory) (dom
 }
 
 func (s *Service) DeleteKeyMemory(ctx context.Context, userID, memoryKey string) error {
+	memoryKey = strings.TrimSpace(memoryKey)
+	existing, hasExisting, err := s.GetKeyMemory(ctx, userID, memoryKey)
+	if err != nil {
+		return err
+	}
 	if err := s.repo.DeleteKeyMemory(ctx, userID, memoryKey); err != nil {
 		return err
 	}
 	if s.vectors != nil {
-		if err := s.vectors.DeleteByNode(ctx, userID, keyMemoryNodeID(userID, memoryKey)); err != nil {
+		nodeID := keyMemoryNodeID(userID, memoryKey)
+		if hasExisting {
+			if existingNodeID := stringMetadataValue(existing.Metadata, "node_id"); existingNodeID != "" {
+				nodeID = existingNodeID
+			}
+		}
+		if err := s.vectors.DeleteByNode(ctx, userID, nodeID); err != nil {
 			return err
 		}
 	}

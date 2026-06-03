@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -278,6 +279,7 @@ func (a *Adapter) streamChat(ctx context.Context, req domain.UnifiedRequest, con
 	role := domain.RoleAssistant
 	textBuilder := strings.Builder{}
 	usage := domain.UsageRecord{}
+	toolAccumulator := newChatToolCallAccumulator()
 	started := false
 	emitStart := func() error {
 		if started {
@@ -308,8 +310,17 @@ func (a *Adapter) streamChat(ctx context.Context, req domain.UnifiedRequest, con
 			Created int64  `json:"created"`
 			Choices []struct {
 				Delta struct {
-					Role    string `json:"role"`
-					Content any    `json:"content"`
+					Role      string `json:"role"`
+					Content   any    `json:"content"`
+					ToolCalls []struct {
+						Index    int    `json:"index"`
+						ID       string `json:"id"`
+						Type     string `json:"type"`
+						Function struct {
+							Name      string `json:"name"`
+							Arguments string `json:"arguments"`
+						} `json:"function"`
+					} `json:"tool_calls"`
 				} `json:"delta"`
 			} `json:"choices"`
 			Usage *struct {
@@ -337,6 +348,7 @@ func (a *Adapter) streamChat(ctx context.Context, req domain.UnifiedRequest, con
 			return err
 		}
 		if len(chunk.Choices) > 0 {
+			toolAccumulator.Add(chunk.Choices[0].Delta.ToolCalls)
 			delta := contentToText(chunk.Choices[0].Delta.Content)
 			if delta != "" {
 				textBuilder.WriteString(delta)
@@ -381,7 +393,9 @@ func (a *Adapter) streamChat(ctx context.Context, req domain.UnifiedRequest, con
 			return nil, err
 		}
 	}
-	return newUnifiedResponse(req.Protocol, responseID, a.Name(), model, role, textBuilder.String(), createdAt, usage), nil
+	unified := newUnifiedResponse(req.Protocol, responseID, a.Name(), model, role, textBuilder.String(), createdAt, usage)
+	unified.Message.ToolCalls = toolAccumulator.ToolCalls()
+	return unified, nil
 }
 
 func (a *Adapter) streamResponses(ctx context.Context, req domain.UnifiedRequest, config provider.RuntimeConfig, emit func(domain.StreamEvent) error) (*domain.UnifiedResponse, error) {
@@ -407,6 +421,7 @@ func (a *Adapter) streamResponses(ctx context.Context, req domain.UnifiedRequest
 	role := domain.RoleAssistant
 	textBuilder := strings.Builder{}
 	usage := domain.UsageRecord{}
+	responseToolAccumulator := newResponsesToolCallAccumulator()
 	started := false
 	emitStart := func() error {
 		if started {
@@ -432,11 +447,32 @@ func (a *Adapter) streamResponses(ctx context.Context, req domain.UnifiedRequest
 			return nil
 		}
 		var chunk struct {
-			Type     string `json:"type"`
-			Delta    string `json:"delta"`
-			Response struct {
-				ID    string `json:"id"`
-				Model string `json:"model"`
+			Type      string `json:"type"`
+			Delta     string `json:"delta"`
+			ItemID    string `json:"item_id"`
+			Name      string `json:"name"`
+			CallID    string `json:"call_id"`
+			Arguments string `json:"arguments"`
+			Item      struct {
+				ID        string `json:"id"`
+				Type      string `json:"type"`
+				CallID    string `json:"call_id"`
+				Name      string `json:"name"`
+				Arguments string `json:"arguments"`
+			} `json:"item"`
+			OutputIndex *int `json:"output_index"`
+			Response    struct {
+				ID     string `json:"id"`
+				Model  string `json:"model"`
+				Output []struct {
+					ID        string           `json:"id"`
+					Type      string           `json:"type"`
+					Role      string           `json:"role"`
+					Name      string           `json:"name"`
+					CallID    string           `json:"call_id"`
+					Arguments string           `json:"arguments"`
+					Content   []map[string]any `json:"content"`
+				} `json:"output"`
 				Usage struct {
 					InputTokens  int `json:"input_tokens"`
 					OutputTokens int `json:"output_tokens"`
@@ -455,6 +491,17 @@ func (a *Adapter) streamResponses(ctx context.Context, req domain.UnifiedRequest
 		}
 		switch chunk.Type {
 		case "response.created":
+			return emitStart()
+		case "response.output_item.added", "response.output_item.done":
+			if chunk.Item.Type == "function_call" {
+				responseToolAccumulator.AddItem(outputIndexValue(chunk.OutputIndex), chunk.Item.ID, chunk.Item.CallID, chunk.Item.Name, chunk.Item.Arguments)
+			}
+			return emitStart()
+		case "response.function_call_arguments.delta":
+			responseToolAccumulator.AddArgumentsDelta(outputIndexValue(chunk.OutputIndex), chunk.ItemID, chunk.Delta)
+			return emitStart()
+		case "response.function_call_arguments.done":
+			responseToolAccumulator.AddArgumentsDone(outputIndexValue(chunk.OutputIndex), chunk.ItemID, chunk.CallID, chunk.Name, chunk.Arguments)
 			return emitStart()
 		case "response.output_text.delta":
 			if err := emitStart(); err != nil {
@@ -476,6 +523,8 @@ func (a *Adapter) streamResponses(ctx context.Context, req domain.UnifiedRequest
 			if err := emitStart(); err != nil {
 				return err
 			}
+			_, _, completedToolCalls := responseOutput(chunk.Response.Output)
+			responseToolAccumulator.AddCompleted(completedToolCalls)
 			usage = domain.UsageRecord{
 				InputTokens:  chunk.Response.Usage.InputTokens,
 				OutputTokens: chunk.Response.Usage.OutputTokens,
@@ -503,7 +552,9 @@ func (a *Adapter) streamResponses(ctx context.Context, req domain.UnifiedRequest
 			return nil, err
 		}
 	}
-	return newUnifiedResponse(req.Protocol, responseID, a.Name(), model, role, textBuilder.String(), createdAt, usage), nil
+	unified := newUnifiedResponse(req.Protocol, responseID, a.Name(), model, role, textBuilder.String(), createdAt, usage)
+	unified.Message.ToolCalls = responseToolAccumulator.ToolCalls()
+	return unified, nil
 }
 
 func buildMessages(messages []domain.UnifiedMessage) []map[string]any {
@@ -1055,6 +1106,255 @@ func parseChatToolCalls(items []struct {
 		})
 	}
 	return out
+}
+
+type chatToolCallAccumulator struct {
+	items []chatToolCallState
+}
+
+type chatToolCallState struct {
+	id        string
+	name      string
+	arguments strings.Builder
+}
+
+func newChatToolCallAccumulator() *chatToolCallAccumulator {
+	return &chatToolCallAccumulator{}
+}
+
+func (a *chatToolCallAccumulator) Add(items []struct {
+	Index    int    `json:"index"`
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Function struct {
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+	} `json:"function"`
+},
+) {
+	for _, item := range items {
+		if item.Index < 0 {
+			continue
+		}
+		for len(a.items) <= item.Index {
+			a.items = append(a.items, chatToolCallState{})
+		}
+		state := &a.items[item.Index]
+		if strings.TrimSpace(item.ID) != "" {
+			state.id = item.ID
+		}
+		if strings.TrimSpace(item.Function.Name) != "" {
+			state.name = item.Function.Name
+		}
+		if item.Function.Arguments != "" {
+			state.arguments.WriteString(item.Function.Arguments)
+		}
+	}
+}
+
+func (a *chatToolCallAccumulator) ToolCalls() []domain.ToolCall {
+	if a == nil || len(a.items) == 0 {
+		return nil
+	}
+	out := make([]domain.ToolCall, 0, len(a.items))
+	for idx, item := range a.items {
+		if strings.TrimSpace(item.id) == "" && strings.TrimSpace(item.name) == "" && strings.TrimSpace(item.arguments.String()) == "" {
+			continue
+		}
+		id := item.id
+		if strings.TrimSpace(id) == "" {
+			id = fmt.Sprintf("call-%d", idx+1)
+		}
+		out = append(out, domain.ToolCall{
+			ID:        id,
+			Name:      item.name,
+			Arguments: parseArguments(item.arguments.String()),
+		})
+	}
+	return out
+}
+
+type responsesToolCallAccumulator struct {
+	items         map[int]responsesToolCallState
+	indexByItemID map[string]int
+	completed     []domain.ToolCall
+}
+
+type responsesToolCallState struct {
+	itemID       string
+	call         domain.ToolCall
+	arguments    string
+	argumentsSet bool
+}
+
+func newResponsesToolCallAccumulator() *responsesToolCallAccumulator {
+	return &responsesToolCallAccumulator{
+		items:         map[int]responsesToolCallState{},
+		indexByItemID: map[string]int{},
+	}
+}
+
+func (a *responsesToolCallAccumulator) AddItem(index int, id, callID, name, arguments string) {
+	if a == nil {
+		return
+	}
+	index = a.resolveIndex(index, id, callID)
+	if index < 0 {
+		return
+	}
+	current := a.items[index]
+	if strings.TrimSpace(id) != "" {
+		current.itemID = id
+	}
+	if strings.TrimSpace(id) != "" || strings.TrimSpace(callID) != "" {
+		current.call.ID = firstNonEmpty(callID, id)
+	}
+	if strings.TrimSpace(name) != "" {
+		current.call.Name = name
+	}
+	if strings.TrimSpace(arguments) != "" {
+		current.arguments = arguments
+		current.argumentsSet = true
+	}
+	a.items[index] = current
+	a.recordIndex(index, id, callID)
+}
+
+func (a *responsesToolCallAccumulator) AddArgumentsDelta(index int, itemID, delta string) {
+	if a == nil || delta == "" {
+		return
+	}
+	index = a.resolveIndex(index, itemID)
+	if index < 0 {
+		return
+	}
+	current := a.items[index]
+	if strings.TrimSpace(itemID) != "" {
+		current.itemID = itemID
+	}
+	current.arguments += delta
+	current.argumentsSet = true
+	a.items[index] = current
+	a.recordIndex(index, itemID)
+}
+
+func (a *responsesToolCallAccumulator) AddArgumentsDone(index int, itemID, callID, name, arguments string) {
+	if a == nil {
+		return
+	}
+	index = a.resolveIndex(index, itemID, callID)
+	if index < 0 {
+		return
+	}
+	current := a.items[index]
+	if strings.TrimSpace(itemID) != "" {
+		current.itemID = itemID
+	}
+	if strings.TrimSpace(callID) != "" {
+		current.call.ID = callID
+	}
+	if strings.TrimSpace(name) != "" {
+		current.call.Name = name
+	}
+	if strings.TrimSpace(arguments) != "" {
+		current.arguments = arguments
+		current.argumentsSet = true
+	}
+	a.items[index] = current
+	a.recordIndex(index, itemID, callID)
+}
+
+func (a *responsesToolCallAccumulator) AddCompleted(items []domain.ToolCall) {
+	if a == nil || len(items) == 0 {
+		return
+	}
+	a.completed = append(a.completed, items...)
+}
+
+func (a *responsesToolCallAccumulator) ToolCalls() []domain.ToolCall {
+	if a == nil {
+		return nil
+	}
+	out := make([]domain.ToolCall, 0, len(a.completed)+len(a.items))
+	seen := map[string]struct{}{}
+	appendCall := func(call domain.ToolCall) {
+		if strings.TrimSpace(call.ID) == "" && strings.TrimSpace(call.Name) == "" {
+			return
+		}
+		key := firstNonEmpty(call.ID, call.Name)
+		if strings.TrimSpace(key) == "" {
+			out = append(out, call)
+			return
+		}
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		out = append(out, call)
+	}
+	for _, call := range a.completed {
+		appendCall(call)
+	}
+	indexes := make([]int, 0, len(a.items))
+	for index := range a.items {
+		indexes = append(indexes, index)
+	}
+	sort.Ints(indexes)
+	for _, index := range indexes {
+		state := a.items[index]
+		call := state.call
+		if strings.TrimSpace(call.ID) == "" {
+			call.ID = firstNonEmpty(state.itemID, fmt.Sprintf("call-%d", index+1))
+		}
+		if state.argumentsSet {
+			call.Arguments = parseArguments(state.arguments)
+		}
+		appendCall(call)
+	}
+	return out
+}
+
+func (a *responsesToolCallAccumulator) resolveIndex(index int, ids ...string) int {
+	if a == nil {
+		return -1
+	}
+	if index >= 0 {
+		return index
+	}
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if existing, ok := a.indexByItemID[id]; ok {
+			return existing
+		}
+	}
+	for next := 0; ; next++ {
+		if _, ok := a.items[next]; !ok {
+			return next
+		}
+	}
+}
+
+func (a *responsesToolCallAccumulator) recordIndex(index int, ids ...string) {
+	if a == nil || index < 0 {
+		return
+	}
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		a.indexByItemID[id] = index
+	}
+}
+
+func outputIndexValue(index *int) int {
+	if index == nil {
+		return -1
+	}
+	return *index
 }
 
 func buildChatToolCalls(items []domain.ToolCall) []map[string]any {

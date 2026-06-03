@@ -64,7 +64,12 @@ func handleConversationFinalize(logger *slog.Logger, services Services) func(con
 		userID := stringValue(payload, "user_id")
 		finalizeReason := stringValue(payload, "finalize_reason")
 		finalizeStatus := finalizeStatusValue(payload)
-		logger.InfoContext(ctx, "conversation finalize task received", "payload", string(task.Payload()))
+		logger.InfoContext(ctx, "conversation finalize task received",
+			"user_id", userID,
+			"conversation_id", conversationID,
+			"finalize_reason", finalizeReason,
+			"finalize_status", finalizeStatus,
+		)
 		conversation, err := services.Conversations.GetConversation(ctx, userID, conversationID)
 		if err != nil {
 			return err

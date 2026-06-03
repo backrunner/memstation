@@ -2188,23 +2188,61 @@ func (r *PostgresMemoryRepository) ListKeyMemories(ctx context.Context, userID s
 
 	out := make([]domain.KeyMemory, 0)
 	for rows.Next() {
-		var item domain.KeyMemory
-		var nodeID string
-		var lastConfirmedAt sqlpkg.NullTime
-		var timeTier string
-		item.UserID = userID
-		if err := rows.Scan(&item.ID, &nodeID, &item.Key, &item.Value, &item.Category, &item.Source, &item.ReviewStatus, &lastConfirmedAt, &item.CreatedAt, &item.UpdatedAt, &item.Importance, &item.DecayFactor, &item.ActivityAt, &timeTier); err != nil {
+		item, err := scanKeyMemoryRow(rows, userID)
+		if err != nil {
 			return nil, err
-		}
-		item.Metadata = map[string]any{"node_id": nodeID}
-		item.TimeTier = domain.ParseTimeTier(timeTier)
-		item.EffectiveScore = item.Importance * domain.TimeDecay(domain.MemoryTypeKeyMemory, item.ActivityAt, item.DecayFactor, item.Importance, time.Now().UTC())
-		if lastConfirmedAt.Valid {
-			item.LastConfirmedAt = &lastConfirmedAt.Time
 		}
 		out = append(out, item)
 	}
 	return out, rows.Err()
+}
+
+func (r *PostgresMemoryRepository) GetKeyMemory(ctx context.Context, userID, memoryKey string) (domain.KeyMemory, bool, error) {
+	row := r.db.QueryRowContext(ctx, `
+	        SELECT k.id, k.node_id, k.key, k.value, k.category, k.source, k.review_status, k.last_confirmed_at, k.created_at, k.updated_at,
+	               COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, k.updated_at), COALESCE(n.time_tier, '')
+	        FROM key_memories k
+	        LEFT JOIN memory_nodes n ON n.id = k.node_id
+	        WHERE k.user_id = $1 AND k.key = $2 AND k.deleted_at IS NULL
+	    `, userID, strings.TrimSpace(memoryKey))
+	item, err := scanKeyMemoryRow(row, userID)
+	if errors.Is(err, sqlpkg.ErrNoRows) {
+		return domain.KeyMemory{}, false, nil
+	}
+	if err != nil {
+		return domain.KeyMemory{}, false, err
+	}
+	return item, true, nil
+}
+
+func (r *PostgresMemoryRepository) GetKeyMemoryByID(ctx context.Context, userID, id string) (domain.KeyMemory, bool, error) {
+	row := r.db.QueryRowContext(ctx, `
+	        SELECT k.id, k.node_id, k.key, k.value, k.category, k.source, k.review_status, k.last_confirmed_at, k.created_at, k.updated_at,
+	               COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, k.updated_at), COALESCE(n.time_tier, '')
+	        FROM key_memories k
+	        LEFT JOIN memory_nodes n ON n.id = k.node_id
+	        WHERE k.user_id = $1 AND k.id = $2 AND k.deleted_at IS NULL
+	    `, userID, strings.TrimSpace(id))
+	item, err := scanKeyMemoryRow(row, userID)
+	if errors.Is(err, sqlpkg.ErrNoRows) {
+		return domain.KeyMemory{}, false, nil
+	}
+	if err != nil {
+		return domain.KeyMemory{}, false, err
+	}
+	return item, true, nil
+}
+
+func (r *PostgresMemoryRepository) CountKeyMemories(ctx context.Context, userID string) (int, error) {
+	var count int
+	if err := r.db.QueryRowContext(ctx, `
+	        SELECT COUNT(*)
+	        FROM key_memories
+	        WHERE user_id = $1 AND deleted_at IS NULL
+	    `, userID).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 func (r *PostgresMemoryRepository) SearchKeyMemories(ctx context.Context, input domain.KeyMemoryQuery) ([]domain.KeyMemory, error) {
@@ -2249,13 +2287,72 @@ func (r *PostgresMemoryRepository) SearchKeyMemories(ctx context.Context, input 
 	return filtered, nil
 }
 
+type keyMemoryScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanKeyMemoryRow(row keyMemoryScanner, userID string) (domain.KeyMemory, error) {
+	var item domain.KeyMemory
+	var nodeID string
+	var lastConfirmedAt sqlpkg.NullTime
+	var timeTier string
+	item.UserID = userID
+	if err := row.Scan(&item.ID, &nodeID, &item.Key, &item.Value, &item.Category, &item.Source, &item.ReviewStatus, &lastConfirmedAt, &item.CreatedAt, &item.UpdatedAt, &item.Importance, &item.DecayFactor, &item.ActivityAt, &timeTier); err != nil {
+		return domain.KeyMemory{}, err
+	}
+	item.Metadata = map[string]any{"node_id": nodeID}
+	item.TimeTier = domain.ParseTimeTier(timeTier)
+	item.EffectiveScore = item.Importance * domain.TimeDecay(domain.MemoryTypeKeyMemory, item.ActivityAt, item.DecayFactor, item.Importance, time.Now().UTC())
+	if lastConfirmedAt.Valid {
+		item.LastConfirmedAt = &lastConfirmedAt.Time
+	}
+	return item, nil
+}
+
 func (r *PostgresMemoryRepository) UpsertKeyMemory(ctx context.Context, km domain.KeyMemory) error {
+	km.Key = strings.TrimSpace(km.Key)
+	var existingID string
+	var existingNodeID string
+	var existingCreatedAt time.Time
+	var existingCategory sqlpkg.NullString
+	var existingSource sqlpkg.NullString
+	var existingReviewStatus sqlpkg.NullString
+	var existingLastConfirmedAt sqlpkg.NullTime
+	switch err := r.db.QueryRowContext(ctx, `
+        SELECT id, node_id, created_at, category, source, review_status, last_confirmed_at
+        FROM key_memories
+        WHERE user_id = $1 AND key = $2
+    `, km.UserID, km.Key).Scan(&existingID, &existingNodeID, &existingCreatedAt, &existingCategory, &existingSource, &existingReviewStatus, &existingLastConfirmedAt); err {
+	case nil:
+		km.ID = existingID
+		if km.CreatedAt.IsZero() {
+			km.CreatedAt = existingCreatedAt
+		}
+		if km.Category == "" {
+			km.Category = existingCategory.String
+		}
+		if km.Source == "" {
+			km.Source = existingSource.String
+		}
+		if km.ReviewStatus == "" {
+			km.ReviewStatus = existingReviewStatus.String
+		}
+		if km.LastConfirmedAt == nil && existingLastConfirmedAt.Valid {
+			km.LastConfirmedAt = &existingLastConfirmedAt.Time
+		}
+	case sqlpkg.ErrNoRows:
+	default:
+		return err
+	}
 	if km.ID == "" {
 		km.ID = uuid.NewString()
 	}
 	nodeID := stringValue(km.Metadata, "node_id")
+	if existingNodeID != "" {
+		nodeID = existingNodeID
+	}
 	if nodeID == "" {
-		nodeID = uuid.NewString()
+		nodeID = keyMemoryNodeID(km.UserID, km.Key)
 	}
 	if km.Importance == 0 {
 		km.Importance = 1
@@ -2275,7 +2372,28 @@ func (r *PostgresMemoryRepository) UpsertKeyMemory(ctx context.Context, km domai
 	}
 	defer rollback(tx)
 
+	if existingNodeID != "" && existingNodeID != nodeID {
+		if err := deleteMemoryEvidencesByNodeIDsTx(ctx, tx, km.UserID, []string{existingNodeID}); err != nil {
+			return err
+		}
+		if err := deleteRelationsByNodeIDsTx(ctx, tx, km.UserID, []string{existingNodeID}); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
+            DELETE FROM memory_embeddings
+            WHERE user_id = $1 AND node_id = $2
+        `, km.UserID, existingNodeID); err != nil {
+			return err
+		}
+		if err := deleteMemoryNodesByIDsTx(ctx, tx, km.UserID, []string{existingNodeID}); err != nil {
+			return err
+		}
+	}
+
 	now := time.Now().UTC()
+	if km.CreatedAt.IsZero() {
+		km.CreatedAt = now
+	}
 	_, err = tx.ExecContext(ctx, `
 	        INSERT INTO memory_nodes (id, user_id, node_type, entity_id, importance, decay_factor, activity_at, time_tier, embedding_status, created_at, updated_at)
 	        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
@@ -2285,7 +2403,7 @@ func (r *PostgresMemoryRepository) UpsertKeyMemory(ctx context.Context, km domai
 	            activity_at = EXCLUDED.activity_at,
 	            time_tier = EXCLUDED.time_tier,
 	            updated_at = EXCLUDED.updated_at
-	    `, nodeID, km.UserID, string(domain.MemoryTypeKeyMemory), km.ID, km.Importance, km.DecayFactor, km.ActivityAt, string(km.TimeTier), "pending", now, now)
+	`, nodeID, km.UserID, string(domain.MemoryTypeKeyMemory), km.ID, km.Importance, km.DecayFactor, km.ActivityAt, string(km.TimeTier), "pending", km.CreatedAt, now)
 	if err != nil {
 		return err
 	}

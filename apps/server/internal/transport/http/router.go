@@ -651,16 +651,11 @@ func keyMemoryUpsertHandler(service *memoryservice.Service, audit *auditsvc.Serv
 		key := chi.URLParam(r, "key")
 		userID := security.UserIDFromContext(r.Context())
 		action := "create_key_memory"
-		if service != nil {
-			items, err := service.ListKeyMemories(r.Context(), userID, 200)
-			if err == nil {
-				for _, item := range items {
-					if item.Key == key {
-						action = "update_key_memory"
-						break
-					}
-				}
-			}
+		if existing, ok, err := service.GetKeyMemory(r.Context(), userID, key); err != nil {
+			writeError(w, http.StatusInternalServerError, "key_memory_failed", err.Error())
+			return
+		} else if ok && existing.ID != "" {
+			action = "update_key_memory"
 		}
 		item, err := service.UpsertKeyMemory(r.Context(), domain.KeyMemory{
 			UserID:       userID,
@@ -2484,14 +2479,12 @@ func parseOptionalRFC3339(value string) (*time.Time, error) {
 }
 
 func findKeyMemoryByID(ctx context.Context, service *memoryservice.Service, userID, id string) (domain.KeyMemory, error) {
-	items, err := service.ListKeyMemories(ctx, userID, 500)
+	item, ok, err := service.GetKeyMemoryByID(ctx, userID, id)
 	if err != nil {
 		return domain.KeyMemory{}, err
 	}
-	for _, item := range items {
-		if item.ID == id {
-			return item, nil
-		}
+	if ok {
+		return item, nil
 	}
 	return domain.KeyMemory{}, fmt.Errorf("key memory not found: %s", id)
 }

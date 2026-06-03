@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -57,7 +58,7 @@ type ProviderHTTPError struct {
 }
 
 func (e *ProviderHTTPError) Error() string {
-	return fmt.Sprintf("provider request failed: status=%d body=%s", e.StatusCode, e.Body)
+	return fmt.Sprintf("provider request failed: status=%d body=%s", e.StatusCode, sanitizeProviderErrorBody(e.Body))
 }
 
 func DoJSONRequest(ctx context.Context, client *http.Client, providerName domain.Provider, method, endpoint string, headers map[string]string, payload any) ([]byte, int, error) {
@@ -211,6 +212,21 @@ func doSingleRequest(ctx context.Context, client *http.Client, spec providerRequ
 		StatusCode: response.StatusCode,
 		Body:       raw,
 	}, nil
+}
+
+var providerSecretPattern = regexp.MustCompile(`(?i)(sk-[a-z0-9_-]{8,}|ms-[a-z0-9_-]{8,}|bearer\s+[a-z0-9._-]{8,}|api[_ -]?key["'\s:=]+[a-z0-9._-]{8,})`)
+
+func sanitizeProviderErrorBody(body string) string {
+	normalized := strings.Join(strings.Fields(strings.TrimSpace(body)), " ")
+	if normalized == "" {
+		return ""
+	}
+	normalized = providerSecretPattern.ReplaceAllString(normalized, "[redacted]")
+	const maxErrorBodyChars = 240
+	if len(normalized) > maxErrorBodyChars {
+		return normalized[:maxErrorBodyChars] + "..."
+	}
+	return normalized
 }
 
 func shouldRetry(ctx context.Context, err error) bool {

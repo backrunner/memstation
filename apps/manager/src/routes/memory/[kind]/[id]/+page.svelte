@@ -167,7 +167,7 @@
   }
 
   function applyDraft(draft: MemoryDetailDraft | null): void {
-    if (!draft) {
+    if (!draft || draftsEqual(draft, emptyDraft())) {
       return;
     }
     if (routeKind === 'keys') {
@@ -177,6 +177,14 @@
       return;
     }
     draftContent = draft.draftContent ?? draftContent;
+  }
+
+  function clearActiveDraft(): void {
+    if (!activeDraftKey) {
+      return;
+    }
+    clearSessionDraft(activeDraftKey);
+    savedDraft = captureDraft();
   }
 
   async function loadDetail(): Promise<void> {
@@ -265,6 +273,7 @@
         }
         documentItem = await updateAdminMemoryDocument($selectedTarget, documentKind, documentItem.id, draftContent, activeUserId);
       }
+      clearActiveDraft();
       await loadDetail();
       success = routeKind === 'keys' ? 'Key memory updated and reloaded from the target.' : `${itemTitle} updated and reloaded from the target.`;
     } catch (cause) {

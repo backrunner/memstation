@@ -686,6 +686,39 @@ func (r *InMemoryMemoryRepository) ListKeyMemories(_ context.Context, userID str
 	return out, nil
 }
 
+func (r *InMemoryMemoryRepository) GetKeyMemory(_ context.Context, userID, memoryKey string) (domain.KeyMemory, bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	km, ok := r.keyMemories[key(userID, strings.TrimSpace(memoryKey))]
+	if !ok {
+		return domain.KeyMemory{}, false, nil
+	}
+	return hydrateKeyMemory(km), true, nil
+}
+
+func (r *InMemoryMemoryRepository) GetKeyMemoryByID(_ context.Context, userID, id string) (domain.KeyMemory, bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, km := range r.keyMemories {
+		if km.UserID == userID && km.ID == strings.TrimSpace(id) {
+			return hydrateKeyMemory(km), true, nil
+		}
+	}
+	return domain.KeyMemory{}, false, nil
+}
+
+func (r *InMemoryMemoryRepository) CountKeyMemories(_ context.Context, userID string) (int, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	count := 0
+	for _, km := range r.keyMemories {
+		if km.UserID == userID {
+			count++
+		}
+	}
+	return count, nil
+}
+
 func (r *InMemoryMemoryRepository) SearchKeyMemories(_ context.Context, input domain.KeyMemoryQuery) ([]domain.KeyMemory, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -731,10 +764,53 @@ func (r *InMemoryMemoryRepository) SearchKeyMemories(_ context.Context, input do
 	return out, nil
 }
 
+func hydrateKeyMemory(km domain.KeyMemory) domain.KeyMemory {
+	km.Importance = domain.ClampImportance(km.Importance)
+	km.DecayFactor = domain.ClampDecayFactor(km.DecayFactor)
+	km.ActivityAt = domain.DeriveActivityAt(km.ActivityAt, km.UpdatedAt, km.CreatedAt)
+	km.TimeTier = domain.ClassifyTimeTier(km.ActivityAt, time.Now().UTC())
+	km.EffectiveScore = km.Importance * domain.TimeDecay(domain.MemoryTypeKeyMemory, km.ActivityAt, km.DecayFactor, km.Importance, time.Now().UTC())
+	return km
+}
+
 func (r *InMemoryMemoryRepository) UpsertKeyMemory(_ context.Context, km domain.KeyMemory) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := time.Now().UTC()
+	existing, existed := r.keyMemories[key(km.UserID, km.Key)]
+	existingNodeID := stringMetadataValue(existing.Metadata, "node_id")
+	if existed {
+		if km.ID == "" || km.ID != existing.ID {
+			km.ID = existing.ID
+		}
+		if km.CreatedAt.IsZero() {
+			km.CreatedAt = existing.CreatedAt
+		}
+		if km.Metadata == nil {
+			km.Metadata = cloneMetadata(existing.Metadata)
+		} else if existing.Metadata != nil {
+			merged := cloneMetadata(existing.Metadata)
+			for key, value := range km.Metadata {
+				merged[key] = value
+			}
+			km.Metadata = merged
+		}
+		if existingNodeID != "" {
+			km.Metadata["node_id"] = existingNodeID
+		}
+		if km.Category == "" {
+			km.Category = existing.Category
+		}
+		if km.Source == "" {
+			km.Source = existing.Source
+		}
+		if km.ReviewStatus == "" {
+			km.ReviewStatus = existing.ReviewStatus
+		}
+		if km.LastConfirmedAt == nil {
+			km.LastConfirmedAt = existing.LastConfirmedAt
+		}
+	}
 	if km.ID == "" {
 		km.ID = uuid.NewString()
 	}
@@ -764,13 +840,22 @@ func (r *InMemoryMemoryRepository) UpsertKeyMemory(_ context.Context, km domain.
 		nodeID = typed
 	}
 	if nodeID == "" {
-		nodeID = uuid.NewString()
+		nodeID = existingNodeID
+	}
+	if nodeID == "" {
+		nodeID = keyMemoryNodeID(km.UserID, km.Key)
 		if km.Metadata == nil {
 			km.Metadata = map[string]any{}
 		}
-		km.Metadata["node_id"] = nodeID
-		r.keyMemories[key(km.UserID, km.Key)] = km
 	}
+	km.Metadata["node_id"] = nodeID
+	if existed {
+		delete(r.documents, key(km.UserID, existing.ID))
+		if existingNodeID != "" && existingNodeID != nodeID {
+			r.removeRelationsForNodeLocked(km.UserID, existingNodeID)
+		}
+	}
+	r.keyMemories[key(km.UserID, km.Key)] = km
 	r.documents[key(km.UserID, km.ID)] = domain.MemoryDocument{
 		ID:          km.ID,
 		NodeID:      nodeID,
@@ -804,18 +889,22 @@ func (r *InMemoryMemoryRepository) DeleteKeyMemory(_ context.Context, userID, me
 		nodeID := stringMetadataValue(km.Metadata, "node_id")
 		delete(r.documents, key(userID, km.ID))
 		if nodeID != "" {
-			filtered := r.relations[:0]
-			for _, relation := range r.relations {
-				if relation.UserID == userID && (relation.SrcNodeID == nodeID || relation.DstNodeID == nodeID) {
-					continue
-				}
-				filtered = append(filtered, relation)
-			}
-			r.relations = filtered
+			r.removeRelationsForNodeLocked(userID, nodeID)
 		}
 	}
 	delete(r.keyMemories, key(userID, memoryKey))
 	return nil
+}
+
+func (r *InMemoryMemoryRepository) removeRelationsForNodeLocked(userID, nodeID string) {
+	filtered := r.relations[:0]
+	for _, relation := range r.relations {
+		if relation.UserID == userID && (relation.SrcNodeID == nodeID || relation.DstNodeID == nodeID) {
+			continue
+		}
+		filtered = append(filtered, relation)
+	}
+	r.relations = filtered
 }
 
 func (r *InMemoryMemoryRepository) LinkDocuments(_ context.Context, relation domain.MemoryRelation) error {
@@ -1467,6 +1556,10 @@ func (r *InMemoryOutboxRepository) MarkProcessed(_ context.Context, id string) e
 
 func key(parts ...string) string {
 	return strings.Join(parts, "::")
+}
+
+func keyMemoryNodeID(userID, memoryKey string) string {
+	return "node:keymemory:" + userID + ":" + memoryKey
 }
 
 func matchesMemoryType(value domain.MemoryType, filters []domain.MemoryType) bool {

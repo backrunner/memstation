@@ -108,7 +108,7 @@ func (s *Service) Overview(ctx context.Context, userID string) (map[string]any, 
 	if err != nil {
 		return nil, err
 	}
-	keyMemories, err := s.memories.ListKeyMemories(ctx, userID, 50)
+	keyMemoryCount, err := countKeyMemories(ctx, s.memories, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func (s *Service) Overview(ctx context.Context, userID string) (map[string]any, 
 		"active_conversations": activeConversations,
 		"conversation_count":   len(conversations),
 		"memory_count":         countDocumentsByType(ctx, s.memories, s.generations, userID, nil),
-		"key_memory_count":     len(keyMemories),
+		"key_memory_count":     keyMemoryCount,
 		"models":               s.models.List(),
 		"config":               config,
 		"recent_audit_events":  recentAuditEvents,
@@ -347,7 +347,10 @@ func (s *Service) ListUsers(ctx context.Context) ([]UserSummary, error) {
 		if err != nil {
 			return nil, err
 		}
-		keyMemories := countKeyMemories(ctx, s.memories, user.ID)
+		keyMemories, err := countKeyMemories(ctx, s.memories, user.ID)
+		if err != nil {
+			return nil, err
+		}
 		totals, err := s.totalsForUser(ctx, user.ID, conversations)
 		if err != nil {
 			return nil, err
@@ -439,7 +442,12 @@ func (s *Service) UserDetail(ctx context.Context, userID string) (UserDetail, er
 	}
 
 	keyMemories := []domain.KeyMemory{}
+	keyMemoryCount := 0
 	if s.memories != nil {
+		keyMemoryCount, err = countKeyMemories(ctx, s.memories, userID)
+		if err != nil {
+			return UserDetail{}, err
+		}
 		keyMemories, err = s.memories.ListKeyMemories(ctx, userID, 20)
 		if err != nil {
 			return UserDetail{}, err
@@ -460,7 +468,7 @@ func (s *Service) UserDetail(ctx context.Context, userID string) (UserDetail, er
 		TokenUsage:    tokenUsage,
 		Stats: map[string]any{
 			"conversation_count": lenOrFallback(conversations, conversationCount),
-			"key_memory_count":   len(keyMemories),
+			"key_memory_count":   keyMemoryCount,
 			"api_key_count":      len(apiKeys),
 		},
 	}, nil
@@ -528,15 +536,11 @@ func anyString(value any) string {
 	return typed
 }
 
-func countKeyMemories(ctx context.Context, repo ports.MemoryRepository, userID string) int {
+func countKeyMemories(ctx context.Context, repo ports.MemoryRepository, userID string) (int, error) {
 	if repo == nil {
-		return 0
+		return 0, nil
 	}
-	items, err := repo.ListKeyMemories(ctx, userID, 1000)
-	if err != nil {
-		return 0
-	}
-	return len(items)
+	return repo.CountKeyMemories(ctx, userID)
 }
 
 func (s *Service) activeGenerationID(ctx context.Context, userID string) (string, error) {

@@ -243,6 +243,7 @@ func (a *Adapter) Stream(ctx context.Context, req domain.UnifiedRequest, emit fu
 	role := domain.RoleAssistant
 	textBuilder := strings.Builder{}
 	usage := domain.UsageRecord{}
+	toolAccumulator := newStreamToolUseAccumulator()
 	started := false
 	emitStart := func() error {
 		if started {
@@ -306,15 +307,34 @@ func (a *Adapter) Stream(ctx context.Context, req domain.UnifiedRequest, emit fu
 				})
 			}
 			return nil
+		case "content_block_start":
+			var chunk struct {
+				Index        int            `json:"index"`
+				ContentBlock map[string]any `json:"content_block"`
+			}
+			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+				return err
+			}
+			if stringValue(chunk.ContentBlock, "type") == "tool_use" {
+				toolAccumulator.Start(chunk.Index, stringValue(chunk.ContentBlock, "id"), stringValue(chunk.ContentBlock, "name"), chunk.ContentBlock["input"])
+				return emitStart()
+			}
+			return nil
 		case "content_block_delta":
 			var chunk struct {
+				Index int `json:"index"`
 				Delta struct {
-					Type string `json:"type"`
-					Text string `json:"text"`
+					Type        string `json:"type"`
+					Text        string `json:"text"`
+					PartialJSON string `json:"partial_json"`
 				} `json:"delta"`
 			}
 			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 				return err
+			}
+			if chunk.Delta.Type == "input_json_delta" {
+				toolAccumulator.AddInputDelta(chunk.Index, chunk.Delta.PartialJSON)
+				return emitStart()
 			}
 			if chunk.Delta.Type != "text_delta" || chunk.Delta.Text == "" {
 				return nil
@@ -375,8 +395,9 @@ func (a *Adapter) Stream(ctx context.Context, req domain.UnifiedRequest, emit fu
 		Provider:   domain.ProviderAnthropic,
 		Model:      model,
 		Message: domain.UnifiedMessage{
-			Role: role,
-			Text: text,
+			Role:      role,
+			Text:      text,
+			ToolCalls: toolAccumulator.ToolCalls(),
 			Blocks: []domain.ContentBlock{{
 				Type: domain.ContentBlockText,
 				Text: text,
@@ -388,6 +409,81 @@ func (a *Adapter) Stream(ctx context.Context, req domain.UnifiedRequest, emit fu
 			"provider": "anthropic",
 		},
 	}, nil
+}
+
+type streamToolUseAccumulator struct {
+	items []streamToolUseState
+}
+
+type streamToolUseState struct {
+	id       string
+	name     string
+	input    any
+	inputRaw strings.Builder
+}
+
+func newStreamToolUseAccumulator() *streamToolUseAccumulator {
+	return &streamToolUseAccumulator{}
+}
+
+func (a *streamToolUseAccumulator) Start(index int, id, name string, input any) {
+	if a == nil || index < 0 {
+		return
+	}
+	for len(a.items) <= index {
+		a.items = append(a.items, streamToolUseState{})
+	}
+	state := &a.items[index]
+	if strings.TrimSpace(id) != "" {
+		state.id = id
+	}
+	if strings.TrimSpace(name) != "" {
+		state.name = name
+	}
+	if input != nil {
+		state.input = input
+	}
+}
+
+func (a *streamToolUseAccumulator) AddInputDelta(index int, partialJSON string) {
+	if a == nil || index < 0 || partialJSON == "" {
+		return
+	}
+	for len(a.items) <= index {
+		a.items = append(a.items, streamToolUseState{})
+	}
+	a.items[index].inputRaw.WriteString(partialJSON)
+}
+
+func (a *streamToolUseAccumulator) ToolCalls() []domain.ToolCall {
+	if a == nil || len(a.items) == 0 {
+		return nil
+	}
+	out := make([]domain.ToolCall, 0, len(a.items))
+	for index, item := range a.items {
+		if strings.TrimSpace(item.id) == "" && strings.TrimSpace(item.name) == "" && strings.TrimSpace(item.inputRaw.String()) == "" && item.input == nil {
+			continue
+		}
+		id := item.id
+		if strings.TrimSpace(id) == "" {
+			id = fmt.Sprintf("toolu_%d", index+1)
+		}
+		arguments := item.input
+		if raw := strings.TrimSpace(item.inputRaw.String()); raw != "" {
+			var parsed any
+			if err := json.Unmarshal([]byte(raw), &parsed); err == nil {
+				arguments = parsed
+			} else {
+				arguments = raw
+			}
+		}
+		out = append(out, domain.ToolCall{
+			ID:        id,
+			Name:      item.name,
+			Arguments: arguments,
+		})
+	}
+	return out
 }
 
 func (a *Adapter) resolveConfig(ctx context.Context) (provider.RuntimeConfig, error) {

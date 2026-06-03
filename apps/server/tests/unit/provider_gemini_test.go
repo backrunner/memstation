@@ -3,6 +3,7 @@ package unit_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -243,5 +244,55 @@ func TestGeminiAdapterCompleteSendsFunctionResponses(t *testing.T) {
 	}
 	if response.Message.Text != "It is sunny in London." {
 		t.Fatalf("unexpected text: %s", response.Message.Text)
+	}
+}
+
+func TestGeminiAdapterStreamParsesToolCalls(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Path; got != "/models/gemini-2.5-flash:streamGenerateContent" {
+			t.Fatalf("unexpected path: %s", got)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, _ := w.(http.Flusher)
+		events := []string{
+			fmt.Sprintf("data: %s\n\n", `{"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"id":"call-weather-1","name":"get_weather","args":{"city":"London"}}}]}}],"usageMetadata":{"promptTokenCount":12,"candidatesTokenCount":4,"totalTokenCount":16},"modelVersion":"gemini-2.5-flash"}`),
+		}
+		for _, event := range events {
+			if _, err := w.Write([]byte(event)); err != nil {
+				t.Fatalf("write event: %v", err)
+			}
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+	}))
+	defer server.Close()
+
+	adapter := geminiprovider.NewAdapter(provider.StaticConfigResolver{
+		domain.ProviderGemini: {APIKey: "sk-gemini", BaseURL: server.URL},
+	}, 5*time.Second)
+
+	response, err := adapter.Stream(context.Background(), domain.UnifiedRequest{
+		Protocol: domain.ProtocolOpenAIResponses,
+		Model:    "gemini-2.5-flash",
+		Stream:   true,
+		Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "weather in London"}},
+		Tools:    []domain.ToolDefinition{{Name: "get_weather"}},
+	}, func(domain.StreamEvent) error { return nil })
+	if err != nil {
+		t.Fatalf("stream: %v", err)
+	}
+	if len(response.Message.ToolCalls) != 1 {
+		t.Fatalf("expected streamed tool call, got %+v", response.Message.ToolCalls)
+	}
+	call := response.Message.ToolCalls[0]
+	if call.ID != "call-weather-1" || call.Name != "get_weather" {
+		t.Fatalf("unexpected tool call: %+v", call)
+	}
+	arguments, ok := call.Arguments.(map[string]any)
+	if !ok || arguments["city"] != "London" {
+		t.Fatalf("unexpected tool arguments: %+v", call.Arguments)
 	}
 }

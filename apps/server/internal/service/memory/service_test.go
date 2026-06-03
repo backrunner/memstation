@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -120,6 +121,158 @@ func TestServiceUpsertKeyMemoryCreatesSearchableEmbedding(t *testing.T) {
 	}
 	if result.Memories[0].Metadata["key"] != "preferred_editor" {
 		t.Fatalf("expected metadata key preferred_editor, got %v", result.Memories[0].Metadata["key"])
+	}
+}
+
+func TestServiceUpsertKeyMemoryReusesExistingIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := sqlstore.NewInMemoryMemoryRepository()
+	vectors := vectorstore.NewPGVectorStore(nil)
+	engine := NewEngine(repo, vectors)
+	service := NewService(engine, repo)
+	service.SetVectorStore(vectors)
+
+	created, err := service.UpsertKeyMemory(ctx, domain.KeyMemory{
+		UserID: "user-1",
+		Key:    "preferred_editor",
+		Value:  "neovim",
+	})
+	if err != nil {
+		t.Fatalf("create key memory: %v", err)
+	}
+	createdNodeID := stringMetadataValue(created.Metadata, "node_id")
+
+	updated, err := service.UpsertKeyMemory(ctx, domain.KeyMemory{
+		UserID: "user-1",
+		Key:    "preferred_editor",
+		Value:  "zed",
+	})
+	if err != nil {
+		t.Fatalf("update key memory: %v", err)
+	}
+	if updated.ID != created.ID {
+		t.Fatalf("expected update to reuse id %s, got %s", created.ID, updated.ID)
+	}
+	if got := stringMetadataValue(updated.Metadata, "node_id"); got != createdNodeID {
+		t.Fatalf("expected update to reuse node id %s, got %s", createdNodeID, got)
+	}
+
+	memories, err := repo.ListKeyMemories(ctx, "user-1", 10)
+	if err != nil {
+		t.Fatalf("list key memories: %v", err)
+	}
+	if len(memories) != 1 || memories[0].Value != "zed" {
+		t.Fatalf("expected single updated key memory, got %+v", memories)
+	}
+	docs, err := repo.ListDocuments(ctx, "user-1", []domain.MemoryType{domain.MemoryTypeKeyMemory}, 10)
+	if err != nil {
+		t.Fatalf("list key-memory documents: %v", err)
+	}
+	if len(docs) != 1 || docs[0].ID != created.ID || docs[0].Content != "preferred_editor: zed" {
+		t.Fatalf("expected one updated key-memory document, got %+v", docs)
+	}
+	result, err := engine.Search(ctx, domain.SearchInput{
+		UserID:      "user-1",
+		Query:       "preferred_editor zed",
+		TopN:        5,
+		MemoryTypes: []domain.MemoryType{domain.MemoryTypeKeyMemory},
+	})
+	if err != nil {
+		t.Fatalf("search updated key memory: %v", err)
+	}
+	if len(result.Memories) != 1 || result.Memories[0].ID != created.ID || !strings.Contains(result.Memories[0].Content, "zed") {
+		t.Fatalf("expected only updated key memory in search, got %+v", result.Memories)
+	}
+
+	if err := service.DeleteKeyMemory(ctx, "user-1", "preferred_editor"); err != nil {
+		t.Fatalf("delete updated key memory: %v", err)
+	}
+	deletedResult, err := engine.Search(ctx, domain.SearchInput{
+		UserID:      "user-1",
+		Query:       "preferred_editor zed",
+		TopN:        5,
+		MemoryTypes: []domain.MemoryType{domain.MemoryTypeKeyMemory},
+	})
+	if err != nil {
+		t.Fatalf("search deleted key memory: %v", err)
+	}
+	if len(deletedResult.Memories) != 0 {
+		t.Fatalf("expected deleted key memory vector/document to be gone, got %+v", deletedResult.Memories)
+	}
+}
+
+func TestServiceUpsertKeyMemoryFindsExistingPastListLimit(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := sqlstore.NewInMemoryMemoryRepository()
+	vectors := vectorstore.NewPGVectorStore(nil)
+	engine := NewEngine(repo, vectors)
+	service := NewService(engine, repo)
+	service.SetVectorStore(vectors)
+
+	targetCreatedAt := time.Now().UTC().Add(-48 * time.Hour)
+	if err := repo.UpsertKeyMemory(ctx, domain.KeyMemory{
+		ID:        "target-km",
+		UserID:    "user-1",
+		Key:       "deep_key",
+		Value:     "old",
+		CreatedAt: targetCreatedAt,
+		UpdatedAt: targetCreatedAt,
+		Metadata:  map[string]any{"node_id": "target-node"},
+	}); err != nil {
+		t.Fatalf("seed target key memory: %v", err)
+	}
+	for idx := range 1005 {
+		now := time.Now().UTC().Add(time.Duration(idx) * time.Second)
+		if err := repo.UpsertKeyMemory(ctx, domain.KeyMemory{
+			ID:        "filler-" + strconv.Itoa(idx),
+			UserID:    "user-1",
+			Key:       "filler_" + strconv.Itoa(idx),
+			Value:     "value",
+			CreatedAt: now,
+			UpdatedAt: now,
+			Metadata:  map[string]any{"node_id": "filler-node-" + strconv.Itoa(idx)},
+		}); err != nil {
+			t.Fatalf("seed filler key memory %d: %v", idx, err)
+		}
+	}
+
+	updated, err := service.UpsertKeyMemory(ctx, domain.KeyMemory{
+		UserID: "user-1",
+		Key:    "deep_key",
+		Value:  "new",
+	})
+	if err != nil {
+		t.Fatalf("update target key memory: %v", err)
+	}
+	if updated.ID != "target-km" || stringMetadataValue(updated.Metadata, "node_id") != "target-node" {
+		t.Fatalf("expected existing identity beyond list limit, got %+v", updated)
+	}
+	foundByID, ok, err := service.GetKeyMemoryByID(ctx, "user-1", "target-km")
+	if err != nil {
+		t.Fatalf("get target key memory by id: %v", err)
+	}
+	if !ok || foundByID.ID != "target-km" || foundByID.Key != "deep_key" {
+		t.Fatalf("expected deterministic lookup by id beyond list limit, got ok=%v item=%+v", ok, foundByID)
+	}
+	docs, err := repo.ListDocuments(ctx, "user-1", []domain.MemoryType{domain.MemoryTypeKeyMemory}, 2000)
+	if err != nil {
+		t.Fatalf("list docs: %v", err)
+	}
+	targetDocs := 0
+	for _, doc := range docs {
+		if doc.ID == "target-km" || doc.Content == "deep_key: new" {
+			targetDocs++
+			if doc.NodeID != "target-node" || doc.Content != "deep_key: new" {
+				t.Fatalf("expected target doc to keep node and content, got %+v", doc)
+			}
+		}
+	}
+	if targetDocs != 1 {
+		t.Fatalf("expected exactly one updated target document, got %d", targetDocs)
 	}
 }
 

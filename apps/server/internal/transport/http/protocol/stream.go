@@ -160,6 +160,13 @@ func (w *ChatCompletionStreamWriter) Close(response domain.UnifiedResponse) erro
 			return err
 		}
 	}
+	if len(w.response.Message.ToolCalls) > 0 {
+		if err := w.base.writeData(chatChunk(w.response.ResponseID, w.response.Model, w.createdUnix(), map[string]any{
+			"tool_calls": formatOpenAIStreamToolCalls(w.response.Message.ToolCalls),
+		}, nil)); err != nil {
+			return err
+		}
+	}
 	if w.response.Usage.TotalTokens > 0 {
 		if err := w.base.writeData(map[string]any{
 			"id":      w.response.ResponseID,
@@ -176,7 +183,11 @@ func (w *ChatCompletionStreamWriter) Close(response domain.UnifiedResponse) erro
 			return err
 		}
 	}
-	if err := w.base.writeData(chatChunk(w.response.ResponseID, w.response.Model, w.createdUnix(), map[string]any{}, "stop")); err != nil {
+	finishReason := "stop"
+	if len(w.response.Message.ToolCalls) > 0 {
+		finishReason = "tool_calls"
+	}
+	if err := w.base.writeData(chatChunk(w.response.ResponseID, w.response.Model, w.createdUnix(), map[string]any{}, finishReason)); err != nil {
 		return err
 	}
 	return w.base.writeRaw("data: [DONE]\n\n")
@@ -212,6 +223,9 @@ func (w *ChatCompletionStreamWriter) mergeResponse(response domain.UnifiedRespon
 	if w.response.Message.Text == "" {
 		w.response.Message = response.Message
 	}
+	if len(w.response.Message.ToolCalls) == 0 {
+		w.response.Message.ToolCalls = response.Message.ToolCalls
+	}
 	if w.response.Usage.TotalTokens == 0 {
 		w.response.Usage = response.Usage
 	}
@@ -236,6 +250,22 @@ func chatChunk(responseID, model string, created int64, delta map[string]any, fi
 			"finish_reason": finishReason,
 		}},
 	}
+}
+
+func formatOpenAIStreamToolCalls(items []domain.ToolCall) []map[string]any {
+	out := make([]map[string]any, 0, len(items))
+	for index, item := range items {
+		out = append(out, map[string]any{
+			"index": index,
+			"id":    item.ID,
+			"type":  "function",
+			"function": map[string]any{
+				"name":      item.Name,
+				"arguments": marshalArguments(item.Arguments),
+			},
+		})
+	}
+	return out
 }
 
 type ResponsesStreamWriter struct {
@@ -334,6 +364,21 @@ func (w *ResponsesStreamWriter) Close(response domain.UnifiedResponse) error {
 			return err
 		}
 	}
+	for index, call := range w.response.Message.ToolCalls {
+		if err := w.base.writeData(map[string]any{
+			"type":         "response.output_item.done",
+			"output_index": index,
+			"item": map[string]any{
+				"id":        call.ID,
+				"type":      "function_call",
+				"call_id":   call.ID,
+				"name":      call.Name,
+				"arguments": marshalArguments(call.Arguments),
+			},
+		}); err != nil {
+			return err
+		}
+	}
 	return w.base.writeData(map[string]any{
 		"type": "response.completed",
 		"response": map[string]any{
@@ -373,6 +418,9 @@ func (w *ResponsesStreamWriter) mergeResponse(response domain.UnifiedResponse) {
 	if w.response.Usage.TotalTokens == 0 {
 		w.response.Usage = response.Usage
 	}
+	if len(w.response.Message.ToolCalls) == 0 {
+		w.response.Message.ToolCalls = response.Message.ToolCalls
+	}
 }
 
 type AnthropicStreamWriter struct {
@@ -405,7 +453,7 @@ func (w *AnthropicStreamWriter) Event(event domain.StreamEvent) error {
 		if event.Role != "" {
 			w.response.Message.Role = event.Role
 		}
-		return w.ensureStart()
+		return w.ensureMessageStart()
 	case domain.StreamEventTextDelta:
 		w.response.ResponseID = firstNonEmpty(event.ResponseID, w.response.ResponseID)
 		w.response.Model = firstNonEmpty(event.Model, w.response.Model)
@@ -436,7 +484,12 @@ func (w *AnthropicStreamWriter) Event(event domain.StreamEvent) error {
 
 func (w *AnthropicStreamWriter) Close(response domain.UnifiedResponse) error {
 	w.mergeResponse(response)
-	if err := w.ensureStart(); err != nil {
+	hasText := w.response.Message.Text != ""
+	if hasText || len(w.response.Message.ToolCalls) == 0 || w.contentOpened {
+		if err := w.ensureStart(); err != nil {
+			return err
+		}
+	} else if err := w.ensureMessageStart(); err != nil {
 		return err
 	}
 	if !w.contentSent && w.response.Message.Text != "" {
@@ -451,26 +504,54 @@ func (w *AnthropicStreamWriter) Close(response domain.UnifiedResponse) error {
 			return err
 		}
 	}
-	if w.response.Usage.TotalTokens > 0 {
-		if err := w.base.writeNamedEvent("message_delta", map[string]any{
-			"type": "message_delta",
-			"usage": map[string]any{
-				"output_tokens": w.response.Usage.OutputTokens,
+	if len(w.response.Message.ToolCalls) > 0 && w.contentOpened {
+		if err := w.closeTextContentBlock(); err != nil {
+			return err
+		}
+	}
+	for index, call := range w.response.Message.ToolCalls {
+		toolIndex := index + 1
+		if !w.contentOpened && !w.contentSent && !hasText {
+			toolIndex = index
+		}
+		if err := w.base.writeNamedEvent("content_block_start", map[string]any{
+			"type":  "content_block_start",
+			"index": toolIndex,
+			"content_block": map[string]any{
+				"type":  "tool_use",
+				"id":    call.ID,
+				"name":  call.Name,
+				"input": call.Arguments,
 			},
-			"delta": map[string]any{
-				"stop_reason": "end_turn",
-			},
+		}); err != nil {
+			return err
+		}
+		if err := w.base.writeNamedEvent("content_block_stop", map[string]any{
+			"type":  "content_block_stop",
+			"index": toolIndex,
 		}); err != nil {
 			return err
 		}
 	}
 	if w.contentOpened {
-		if err := w.base.writeNamedEvent("content_block_stop", map[string]any{
-			"type":  "content_block_stop",
-			"index": 0,
-		}); err != nil {
+		if err := w.closeTextContentBlock(); err != nil {
 			return err
 		}
+	}
+	stopReason := "end_turn"
+	if len(w.response.Message.ToolCalls) > 0 {
+		stopReason = "tool_use"
+	}
+	if err := w.base.writeNamedEvent("message_delta", map[string]any{
+		"type": "message_delta",
+		"usage": map[string]any{
+			"output_tokens": w.response.Usage.OutputTokens,
+		},
+		"delta": map[string]any{
+			"stop_reason": stopReason,
+		},
+	}); err != nil {
+		return err
 	}
 	return w.base.writeNamedEvent("message_stop", map[string]any{
 		"type": "message_stop",
@@ -485,22 +566,8 @@ func (w *AnthropicStreamWriter) Error(err error) error {
 }
 
 func (w *AnthropicStreamWriter) ensureStart() error {
-	if !w.messageStarted {
-		w.messageStarted = true
-		role := w.response.Message.Role
-		if role == "" {
-			role = domain.RoleAssistant
-		}
-		if err := w.base.writeNamedEvent("message_start", map[string]any{
-			"type": "message_start",
-			"message": map[string]any{
-				"id":    w.response.ResponseID,
-				"model": w.response.Model,
-				"role":  role,
-			},
-		}); err != nil {
-			return err
-		}
+	if err := w.ensureMessageStart(); err != nil {
+		return err
 	}
 	if !w.contentOpened {
 		w.contentOpened = true
@@ -514,6 +581,36 @@ func (w *AnthropicStreamWriter) ensureStart() error {
 		})
 	}
 	return nil
+}
+
+func (w *AnthropicStreamWriter) closeTextContentBlock() error {
+	if !w.contentOpened {
+		return nil
+	}
+	w.contentOpened = false
+	return w.base.writeNamedEvent("content_block_stop", map[string]any{
+		"type":  "content_block_stop",
+		"index": 0,
+	})
+}
+
+func (w *AnthropicStreamWriter) ensureMessageStart() error {
+	if w.messageStarted {
+		return nil
+	}
+	w.messageStarted = true
+	role := w.response.Message.Role
+	if role == "" {
+		role = domain.RoleAssistant
+	}
+	return w.base.writeNamedEvent("message_start", map[string]any{
+		"type": "message_start",
+		"message": map[string]any{
+			"id":    w.response.ResponseID,
+			"model": w.response.Model,
+			"role":  role,
+		},
+	})
 }
 
 func (w *AnthropicStreamWriter) mergeResponse(response domain.UnifiedResponse) {
@@ -530,6 +627,9 @@ func (w *AnthropicStreamWriter) mergeResponse(response domain.UnifiedResponse) {
 	}
 	if w.response.Message.Text == "" {
 		w.response.Message.Text = response.Message.Text
+	}
+	if len(w.response.Message.ToolCalls) == 0 {
+		w.response.Message.ToolCalls = response.Message.ToolCalls
 	}
 	if w.response.Usage.TotalTokens == 0 {
 		w.response.Usage = response.Usage

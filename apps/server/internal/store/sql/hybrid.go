@@ -283,6 +283,27 @@ func (r *HybridMemoryRepository) ListKeyMemories(ctx context.Context, userID str
 	return r.fallback.ListKeyMemories(ctx, userID, limit)
 }
 
+func (r *HybridMemoryRepository) GetKeyMemory(ctx context.Context, userID, key string) (domain.KeyMemory, bool, error) {
+	if db := currentDB(r.db); db != nil {
+		return NewPostgresMemoryRepository(db).GetKeyMemory(ctx, userID, key)
+	}
+	return r.fallback.GetKeyMemory(ctx, userID, key)
+}
+
+func (r *HybridMemoryRepository) GetKeyMemoryByID(ctx context.Context, userID, id string) (domain.KeyMemory, bool, error) {
+	if db := currentDB(r.db); db != nil {
+		return NewPostgresMemoryRepository(db).GetKeyMemoryByID(ctx, userID, id)
+	}
+	return r.fallback.GetKeyMemoryByID(ctx, userID, id)
+}
+
+func (r *HybridMemoryRepository) CountKeyMemories(ctx context.Context, userID string) (int, error) {
+	if db := currentDB(r.db); db != nil {
+		return NewPostgresMemoryRepository(db).CountKeyMemories(ctx, userID)
+	}
+	return r.fallback.CountKeyMemories(ctx, userID)
+}
+
 func (r *HybridMemoryRepository) SearchKeyMemories(ctx context.Context, input domain.KeyMemoryQuery) ([]domain.KeyMemory, error) {
 	if db := currentDB(r.db); db != nil {
 		return NewPostgresMemoryRepository(db).SearchKeyMemories(ctx, input)
