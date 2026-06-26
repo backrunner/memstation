@@ -561,6 +561,8 @@ v1.0 完整 CI 至少执行下列门禁；当前仓库如未全部补齐，也�
 
 CI 基线不包含 retrieval/ranking benchmark、不执行 LOCOMO / LongMemEval benchmark，也不对 benchmark 指标设置红线。
 
+CI 中的 artifact / report upload 只作为诊断辅助步骤，必须使用短保留策略，且不得因为 GitHub artifact storage quota 等平台配额问题覆盖前面已经完成的正确性门禁结果。禁止把 `go test`、format、lint、generated diff、Atlas、contract、coverage、Playwright、backup/restore dry-run 等正确性门禁降级为非阻塞。
+
 ### 12.5 Nightly 基线
 
 nightly 回归不是可选项，v1.0 必须预留并最终落地，但 nightly CI 默认聚焦运维和可靠性回归，不执行 retrieval/ranking benchmark 红线：
@@ -570,6 +572,8 @@ nightly 回归不是可选项，v1.0 必须预留并最终落地，但 nightly C
 3. 任务积压、恢复耗时、备份恢复结果的机器可读 artifact
 
 LOCOMO full benchmark、ranking ablation、模型与记忆排序变更前后的 benchmark 对比，保留在本地 / 手动 / 专用评测环境运行，不作为 GitHub CI / nightly 的红绿判定。
+
+Nightly 的 worker recovery drill 与 backup/restore drill 必须保持阻塞；诊断 artifact 上传可以 best-effort，并使用短保留时间，避免 GitHub artifact storage quota 已满时把已经通过的 nightly drill 判定为失败。定时 nightly 应先检查同分支上一条已完成 nightly 的 `head_sha`，如当前提交已经被覆盖则直接成功跳过重型 drill；手动 `workflow_dispatch` 必须保留强制运行能力。
 
 ### 12.6 代码质量规则
 
@@ -628,6 +632,7 @@ v1.x 后续路线：
 - `apps/server/tests/eval` 已落地 repo-native golden dataset、LOCOMO adapter、artifact writer、perf smoke 与 benchmark runner
 - worker backlog recovery drill、artifact writer、CI smoke 与 nightly recovery 回归已落地
 - backup/export/restore drill、Compose 恢复校验文档、CI dry-run 与 nightly 实际演练入口已落地
+- CI / nightly artifact 上传已收紧为短保留、非阻塞的诊断步骤，避免平台 artifact quota 影响已经通过的可靠性门禁结论；定时 nightly 已增加同提交覆盖检查，避免无代码更新时重复消耗 Actions 额度
 - fresh dev baseline migration 已折叠为单一 init migration，本地可通过 `./scripts/dev/reset-compose-stack.sh` 一键重置 Compose 栈、重放 migration 与 seed
 - `pnpm dev` 已切换为 devcontainer-first 联调入口：先启动 `workspace` devcontainer，再在容器内并发运行后端 watch 热重启与 manager 调试服务
 - 本地可通过 `pnpm dev:container:portless` 继续把 server、manager、PostgreSQL、Redis 全部跑在 devcontainer 内，并用 Portless alias 暴露 `https://memstation-manager.localhost`
@@ -654,6 +659,7 @@ v1.x 后续路线：
 - backup/restore 实际演练仍要求运行环境具备 Docker Compose 与镜像拉取能力；在无 Docker 环境下只能执行 dry-run 形态校验
 - 压测与覆盖率门禁已具备基线实现，但后续仍应随着功能扩展逐步提高阈值，而不是长期停留在当前数值
 - 2026-04-25 本地复核中，`go test ./...` 与新增 benchmark smoke 已通过；`scripts/go/format.sh --check` 和 `scripts/go/lint.sh` 当前在未触及文件报告既有格式 / lint 问题，需要后续独立收敛后恢复门禁全绿
+- 2026-06-27 复核 GitHub nightly 最近失败点为 `actions/upload-artifact` 存储配额已满；worker recovery nightly drill 与 backup/restore nightly drill 本身均通过。workflow 已将诊断 artifact 上传改为 3 天保留与非阻塞，并在定时 nightly 中加入同提交覆盖检查，后续仍需定期清理远端 Actions artifact 存储。
 - 当前主要剩余工作已从“补功能”转为“持续提高工程门禁和运维阈值”，而不是继续扩写新的 v1 范围
 
 ### 14.3 重启检查点

@@ -6,7 +6,70 @@ on:
   workflow_dispatch:
 
 jobs:
+  check-nightly-delta:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      should_run: ${{ steps.delta.outputs.should_run }}
+      reason: ${{ steps.delta.outputs.reason }}
+    steps:
+      - name: Check for updates since previous nightly
+        id: delta
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" != "schedule" ]]; then
+            echo "should_run=true" >>"$GITHUB_OUTPUT"
+            echo "reason=workflow_dispatch always runs nightly drills" >>"$GITHUB_OUTPUT"
+            echo "Manual nightly dispatch: running drills." >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          runs_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/nightly.yml/runs?branch=${GITHUB_REF_NAME}&status=completed&per_page=20"
+          if ! response=$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$runs_url"); then
+            echo "should_run=true" >>"$GITHUB_OUTPUT"
+            echo "reason=unable to inspect previous nightly run; fail open and run drills" >>"$GITHUB_OUTPUT"
+            echo "Could not inspect previous nightly run, so drills will run." >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          previous_sha=$(jq -r --argjson current_id "$GITHUB_RUN_ID" '[.workflow_runs[] | select(.id != $current_id)] | .[0].head_sha // ""' <<<"$response")
+          previous_id=$(jq -r --argjson current_id "$GITHUB_RUN_ID" '[.workflow_runs[] | select(.id != $current_id)] | .[0].id // ""' <<<"$response")
+
+          if [[ -n "$previous_sha" && "$previous_sha" == "$GITHUB_SHA" ]]; then
+            echo "should_run=false" >>"$GITHUB_OUTPUT"
+            echo "reason=current commit already covered by nightly run ${previous_id}" >>"$GITHUB_OUTPUT"
+            {
+              echo "Nightly drills skipped."
+              echo ""
+              echo "- Current SHA: \`${GITHUB_SHA}\`"
+              echo "- Previous nightly run: \`${previous_id}\`"
+              echo "- Reason: no code changes since the previous completed nightly run."
+            } >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "should_run=true" >>"$GITHUB_OUTPUT"
+          echo "reason=current commit has not been covered by a completed nightly run" >>"$GITHUB_OUTPUT"
+          {
+            echo "Nightly drills will run."
+            echo ""
+            echo "- Current SHA: \`${GITHUB_SHA}\`"
+            echo "- Previous nightly SHA: \`${previous_sha:-none}\`"
+          } >>"$GITHUB_STEP_SUMMARY"
+
   drills:
+    needs: check-nightly-delta
+    if: needs.check-nightly-delta.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     env:
       MEMSTATION_RECOVERY_MAX_DRAIN: "20s"
@@ -30,9 +93,11 @@ jobs:
         run: bash ./scripts/ops/run-backup-restore-drill.sh --out-dir "$RUNNER_TEMP/memstation-backup-drill"
       - name: Upload nightly artifacts
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: memstation-nightly-ops-artifacts
+          retention-days: 3
           path: |
             ${{ runner.temp }}/memstation-nightly-recovery
             ${{ runner.temp }}/memstation-backup-drill

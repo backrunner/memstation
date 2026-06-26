@@ -70,17 +70,21 @@ jobs:
         run: pnpm test:e2e:manager
       - name: Upload ops artifacts
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: memstation-ops-artifacts
+          retention-days: 3
           path: |
             ${{ runner.temp }}/memstation-recovery
             ${{ runner.temp }}/memstation-backup-drill
       - name: Upload manager Playwright artifacts
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: manager-playwright-artifacts
+          retention-days: 3
           path: |
             apps/manager/test-results
             apps/manager/playwright-report

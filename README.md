@@ -89,6 +89,7 @@ memstation/
 - Contract tests、Go E2E、Manager Playwright E2E
 - Worker backlog recovery smoke/nightly
 - Backup / export / restore drill
+- CI / nightly diagnostic artifacts use short-retention, best-effort uploads
 - Docker Compose 单机交付基线
 - K8s baseline manifests
 - OTel / OTLP / structured logging / health endpoints
@@ -365,6 +366,7 @@ Embedding 已接入真实 provider 调用，采用 OpenAI-compatible embedding �
 - Performance smoke（本地 / 手动评测）
 - Worker backlog recovery drill
 - Backup / restore drill
+- CI / nightly diagnostic artifact upload（短保留、best-effort，不覆盖正确性门禁结论）
 
 评测入口：
 
@@ -374,6 +376,8 @@ Embedding 已接入真实 provider 调用，采用 OpenAI-compatible embedding �
 - `scripts/eval/run-memory-nightly.sh`
 
 CI / nightly 不执行 retrieval/ranking benchmark，也不基于 Recall、nDCG 或 benchmark P95 设置红线。评测脚本保留给本地、手动或专用评测环境；如确需临时执行硬门禁，必须显式设置 `MEMSTATION_ENFORCE_BENCHMARKS=true`，性能阈值需额外显式设置 `MEMSTATION_PERF_P95_MS`。
+
+Nightly 的 worker recovery drill 与 backup/restore drill 仍是阻塞门禁；artifact upload 只用于诊断报告收集，采用 3 天保留与 best-effort 上传，GitHub artifact storage quota 满时不应把已通过的 nightly drill 判红。定时 nightly 会先检查同分支上一条已完成 nightly 的 `head_sha`，如果当前提交已经被覆盖，则直接成功跳过重型 drill；手动 `workflow_dispatch` 始终强制运行。
 
 ## 部署
 
@@ -391,3 +395,5 @@ CI / nightly 不执行 retrieval/ranking benchmark，也不基于 Recall、nDCG 
 2026-04-25 本地复核：`go test ./...` 与新增 hot-path benchmark smoke 已通过；`scripts/go/format.sh --check` 和 `scripts/go/lint.sh` 当前在未触及文件报告既有格式 / lint 问题，需后续单独收敛后恢复门禁全绿。
 
 2026-05-15 更新：CI / nightly 已移除 retrieval/ranking benchmark 与 benchmark 性能红线；相关脚本仅作为本地、手动或专用评测入口保留。
+
+2026-06-27 更新：最近 nightly 失败点定位为 `actions/upload-artifact` 触发 GitHub artifact storage quota，而 worker recovery 与 backup/restore drill 均已通过；workflow 已将诊断 artifact 上传改为短保留、非阻塞，并为定时 nightly 增加“同提交已覆盖则跳过”的前置检查以减少 Actions 额度消耗。
