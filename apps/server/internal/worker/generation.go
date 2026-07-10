@@ -106,6 +106,8 @@ func snapshotConversation(snapshot domain.MemorySourceSnapshot) domain.Conversat
 		Metadata:       metadata,
 		Usage:          snapshot.Usage,
 		Messages:       append([]domain.UnifiedMessage{}, snapshot.Messages...),
+		Parts:          append([]domain.MessagePart{}, snapshot.Parts...),
+		Artifacts:      append([]domain.MessagePartArtifact{}, snapshot.Artifacts...),
 		CreatedAt:      snapshot.CreatedAt,
 		UpdatedAt:      snapshot.UpdatedAt,
 	}

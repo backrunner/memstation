@@ -805,21 +805,7 @@ func searchAllowsSegments(input domain.SearchInput) bool {
 
 func repoSearchTypes(input domain.SearchInput) []domain.MemoryType {
 	if len(input.MemoryTypes) == 0 {
-		if input.IncludeSegments {
-			return []domain.MemoryType{
-				domain.MemoryTypeSummary,
-				domain.MemoryTypeSegment,
-				domain.MemoryTypeImpression,
-				domain.MemoryTypeFact,
-				domain.MemoryTypeKeyMemory,
-			}
-		}
-		return []domain.MemoryType{
-			domain.MemoryTypeSummary,
-			domain.MemoryTypeImpression,
-			domain.MemoryTypeFact,
-			domain.MemoryTypeKeyMemory,
-		}
+		return domain.DefaultSearchMemoryTypes(input.IncludeSegments)
 	}
 	return append([]domain.MemoryType{}, input.MemoryTypes...)
 }
@@ -882,14 +868,14 @@ func expandRelationScores(base map[string]float64, relations []domain.MemoryRela
 			})
 		}
 		relatedMap[relation.SrcNodeID] = append(relatedMap[relation.SrcNodeID], domain.RelatedMemory{
-			ID:     relation.DstNodeID,
-			Type:   relation.RelationType,
-			Weight: relation.Weight,
+			NodeID:       relation.DstNodeID,
+			RelationType: relation.RelationType,
+			Weight:       relation.Weight,
 		})
 		relatedMap[relation.DstNodeID] = append(relatedMap[relation.DstNodeID], domain.RelatedMemory{
-			ID:     relation.SrcNodeID,
-			Type:   relation.RelationType,
-			Weight: relation.Weight,
+			NodeID:       relation.SrcNodeID,
+			RelationType: relation.RelationType,
+			Weight:       relation.Weight,
 		})
 	}
 
@@ -1202,9 +1188,9 @@ type relationTraversalEdge struct {
 
 func relationTraversalEdges(relation domain.MemoryRelation) []relationTraversalEdge {
 	switch strings.TrimSpace(strings.ToLower(relation.RelationType)) {
-	case "derived_from", "summarized_into", "promoted_to_key_memory":
+	case domain.MemoryRelationDerivedFrom, "summarized_into", "promoted_to_key_memory", domain.MemoryRelationProducedArtifact, domain.MemoryRelationResultedIn:
 		return []relationTraversalEdge{{fromNodeID: relation.SrcNodeID, toNodeID: relation.DstNodeID}}
-	case "supports":
+	case domain.MemoryRelationSupports:
 		return []relationTraversalEdge{{fromNodeID: relation.DstNodeID, toNodeID: relation.SrcNodeID}}
 	default:
 		return []relationTraversalEdge{
@@ -1216,12 +1202,16 @@ func relationTraversalEdges(relation domain.MemoryRelation) []relationTraversalE
 
 func relationBoostFactor(relationType string) float64 {
 	switch strings.TrimSpace(strings.ToLower(relationType)) {
-	case "derived_from", "promoted_to_key_memory":
+	case domain.MemoryRelationDerivedFrom, "promoted_to_key_memory", domain.MemoryRelationResultedIn:
 		return 0.35
-	case "supports":
+	case domain.MemoryRelationSupports, domain.MemoryRelationMentionsEntity:
 		return 0.12
-	case "summarized_into":
+	case "summarized_into", domain.MemoryRelationProducedArtifact:
 		return 0.2
+	case domain.MemoryRelationUsedTool, domain.MemoryRelationDependsOn:
+		return 0.16
+	case domain.MemoryRelationContradicts, domain.MemoryRelationReplaces:
+		return 0.08
 	default:
 		return 0.18
 	}
@@ -1237,6 +1227,16 @@ func conversationCompanionFactor(memoryType domain.MemoryType) float64 {
 		return 0.48
 	case domain.MemoryTypeSegment:
 		return 0.42
+	case domain.MemoryTypeTask:
+		return 0.6
+	case domain.MemoryTypeProcedure:
+		return 0.58
+	case domain.MemoryTypeEvent:
+		return 0.54
+	case domain.MemoryTypeAgentAction:
+		return 0.5
+	case domain.MemoryTypeArtifact, domain.MemoryTypeEntity:
+		return 0.46
 	default:
 		return 0.4
 	}
@@ -1299,8 +1299,7 @@ func mergeInjectionMemories(primary, keyMemories []domain.MemoryDocument) []doma
 	for _, item := range primary {
 		appendItem(item, "semantic_recall")
 	}
-	// Stable ordering: injection priority (Key Memory, Summary, Fact,
-	// Impression, then others), then by effective score and recency.
+	// Stable ordering: injection priority, then by effective score and recency.
 	sort.SliceStable(merged, func(i, j int) bool {
 		if lp, rp := injectionPriority(merged[i]), injectionPriority(merged[j]); lp != rp {
 			return lp < rp
@@ -1317,16 +1316,41 @@ func injectionPriority(doc domain.MemoryDocument) int {
 	switch doc.Type {
 	case domain.MemoryTypeKeyMemory:
 		return 0
-	case domain.MemoryTypeSummary:
+	case domain.MemoryTypeTask:
 		return 1
-	case domain.MemoryTypeFact:
+	case domain.MemoryTypeProcedure:
 		return 2
-	case domain.MemoryTypeImpression:
+	case domain.MemoryTypeFact:
 		return 3
-	case domain.MemoryTypeSegment:
+	case domain.MemoryTypeEvent, domain.MemoryTypeAgentAction:
 		return 4
-	default:
+	case domain.MemoryTypeArtifact, domain.MemoryTypeEntity:
 		return 5
+	case domain.MemoryTypeSummary, domain.MemoryTypeSegment:
+		return 6
+	case domain.MemoryTypeImpression:
+		return 7
+	default:
+		return 8
+	}
+}
+
+func injectionEligible(doc domain.MemoryDocument) bool {
+	status := strings.TrimSpace(strings.ToLower(memoryMetadataString(doc.Metadata, "status")))
+	reviewStatus := strings.TrimSpace(strings.ToLower(memoryMetadataString(doc.Metadata, "review_status")))
+	switch doc.Type {
+	case domain.MemoryTypeTask:
+		return status == "" || status == "pending" || status == "current" || status == "in_progress" || status == "blocked"
+	case domain.MemoryTypeProcedure:
+		return reviewStatus == "approved"
+	case domain.MemoryTypeFact:
+		return !domain.IsStaleMemory(doc, time.Now().UTC())
+	case domain.MemoryTypeArtifact:
+		return status != "rejected" && status != "deleted" && status != "stale" && status != "failed" && status != "error"
+	case domain.MemoryTypeEvent, domain.MemoryTypeEntity, domain.MemoryTypeAgentAction:
+		return status != "rejected" && status != "deleted" && status != "stale"
+	default:
+		return true
 	}
 }
 
@@ -1337,16 +1361,17 @@ func packInjectionMemories(memories []domain.MemoryDocument, maxTokens int) []do
 	if maxTokens <= 0 {
 		maxTokens = 2048
 	}
-	// Input is already sorted by injection priority (key memory, summary, fact,
-	// impression) then by effective score (see mergeInjectionMemories). A
-	// single greedy pass preserves that ordering so high-priority items win a
-	// tight budget, while smaller low-priority items can still slip in after a
-	// too-large earlier candidate is skipped.
+	// Input is already sorted by injection priority and then by effective score
+	// (see mergeInjectionMemories). A single greedy pass preserves that ordering
+	// while enforcing the configured token budget strictly.
 	remaining := maxTokens
 	selected := make([]domain.MemoryDocument, 0, len(memories))
 	for _, item := range memories {
+		if !injectionEligible(item) {
+			continue
+		}
 		tokens := estimateMemoryTokens(item)
-		if len(selected) > 0 && tokens > remaining {
+		if tokens > remaining {
 			continue
 		}
 		selected = append(selected, item)
@@ -1356,7 +1381,7 @@ func packInjectionMemories(memories []domain.MemoryDocument, maxTokens int) []do
 		}
 	}
 	if len(selected) == 0 {
-		return memories[:1]
+		return nil
 	}
 	return selected
 }
@@ -1388,20 +1413,38 @@ func isTemporalRelationType(relationType string) bool {
 // Only non-empty sections are emitted so the prompt stays tight.
 func buildInjectionSystemPrompt(memories []domain.MemoryDocument) string {
 	var (
-		keyMemories []domain.MemoryDocument
-		summaries   []domain.MemoryDocument
-		facts       []domain.MemoryDocument
-		impressions []domain.MemoryDocument
-		other       []domain.MemoryDocument
+		keyMemories  []domain.MemoryDocument
+		tasks        []domain.MemoryDocument
+		procedures   []domain.MemoryDocument
+		facts        []domain.MemoryDocument
+		events       []domain.MemoryDocument
+		agentActions []domain.MemoryDocument
+		artifacts    []domain.MemoryDocument
+		entities     []domain.MemoryDocument
+		summaries    []domain.MemoryDocument
+		impressions  []domain.MemoryDocument
+		other        []domain.MemoryDocument
 	)
 	for _, item := range memories {
 		switch item.Type {
 		case domain.MemoryTypeKeyMemory:
 			keyMemories = append(keyMemories, item)
-		case domain.MemoryTypeSummary, domain.MemoryTypeSegment:
-			summaries = append(summaries, item)
+		case domain.MemoryTypeTask:
+			tasks = append(tasks, item)
+		case domain.MemoryTypeProcedure:
+			procedures = append(procedures, item)
 		case domain.MemoryTypeFact:
 			facts = append(facts, item)
+		case domain.MemoryTypeEvent:
+			events = append(events, item)
+		case domain.MemoryTypeAgentAction:
+			agentActions = append(agentActions, item)
+		case domain.MemoryTypeArtifact:
+			artifacts = append(artifacts, item)
+		case domain.MemoryTypeEntity:
+			entities = append(entities, item)
+		case domain.MemoryTypeSummary, domain.MemoryTypeSegment:
+			summaries = append(summaries, item)
 		case domain.MemoryTypeImpression:
 			impressions = append(impressions, item)
 		default:
@@ -1430,19 +1473,36 @@ func buildInjectionSystemPrompt(memories []domain.MemoryDocument) string {
 		}
 	}
 
+	writeBulletSection := func(title string, items []domain.MemoryDocument) {
+		if len(items) == 0 {
+			return
+		}
+		b.WriteString("\n")
+		b.WriteString(title)
+		b.WriteString(":\n")
+		for _, item := range items {
+			b.WriteString("- ")
+			if label := genericMemoryLabel(item); label != "" {
+				b.WriteString(label)
+				b.WriteString(": ")
+			}
+			b.WriteString(strings.TrimSpace(item.Content))
+			b.WriteString("\n")
+		}
+	}
+
+	writeBulletSection("Active Tasks", tasks)
+	writeBulletSection("Relevant Procedures", procedures)
+	writeBulletSection("Relevant Facts", facts)
+	writeBulletSection("Relevant Events", events)
+	writeBulletSection("Relevant Agent Actions", agentActions)
+	writeBulletSection("Relevant Artifacts", artifacts)
+	writeBulletSection("Relevant Entities", entities)
+
 	if len(summaries) > 0 {
 		b.WriteString("\nRelevant Memories:\n")
 		for i, item := range summaries {
 			fmt.Fprintf(&b, "%d. %s\n", i+1, strings.TrimSpace(item.Content))
-		}
-	}
-
-	if len(facts) > 0 {
-		b.WriteString("\nRelevant Facts:\n")
-		for _, item := range facts {
-			b.WriteString("- ")
-			b.WriteString(strings.TrimSpace(item.Content))
-			b.WriteString("\n")
 		}
 	}
 
@@ -1476,4 +1536,31 @@ func keyMemoryLabel(item domain.MemoryDocument) string {
 		}
 	}
 	return ""
+}
+
+func genericMemoryLabel(item domain.MemoryDocument) string {
+	for _, key := range []string{"title", "status", "review_status"} {
+		if value := memoryMetadataString(item.Metadata, key); value != "" && value != "auto" && value != "current" {
+			return value
+		}
+	}
+	return ""
+}
+
+func memoryMetadataString(metadata map[string]any, key string) string {
+	if metadata == nil {
+		return ""
+	}
+	value, ok := metadata[key]
+	if !ok || value == nil {
+		return ""
+	}
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case fmt.Stringer:
+		return strings.TrimSpace(typed.String())
+	default:
+		return strings.TrimSpace(fmt.Sprintf("%v", typed))
+	}
 }

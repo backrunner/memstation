@@ -198,9 +198,11 @@ message FactLineage {
 }
 
 message RelatedMemory {
-  string id = 1;
-  string type = 2;
-  double weight = 3;
+  string node_id = 1;
+  string document_id = 2;
+  string document_type = 3;
+  string relation_type = 4;
+  double weight = 5;
 }
 
 message ListKeyMemoriesRequest {

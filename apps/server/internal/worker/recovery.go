@@ -46,6 +46,7 @@ type RecoveryReport struct {
 	SummaryDocuments         int                          `json:"summary_documents"`
 	FactDocuments            int                          `json:"fact_documents"`
 	ImpressionDocuments      int                          `json:"impression_documents"`
+	GenericDocuments         int                          `json:"generic_documents"`
 	KeyMemories              int                          `json:"key_memories"`
 }
 
@@ -194,6 +195,14 @@ func RunRecoveryDrill(ctx context.Context, options RecoveryOptions) (RecoveryRep
 	summaryDocs := countRecoveryDocuments(ctx, memories, userIDs, domain.MemoryTypeSummary)
 	factDocs := countRecoveryDocuments(ctx, memories, userIDs, domain.MemoryTypeFact)
 	impressionDocs := countRecoveryDocuments(ctx, memories, userIDs, domain.MemoryTypeImpression)
+	genericDocs := countRecoveryDocuments(ctx, memories, userIDs,
+		domain.MemoryTypeEvent,
+		domain.MemoryTypeTask,
+		domain.MemoryTypeProcedure,
+		domain.MemoryTypeArtifact,
+		domain.MemoryTypeEntity,
+		domain.MemoryTypeAgentAction,
+	)
 	keyMemories := countRecoveryKeyMemories(ctx, memories, userIDs)
 
 	report := RecoveryReport{
@@ -214,6 +223,7 @@ func RunRecoveryDrill(ctx context.Context, options RecoveryOptions) (RecoveryRep
 		SummaryDocuments:       summaryDocs,
 		FactDocuments:          factDocs,
 		ImpressionDocuments:    impressionDocs,
+		GenericDocuments:       genericDocs,
 		KeyMemories:            keyMemories,
 	}
 	if report.DurationMillis > 0 {
@@ -243,6 +253,9 @@ func ValidateRecoveryReport(report RecoveryReport, maxDrain time.Duration) error
 	}
 	if report.ImpressionDocuments != report.Conversations {
 		return fmt.Errorf("expected %d impression docs, got %d", report.Conversations, report.ImpressionDocuments)
+	}
+	if report.GenericDocuments < report.Conversations {
+		return fmt.Errorf("expected at least %d generic docs, got %d", report.Conversations, report.GenericDocuments)
 	}
 	if report.KeyMemories != report.Conversations {
 		return fmt.Errorf("expected %d key memories, got %d", report.Conversations, report.KeyMemories)
@@ -463,10 +476,10 @@ func countRecoveryConversations(ctx context.Context, conversations *sqlstore.InM
 	return completedConversations, summaryCompleted, analysisCompleted, nil
 }
 
-func countRecoveryDocuments(ctx context.Context, memories *sqlstore.InMemoryMemoryRepository, userIDs []string, memoryType domain.MemoryType) int {
+func countRecoveryDocuments(ctx context.Context, memories *sqlstore.InMemoryMemoryRepository, userIDs []string, memoryTypes ...domain.MemoryType) int {
 	count := 0
 	for _, userID := range userIDs {
-		items, err := memories.ListDocuments(ctx, userID, []domain.MemoryType{memoryType}, 32)
+		items, err := memories.ListDocuments(ctx, userID, memoryTypes, 128)
 		if err == nil {
 			count += len(items)
 		}

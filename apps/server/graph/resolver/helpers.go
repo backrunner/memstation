@@ -64,6 +64,20 @@ func graphFact(doc domain.MemoryDocument) *generated.Fact {
 	return &generated.Fact{ID: doc.ID, Content: doc.Content, Lineage: graphFactLineage(doc)}
 }
 
+func graphRelatedMemories(items []domain.RelatedMemory) []*generated.RelatedMemory {
+	out := make([]*generated.RelatedMemory, 0, len(items))
+	for _, item := range items {
+		out = append(out, &generated.RelatedMemory{
+			NodeID:       nullablePtr(item.NodeID),
+			DocumentID:   nullablePtr(item.DocumentID),
+			DocumentType: nullablePtr(item.DocumentType),
+			RelationType: nullablePtr(item.RelationType),
+			Weight:       item.Weight,
+		})
+	}
+	return out
+}
+
 func graphFactLineage(doc domain.MemoryDocument) *generated.FactLineage {
 	if doc.Lineage == nil {
 		if doc.Metadata == nil {

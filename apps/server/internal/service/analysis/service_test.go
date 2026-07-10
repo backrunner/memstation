@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -59,8 +60,8 @@ func TestAnalyzeConversationBuildsFactImpressionAndRelations(t *testing.T) {
 	if evaluation := result.Impression.Metadata["evaluation"]; evaluation != "planning" {
 		t.Fatalf("expected planning evaluation, got %v", evaluation)
 	}
-	if len(result.Relations) != 3 {
-		t.Fatalf("expected 3 relations, got %d", len(result.Relations))
+	if len(result.Relations) < 3 {
+		t.Fatalf("expected at least summary/fact/impression relations, got %d", len(result.Relations))
 	}
 }
 
@@ -159,7 +160,8 @@ func TestAnalyzeConversationExtractsMultipleStructuredFacts(t *testing.T) {
 	if _, ok := keys["plan_relocation"]; !ok {
 		t.Fatalf("expected plan fact, got keys %+v", keys)
 	}
-	if len(result.Relations) != len(result.Facts)*2+1 {
+	minRelations := len(result.Facts)*2 + 1
+	if len(result.Relations) < minRelations {
 		t.Fatalf("expected summary/fact/impression relations for all facts, got %d relations for %d facts", len(result.Relations), len(result.Facts))
 	}
 }
@@ -196,6 +198,85 @@ func TestAnalyzeConversationKeepsDistinctFactKeysForUnrelatedPreferenceAndPlans(
 	}
 	if _, ok := keys["work_schedule_gateway"]; !ok {
 		t.Fatalf("expected scoped gateway schedule key, got %+v", keys)
+	}
+}
+
+func TestAnalyzeConversationExtractsGenericAgentMemoryItems(t *testing.T) {
+	t.Parallel()
+
+	service := NewService()
+	result, err := service.AnalyzeConversation(context.Background(), Input{
+		UserID:         "user-1",
+		ConversationID: "conv-agent",
+		Conversation: domain.ConversationRecord{
+			ConversationID: "conv-agent",
+			UserID:         "user-1",
+			Messages: []domain.UnifiedMessage{{
+				Role: domain.RoleAssistant,
+				ToolCalls: []domain.ToolCall{{
+					ID:   "call-1",
+					Name: "inspect_assets",
+					Arguments: map[string]any{
+						"path": "/tmp/report.pdf",
+					},
+				}},
+			}, {
+				Role: domain.RoleTool,
+				ToolResults: []domain.ToolResult{{
+					ToolCallID: "call-1",
+					Name:       "inspect_assets",
+					Output: map[string]any{
+						"status":     "sk-test-raw-payload",
+						"result":     "sk-result-raw-payload",
+						"error_type": "sk-error-raw-payload",
+						"pages":      3,
+					},
+				}},
+			}},
+		},
+		Summary: domain.MemoryDocument{
+			ID:      "summary:conv-agent:v1",
+			NodeID:  "node:summary:conv-agent:v1",
+			UserID:  "user-1",
+			Type:    domain.MemoryTypeSummary,
+			Content: "The user plans to review the report next week. The workflow should use inspect_assets for PDF inspection.",
+		},
+	})
+	if err != nil {
+		t.Fatalf("analyze conversation: %v", err)
+	}
+	types := map[domain.MemoryType]int{}
+	for _, item := range result.GenericItems {
+		types[item.Type]++
+		if item.ID == "" || item.NodeID == "" {
+			t.Fatalf("expected stable IDs for generic item: %+v", item)
+		}
+		if item.Type == domain.MemoryTypeAgentAction {
+			serializedMetadata := fmt.Sprint(item.Metadata)
+			for _, secret := range []string{"sk-test-raw-payload", "sk-result-raw-payload", "sk-error-raw-payload"} {
+				if strings.Contains(item.Content, secret) || strings.Contains(serializedMetadata, secret) {
+					t.Fatalf("agent action should not retain raw tool output payload %q: %+v", secret, item)
+				}
+			}
+			if strings.Contains(metadataString(item.Metadata, "result_summary"), "status=sk") {
+				t.Fatalf("agent action should not retain raw tool output payload: %+v", item)
+			}
+		}
+	}
+	for _, kind := range []domain.MemoryType{domain.MemoryTypeTask, domain.MemoryTypeProcedure, domain.MemoryTypeAgentAction, domain.MemoryTypeEntity} {
+		if types[kind] == 0 {
+			t.Fatalf("expected generic memory type %s, got counts %+v", kind, types)
+		}
+	}
+	foundToolRelation := false
+	for _, relation := range result.Relations {
+		if relation.RelationType == domain.MemoryRelationUsedTool {
+			foundToolRelation = true
+			break
+		}
+	}
+	if !foundToolRelation {
+		t.Fatalf("expected used_tool relation, got %+v", result.Relations)
 	}
 }
 

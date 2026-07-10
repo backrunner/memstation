@@ -17,9 +17,11 @@ type SearchInput struct {
 }
 
 type RelatedMemory struct {
-	ID     string  `json:"id"`
-	Type   string  `json:"type"`
-	Weight float64 `json:"weight"`
+	NodeID       string  `json:"node_id,omitempty"`
+	DocumentID   string  `json:"document_id,omitempty"`
+	DocumentType string  `json:"document_type,omitempty"`
+	RelationType string  `json:"relation_type,omitempty"`
+	Weight       float64 `json:"weight"`
 }
 
 type MemoryLineageMeta struct {
@@ -241,21 +243,23 @@ const (
 )
 
 type MemorySourceSnapshot struct {
-	SnapshotID      string           `json:"snapshot_id"`
-	UserID          string           `json:"user_id"`
-	ConversationID  string           `json:"conversation_id"`
-	SnapshotVersion int              `json:"snapshot_version"`
-	SourceHash      string           `json:"source_hash"`
-	RequestFormat   string           `json:"request_format"`
-	Provider        Provider         `json:"provider"`
-	Mode            Mode             `json:"mode"`
-	FinalizeStatus  FinalizeStatus   `json:"finalize_status"`
-	Metadata        map[string]any   `json:"metadata,omitempty"`
-	Usage           UsageRecord      `json:"usage"`
-	MessageCount    int              `json:"message_count"`
-	Messages        []UnifiedMessage `json:"messages,omitempty"`
-	CreatedAt       time.Time        `json:"created_at"`
-	UpdatedAt       time.Time        `json:"updated_at"`
+	SnapshotID      string                `json:"snapshot_id"`
+	UserID          string                `json:"user_id"`
+	ConversationID  string                `json:"conversation_id"`
+	SnapshotVersion int                   `json:"snapshot_version"`
+	SourceHash      string                `json:"source_hash"`
+	RequestFormat   string                `json:"request_format"`
+	Provider        Provider              `json:"provider"`
+	Mode            Mode                  `json:"mode"`
+	FinalizeStatus  FinalizeStatus        `json:"finalize_status"`
+	Metadata        map[string]any        `json:"metadata,omitempty"`
+	Usage           UsageRecord           `json:"usage"`
+	MessageCount    int                   `json:"message_count"`
+	Messages        []UnifiedMessage      `json:"messages,omitempty"`
+	Parts           []MessagePart         `json:"parts,omitempty"`
+	Artifacts       []MessagePartArtifact `json:"artifacts,omitempty"`
+	CreatedAt       time.Time             `json:"created_at"`
+	UpdatedAt       time.Time             `json:"updated_at"`
 }
 
 type MemoryGenerationSource struct {

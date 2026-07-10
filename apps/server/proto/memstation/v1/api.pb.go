@@ -1576,9 +1576,11 @@ func (x *FactLineage) GetCurrentHeadId() string {
 
 type RelatedMemory struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	Weight        float64                `protobuf:"fixed64,3,opt,name=weight,proto3" json:"weight,omitempty"`
+	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	DocumentId    string                 `protobuf:"bytes,2,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
+	DocumentType  string                 `protobuf:"bytes,3,opt,name=document_type,json=documentType,proto3" json:"document_type,omitempty"`
+	RelationType  string                 `protobuf:"bytes,4,opt,name=relation_type,json=relationType,proto3" json:"relation_type,omitempty"`
+	Weight        float64                `protobuf:"fixed64,5,opt,name=weight,proto3" json:"weight,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1613,16 +1615,30 @@ func (*RelatedMemory) Descriptor() ([]byte, []int) {
 	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{19}
 }
 
-func (x *RelatedMemory) GetId() string {
+func (x *RelatedMemory) GetNodeId() string {
 	if x != nil {
-		return x.Id
+		return x.NodeId
 	}
 	return ""
 }
 
-func (x *RelatedMemory) GetType() string {
+func (x *RelatedMemory) GetDocumentId() string {
 	if x != nil {
-		return x.Type
+		return x.DocumentId
+	}
+	return ""
+}
+
+func (x *RelatedMemory) GetDocumentType() string {
+	if x != nil {
+		return x.DocumentType
+	}
+	return ""
+}
+
+func (x *RelatedMemory) GetRelationType() string {
+	if x != nil {
+		return x.RelationType
 	}
 	return ""
 }
@@ -3064,11 +3080,14 @@ const file_proto_memstation_v1_api_proto_rawDesc = "" +
 	"\flineage_path\x18\x05 \x03(\tR\vlineagePath\x129\n" +
 	"\x19superseded_alias_node_ids\x18\x06 \x03(\tR\x16supersededAliasNodeIds\x12%\n" +
 	"\x0erevision_depth\x18\a \x01(\x05R\rrevisionDepth\x12&\n" +
-	"\x0fcurrent_head_id\x18\b \x01(\tR\rcurrentHeadId\"K\n" +
-	"\rRelatedMemory\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\x12\x16\n" +
-	"\x06weight\x18\x03 \x01(\x01R\x06weight\"\xd0\x01\n" +
+	"\x0fcurrent_head_id\x18\b \x01(\tR\rcurrentHeadId\"\xab\x01\n" +
+	"\rRelatedMemory\x12\x17\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1f\n" +
+	"\vdocument_id\x18\x02 \x01(\tR\n" +
+	"documentId\x12#\n" +
+	"\rdocument_type\x18\x03 \x01(\tR\fdocumentType\x12#\n" +
+	"\rrelation_type\x18\x04 \x01(\tR\frelationType\x12\x16\n" +
+	"\x06weight\x18\x05 \x01(\x01R\x06weight\"\xd0\x01\n" +
 	"\x16ListKeyMemoriesRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x13\n" +
 	"\x05top_k\x18\x02 \x01(\x05R\x04topK\x12\x1d\n" +

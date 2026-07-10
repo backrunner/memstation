@@ -286,10 +286,12 @@ func (r *queryResolver) SearchMemories(ctx context.Context, query string, topN *
 		items = append(items, &generated.SearchMemoryItem{
 			ID:             item.ID,
 			Type:           string(item.Type),
+			NodeID:         nullablePtr(item.NodeID),
 			Content:        item.Content,
 			Score:          item.Score,
 			EffectiveScore: item.EffectiveScore,
 			Lineage:        graphFactLineage(item),
+			Related:        graphRelatedMemories(item.Related),
 		})
 	}
 	return &generated.SearchMemoriesResult{Memories: items, Total: result.Total, QueryEmbeddingTokens: result.QueryEmbeddingTokens}, nil

@@ -147,16 +147,11 @@ func parseMemoryTypes(values []string) ([]domain.MemoryType, error) {
 	}
 	out := make([]domain.MemoryType, 0, len(values))
 	for _, value := range values {
-		switch domain.MemoryType(strings.TrimSpace(strings.ToLower(value))) {
-		case domain.MemoryTypeSummary,
-			domain.MemoryTypeSegment,
-			domain.MemoryTypeImpression,
-			domain.MemoryTypeFact,
-			domain.MemoryTypeKeyMemory:
-			out = append(out, domain.MemoryType(strings.TrimSpace(strings.ToLower(value))))
-		default:
+		kind := domain.MemoryType(strings.TrimSpace(strings.ToLower(value)))
+		if !domain.IsSupportedMemoryType(kind) {
 			return nil, status.Errorf(codes.InvalidArgument, "unsupported memory type %q", value)
 		}
+		out = append(out, kind)
 	}
 	return out, nil
 }
@@ -392,9 +387,11 @@ func toProtoRelatedMemories(items []domain.RelatedMemory) []*pb.RelatedMemory {
 	out := make([]*pb.RelatedMemory, 0, len(items))
 	for _, item := range items {
 		out = append(out, &pb.RelatedMemory{
-			Id:     item.ID,
-			Type:   item.Type,
-			Weight: item.Weight,
+			NodeId:       item.NodeID,
+			DocumentId:   item.DocumentID,
+			DocumentType: item.DocumentType,
+			RelationType: item.RelationType,
+			Weight:       item.Weight,
 		})
 	}
 	return out

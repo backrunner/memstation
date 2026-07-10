@@ -125,6 +125,48 @@ func TestInMemoryMemoryRepositoryListRelationsDoesNotExpandThroughTemporalNodes(
 	}
 }
 
+func TestInMemoryMemoryRepositoryStoresGenericMemoryItems(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := NewInMemoryMemoryRepository()
+	doc := domain.MemoryDocument{
+		ID:             "task-1",
+		NodeID:         "node-task-1",
+		UserID:         "user-1",
+		ConversationID: "conv-1",
+		Type:           domain.MemoryTypeTask,
+		Content:        "Task: follow up on the rollout checklist.",
+		Metadata: map[string]any{
+			"status": "pending",
+			"title":  "Rollout follow-up",
+		},
+	}
+	if err := repo.StoreDocument(ctx, doc); err != nil {
+		t.Fatalf("store generic doc: %v", err)
+	}
+	listed, err := repo.ListDocuments(ctx, "user-1", []domain.MemoryType{domain.MemoryTypeTask}, 10)
+	if err != nil {
+		t.Fatalf("list generic docs: %v", err)
+	}
+	if len(listed) != 1 || listed[0].Type != domain.MemoryTypeTask {
+		t.Fatalf("unexpected generic docs: %+v", listed)
+	}
+	updated, err := repo.UpdateDocument(ctx, "user-1", "task-1", domain.MemoryTypeTask, "Task: confirm rollout checklist is done.")
+	if err != nil {
+		t.Fatalf("update generic doc: %v", err)
+	}
+	if updated.Content != "Task: confirm rollout checklist is done." {
+		t.Fatalf("unexpected updated content: %+v", updated)
+	}
+	if err := repo.DeleteDocument(ctx, "user-1", "task-1", domain.MemoryTypeTask); err != nil {
+		t.Fatalf("delete generic doc: %v", err)
+	}
+	if _, err := repo.GetDocument(ctx, "user-1", "task-1", domain.MemoryTypeTask); err == nil {
+		t.Fatalf("expected generic doc to be deleted")
+	}
+}
+
 func TestInMemoryMemoryRepositoryStoresFactSupersedesRelations(t *testing.T) {
 	t.Parallel()
 

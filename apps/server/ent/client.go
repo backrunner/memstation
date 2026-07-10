@@ -18,6 +18,7 @@ import (
 	"memstation/apps/server/ent/impression"
 	"memstation/apps/server/ent/keymemory"
 	"memstation/apps/server/ent/memoryembedding"
+	"memstation/apps/server/ent/memoryitem"
 	"memstation/apps/server/ent/memorykeyword"
 	"memstation/apps/server/ent/memorynode"
 	"memstation/apps/server/ent/memoryrelation"
@@ -52,6 +53,8 @@ type Client struct {
 	KeyMemory *KeyMemoryClient
 	// MemoryEmbedding is the client for interacting with the MemoryEmbedding builders.
 	MemoryEmbedding *MemoryEmbeddingClient
+	// MemoryItem is the client for interacting with the MemoryItem builders.
+	MemoryItem *MemoryItemClient
 	// MemoryKeyword is the client for interacting with the MemoryKeyword builders.
 	MemoryKeyword *MemoryKeywordClient
 	// MemoryNode is the client for interacting with the MemoryNode builders.
@@ -88,6 +91,7 @@ func (c *Client) init() {
 	c.Impression = NewImpressionClient(c.config)
 	c.KeyMemory = NewKeyMemoryClient(c.config)
 	c.MemoryEmbedding = NewMemoryEmbeddingClient(c.config)
+	c.MemoryItem = NewMemoryItemClient(c.config)
 	c.MemoryKeyword = NewMemoryKeywordClient(c.config)
 	c.MemoryNode = NewMemoryNodeClient(c.config)
 	c.MemoryRelation = NewMemoryRelationClient(c.config)
@@ -196,6 +200,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Impression:      NewImpressionClient(cfg),
 		KeyMemory:       NewKeyMemoryClient(cfg),
 		MemoryEmbedding: NewMemoryEmbeddingClient(cfg),
+		MemoryItem:      NewMemoryItemClient(cfg),
 		MemoryKeyword:   NewMemoryKeywordClient(cfg),
 		MemoryNode:      NewMemoryNodeClient(cfg),
 		MemoryRelation:  NewMemoryRelationClient(cfg),
@@ -231,6 +236,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Impression:      NewImpressionClient(cfg),
 		KeyMemory:       NewKeyMemoryClient(cfg),
 		MemoryEmbedding: NewMemoryEmbeddingClient(cfg),
+		MemoryItem:      NewMemoryItemClient(cfg),
 		MemoryKeyword:   NewMemoryKeywordClient(cfg),
 		MemoryNode:      NewMemoryNodeClient(cfg),
 		MemoryRelation:  NewMemoryRelationClient(cfg),
@@ -270,8 +276,9 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.APIKey, c.AuditEvent, c.Conversation, c.Fact, c.Impression, c.KeyMemory,
-		c.MemoryEmbedding, c.MemoryKeyword, c.MemoryNode, c.MemoryRelation,
-		c.MemorySummary, c.Message, c.OutboxEvent, c.TokenUsage, c.User, c.UserSetting,
+		c.MemoryEmbedding, c.MemoryItem, c.MemoryKeyword, c.MemoryNode,
+		c.MemoryRelation, c.MemorySummary, c.Message, c.OutboxEvent, c.TokenUsage,
+		c.User, c.UserSetting,
 	} {
 		n.Use(hooks...)
 	}
@@ -282,8 +289,9 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.APIKey, c.AuditEvent, c.Conversation, c.Fact, c.Impression, c.KeyMemory,
-		c.MemoryEmbedding, c.MemoryKeyword, c.MemoryNode, c.MemoryRelation,
-		c.MemorySummary, c.Message, c.OutboxEvent, c.TokenUsage, c.User, c.UserSetting,
+		c.MemoryEmbedding, c.MemoryItem, c.MemoryKeyword, c.MemoryNode,
+		c.MemoryRelation, c.MemorySummary, c.Message, c.OutboxEvent, c.TokenUsage,
+		c.User, c.UserSetting,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -306,6 +314,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.KeyMemory.mutate(ctx, m)
 	case *MemoryEmbeddingMutation:
 		return c.MemoryEmbedding.mutate(ctx, m)
+	case *MemoryItemMutation:
+		return c.MemoryItem.mutate(ctx, m)
 	case *MemoryKeywordMutation:
 		return c.MemoryKeyword.mutate(ctx, m)
 	case *MemoryNodeMutation:
@@ -1257,6 +1267,139 @@ func (c *MemoryEmbeddingClient) mutate(ctx context.Context, m *MemoryEmbeddingMu
 		return (&MemoryEmbeddingDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown MemoryEmbedding mutation op: %q", m.Op())
+	}
+}
+
+// MemoryItemClient is a client for the MemoryItem schema.
+type MemoryItemClient struct {
+	config
+}
+
+// NewMemoryItemClient returns a client for the MemoryItem from the given config.
+func NewMemoryItemClient(c config) *MemoryItemClient {
+	return &MemoryItemClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `memoryitem.Hooks(f(g(h())))`.
+func (c *MemoryItemClient) Use(hooks ...Hook) {
+	c.hooks.MemoryItem = append(c.hooks.MemoryItem, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `memoryitem.Intercept(f(g(h())))`.
+func (c *MemoryItemClient) Intercept(interceptors ...Interceptor) {
+	c.inters.MemoryItem = append(c.inters.MemoryItem, interceptors...)
+}
+
+// Create returns a builder for creating a MemoryItem entity.
+func (c *MemoryItemClient) Create() *MemoryItemCreate {
+	mutation := newMemoryItemMutation(c.config, OpCreate)
+	return &MemoryItemCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of MemoryItem entities.
+func (c *MemoryItemClient) CreateBulk(builders ...*MemoryItemCreate) *MemoryItemCreateBulk {
+	return &MemoryItemCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *MemoryItemClient) MapCreateBulk(slice any, setFunc func(*MemoryItemCreate, int)) *MemoryItemCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &MemoryItemCreateBulk{err: fmt.Errorf("calling to MemoryItemClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*MemoryItemCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &MemoryItemCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for MemoryItem.
+func (c *MemoryItemClient) Update() *MemoryItemUpdate {
+	mutation := newMemoryItemMutation(c.config, OpUpdate)
+	return &MemoryItemUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *MemoryItemClient) UpdateOne(_m *MemoryItem) *MemoryItemUpdateOne {
+	mutation := newMemoryItemMutation(c.config, OpUpdateOne, withMemoryItem(_m))
+	return &MemoryItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *MemoryItemClient) UpdateOneID(id string) *MemoryItemUpdateOne {
+	mutation := newMemoryItemMutation(c.config, OpUpdateOne, withMemoryItemID(id))
+	return &MemoryItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for MemoryItem.
+func (c *MemoryItemClient) Delete() *MemoryItemDelete {
+	mutation := newMemoryItemMutation(c.config, OpDelete)
+	return &MemoryItemDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *MemoryItemClient) DeleteOne(_m *MemoryItem) *MemoryItemDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *MemoryItemClient) DeleteOneID(id string) *MemoryItemDeleteOne {
+	builder := c.Delete().Where(memoryitem.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &MemoryItemDeleteOne{builder}
+}
+
+// Query returns a query builder for MemoryItem.
+func (c *MemoryItemClient) Query() *MemoryItemQuery {
+	return &MemoryItemQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeMemoryItem},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a MemoryItem entity by its id.
+func (c *MemoryItemClient) Get(ctx context.Context, id string) (*MemoryItem, error) {
+	return c.Query().Where(memoryitem.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *MemoryItemClient) GetX(ctx context.Context, id string) *MemoryItem {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *MemoryItemClient) Hooks() []Hook {
+	return c.hooks.MemoryItem
+}
+
+// Interceptors returns the client interceptors.
+func (c *MemoryItemClient) Interceptors() []Interceptor {
+	return c.inters.MemoryItem
+}
+
+func (c *MemoryItemClient) mutate(ctx context.Context, m *MemoryItemMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&MemoryItemCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&MemoryItemUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&MemoryItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&MemoryItemDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown MemoryItem mutation op: %q", m.Op())
 	}
 }
 
@@ -2461,12 +2604,12 @@ func (c *UserSettingClient) mutate(ctx context.Context, m *UserSettingMutation) 
 type (
 	hooks struct {
 		APIKey, AuditEvent, Conversation, Fact, Impression, KeyMemory, MemoryEmbedding,
-		MemoryKeyword, MemoryNode, MemoryRelation, MemorySummary, Message, OutboxEvent,
-		TokenUsage, User, UserSetting []ent.Hook
+		MemoryItem, MemoryKeyword, MemoryNode, MemoryRelation, MemorySummary, Message,
+		OutboxEvent, TokenUsage, User, UserSetting []ent.Hook
 	}
 	inters struct {
 		APIKey, AuditEvent, Conversation, Fact, Impression, KeyMemory, MemoryEmbedding,
-		MemoryKeyword, MemoryNode, MemoryRelation, MemorySummary, Message, OutboxEvent,
-		TokenUsage, User, UserSetting []ent.Interceptor
+		MemoryItem, MemoryKeyword, MemoryNode, MemoryRelation, MemorySummary, Message,
+		OutboxEvent, TokenUsage, User, UserSetting []ent.Interceptor
 	}
 )

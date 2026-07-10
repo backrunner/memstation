@@ -155,6 +155,32 @@ var (
 		Columns:    MemoryEmbeddingsColumns,
 		PrimaryKey: []*schema.Column{MemoryEmbeddingsColumns[0]},
 	}
+	// MemoryItemsColumns holds the columns for the "memory_items" table.
+	MemoryItemsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, Unique: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "generation_id", Type: field.TypeString, Default: ""},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "conversation_id", Type: field.TypeString, Default: ""},
+		{Name: "node_id", Type: field.TypeString, Unique: true},
+		{Name: "item_type", Type: field.TypeString},
+		{Name: "title", Type: field.TypeString, Default: ""},
+		{Name: "content", Type: field.TypeString},
+		{Name: "status", Type: field.TypeString, Default: "current"},
+		{Name: "confidence", Type: field.TypeFloat64, Default: 0.75},
+		{Name: "valid_from", Type: field.TypeTime, Nullable: true},
+		{Name: "valid_to", Type: field.TypeTime, Nullable: true},
+		{Name: "review_status", Type: field.TypeString, Default: "auto"},
+		{Name: "metadata", Type: field.TypeJSON, Nullable: true},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
+	}
+	// MemoryItemsTable holds the schema information for the "memory_items" table.
+	MemoryItemsTable = &schema.Table{
+		Name:       "memory_items",
+		Columns:    MemoryItemsColumns,
+		PrimaryKey: []*schema.Column{MemoryItemsColumns[0]},
+	}
 	// MemoryKeywordsColumns holds the columns for the "memory_keywords" table.
 	MemoryKeywordsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -338,6 +364,7 @@ var (
 		ImpressionsTable,
 		KeyMemoriesTable,
 		MemoryEmbeddingsTable,
+		MemoryItemsTable,
 		MemoryKeywordsTable,
 		MemoryNodesTable,
 		MemoryRelationsTable,

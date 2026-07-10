@@ -327,6 +327,111 @@
       "updated_at": "2026-03-14T19:30:00Z"
     },
     {
+      "id": "event-gridwave-rollout-1",
+      "node_id": "node-event-gridwave-rollout-1",
+      "user_id": "user-alpha",
+      "conversation_id": "conv-agent-memory-1",
+      "type": "event",
+      "content": "Event: gridwave rollout completed a rollback dry run on 2026-03-14.",
+      "importance": 1.15,
+      "decay_factor": 1.0,
+      "metadata": {
+        "title": "gridwave rollout dry run",
+        "status": "current",
+        "item_type": "event"
+      },
+      "created_at": "2026-03-14T20:00:00Z",
+      "updated_at": "2026-03-14T20:00:00Z"
+    },
+    {
+      "id": "task-launchgate-checklist-1",
+      "node_id": "node-task-launchgate-checklist-1",
+      "user_id": "user-alpha",
+      "conversation_id": "conv-agent-memory-1",
+      "type": "task",
+      "content": "Task: follow up with Nina on the LaunchGate API checklist before Friday.",
+      "importance": 1.25,
+      "decay_factor": 0.85,
+      "metadata": {
+        "title": "LaunchGate checklist follow-up",
+        "status": "pending",
+        "item_type": "task"
+      },
+      "created_at": "2026-03-14T20:05:00Z",
+      "updated_at": "2026-03-14T20:05:00Z"
+    },
+    {
+      "id": "procedure-pdf-inspection-1",
+      "node_id": "node-procedure-pdf-inspection-1",
+      "user_id": "user-alpha",
+      "conversation_id": "conv-agent-memory-1",
+      "type": "procedure",
+      "content": "Procedure: use inspect_assets before summarizing PDF runbooks.",
+      "importance": 1.2,
+      "decay_factor": 1.3,
+      "metadata": {
+        "title": "PDF inspection workflow",
+        "review_status": "approved",
+        "item_type": "procedure"
+      },
+      "created_at": "2026-03-14T20:10:00Z",
+      "updated_at": "2026-03-14T20:10:00Z"
+    },
+    {
+      "id": "artifact-release-brief-1",
+      "node_id": "node-artifact-release-brief-1",
+      "user_id": "user-alpha",
+      "conversation_id": "conv-agent-memory-1",
+      "type": "artifact",
+      "content": "Artifact: release-brief.pdf contains the LaunchGate API rollback matrix.",
+      "importance": 1.05,
+      "decay_factor": 1.1,
+      "metadata": {
+        "title": "release-brief.pdf",
+        "status": "current",
+        "item_type": "artifact",
+        "artifact_id": "artifact-release-brief-1"
+      },
+      "created_at": "2026-03-14T20:15:00Z",
+      "updated_at": "2026-03-14T20:15:00Z"
+    },
+    {
+      "id": "entity-launchgate-api-1",
+      "node_id": "node-entity-launchgate-api-1",
+      "user_id": "user-alpha",
+      "conversation_id": "conv-agent-memory-1",
+      "type": "entity",
+      "content": "Entity: LaunchGate API service.",
+      "importance": 0.95,
+      "decay_factor": 1.4,
+      "metadata": {
+        "title": "LaunchGate API",
+        "status": "current",
+        "item_type": "entity",
+        "entity_kind": "service"
+      },
+      "created_at": "2026-03-14T20:20:00Z",
+      "updated_at": "2026-03-14T20:20:00Z"
+    },
+    {
+      "id": "agent-action-inspect-assets-1",
+      "node_id": "node-agent-action-inspect-assets-1",
+      "user_id": "user-alpha",
+      "conversation_id": "conv-agent-memory-1",
+      "type": "agent_action",
+      "content": "Agent action: used tool inspect_assets with result extracted the PDF checklist.",
+      "importance": 0.95,
+      "decay_factor": 0.8,
+      "metadata": {
+        "title": "inspect_assets",
+        "status": "succeeded",
+        "item_type": "agent_action",
+        "tool_name": "inspect_assets"
+      },
+      "created_at": "2026-03-14T20:25:00Z",
+      "updated_at": "2026-03-14T20:25:00Z"
+    },
+    {
       "id": "summary-other-user-1",
       "node_id": "node-summary-other-user-1",
       "user_id": "user-bravo",
@@ -361,6 +466,22 @@
       "dst_node_id": "node-fact-release-approver-history-stale-1",
       "relation_type": "derived_from",
       "weight": 0.9,
+      "source": "golden"
+    },
+    {
+      "user_id": "user-alpha",
+      "src_node_id": "node-task-launchgate-checklist-1",
+      "dst_node_id": "node-entity-launchgate-api-1",
+      "relation_type": "mentions_entity",
+      "weight": 0.9,
+      "source": "golden"
+    },
+    {
+      "user_id": "user-alpha",
+      "src_node_id": "node-agent-action-inspect-assets-1",
+      "dst_node_id": "node-procedure-pdf-inspection-1",
+      "relation_type": "used_tool",
+      "weight": 0.8,
       "source": "golden"
     }
   ],
@@ -632,6 +753,102 @@
       "notes": "Tool-output-derived multimodal proxies should stay searchable and export tool payload evidence metadata.",
       "memory_types": [
         "summary"
+      ]
+    },
+    {
+      "case_id": "retrieval.generic_event_gridwave",
+      "user_id": "user-alpha",
+      "query": "When did gridwave rollout complete the rollback dry run?",
+      "top_n": 3,
+      "positives": [
+        "event-gridwave-rollout-1"
+      ],
+      "graded_relevance": {
+        "event-gridwave-rollout-1": 3
+      },
+      "notes": "Event memory should support time-bounded occurrence recall.",
+      "memory_types": [
+        "event"
+      ]
+    },
+    {
+      "case_id": "retrieval.generic_task_launchgate",
+      "user_id": "user-alpha",
+      "query": "What follow up is pending for Nina and the LaunchGate API checklist?",
+      "top_n": 3,
+      "positives": [
+        "task-launchgate-checklist-1"
+      ],
+      "graded_relevance": {
+        "task-launchgate-checklist-1": 3
+      },
+      "notes": "Task memory should keep active commitments retrievable.",
+      "memory_types": [
+        "task"
+      ]
+    },
+    {
+      "case_id": "retrieval.generic_procedure_pdf",
+      "user_id": "user-alpha",
+      "query": "Which procedure says to use inspect_assets before summarizing PDF runbooks?",
+      "top_n": 3,
+      "positives": [
+        "procedure-pdf-inspection-1"
+      ],
+      "graded_relevance": {
+        "procedure-pdf-inspection-1": 3
+      },
+      "notes": "Procedural memory should retrieve reusable tool workflows.",
+      "memory_types": [
+        "procedure"
+      ]
+    },
+    {
+      "case_id": "retrieval.generic_artifact_release_brief",
+      "user_id": "user-alpha",
+      "query": "Which artifact contains the LaunchGate API rollback matrix?",
+      "top_n": 3,
+      "positives": [
+        "artifact-release-brief-1"
+      ],
+      "graded_relevance": {
+        "artifact-release-brief-1": 3
+      },
+      "notes": "Artifact memory should surface durable generated or referenced objects.",
+      "memory_types": [
+        "artifact"
+      ]
+    },
+    {
+      "case_id": "retrieval.generic_entity_launchgate",
+      "user_id": "user-alpha",
+      "query": "LaunchGate API service entity",
+      "top_n": 3,
+      "positives": [
+        "entity-launchgate-api-1"
+      ],
+      "graded_relevance": {
+        "entity-launchgate-api-1": 3
+      },
+      "notes": "Entity memory should provide stable graph anchors.",
+      "memory_types": [
+        "entity"
+      ]
+    },
+    {
+      "case_id": "retrieval.generic_agent_action_inspect_assets",
+      "user_id": "user-alpha",
+      "query": "Which agent action used inspect_assets and extracted the PDF checklist?",
+      "top_n": 3,
+      "positives": [
+        "agent-action-inspect-assets-1"
+      ],
+      "graded_relevance": {
+        "agent-action-inspect-assets-1": 3
+      },
+      "notes": "Agent action memory should recall durable tool-use outcomes without raw payload storage.",
+      "memory_types": [
+        "agent_action"
       ]
     }
   ]

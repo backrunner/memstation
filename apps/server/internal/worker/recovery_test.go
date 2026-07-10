@@ -36,7 +36,7 @@ func TestRunRecoveryDrillCompletesBacklog(t *testing.T) {
 	expectedCounts := map[string]int{
 		TypeConversationFinalize: report.Conversations,
 		TypeSummaryGenerate:      report.Conversations,
-		TypeEmbeddingGenerate:    report.Conversations*3 + report.FactDocuments,
+		TypeEmbeddingGenerate:    report.Conversations*3 + report.FactDocuments + report.GenericDocuments,
 		TypeAnalysisExtract:      report.Conversations,
 		TypeKeyMemoryReconcile:   report.Conversations,
 	}

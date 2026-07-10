@@ -60,16 +60,91 @@ const (
 )
 
 const (
-	MemoryTypeSummary    MemoryType = "summary"
-	MemoryTypeSegment    MemoryType = "segment"
-	MemoryTypeImpression MemoryType = "impression"
-	MemoryTypeFact       MemoryType = "fact"
-	MemoryTypeKeyMemory  MemoryType = "key_memory"
+	MemoryTypeSummary     MemoryType = "summary"
+	MemoryTypeSegment     MemoryType = "segment"
+	MemoryTypeImpression  MemoryType = "impression"
+	MemoryTypeFact        MemoryType = "fact"
+	MemoryTypeKeyMemory   MemoryType = "key_memory"
+	MemoryTypeEvent       MemoryType = "event"
+	MemoryTypeTask        MemoryType = "task"
+	MemoryTypeProcedure   MemoryType = "procedure"
+	MemoryTypeArtifact    MemoryType = "artifact"
+	MemoryTypeEntity      MemoryType = "entity"
+	MemoryTypeAgentAction MemoryType = "agent_action"
 )
 
 const (
-	MemoryRelationSupersedes = "supersedes"
+	MemoryRelationDerivedFrom      = "derived_from"
+	MemoryRelationMentionsEntity   = "mentions_entity"
+	MemoryRelationUsedTool         = "used_tool"
+	MemoryRelationProducedArtifact = "produced_artifact"
+	MemoryRelationResultedIn       = "resulted_in"
+	MemoryRelationDependsOn        = "depends_on"
+	MemoryRelationSupports         = "supports"
+	MemoryRelationContradicts      = "contradicts"
+	MemoryRelationReplaces         = "replaces"
+	MemoryRelationSupersedes       = "supersedes"
 )
+
+func IsGenericMemoryType(value MemoryType) bool {
+	switch value {
+	case MemoryTypeEvent,
+		MemoryTypeTask,
+		MemoryTypeProcedure,
+		MemoryTypeArtifact,
+		MemoryTypeEntity,
+		MemoryTypeAgentAction:
+		return true
+	default:
+		return false
+	}
+}
+
+func IsSupportedMemoryType(value MemoryType) bool {
+	switch value {
+	case MemoryTypeSummary,
+		MemoryTypeSegment,
+		MemoryTypeImpression,
+		MemoryTypeFact,
+		MemoryTypeKeyMemory:
+		return true
+	default:
+		return IsGenericMemoryType(value)
+	}
+}
+
+func DefaultSearchMemoryTypes(includeSegments bool) []MemoryType {
+	items := []MemoryType{
+		MemoryTypeSummary,
+		MemoryTypeImpression,
+		MemoryTypeFact,
+		MemoryTypeKeyMemory,
+		MemoryTypeEvent,
+		MemoryTypeTask,
+		MemoryTypeProcedure,
+		MemoryTypeArtifact,
+		MemoryTypeEntity,
+		MemoryTypeAgentAction,
+	}
+	if includeSegments {
+		items = append([]MemoryType{MemoryTypeSummary, MemoryTypeSegment}, items[1:]...)
+	}
+	return items
+}
+
+func DefaultAdminMemoryTypes() []MemoryType {
+	return []MemoryType{
+		MemoryTypeSummary,
+		MemoryTypeImpression,
+		MemoryTypeFact,
+		MemoryTypeEvent,
+		MemoryTypeTask,
+		MemoryTypeProcedure,
+		MemoryTypeArtifact,
+		MemoryTypeEntity,
+		MemoryTypeAgentAction,
+	}
+}
 
 const (
 	StreamEventResponseStart StreamEventType = "response.start"

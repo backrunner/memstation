@@ -10,6 +10,7 @@ import (
 	"memstation/apps/server/ent/impression"
 	"memstation/apps/server/ent/keymemory"
 	"memstation/apps/server/ent/memoryembedding"
+	"memstation/apps/server/ent/memoryitem"
 	"memstation/apps/server/ent/memorykeyword"
 	"memstation/apps/server/ent/memorynode"
 	"memstation/apps/server/ent/memoryrelation"
@@ -168,6 +169,45 @@ func init() {
 	memoryembeddingDescEmbeddingVersion := memoryembeddingFields[4].Descriptor()
 	// memoryembedding.DefaultEmbeddingVersion holds the default value on creation for the embedding_version field.
 	memoryembedding.DefaultEmbeddingVersion = memoryembeddingDescEmbeddingVersion.Default.(int)
+	memoryitemMixin := schema.MemoryItem{}.Mixin()
+	memoryitemMixinFields0 := memoryitemMixin[0].Fields()
+	_ = memoryitemMixinFields0
+	memoryitemFields := schema.MemoryItem{}.Fields()
+	_ = memoryitemFields
+	// memoryitemDescCreatedAt is the schema descriptor for created_at field.
+	memoryitemDescCreatedAt := memoryitemMixinFields0[0].Descriptor()
+	// memoryitem.DefaultCreatedAt holds the default value on creation for the created_at field.
+	memoryitem.DefaultCreatedAt = memoryitemDescCreatedAt.Default.(func() time.Time)
+	// memoryitemDescUpdatedAt is the schema descriptor for updated_at field.
+	memoryitemDescUpdatedAt := memoryitemMixinFields0[1].Descriptor()
+	// memoryitem.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	memoryitem.DefaultUpdatedAt = memoryitemDescUpdatedAt.Default.(func() time.Time)
+	// memoryitem.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	memoryitem.UpdateDefaultUpdatedAt = memoryitemDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// memoryitemDescGenerationID is the schema descriptor for generation_id field.
+	memoryitemDescGenerationID := memoryitemFields[1].Descriptor()
+	// memoryitem.DefaultGenerationID holds the default value on creation for the generation_id field.
+	memoryitem.DefaultGenerationID = memoryitemDescGenerationID.Default.(string)
+	// memoryitemDescConversationID is the schema descriptor for conversation_id field.
+	memoryitemDescConversationID := memoryitemFields[3].Descriptor()
+	// memoryitem.DefaultConversationID holds the default value on creation for the conversation_id field.
+	memoryitem.DefaultConversationID = memoryitemDescConversationID.Default.(string)
+	// memoryitemDescTitle is the schema descriptor for title field.
+	memoryitemDescTitle := memoryitemFields[6].Descriptor()
+	// memoryitem.DefaultTitle holds the default value on creation for the title field.
+	memoryitem.DefaultTitle = memoryitemDescTitle.Default.(string)
+	// memoryitemDescStatus is the schema descriptor for status field.
+	memoryitemDescStatus := memoryitemFields[8].Descriptor()
+	// memoryitem.DefaultStatus holds the default value on creation for the status field.
+	memoryitem.DefaultStatus = memoryitemDescStatus.Default.(string)
+	// memoryitemDescConfidence is the schema descriptor for confidence field.
+	memoryitemDescConfidence := memoryitemFields[9].Descriptor()
+	// memoryitem.DefaultConfidence holds the default value on creation for the confidence field.
+	memoryitem.DefaultConfidence = memoryitemDescConfidence.Default.(float64)
+	// memoryitemDescReviewStatus is the schema descriptor for review_status field.
+	memoryitemDescReviewStatus := memoryitemFields[12].Descriptor()
+	// memoryitem.DefaultReviewStatus holds the default value on creation for the review_status field.
+	memoryitem.DefaultReviewStatus = memoryitemDescReviewStatus.Default.(string)
 	memorykeywordMixin := schema.MemoryKeyword{}.Mixin()
 	memorykeywordMixinFields0 := memorykeywordMixin[0].Fields()
 	_ = memorykeywordMixinFields0

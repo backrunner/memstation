@@ -13,6 +13,7 @@ import (
 	"memstation/apps/server/ent/impression"
 	"memstation/apps/server/ent/keymemory"
 	"memstation/apps/server/ent/memoryembedding"
+	"memstation/apps/server/ent/memoryitem"
 	"memstation/apps/server/ent/memorykeyword"
 	"memstation/apps/server/ent/memorynode"
 	"memstation/apps/server/ent/memoryrelation"
@@ -95,6 +96,7 @@ func checkColumn(t, c string) error {
 			impression.Table:      impression.ValidColumn,
 			keymemory.Table:       keymemory.ValidColumn,
 			memoryembedding.Table: memoryembedding.ValidColumn,
+			memoryitem.Table:      memoryitem.ValidColumn,
 			memorykeyword.Table:   memorykeyword.ValidColumn,
 			memorynode.Table:      memorynode.ValidColumn,
 			memoryrelation.Table:  memoryrelation.ValidColumn,

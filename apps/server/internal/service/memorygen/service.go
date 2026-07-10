@@ -427,8 +427,9 @@ func (s *Service) CaptureSourceSnapshot(ctx context.Context, conversation domain
 	_, err = tx.ExecContext(ctx, `
         INSERT INTO memory_source_snapshots (
             snapshot_id, user_id, conversation_id, snapshot_version, source_hash, request_format,
-            upstream_provider, mode, finalize_status, metadata, usage, message_count, created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13)
+            upstream_provider, mode, finalize_status, metadata, usage, message_count,
+            message_parts, part_artifacts, created_at, updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15)
     `,
 		snapshot.SnapshotID,
 		snapshot.UserID,
@@ -442,6 +443,8 @@ func (s *Service) CaptureSourceSnapshot(ctx context.Context, conversation domain
 		marshalJSON(snapshot.Metadata),
 		marshalJSON(snapshot.Usage),
 		snapshot.MessageCount,
+		marshalJSON(snapshot.Parts),
+		marshalJSON(snapshot.Artifacts),
 		now,
 	)
 	if err != nil {
@@ -494,7 +497,8 @@ func (s *Service) GetSourceSnapshot(ctx context.Context, userID, snapshotID stri
 	}
 	row := db.QueryRowContext(ctx, `
         SELECT snapshot_id, user_id, conversation_id, snapshot_version, source_hash, request_format,
-               upstream_provider, mode, finalize_status, metadata, usage, message_count, created_at, updated_at
+               upstream_provider, mode, finalize_status, metadata, usage, message_count,
+               message_parts, part_artifacts, created_at, updated_at
         FROM memory_source_snapshots
         WHERE snapshot_id = $1 AND user_id = $2
     `, snapshotID, userID)
@@ -550,7 +554,8 @@ func (s *Service) ListSourceSnapshots(ctx context.Context, userID, conversationI
 	}
 	rows, err := db.QueryContext(ctx, `
         SELECT snapshot_id, user_id, conversation_id, snapshot_version, source_hash, request_format,
-               upstream_provider, mode, finalize_status, metadata, usage, message_count, created_at, updated_at
+               upstream_provider, mode, finalize_status, metadata, usage, message_count,
+               message_parts, part_artifacts, created_at, updated_at
         FROM memory_source_snapshots
         WHERE user_id = $1 AND conversation_id = $2
         ORDER BY snapshot_version DESC
@@ -1140,7 +1145,8 @@ func (s *Service) latestSnapshotsForScope(ctx context.Context, userID, scope, co
 		rows, err := db.QueryContext(ctx, `
             SELECT DISTINCT ON (conversation_id)
                 snapshot_id, user_id, conversation_id, snapshot_version, source_hash, request_format,
-                upstream_provider, mode, finalize_status, metadata, usage, message_count, created_at, updated_at
+                upstream_provider, mode, finalize_status, metadata, usage, message_count,
+                message_parts, part_artifacts, created_at, updated_at
             FROM memory_source_snapshots
             WHERE user_id = $1
             ORDER BY conversation_id, snapshot_version DESC
@@ -1203,7 +1209,8 @@ func (s *Service) latestSnapshotHeaderFromDB(ctx context.Context, userID, conver
 	}
 	row := db.QueryRowContext(ctx, `
         SELECT snapshot_id, user_id, conversation_id, snapshot_version, source_hash, request_format,
-               upstream_provider, mode, finalize_status, metadata, usage, message_count, created_at, updated_at
+               upstream_provider, mode, finalize_status, metadata, usage, message_count,
+               message_parts, part_artifacts, created_at, updated_at
         FROM memory_source_snapshots
         WHERE user_id = $1 AND conversation_id = $2
         ORDER BY snapshot_version DESC
@@ -1266,6 +1273,8 @@ func snapshotFromConversation(conversation domain.ConversationRecord) domain.Mem
 	metadata["captured_from_conversation"] = conversation.ConversationID
 	metadata["captured_at"] = now.Format(time.RFC3339)
 	messages := conversationservice.PrepareMessagesForStorage(conversation.Messages)
+	parts := append([]domain.MessagePart(nil), conversation.Parts...)
+	artifacts := append([]domain.MessagePartArtifact(nil), conversation.Artifacts...)
 	return domain.MemorySourceSnapshot{
 		UserID:         conversation.UserID,
 		ConversationID: conversation.ConversationID,
@@ -1274,6 +1283,8 @@ func snapshotFromConversation(conversation domain.ConversationRecord) domain.Mem
 			"provider":       conversation.Provider,
 			"mode":           conversation.Mode,
 			"messages":       messagesWithoutDerivedPromptText(messages),
+			"parts":          parts,
+			"artifacts":      artifacts,
 		}),
 		RequestFormat:  conversation.RequestFormat,
 		Provider:       conversation.Provider,
@@ -1283,6 +1294,8 @@ func snapshotFromConversation(conversation domain.ConversationRecord) domain.Mem
 		Usage:          conversation.Usage,
 		MessageCount:   len(messages),
 		Messages:       messages,
+		Parts:          parts,
+		Artifacts:      artifacts,
 	}
 }
 
@@ -1355,6 +1368,8 @@ func scanSnapshot(scanner interface{ Scan(dest ...any) error }) (domain.MemorySo
 	var finalizeStatus string
 	var metadataBytes []byte
 	var usageBytes []byte
+	var partsBytes []byte
+	var artifactsBytes []byte
 	err := scanner.Scan(
 		&snapshot.SnapshotID,
 		&snapshot.UserID,
@@ -1368,6 +1383,8 @@ func scanSnapshot(scanner interface{ Scan(dest ...any) error }) (domain.MemorySo
 		&metadataBytes,
 		&usageBytes,
 		&snapshot.MessageCount,
+		&partsBytes,
+		&artifactsBytes,
 		&snapshot.CreatedAt,
 		&snapshot.UpdatedAt,
 	)
@@ -1379,6 +1396,8 @@ func scanSnapshot(scanner interface{ Scan(dest ...any) error }) (domain.MemorySo
 	snapshot.FinalizeStatus = domain.FinalizeStatus(finalizeStatus)
 	_ = json.Unmarshal(metadataBytes, &snapshot.Metadata)
 	_ = json.Unmarshal(usageBytes, &snapshot.Usage)
+	_ = json.Unmarshal(partsBytes, &snapshot.Parts)
+	_ = json.Unmarshal(artifactsBytes, &snapshot.Artifacts)
 	return snapshot, nil
 }
 

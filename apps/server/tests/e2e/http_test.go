@@ -720,8 +720,16 @@ func TestAdminMemoryEndpoints(t *testing.T) {
 	if !strings.Contains(documentRecorder.Body.String(), `"topic_label":"Project Atlas"`) {
 		t.Fatalf("expected summary metadata, got %s", documentRecorder.Body.String())
 	}
-	if !strings.Contains(documentRecorder.Body.String(), `"related":[{"id":"fact-seeded","type":"fact","weight":0.88}]`) {
-		t.Fatalf("expected hydrated related fact, got %s", documentRecorder.Body.String())
+	for _, expected := range []string{
+		`"node_id":"node-fact-seeded"`,
+		`"document_id":"fact-seeded"`,
+		`"document_type":"fact"`,
+		`"relation_type":"supports"`,
+		`"weight":0.88`,
+	} {
+		if !strings.Contains(documentRecorder.Body.String(), expected) {
+			t.Fatalf("expected hydrated related fact field %s, got %s", expected, documentRecorder.Body.String())
+		}
 	}
 
 	auditRequest := httptest.NewRequest(http.MethodGet, "/api/admin/audit?action=update_key_memory&target_type=key_memory&target_id="+keyID, nil)

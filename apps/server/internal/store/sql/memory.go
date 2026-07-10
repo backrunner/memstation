@@ -305,9 +305,6 @@ func (r *InMemoryMemoryRepository) StoreDocument(_ context.Context, doc domain.M
 	if doc.ID == "" {
 		doc.ID = uuid.NewString()
 	}
-	if doc.NodeID == "" {
-		doc.NodeID = uuid.NewString()
-	}
 	if doc.CreatedAt.IsZero() {
 		doc.CreatedAt = now
 	}
@@ -338,6 +335,9 @@ func (r *InMemoryMemoryRepository) StoreDocument(_ context.Context, doc domain.M
 		if seq := factLineageRevisionSeqFromMetadata(doc.Metadata); seq <= 0 {
 			doc.Metadata["revision_seq"] = r.nextFactRevisionSeqLocked(doc)
 		}
+	}
+	if doc.NodeID == "" {
+		doc.NodeID = defaultMemoryNodeID(doc.UserID, doc.Type, doc.ID)
 	}
 	documentKey := key(doc.UserID, doc.ID)
 	existing, existed := r.documents[documentKey]
@@ -1560,6 +1560,18 @@ func key(parts ...string) string {
 
 func keyMemoryNodeID(userID, memoryKey string) string {
 	return "node:keymemory:" + userID + ":" + memoryKey
+}
+
+func defaultMemoryNodeID(userID string, kind domain.MemoryType, documentID string) string {
+	userID = strings.TrimSpace(userID)
+	documentID = strings.TrimSpace(documentID)
+	if userID == "" {
+		userID = "unknown-user"
+	}
+	if documentID == "" {
+		documentID = uuid.NewString()
+	}
+	return "node:" + string(kind) + ":" + userID + ":" + documentID
 }
 
 func matchesMemoryType(value domain.MemoryType, filters []domain.MemoryType) bool {

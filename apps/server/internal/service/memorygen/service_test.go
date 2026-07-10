@@ -61,6 +61,84 @@ func TestCaptureSourceSnapshotVersionsConversationHistory(t *testing.T) {
 	}
 }
 
+func TestCaptureSourceSnapshotPreservesPartsAndArtifacts(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	service := NewService(nil, "text-embedding-3-large")
+	now := time.Now().UTC()
+	conversation := domain.ConversationRecord{
+		UserID:         "user-1",
+		ConversationID: "conv-artifact",
+		RequestFormat:  "chat_completions",
+		Provider:       domain.ProviderOpenAI,
+		Mode:           domain.ModeTransparent,
+		FinalizeStatus: domain.FinalizeStatusEnded,
+		UpdatedAt:      now,
+		Messages: []domain.UnifiedMessage{
+			{Role: domain.RoleUser, Text: "please inspect this report"},
+		},
+		Parts: []domain.MessagePart{{
+			PartID:         "part-1",
+			UserID:         "user-1",
+			ConversationID: "conv-artifact",
+			SequenceNum:    0,
+			Role:           domain.RoleUser,
+			PartType:       domain.ContentBlockFile,
+			Filename:       "report.pdf",
+			TextContent:    "The report says the launch checklist is pending.",
+			CreatedAt:      now,
+			UpdatedAt:      now,
+		}},
+		Artifacts: []domain.MessagePartArtifact{{
+			ArtifactID:     "artifact-1",
+			UserID:         "user-1",
+			ConversationID: "conv-artifact",
+			PartID:         "part-1",
+			ArtifactType:   "document",
+			Status:         "completed",
+			TextContent:    "The launch checklist is pending.",
+			Confidence:     0.91,
+			CreatedAt:      now,
+			UpdatedAt:      now,
+		}},
+	}
+
+	first, created, err := service.CaptureSourceSnapshot(ctx, conversation)
+	if err != nil {
+		t.Fatalf("capture snapshot: %v", err)
+	}
+	if !created {
+		t.Fatal("expected first snapshot to be created")
+	}
+	if len(first.Parts) != 1 || len(first.Artifacts) != 1 {
+		t.Fatalf("expected retained parts/artifacts, got parts=%d artifacts=%d", len(first.Parts), len(first.Artifacts))
+	}
+
+	loaded, ok, err := service.GetSourceSnapshot(ctx, "user-1", first.SnapshotID)
+	if err != nil {
+		t.Fatalf("load snapshot: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected stored snapshot to load")
+	}
+	if len(loaded.Parts) != 1 || loaded.Parts[0].PartID != "part-1" {
+		t.Fatalf("expected source part to round trip, got %+v", loaded.Parts)
+	}
+	if len(loaded.Artifacts) != 1 || loaded.Artifacts[0].ArtifactID != "artifact-1" {
+		t.Fatalf("expected artifact to round trip, got %+v", loaded.Artifacts)
+	}
+
+	conversation.Artifacts[0].Status = "failed"
+	second, created, err := service.CaptureSourceSnapshot(ctx, conversation)
+	if err != nil {
+		t.Fatalf("capture changed snapshot: %v", err)
+	}
+	if !created || second.SnapshotVersion != 2 {
+		t.Fatalf("expected artifact-only change to create version 2, created=%v snapshot=%+v", created, second)
+	}
+}
+
 func TestCreateRebuildGenerationUsesLatestRetainedSnapshots(t *testing.T) {
 	t.Parallel()
 

@@ -104,7 +104,7 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 	finalizeReason := stringValue(conversation.Metadata, "finalize_reason")
 	segments := applySnapshotMetadataToSegments(
 		snapshot,
-		applyGenerationToSegments(snapshot.UserID, generation.GenerationID, conversationservice.BuildSegments(snapshot.UserID, snapshot.ConversationID, snapshot.Messages, snapshot.UpdatedAt, conversationservice.DefaultSegmentOptions())),
+		applyGenerationToSegments(snapshot.UserID, generation.GenerationID, conversationservice.BuildSegmentsFromTimeline(snapshot.UserID, snapshot.ConversationID, snapshot.Messages, snapshot.Parts, snapshot.Artifacts, snapshot.UpdatedAt, conversationservice.DefaultSegmentOptions())),
 	)
 	if err := ensureCurrentGenerationSource(ctx, services, snapshot.UserID, generation.GenerationID, snapshot.SnapshotID); err != nil {
 		return 0, err
@@ -113,11 +113,12 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 		return 0, err
 	}
 
-	summaryText := buildSummary(snapshot.Messages, nil, nil)
+	summaryText := buildSummary(snapshot.Messages, snapshot.Parts, snapshot.Artifacts)
 	if summaryText == "" {
 		summaryText = conversationservice.SummarizeSegments(segments)
 	}
-	chunkCount := summaryChunkCount(snapshot.Messages, nil, nil)
+	chunkCount := summaryChunkCount(snapshot.Messages, snapshot.Parts, snapshot.Artifacts)
+	summaryEvidences := buildNodeEvidences(snapshot.UserID, generation.GenerationID, "", snapshot.ConversationID, snapshot.Parts, snapshot.Artifacts, nil, nil)
 	summaryDoc := applyGenerationToDocument(snapshot.UserID, generation.GenerationID, domain.MemoryDocument{
 		ID:             summaryDocumentID(snapshot.ConversationID, 1),
 		NodeID:         summaryNodeID(snapshot.ConversationID, 1),
@@ -138,6 +139,10 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 			"summary_chunk_count":      chunkCount,
 			"summary_chunk_max_tokens": summaryChunkMaxTokens,
 			"summary_chunk_overlap":    summaryChunkOverlapTokens,
+			"modalities":               modalitiesFromParts(snapshot.Parts),
+			"evidence_count":           len(summaryEvidences),
+			"source_part_count":        len(snapshot.Parts),
+			"has_source_blob":          hasSourceBlob(snapshot.Parts),
 		}),
 	})
 	applyDocumentScore(ctx, services.Scorer, &summaryDoc, conversation.UpdatedAt)
@@ -147,7 +152,10 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 	if err := services.Memories.StoreDocument(ctx, summaryDoc); err != nil {
 		return 0, err
 	}
-	segmentDocs, err := storeSegmentDocuments(ctx, services, segments, summaryDoc, conversation.UpdatedAt, nil, nil)
+	if err := storeDocumentEvidences(ctx, services, snapshot.UserID, generation.GenerationID, summaryDoc.NodeID, snapshot.ConversationID, summaryEvidences); err != nil {
+		return 0, err
+	}
+	segmentDocs, err := storeSegmentDocuments(ctx, services, segments, summaryDoc, conversation.UpdatedAt, snapshot.Parts, snapshot.Artifacts)
 	if err != nil {
 		return 0, err
 	}
@@ -182,6 +190,12 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 		if err := services.Memories.StoreDocument(ctx, factDocs[idx]); err != nil {
 			return 0, err
 		}
+		if len(summaryEvidences) > 0 {
+			factEvidences := cloneNodeEvidences(snapshot.UserID, generation.GenerationID, factDocs[idx].NodeID, summaryEvidences)
+			if err := services.Memories.ReplaceEvidences(ctx, snapshot.UserID, factDocs[idx].NodeID, factEvidences); err != nil {
+				return 0, err
+			}
+		}
 	}
 	result.Fact = factDocs[0]
 	result.Facts = factDocs
@@ -195,17 +209,43 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 	if err := services.Memories.StoreDocument(ctx, result.Impression); err != nil {
 		return 0, err
 	}
+	if len(summaryEvidences) > 0 {
+		impressionEvidences := cloneNodeEvidences(snapshot.UserID, generation.GenerationID, result.Impression.NodeID, summaryEvidences)
+		if err := services.Memories.ReplaceEvidences(ctx, snapshot.UserID, result.Impression.NodeID, impressionEvidences); err != nil {
+			return 0, err
+		}
+	}
+	genericDocs := append([]domain.MemoryDocument(nil), result.GenericItems...)
+	for idx := range genericDocs {
+		genericDocs[idx] = applyGenerationToDocument(snapshot.UserID, generation.GenerationID, genericDocs[idx])
+		genericDocs[idx].Metadata = mergeMetadata(genericDocs[idx].Metadata, snapshotMetadata(snapshot))
+		applyDocumentScore(ctx, services.Scorer, &genericDocs[idx], conversation.UpdatedAt)
+		if err := ensureCurrentGenerationSource(ctx, services, snapshot.UserID, generation.GenerationID, snapshot.SnapshotID); err != nil {
+			return 0, err
+		}
+		if err := services.Memories.StoreDocument(ctx, genericDocs[idx]); err != nil {
+			return 0, err
+		}
+		if len(summaryEvidences) > 0 {
+			itemEvidences := cloneNodeEvidences(snapshot.UserID, generation.GenerationID, genericDocs[idx].NodeID, summaryEvidences)
+			if err := services.Memories.ReplaceEvidences(ctx, snapshot.UserID, genericDocs[idx].NodeID, itemEvidences); err != nil {
+				return 0, err
+			}
+		}
+	}
+	result.GenericItems = genericDocs
 	for _, relation := range result.Relations {
 		if err := services.Memories.LinkDocuments(ctx, relation); err != nil {
 			return 0, err
 		}
 	}
 
-	docs := make([]domain.MemoryDocument, 0, 1+len(segmentDocs)+len(factDocs)+1)
+	docs := make([]domain.MemoryDocument, 0, 1+len(segmentDocs)+len(factDocs)+1+len(genericDocs))
 	docs = append(docs, summaryDoc)
 	docs = append(docs, segmentDocs...)
 	docs = append(docs, factDocs...)
 	docs = append(docs, result.Impression)
+	docs = append(docs, genericDocs...)
 	return upsertStoredDocumentEmbeddings(ctx, services, generation, snapshot, docs)
 }
 

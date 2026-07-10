@@ -115,6 +115,14 @@ type ComplexityRoot struct {
 		Users           func(childComplexity int) int
 	}
 
+	RelatedMemory struct {
+		DocumentID   func(childComplexity int) int
+		DocumentType func(childComplexity int) int
+		NodeID       func(childComplexity int) int
+		RelationType func(childComplexity int) int
+		Weight       func(childComplexity int) int
+	}
+
 	SearchMemoriesResult struct {
 		Memories             func(childComplexity int) int
 		QueryEmbeddingTokens func(childComplexity int) int
@@ -126,6 +134,8 @@ type ComplexityRoot struct {
 		EffectiveScore func(childComplexity int) int
 		ID             func(childComplexity int) int
 		Lineage        func(childComplexity int) int
+		NodeID         func(childComplexity int) int
+		Related        func(childComplexity int) int
 		Score          func(childComplexity int) int
 		Type           func(childComplexity int) int
 	}
@@ -569,6 +579,37 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Query.Users(childComplexity), true
 
+	case "RelatedMemory.documentID":
+		if e.ComplexityRoot.RelatedMemory.DocumentID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RelatedMemory.DocumentID(childComplexity), true
+	case "RelatedMemory.documentType":
+		if e.ComplexityRoot.RelatedMemory.DocumentType == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RelatedMemory.DocumentType(childComplexity), true
+	case "RelatedMemory.nodeID":
+		if e.ComplexityRoot.RelatedMemory.NodeID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RelatedMemory.NodeID(childComplexity), true
+	case "RelatedMemory.relationType":
+		if e.ComplexityRoot.RelatedMemory.RelationType == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RelatedMemory.RelationType(childComplexity), true
+	case "RelatedMemory.weight":
+		if e.ComplexityRoot.RelatedMemory.Weight == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RelatedMemory.Weight(childComplexity), true
+
 	case "SearchMemoriesResult.memories":
 		if e.ComplexityRoot.SearchMemoriesResult.Memories == nil {
 			break
@@ -612,6 +653,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SearchMemoryItem.Lineage(childComplexity), true
+	case "SearchMemoryItem.nodeID":
+		if e.ComplexityRoot.SearchMemoryItem.NodeID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SearchMemoryItem.NodeID(childComplexity), true
+	case "SearchMemoryItem.related":
+		if e.ComplexityRoot.SearchMemoryItem.Related == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SearchMemoryItem.Related(childComplexity), true
 	case "SearchMemoryItem.score":
 		if e.ComplexityRoot.SearchMemoryItem.Score == nil {
 			break
@@ -846,7 +899,23 @@ type FactLineage {
   revisionDepth: Int!
   currentHeadID: ID!
 }
-type SearchMemoryItem { id: ID!, type: String!, content: String!, score: Float!, effectiveScore: Float!, lineage: FactLineage }
+type RelatedMemory {
+  nodeID: ID
+  documentID: ID
+  documentType: String
+  relationType: String
+  weight: Float!
+}
+type SearchMemoryItem {
+  id: ID!
+  type: String!
+  nodeID: ID
+  content: String!
+  score: Float!
+  effectiveScore: Float!
+  lineage: FactLineage
+  related: [RelatedMemory!]!
+}
 type SearchMemoriesResult { memories: [SearchMemoryItem!]!, total: Int!, queryEmbeddingTokens: Int! }
 type TokenUsageStats { inputTokens: Int!, outputTokens: Int!, totalTokens: Int! }
 type SystemOverview { activeConversations: Int!, keyMemoryCount: Int!, recentAuditEvents: Int! }
@@ -2989,6 +3058,151 @@ func (ec *executionContext) fieldContext_Query___schema(_ context.Context, field
 	return fc, nil
 }
 
+func (ec *executionContext) _RelatedMemory_nodeID(ctx context.Context, field graphql.CollectedField, obj *RelatedMemory) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RelatedMemory_nodeID,
+		func(ctx context.Context) (any, error) {
+			return obj.NodeID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_RelatedMemory_nodeID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RelatedMemory",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RelatedMemory_documentID(ctx context.Context, field graphql.CollectedField, obj *RelatedMemory) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RelatedMemory_documentID,
+		func(ctx context.Context) (any, error) {
+			return obj.DocumentID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_RelatedMemory_documentID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RelatedMemory",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RelatedMemory_documentType(ctx context.Context, field graphql.CollectedField, obj *RelatedMemory) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RelatedMemory_documentType,
+		func(ctx context.Context) (any, error) {
+			return obj.DocumentType, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_RelatedMemory_documentType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RelatedMemory",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RelatedMemory_relationType(ctx context.Context, field graphql.CollectedField, obj *RelatedMemory) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RelatedMemory_relationType,
+		func(ctx context.Context) (any, error) {
+			return obj.RelationType, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_RelatedMemory_relationType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RelatedMemory",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RelatedMemory_weight(ctx context.Context, field graphql.CollectedField, obj *RelatedMemory) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RelatedMemory_weight,
+		func(ctx context.Context) (any, error) {
+			return obj.Weight, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RelatedMemory_weight(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RelatedMemory",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SearchMemoriesResult_memories(ctx context.Context, field graphql.CollectedField, obj *SearchMemoriesResult) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -3017,6 +3231,8 @@ func (ec *executionContext) fieldContext_SearchMemoriesResult_memories(_ context
 				return ec.fieldContext_SearchMemoryItem_id(ctx, field)
 			case "type":
 				return ec.fieldContext_SearchMemoryItem_type(ctx, field)
+			case "nodeID":
+				return ec.fieldContext_SearchMemoryItem_nodeID(ctx, field)
 			case "content":
 				return ec.fieldContext_SearchMemoryItem_content(ctx, field)
 			case "score":
@@ -3025,6 +3241,8 @@ func (ec *executionContext) fieldContext_SearchMemoriesResult_memories(_ context
 				return ec.fieldContext_SearchMemoryItem_effectiveScore(ctx, field)
 			case "lineage":
 				return ec.fieldContext_SearchMemoryItem_lineage(ctx, field)
+			case "related":
+				return ec.fieldContext_SearchMemoryItem_related(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type SearchMemoryItem", field.Name)
 		},
@@ -3143,6 +3361,35 @@ func (ec *executionContext) fieldContext_SearchMemoryItem_type(_ context.Context
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SearchMemoryItem_nodeID(ctx context.Context, field graphql.CollectedField, obj *SearchMemoryItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SearchMemoryItem_nodeID,
+		func(ctx context.Context) (any, error) {
+			return obj.NodeID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_SearchMemoryItem_nodeID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SearchMemoryItem",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
 		},
 	}
 	return fc, nil
@@ -3277,6 +3524,47 @@ func (ec *executionContext) fieldContext_SearchMemoryItem_lineage(_ context.Cont
 				return ec.fieldContext_FactLineage_currentHeadID(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type FactLineage", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SearchMemoryItem_related(ctx context.Context, field graphql.CollectedField, obj *SearchMemoryItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SearchMemoryItem_related,
+		func(ctx context.Context) (any, error) {
+			return obj.Related, nil
+		},
+		nil,
+		ec.marshalNRelatedMemory2ᚕᚖmemstationᚋappsᚋserverᚋgraphᚋgeneratedᚐRelatedMemoryᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SearchMemoryItem_related(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SearchMemoryItem",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "nodeID":
+				return ec.fieldContext_RelatedMemory_nodeID(ctx, field)
+			case "documentID":
+				return ec.fieldContext_RelatedMemory_documentID(ctx, field)
+			case "documentType":
+				return ec.fieldContext_RelatedMemory_documentType(ctx, field)
+			case "relationType":
+				return ec.fieldContext_RelatedMemory_relationType(ctx, field)
+			case "weight":
+				return ec.fieldContext_RelatedMemory_weight(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RelatedMemory", field.Name)
 		},
 	}
 	return fc, nil
@@ -5950,6 +6238,53 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 	return out
 }
 
+var relatedMemoryImplementors = []string{"RelatedMemory"}
+
+func (ec *executionContext) _RelatedMemory(ctx context.Context, sel ast.SelectionSet, obj *RelatedMemory) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, relatedMemoryImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RelatedMemory")
+		case "nodeID":
+			out.Values[i] = ec._RelatedMemory_nodeID(ctx, field, obj)
+		case "documentID":
+			out.Values[i] = ec._RelatedMemory_documentID(ctx, field, obj)
+		case "documentType":
+			out.Values[i] = ec._RelatedMemory_documentType(ctx, field, obj)
+		case "relationType":
+			out.Values[i] = ec._RelatedMemory_relationType(ctx, field, obj)
+		case "weight":
+			out.Values[i] = ec._RelatedMemory_weight(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var searchMemoriesResultImplementors = []string{"SearchMemoriesResult"}
 
 func (ec *executionContext) _SearchMemoriesResult(ctx context.Context, sel ast.SelectionSet, obj *SearchMemoriesResult) graphql.Marshaler {
@@ -6020,6 +6355,8 @@ func (ec *executionContext) _SearchMemoryItem(ctx context.Context, sel ast.Selec
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "nodeID":
+			out.Values[i] = ec._SearchMemoryItem_nodeID(ctx, field, obj)
 		case "content":
 			out.Values[i] = ec._SearchMemoryItem_content(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -6037,6 +6374,11 @@ func (ec *executionContext) _SearchMemoryItem(ctx context.Context, sel ast.Selec
 			}
 		case "lineage":
 			out.Values[i] = ec._SearchMemoryItem_lineage(ctx, field, obj)
+		case "related":
+			out.Values[i] = ec._SearchMemoryItem_related(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -6869,6 +7211,32 @@ func (ec *executionContext) marshalNMemorySummary2ᚖmemstationᚋappsᚋserver�
 	return ec._MemorySummary(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNRelatedMemory2ᚕᚖmemstationᚋappsᚋserverᚋgraphᚋgeneratedᚐRelatedMemoryᚄ(ctx context.Context, sel ast.SelectionSet, v []*RelatedMemory) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNRelatedMemory2ᚖmemstationᚋappsᚋserverᚋgraphᚋgeneratedᚐRelatedMemory(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNRelatedMemory2ᚖmemstationᚋappsᚋserverᚋgraphᚋgeneratedᚐRelatedMemory(ctx context.Context, sel ast.SelectionSet, v *RelatedMemory) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._RelatedMemory(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNSearchMemoriesResult2memstationᚋappsᚋserverᚋgraphᚋgeneratedᚐSearchMemoriesResult(ctx context.Context, sel ast.SelectionSet, v SearchMemoriesResult) graphql.Marshaler {
 	return ec._SearchMemoriesResult(ctx, sel, &v)
 }
@@ -7173,6 +7541,24 @@ func (ec *executionContext) marshalOFactLineage2ᚖmemstationᚋappsᚋserverᚋ
 		return graphql.Null
 	}
 	return ec._FactLineage(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOID2ᚖstring(ctx context.Context, v any) (*string, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := graphql.UnmarshalID(v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOID2ᚖstring(ctx context.Context, sel ast.SelectionSet, v *string) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	_ = sel
+	_ = ctx
+	res := graphql.MarshalID(*v)
+	return res
 }
 
 func (ec *executionContext) unmarshalOInt2ᚖint(ctx context.Context, v any) (*int, error) {

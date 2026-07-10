@@ -413,10 +413,10 @@ func memoryTypesArg(value any) []domain.MemoryType {
 	}
 	out := make([]domain.MemoryType, 0, len(items))
 	for _, item := range items {
-		text := strings.TrimSpace(fmt.Sprintf("%v", item))
-		switch domain.MemoryType(text) {
-		case domain.MemoryTypeSummary, domain.MemoryTypeSegment, domain.MemoryTypeImpression, domain.MemoryTypeFact, domain.MemoryTypeKeyMemory:
-			out = append(out, domain.MemoryType(text))
+		text := strings.TrimSpace(strings.ToLower(fmt.Sprintf("%v", item)))
+		kind := domain.MemoryType(text)
+		if domain.IsSupportedMemoryType(kind) {
+			out = append(out, kind)
 		}
 	}
 	return out

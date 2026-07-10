@@ -62,6 +62,14 @@ type Mutation struct {
 type Query struct {
 }
 
+type RelatedMemory struct {
+	NodeID       *string `json:"nodeID,omitempty"`
+	DocumentID   *string `json:"documentID,omitempty"`
+	DocumentType *string `json:"documentType,omitempty"`
+	RelationType *string `json:"relationType,omitempty"`
+	Weight       float64 `json:"weight"`
+}
+
 type SearchMemoriesResult struct {
 	Memories             []*SearchMemoryItem `json:"memories"`
 	Total                int                 `json:"total"`
@@ -69,12 +77,14 @@ type SearchMemoriesResult struct {
 }
 
 type SearchMemoryItem struct {
-	ID             string       `json:"id"`
-	Type           string       `json:"type"`
-	Content        string       `json:"content"`
-	Score          float64      `json:"score"`
-	EffectiveScore float64      `json:"effectiveScore"`
-	Lineage        *FactLineage `json:"lineage,omitempty"`
+	ID             string           `json:"id"`
+	Type           string           `json:"type"`
+	NodeID         *string          `json:"nodeID,omitempty"`
+	Content        string           `json:"content"`
+	Score          float64          `json:"score"`
+	EffectiveScore float64          `json:"effectiveScore"`
+	Lineage        *FactLineage     `json:"lineage,omitempty"`
+	Related        []*RelatedMemory `json:"related"`
 }
 
 type SystemOverview struct {

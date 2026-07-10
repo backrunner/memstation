@@ -92,6 +92,18 @@ func (f MemoryEmbeddingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Va
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MemoryEmbeddingMutation", m)
 }
 
+// The MemoryItemFunc type is an adapter to allow the use of ordinary
+// function as MemoryItem mutator.
+type MemoryItemFunc func(context.Context, *ent.MemoryItemMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f MemoryItemFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.MemoryItemMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MemoryItemMutation", m)
+}
+
 // The MemoryKeywordFunc type is an adapter to allow the use of ordinary
 // function as MemoryKeyword mutator.
 type MemoryKeywordFunc func(context.Context, *ent.MemoryKeywordMutation) (ent.Value, error)

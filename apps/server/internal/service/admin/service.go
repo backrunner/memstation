@@ -63,6 +63,7 @@ type MemoryPreview struct {
 	Fact           map[string]any   `json:"fact,omitempty"`
 	Facts          []map[string]any `json:"facts,omitempty"`
 	Impression     map[string]any   `json:"impression,omitempty"`
+	GenericItems   []map[string]any `json:"generic_items,omitempty"`
 	KeyMemories    []map[string]any `json:"key_memories,omitempty"`
 	Metadata       map[string]any   `json:"metadata,omitempty"`
 }
@@ -267,6 +268,10 @@ func (s *Service) PreviewMemory(ctx context.Context, userID, conversationID stri
 	for _, fact := range result.Facts {
 		factPreviews = append(factPreviews, previewFactMap(fact, now))
 	}
+	genericPreviews := make([]map[string]any, 0, len(result.GenericItems))
+	for _, item := range result.GenericItems {
+		genericPreviews = append(genericPreviews, previewGenericMemoryItemMap(item, now))
+	}
 
 	return MemoryPreview{
 		ConversationID: conversationID,
@@ -297,11 +302,27 @@ func (s *Service) PreviewMemory(ctx context.Context, userID, conversationID stri
 			"time_tier":       domain.ClassifyTimeTier(now, now),
 			"effective_score": result.Impression.Importance * domain.TimeDecay(domain.MemoryTypeImpression, now, result.Impression.DecayFactor, result.Impression.Importance, now),
 		},
-		KeyMemories: keyMemoryCandidates,
+		GenericItems: genericPreviews,
+		KeyMemories:  keyMemoryCandidates,
 		Metadata: map[string]any{
 			"message_count": len(messages),
 		},
 	}, nil
+}
+
+func previewGenericMemoryItemMap(item domain.MemoryDocument, now time.Time) map[string]any {
+	return map[string]any{
+		"id":              item.ID,
+		"node_id":         item.NodeID,
+		"type":            item.Type,
+		"content":         item.Content,
+		"metadata":        item.Metadata,
+		"importance":      item.Importance,
+		"decay_factor":    item.DecayFactor,
+		"activity_at":     now,
+		"time_tier":       domain.ClassifyTimeTier(now, now),
+		"effective_score": item.Importance * domain.TimeDecay(item.Type, now, item.DecayFactor, item.Importance, now),
+	}
 }
 
 func previewFactMap(fact domain.MemoryDocument, now time.Time) map[string]any {

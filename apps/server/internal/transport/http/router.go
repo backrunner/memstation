@@ -2410,7 +2410,7 @@ func zeroTimeOrNil(value time.Time) any {
 
 func parseMemoryKinds(value string) ([]domain.MemoryType, error) {
 	if strings.TrimSpace(value) == "" {
-		return []domain.MemoryType{domain.MemoryTypeSummary, domain.MemoryTypeImpression, domain.MemoryTypeFact}, nil
+		return domain.DefaultAdminMemoryTypes(), nil
 	}
 	parts := strings.Split(value, ",")
 	return parseMemoryTypeList(parts)
@@ -2446,6 +2446,18 @@ func parseMemoryKind(value string) (domain.MemoryType, error) {
 		return domain.MemoryTypeFact, nil
 	case "key_memory", "keymemories", "key_memories", "key-memory":
 		return domain.MemoryTypeKeyMemory, nil
+	case "event", "events":
+		return domain.MemoryTypeEvent, nil
+	case "task", "tasks":
+		return domain.MemoryTypeTask, nil
+	case "procedure", "procedures":
+		return domain.MemoryTypeProcedure, nil
+	case "artifact", "artifacts":
+		return domain.MemoryTypeArtifact, nil
+	case "entity", "entities":
+		return domain.MemoryTypeEntity, nil
+	case "agent_action", "agent_actions", "agent-action", "agent-actions":
+		return domain.MemoryTypeAgentAction, nil
 	default:
 		return "", fmt.Errorf("unsupported memory kind: %s", value)
 	}

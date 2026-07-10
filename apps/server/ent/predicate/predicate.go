@@ -27,6 +27,9 @@ type KeyMemory func(*sql.Selector)
 // MemoryEmbedding is the predicate function for memoryembedding builders.
 type MemoryEmbedding func(*sql.Selector)
 
+// MemoryItem is the predicate function for memoryitem builders.
+type MemoryItem func(*sql.Selector)
+
 // MemoryKeyword is the predicate function for memorykeyword builders.
 type MemoryKeyword func(*sql.Selector)
 

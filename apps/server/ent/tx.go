@@ -26,6 +26,8 @@ type Tx struct {
 	KeyMemory *KeyMemoryClient
 	// MemoryEmbedding is the client for interacting with the MemoryEmbedding builders.
 	MemoryEmbedding *MemoryEmbeddingClient
+	// MemoryItem is the client for interacting with the MemoryItem builders.
+	MemoryItem *MemoryItemClient
 	// MemoryKeyword is the client for interacting with the MemoryKeyword builders.
 	MemoryKeyword *MemoryKeywordClient
 	// MemoryNode is the client for interacting with the MemoryNode builders.
@@ -182,6 +184,7 @@ func (tx *Tx) init() {
 	tx.Impression = NewImpressionClient(tx.config)
 	tx.KeyMemory = NewKeyMemoryClient(tx.config)
 	tx.MemoryEmbedding = NewMemoryEmbeddingClient(tx.config)
+	tx.MemoryItem = NewMemoryItemClient(tx.config)
 	tx.MemoryKeyword = NewMemoryKeywordClient(tx.config)
 	tx.MemoryNode = NewMemoryNodeClient(tx.config)
 	tx.MemoryRelation = NewMemoryRelationClient(tx.config)

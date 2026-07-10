@@ -5,6 +5,7 @@ This directory holds the retrieval and ranking benchmark foundation for MemStati
 Datasets
 - `testdata/repo_native_golden.json`: small repo-distributed golden dataset used by local smoke runs.
   It now includes multimodal text-proxy fixtures for image OCR/caption, PDF parsing, audio transcription, and tool-output-derived evidence metadata.
+  It also includes generic agent-memory retrieval cases for `event`, `task`, `procedure`, `artifact`, `entity`, and `agent_action`.
 - `testdata/locomo_fixture.json`: tiny LOCOMO-shaped adapter fixture used only for parser smoke.
 - `testdata/longmemeval_fixture.json`: tiny LongMemEval-shaped adapter fixture used only for parser smoke.
 - Raw LOCOMO data is not committed to this repository.

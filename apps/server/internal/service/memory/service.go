@@ -49,10 +49,7 @@ func (s *Service) Search(ctx context.Context, input domain.SearchInput) (domain.
 	if err != nil {
 		return domain.SearchResult{}, err
 	}
-	lineageCache := make(map[string]domain.FactLineage)
-	for idx := range result.Memories {
-		s.hydrateFactLineageWithCache(ctx, &result.Memories[idx], lineageCache)
-	}
+	s.hydrateRelatedDocumentsBatch(ctx, memoryDocumentPointers(result.Memories))
 	return result, nil
 }
 
@@ -126,6 +123,9 @@ func isTemporalRelationTypeForHydration(relationType string) bool {
 func (s *Service) UpdateDocument(ctx context.Context, userID, id string, kind domain.MemoryType, content string) (domain.MemoryDocument, error) {
 	item, err := s.repo.UpdateDocument(ctx, userID, id, kind, content)
 	if err != nil {
+		return domain.MemoryDocument{}, err
+	}
+	if err := s.syncDocumentEmbedding(ctx, item); err != nil {
 		return domain.MemoryDocument{}, err
 	}
 	s.hydrateRelatedDocuments(ctx, &item)
@@ -399,6 +399,57 @@ func keyMemoryEmbeddingContent(km domain.KeyMemory) string {
 		return km.Key + ": " + km.Value + " (" + km.Category + ")"
 	}
 	return km.Key + ": " + km.Value
+}
+
+func (s *Service) syncDocumentEmbedding(ctx context.Context, doc domain.MemoryDocument) error {
+	if s.vectors == nil || strings.TrimSpace(doc.UserID) == "" || strings.TrimSpace(doc.NodeID) == "" {
+		return nil
+	}
+	embeddingVersion := 1
+	embeddingModel := ""
+	if s.generations != nil {
+		generation, err := s.generations.ResolveGeneration(ctx, doc.UserID, doc.GenerationID)
+		if err != nil {
+			return err
+		}
+		if generation.EmbeddingVersion > 0 {
+			embeddingVersion = generation.EmbeddingVersion
+		}
+		embeddingModel = generation.EmbeddingModel
+	}
+	return s.vectors.Upsert(ctx, domain.VectorUpsertRequest{
+		UserID:           doc.UserID,
+		GenerationID:     doc.GenerationID,
+		NodeID:           doc.NodeID,
+		NodeType:         string(doc.Type),
+		EmbeddingVersion: embeddingVersion,
+		EmbeddingModel:   embeddingModel,
+		Content:          documentEmbeddingContent(doc),
+	})
+}
+
+func documentEmbeddingContent(doc domain.MemoryDocument) string {
+	content := strings.TrimSpace(doc.Content)
+	if doc.Type != domain.MemoryTypeSummary {
+		if content == "" {
+			return doc.NodeID
+		}
+		return content
+	}
+	parts := make([]string, 0, 3)
+	if content != "" {
+		parts = append(parts, content)
+	}
+	if topic := stringMetadataValue(doc.Metadata, "topic_label"); topic != "" {
+		parts = append(parts, "Topic: "+topic)
+	}
+	if keywords := stringSliceMetadataValue(doc.Metadata, "keywords"); len(keywords) > 0 {
+		parts = append(parts, "Keywords: "+strings.Join(keywords, ", "))
+	}
+	if len(parts) == 0 {
+		return doc.NodeID
+	}
+	return strings.Join(parts, "\n")
 }
 
 func (s *Service) keyMemoriesFromDocuments(ctx context.Context, userID string, docs []domain.MemoryDocument) ([]domain.KeyMemory, error) {
@@ -753,43 +804,73 @@ func (s *Service) hydrateRelatedDocumentsBatch(ctx context.Context, items []*dom
 			s.hydrateFactLineageWithCache(ctx, item, lineageCache)
 		}
 
-		relations, err := s.repo.ListRelations(ctx, group.userID, group.generationID, seedNodeIDs, 1)
-		if err != nil || len(relations) == 0 {
-			continue
+		type relatedInfo struct {
+			weight       float64
+			relationType string
 		}
-
-		relatedWeightsBySeed := make(map[string]map[string]float64, len(seedNodeIDs))
+		relatedBySeed := make(map[string]map[string]relatedInfo, len(seedNodeIDs))
 		relatedNodeIDs := make(map[string]struct{})
-		for _, relation := range relations {
-			if isTemporalRelationTypeForHydration(relation.RelationType) {
+		precomputedSeeds := make(map[string]struct{})
+		addRelated := func(seedNodeID, relatedNodeID string, info relatedInfo) {
+			if seedNodeID == "" || relatedNodeID == "" || seedNodeID == relatedNodeID {
+				return
+			}
+			items := relatedBySeed[seedNodeID]
+			if items == nil {
+				items = map[string]relatedInfo{}
+				relatedBySeed[seedNodeID] = items
+			}
+			if current, ok := items[relatedNodeID]; !ok || info.weight > current.weight {
+				items[relatedNodeID] = info
+			}
+			if _, ok := seedSet[relatedNodeID]; !ok {
+				relatedNodeIDs[relatedNodeID] = struct{}{}
+			}
+		}
+		for _, item := range group.items {
+			if item == nil || item.NodeID == "" || len(item.Related) == 0 {
 				continue
 			}
-			if _, ok := seedSet[relation.SrcNodeID]; ok && relation.DstNodeID != "" && relation.DstNodeID != relation.SrcNodeID {
-				weights := relatedWeightsBySeed[relation.SrcNodeID]
-				if weights == nil {
-					weights = map[string]float64{}
-					relatedWeightsBySeed[relation.SrcNodeID] = weights
+			for _, relation := range item.Related {
+				if relation.NodeID == "" {
+					continue
 				}
-				if relation.Weight > weights[relation.DstNodeID] {
-					weights[relation.DstNodeID] = relation.Weight
-				}
-				if _, ok := seedSet[relation.DstNodeID]; !ok {
-					relatedNodeIDs[relation.DstNodeID] = struct{}{}
+				precomputedSeeds[item.NodeID] = struct{}{}
+				addRelated(item.NodeID, relation.NodeID, relatedInfo{
+					weight:       relation.Weight,
+					relationType: relation.RelationType,
+				})
+			}
+		}
+
+		relationSeedNodeIDs := make([]string, 0, len(seedNodeIDs))
+		for _, nodeID := range seedNodeIDs {
+			if _, ok := precomputedSeeds[nodeID]; ok {
+				continue
+			}
+			relationSeedNodeIDs = append(relationSeedNodeIDs, nodeID)
+		}
+		if len(relationSeedNodeIDs) > 0 {
+			if relations, err := s.repo.ListRelations(ctx, group.userID, group.generationID, relationSeedNodeIDs, 1); err == nil {
+				for _, relation := range relations {
+					if isTemporalRelationTypeForHydration(relation.RelationType) {
+						continue
+					}
+					if _, ok := seedSet[relation.SrcNodeID]; ok {
+						if _, precomputed := precomputedSeeds[relation.SrcNodeID]; !precomputed {
+							addRelated(relation.SrcNodeID, relation.DstNodeID, relatedInfo{weight: relation.Weight, relationType: relation.RelationType})
+						}
+					}
+					if _, ok := seedSet[relation.DstNodeID]; ok {
+						if _, precomputed := precomputedSeeds[relation.DstNodeID]; !precomputed {
+							addRelated(relation.DstNodeID, relation.SrcNodeID, relatedInfo{weight: relation.Weight, relationType: relation.RelationType})
+						}
+					}
 				}
 			}
-			if _, ok := seedSet[relation.DstNodeID]; ok && relation.SrcNodeID != "" && relation.SrcNodeID != relation.DstNodeID {
-				weights := relatedWeightsBySeed[relation.DstNodeID]
-				if weights == nil {
-					weights = map[string]float64{}
-					relatedWeightsBySeed[relation.DstNodeID] = weights
-				}
-				if relation.Weight > weights[relation.SrcNodeID] {
-					weights[relation.SrcNodeID] = relation.Weight
-				}
-				if _, ok := seedSet[relation.SrcNodeID]; !ok {
-					relatedNodeIDs[relation.SrcNodeID] = struct{}{}
-				}
-			}
+		}
+		if len(relatedBySeed) == 0 {
+			continue
 		}
 
 		if len(relatedNodeIDs) > 0 {
@@ -811,26 +892,28 @@ func (s *Service) hydrateRelatedDocumentsBatch(ctx context.Context, items []*dom
 			if item == nil || item.NodeID == "" {
 				continue
 			}
-			weights := relatedWeightsBySeed[item.NodeID]
-			if len(weights) == 0 {
+			items := relatedBySeed[item.NodeID]
+			if len(items) == 0 {
 				item.Related = nil
 				continue
 			}
-			related := make([]domain.RelatedMemory, 0, len(weights))
-			for nodeID, weight := range weights {
+			related := make([]domain.RelatedMemory, 0, len(items))
+			for nodeID, info := range items {
 				document, ok := docByNodeID[nodeID]
 				if !ok || document.ID == "" {
 					continue
 				}
 				related = append(related, domain.RelatedMemory{
-					ID:     document.ID,
-					Type:   string(document.Type),
-					Weight: weight,
+					NodeID:       document.NodeID,
+					DocumentID:   document.ID,
+					DocumentType: string(document.Type),
+					RelationType: info.relationType,
+					Weight:       info.weight,
 				})
 			}
 			sort.Slice(related, func(i, j int) bool {
 				if related[i].Weight == related[j].Weight {
-					return related[i].ID < related[j].ID
+					return related[i].DocumentID < related[j].DocumentID
 				}
 				return related[i].Weight > related[j].Weight
 			})

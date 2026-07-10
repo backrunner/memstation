@@ -49,7 +49,23 @@ type FactLineage {
   revisionDepth: Int!
   currentHeadID: ID!
 }
-type SearchMemoryItem { id: ID!, type: String!, content: String!, score: Float!, effectiveScore: Float!, lineage: FactLineage }
+type RelatedMemory {
+  nodeID: ID
+  documentID: ID
+  documentType: String
+  relationType: String
+  weight: Float!
+}
+type SearchMemoryItem {
+  id: ID!
+  type: String!
+  nodeID: ID
+  content: String!
+  score: Float!
+  effectiveScore: Float!
+  lineage: FactLineage
+  related: [RelatedMemory!]!
+}
 type SearchMemoriesResult { memories: [SearchMemoryItem!]!, total: Int!, queryEmbeddingTokens: Int! }
 type TokenUsageStats { inputTokens: Int!, outputTokens: Int!, totalTokens: Int! }
 type SystemOverview { activeConversations: Int!, keyMemoryCount: Int!, recentAuditEvents: Int! }

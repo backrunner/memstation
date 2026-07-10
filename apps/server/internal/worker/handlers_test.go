@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -1107,6 +1108,108 @@ func TestMemoryRebuildConversationSkipsSupersededSnapshot(t *testing.T) {
 	}
 }
 
+func TestMemoryRebuildConversationReplaysSnapshotArtifacts(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	generations := memorygenservice.NewService(nil, "test-embedding")
+	memories := sql.NewInMemoryMemoryRepository()
+	vectors := &recordingVectorStore{}
+	now := time.Now().UTC()
+	conversation := domain.ConversationRecord{
+		UserID:         "user-1",
+		ConversationID: "conv-rebuild-artifact",
+		RequestFormat:  string(domain.ProtocolOpenAIChat),
+		Provider:       domain.ProviderOpenAI,
+		Mode:           domain.ModeTransparent,
+		FinalizeStatus: domain.FinalizeStatusEnded,
+		UpdatedAt:      now,
+		Messages: []domain.UnifiedMessage{{
+			Role: domain.RoleUser,
+			Text: "Please inspect the launch report.",
+		}},
+		Parts: []domain.MessagePart{{
+			PartID:         "part-1",
+			UserID:         "user-1",
+			ConversationID: "conv-rebuild-artifact",
+			SequenceNum:    0,
+			Role:           domain.RoleUser,
+			PartType:       domain.ContentBlockFile,
+			Filename:       "launch-report.pdf",
+			TextContent:    "The launch report says the checklist should be reviewed next week.",
+			CreatedAt:      now,
+			UpdatedAt:      now,
+		}},
+		Artifacts: []domain.MessagePartArtifact{{
+			ArtifactID:     "artifact-1",
+			UserID:         "user-1",
+			ConversationID: "conv-rebuild-artifact",
+			PartID:         "part-1",
+			ArtifactType:   "document",
+			Status:         "completed",
+			TextContent:    "The launch checklist should be reviewed next week.",
+			Confidence:     0.91,
+			CreatedAt:      now,
+			UpdatedAt:      now,
+		}},
+	}
+
+	snapshot, _, err := generations.CaptureSourceSnapshot(ctx, conversation)
+	if err != nil {
+		t.Fatalf("capture snapshot: %v", err)
+	}
+	generation, _, err := generations.CreateRebuildGeneration(ctx, memorygenservice.CreateRebuildInput{
+		UserID:            "user-1",
+		Scope:             "conversation",
+		ConversationID:    conversation.ConversationID,
+		ActivateOnSuccess: false,
+	})
+	if err != nil {
+		t.Fatalf("create rebuild generation: %v", err)
+	}
+
+	handler := handleMemoryRebuildConversation(nilLogger(), Services{
+		Generations: generations,
+		Memories:    memories,
+		Vectors:     vectors,
+	})
+	if err := handler(ctx, newTask(t, TypeMemoryRebuildConversation, MemoryRebuildConversationPayload{
+		UserID:       "user-1",
+		GenerationID: generation.GenerationID,
+		SnapshotID:   snapshot.SnapshotID,
+	})); err != nil {
+		t.Fatalf("handle rebuild conversation: %v", err)
+	}
+
+	artifacts, err := memories.ListDocumentsInGeneration(ctx, "user-1", generation.GenerationID, []domain.MemoryType{domain.MemoryTypeArtifact}, 10)
+	if err != nil {
+		t.Fatalf("list rebuilt artifact memories: %v", err)
+	}
+	if len(artifacts) == 0 {
+		t.Fatal("expected rebuilt artifact memory from snapshot artifact")
+	}
+	if !strings.Contains(strings.ToLower(artifacts[0].Content), "launch checklist") {
+		t.Fatalf("expected artifact content from retained artifact text, got %q", artifacts[0].Content)
+	}
+	evidences, err := memories.ListEvidences(ctx, "user-1", artifacts[0].NodeID)
+	if err != nil {
+		t.Fatalf("list artifact evidences: %v", err)
+	}
+	if len(evidences) == 0 || evidences[0].ArtifactID != "artifact-1" {
+		t.Fatalf("expected artifact evidence to be replayed, got %+v", evidences)
+	}
+	foundEmbedding := false
+	for _, upsert := range vectors.upserts {
+		if upsert.NodeID == artifacts[0].NodeID && upsert.NodeType == string(domain.MemoryTypeArtifact) {
+			foundEmbedding = true
+			break
+		}
+	}
+	if !foundEmbedding {
+		t.Fatalf("expected artifact embedding upsert, got %+v", vectors.upserts)
+	}
+}
+
 func TestAnalysisExtractHandlerSelectsSummaryDocumentByType(t *testing.T) {
 	t.Parallel()
 
@@ -1411,6 +1514,34 @@ func TestEmbeddingGenerateUsesCurrentStoredDocumentContent(t *testing.T) {
 	}
 }
 
+func TestEmbeddingGenerateSkipsDeletedDocument(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	repo := sql.NewInMemoryMemoryRepository()
+	vectors := &recordingVectorStore{}
+	generationID := memorygenservice.CurrentGenerationID("user-1")
+
+	handler := handleEmbeddingGenerate(nilLogger(), Services{
+		Memories: repo,
+		Vectors:  vectors,
+	})
+	if err := handler(ctx, newTask(t, TypeEmbeddingGenerate, EmbeddingPayload{
+		UserID:           "user-1",
+		GenerationID:     generationID,
+		NodeID:           generationID + ":node:summary:deleted:v1",
+		NodeType:         string(domain.MemoryTypeSummary),
+		EmbeddingVersion: 1,
+		Content:          "Deleted document payload should not be embedded.",
+		EmbeddingModel:   "test-embedding",
+	})); err != nil {
+		t.Fatalf("handle embedding generate: %v", err)
+	}
+	if len(vectors.upserts) != 0 {
+		t.Fatalf("expected deleted document embedding task to be skipped, got %+v", vectors.upserts)
+	}
+}
+
 func TestMarkConversationFailedAndRecordAuditHelpers(t *testing.T) {
 	t.Parallel()
 
@@ -1586,6 +1717,104 @@ func TestMultimodalTimelineFeedsSummaryAndEvidence(t *testing.T) {
 	}
 }
 
+func TestMediaExtractRefreshesRetainedSourceSnapshotWithArtifacts(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conversations := sql.NewInMemoryConversationRepository()
+	media := sql.NewInMemoryMediaRepository()
+	generations := memorygenservice.NewService(nil, "test-embedding")
+	publisher := &recordingPublisher{}
+	multimodal := multimodalservice.NewService(media, nil, bootstrap.MultimodalConfig{
+		Enabled:   true,
+		FileModel: "doc-test",
+	})
+
+	if err := conversations.PersistExchange(ctx, domain.ConversationRecord{
+		ConversationID: "conv-retain-media",
+		UserID:         "user-1",
+		RequestFormat:  string(domain.ProtocolOpenAIChat),
+		Provider:       domain.ProviderOpenAI,
+		Mode:           domain.ModeTransparent,
+		FinalizeStatus: domain.FinalizeStatusActive,
+		SummaryStatus:  domain.ProcessingStatusPending,
+		AnalysisStatus: domain.ProcessingStatusPending,
+		Metadata: map[string]any{
+			"source_retain_enabled": true,
+		},
+		Messages: []domain.UnifiedMessage{{
+			Role: domain.RoleUser,
+			Blocks: []domain.ContentBlock{{
+				Type:      domain.ContentBlockFile,
+				SourceURL: "https://example.com/launch-report.pdf",
+				MIMEType:  "application/pdf",
+				Filename:  "launch-report.pdf",
+				Text:      "The launch checklist needs review next week.",
+			}},
+		}},
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("persist conversation: %v", err)
+	}
+
+	if err := handleConversationFinalize(nilLogger(), Services{
+		Conversations: conversations,
+		Generations:   generations,
+		Multimodal:    multimodal,
+		Publisher:     publisher,
+	})(ctx, newTask(t, TypeConversationFinalize, map[string]any{
+		"conversation_id": "conv-retain-media",
+		"user_id":         "user-1",
+		"finalize_reason": "explicit",
+		"finalize_status": string(domain.FinalizeStatusEnded),
+	})); err != nil {
+		t.Fatalf("handle finalize: %v", err)
+	}
+
+	initial, ok, err := generations.GetLatestSourceSnapshot(ctx, "user-1", "conv-retain-media")
+	if err != nil {
+		t.Fatalf("get initial snapshot: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected retained source snapshot after finalize")
+	}
+	if initial.FinalizeStatus != domain.FinalizeStatusEnded {
+		t.Fatalf("expected retained snapshot to capture finalized status, got %s", initial.FinalizeStatus)
+	}
+	if len(initial.Parts) != 0 || len(initial.Artifacts) != 0 {
+		t.Fatalf("expected pre-media snapshot to have no materialized timeline, got parts=%d artifacts=%d", len(initial.Parts), len(initial.Artifacts))
+	}
+
+	if err := handleMediaExtract(nilLogger(), Services{
+		Conversations: conversations,
+		Generations:   generations,
+		MediaStore:    media,
+		Multimodal:    multimodal,
+		Publisher:     publisher,
+	})(ctx, newTask(t, TypeMediaExtract, MediaExtractPayload{
+		UserID:         "user-1",
+		ConversationID: "conv-retain-media",
+		FinalizeReason: "explicit",
+	})); err != nil {
+		t.Fatalf("handle media extract: %v", err)
+	}
+
+	latest, ok, err := generations.GetLatestSourceSnapshot(ctx, "user-1", "conv-retain-media")
+	if err != nil {
+		t.Fatalf("get refreshed snapshot: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected refreshed retained source snapshot")
+	}
+	if latest.SnapshotID == initial.SnapshotID {
+		t.Fatalf("expected media extraction to refresh source snapshot, still got %s", latest.SnapshotID)
+	}
+	if len(latest.Parts) == 0 || len(latest.Artifacts) == 0 {
+		t.Fatalf("expected refreshed snapshot to retain timeline artifacts, got parts=%d artifacts=%d", len(latest.Parts), len(latest.Artifacts))
+	}
+}
+
 func TestToolPayloadMultimodalContentEntersTimeline(t *testing.T) {
 	t.Parallel()
 
@@ -1635,6 +1864,8 @@ func TestToolPayloadMultimodalContentEntersTimeline(t *testing.T) {
 					ToolCallID: "call-1",
 					Name:       "inspect_assets",
 					Output: map[string]any{
+						"status":     "sk-source-replay-status",
+						"error_type": "sk-source-replay-error",
 						"content": []any{
 							map[string]any{
 								"type":       "file",
@@ -1709,6 +1940,82 @@ func TestToolPayloadMultimodalContentEntersTimeline(t *testing.T) {
 	}
 	if !strings.Contains(docs[0].Content, "launch Friday") || !strings.Contains(docs[0].Content, "Chen owns rollback") {
 		t.Fatalf("expected summary to include tool payload media text proxies, got %q", docs[0].Content)
+	}
+
+	publisher.tasks = nil
+	if err := handleAnalysisExtract(nilLogger(), services)(ctx, newTask(t, TypeAnalysisExtract, AnalysisPayload{
+		UserID:           "user-1",
+		ConversationID:   "conv-tool-mm",
+		SummaryIDs:       []string{docs[0].ID},
+		EmbeddingVersion: 1,
+		EmbeddingModel:   "test-embedding",
+	})); err != nil {
+		t.Fatalf("handle analysis: %v", err)
+	}
+
+	genericDocs, err := memories.ListDocuments(ctx, "user-1", []domain.MemoryType{
+		domain.MemoryTypeEvent,
+		domain.MemoryTypeTask,
+		domain.MemoryTypeProcedure,
+		domain.MemoryTypeArtifact,
+		domain.MemoryTypeEntity,
+		domain.MemoryTypeAgentAction,
+	}, 20)
+	if err != nil {
+		t.Fatalf("list generic memory docs: %v", err)
+	}
+	types := map[domain.MemoryType]domain.MemoryDocument{}
+	for _, doc := range genericDocs {
+		types[doc.Type] = doc
+	}
+	for _, required := range []domain.MemoryType{domain.MemoryTypeAgentAction, domain.MemoryTypeArtifact, domain.MemoryTypeEntity} {
+		if types[required].ID == "" {
+			t.Fatalf("expected generic memory type %s from source replay, got docs %+v", required, genericDocs)
+		}
+	}
+	if !strings.Contains(types[domain.MemoryTypeAgentAction].Content, "inspect_assets") {
+		t.Fatalf("expected agent action to summarize tool intent/outcome, got %q", types[domain.MemoryTypeAgentAction].Content)
+	}
+	if strings.Contains(types[domain.MemoryTypeAgentAction].Content, "sk-source-replay") ||
+		strings.Contains(fmt.Sprint(types[domain.MemoryTypeAgentAction].Metadata), "sk-source-replay") {
+		t.Fatalf("agent action should not retain raw tool result payload: %+v", types[domain.MemoryTypeAgentAction])
+	}
+	if source := types[domain.MemoryTypeArtifact].Metadata["source"]; source != "message_part_artifact" {
+		t.Fatalf("expected artifact memory to come from retained artifact metadata, got %+v", types[domain.MemoryTypeArtifact].Metadata)
+	}
+	for _, doc := range genericDocs {
+		evidences, err := memories.ListEvidences(ctx, "user-1", doc.NodeID)
+		if err != nil {
+			t.Fatalf("list evidences for %s: %v", doc.ID, err)
+		}
+		if len(evidences) == 0 {
+			t.Fatalf("expected generic memory %s to preserve cloned source evidence", doc.ID)
+		}
+	}
+	relations, err := memories.ListRelations(ctx, "user-1", "", []string{types[domain.MemoryTypeAgentAction].NodeID}, 1)
+	if err != nil {
+		t.Fatalf("list agent action relations: %v", err)
+	}
+	foundToolRelation := false
+	for _, relation := range relations {
+		if relation.RelationType == domain.MemoryRelationUsedTool {
+			foundToolRelation = true
+			break
+		}
+	}
+	if !foundToolRelation {
+		t.Fatalf("expected agent action to be linked to tool entity, got %+v", relations)
+	}
+	embeddingByType := map[string]int{}
+	for _, task := range publisher.tasks {
+		if task.Type == TypeEmbeddingGenerate {
+			embeddingByType[fmt.Sprintf("%v", task.Payload["node_type"])]++
+		}
+	}
+	for _, required := range []domain.MemoryType{domain.MemoryTypeAgentAction, domain.MemoryTypeArtifact, domain.MemoryTypeEntity} {
+		if embeddingByType[string(required)] == 0 {
+			t.Fatalf("expected embedding follow-up for %s, got %+v", required, publisher.tasks)
+		}
 	}
 }
 

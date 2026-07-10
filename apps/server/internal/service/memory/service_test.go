@@ -720,7 +720,7 @@ func TestServiceGetDocumentHydratesRelatedAndSupportsUpdateDelete(t *testing.T) 
 	if err != nil {
 		t.Fatalf("get hydrated document: %v", err)
 	}
-	if len(document.Related) != 1 || document.Related[0].ID != "fact-1" {
+	if len(document.Related) != 1 || document.Related[0].DocumentID != "fact-1" || document.Related[0].DocumentType != string(domain.MemoryTypeFact) {
 		t.Fatalf("expected related fact hydration, got %+v", document.Related)
 	}
 
@@ -738,6 +738,18 @@ func TestServiceGetDocumentHydratesRelatedAndSupportsUpdateDelete(t *testing.T) 
 	}
 	if updated.Content != "Rollback owner is Bob Li." {
 		t.Fatalf("unexpected updated content: %q", updated.Content)
+	}
+	updatedSearch, err := engine.Search(ctx, domain.SearchInput{
+		UserID:      "user-1",
+		Query:       "Bob Li",
+		TopN:        3,
+		MemoryTypes: []domain.MemoryType{domain.MemoryTypeFact},
+	})
+	if err != nil {
+		t.Fatalf("search updated fact: %v", err)
+	}
+	if len(updatedSearch.Memories) == 0 || updatedSearch.Memories[0].ID != "fact-1" {
+		t.Fatalf("expected updated fact to be searchable immediately, got %+v", updatedSearch.Memories)
 	}
 
 	km, err := service.UpsertKeyMemory(ctx, domain.KeyMemory{
@@ -870,6 +882,37 @@ func TestPackInjectionMemoriesHonorsTokenBudget(t *testing.T) {
 	}
 }
 
+func TestPackInjectionMemoriesSkipsOversizedFirstItem(t *testing.T) {
+	t.Parallel()
+
+	memories := []domain.MemoryDocument{
+		{
+			ID:             "km-oversized",
+			Type:           domain.MemoryTypeKeyMemory,
+			Content:        strings.Repeat("oversized profile detail ", 80),
+			EffectiveScore: 0.99,
+		},
+		{
+			ID:             "task-small",
+			Type:           domain.MemoryTypeTask,
+			Content:        "Follow up on rollback checklist.",
+			EffectiveScore: 0.8,
+			Metadata: map[string]any{
+				"status": "pending",
+			},
+		},
+	}
+
+	budget := estimateMemoryTokens(memories[1])
+	selected := packInjectionMemories(memories, budget)
+	if len(selected) != 1 || selected[0].ID != "task-small" {
+		t.Fatalf("expected oversized first item to be skipped within budget %d, got %+v", budget, selected)
+	}
+	if estimateMemoryTokens(selected[0]) > budget {
+		t.Fatalf("selected memory exceeds budget: item=%d budget=%d", estimateMemoryTokens(selected[0]), budget)
+	}
+}
+
 func TestMergeInjectionMemoriesUsesTypePriority(t *testing.T) {
 	t.Parallel()
 
@@ -882,7 +925,7 @@ func TestMergeInjectionMemoriesUsesTypePriority(t *testing.T) {
 		{ID: "km-1", NodeID: "node-km-1", Type: domain.MemoryTypeKeyMemory, Content: "timezone: UTC+8", EffectiveScore: 0.1, ActivityAt: now},
 	})
 
-	if got := []string{merged[0].ID, merged[1].ID, merged[2].ID, merged[3].ID}; strings.Join(got, ",") != "km-1,summary-1,fact-1,impression-1" {
+	if got := []string{merged[0].ID, merged[1].ID, merged[2].ID, merged[3].ID}; strings.Join(got, ",") != "km-1,fact-1,summary-1,impression-1" {
 		t.Fatalf("unexpected injection priority order: %+v", got)
 	}
 
@@ -891,6 +934,95 @@ func TestMergeInjectionMemoriesUsesTypePriority(t *testing.T) {
 		if !strings.Contains(prompt, section) {
 			t.Fatalf("expected prompt section %q in %q", section, prompt)
 		}
+	}
+}
+
+func TestBuildInjectionSystemPromptIncludesGenericAgentMemorySections(t *testing.T) {
+	t.Parallel()
+
+	memories := []domain.MemoryDocument{
+		{
+			ID:      "task-1",
+			Type:    domain.MemoryTypeTask,
+			Content: "Follow up on the rollout checklist.",
+			Metadata: map[string]any{
+				"title":  "Rollout follow-up",
+				"status": "pending",
+			},
+		},
+		{
+			ID:      "procedure-1",
+			Type:    domain.MemoryTypeProcedure,
+			Content: "Use inspect_assets before summarizing PDFs.",
+			Metadata: map[string]any{
+				"title":         "PDF inspection",
+				"review_status": "approved",
+			},
+		},
+		{
+			ID:      "procedure-auto",
+			Type:    domain.MemoryTypeProcedure,
+			Content: "This unapproved procedure should not be injected.",
+			Metadata: map[string]any{
+				"title":         "Unapproved workflow",
+				"review_status": "auto",
+			},
+		},
+		{
+			ID:      "fact-stale",
+			Type:    domain.MemoryTypeFact,
+			Content: "This superseded fact should not be injected.",
+			Metadata: map[string]any{
+				"is_superseded": true,
+			},
+		},
+		{
+			ID:      "task-done",
+			Type:    domain.MemoryTypeTask,
+			Content: "This completed task should not be injected.",
+			Metadata: map[string]any{
+				"status": "completed",
+			},
+		},
+		{
+			ID:      "artifact-failed",
+			Type:    domain.MemoryTypeArtifact,
+			Content: "This failed artifact should not be injected.",
+			Metadata: map[string]any{
+				"status": "failed",
+			},
+		},
+		{
+			ID:      "agent-action-failed",
+			Type:    domain.MemoryTypeAgentAction,
+			Content: "The inspect_assets tool failed with a timeout.",
+			Metadata: map[string]any{
+				"status": "failed",
+				"title":  "inspect_assets",
+			},
+		},
+	}
+	packed := packInjectionMemories(memories, 2048)
+	prompt := buildInjectionSystemPrompt(packed)
+	for _, section := range []string{"Active Tasks:", "Relevant Procedures:", "Relevant Agent Actions:"} {
+		if !strings.Contains(prompt, section) {
+			t.Fatalf("expected prompt section %q in %q", section, prompt)
+		}
+	}
+	if strings.Contains(prompt, "completed task") {
+		t.Fatalf("completed task leaked into prompt: %q", prompt)
+	}
+	if strings.Contains(prompt, "unapproved procedure") {
+		t.Fatalf("unapproved procedure leaked into prompt: %q", prompt)
+	}
+	if strings.Contains(prompt, "superseded fact") {
+		t.Fatalf("superseded fact leaked into prompt: %q", prompt)
+	}
+	if strings.Contains(prompt, "failed artifact") {
+		t.Fatalf("failed artifact leaked into prompt: %q", prompt)
+	}
+	if !strings.Contains(prompt, "inspect_assets tool failed") {
+		t.Fatalf("failed agent action should remain injectable for tool outcome recall: %q", prompt)
 	}
 }
 

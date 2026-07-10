@@ -52,6 +52,7 @@ func recoveryMarkdownReport(report worker.RecoveryReport) string {
 	builder.WriteString(fmt.Sprintf("| Summary documents | %d |\n", report.SummaryDocuments))
 	builder.WriteString(fmt.Sprintf("| Fact documents | %d |\n", report.FactDocuments))
 	builder.WriteString(fmt.Sprintf("| Impression documents | %d |\n", report.ImpressionDocuments))
+	builder.WriteString(fmt.Sprintf("| Generic memory documents | %d |\n", report.GenericDocuments))
 	builder.WriteString(fmt.Sprintf("| Key memories | %d |\n", report.KeyMemories))
 	builder.WriteString("\n## Task Timings\n\n")
 	builder.WriteString("| Task | Count | P50 | P95 | Mean | Max |\n")

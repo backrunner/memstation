@@ -22,6 +22,7 @@ type Input struct {
 	Conversation   domain.ConversationRecord
 	Summary        domain.MemoryDocument
 	ExistingFacts  []domain.MemoryDocument
+	WritePolicy    MemoryWritePolicy
 }
 
 type FallbackExtraction struct {
@@ -37,11 +38,17 @@ type ExtractedFact struct {
 	Metadata map[string]any
 }
 
+type MemoryWritePolicy struct {
+	EnableGenericItems bool
+	MaxGenericItems    int
+}
+
 type Result struct {
-	Fact       domain.MemoryDocument
-	Facts      []domain.MemoryDocument
-	Impression domain.MemoryDocument
-	Relations  []domain.MemoryRelation
+	Fact         domain.MemoryDocument
+	Facts        []domain.MemoryDocument
+	Impression   domain.MemoryDocument
+	GenericItems []domain.MemoryDocument
+	Relations    []domain.MemoryRelation
 }
 
 func NewService() *Service { return &Service{} }
@@ -116,15 +123,16 @@ func (s *Service) AnalyzeConversation(ctx context.Context, input Input) (Result,
 		DecayFactor:    0.95,
 		Metadata:       cloneMap(extracted.ImpressionMetadata),
 	}
+	genericItems := s.ClassifyGenericMemoryItems(input, summary)
 
-	relations := make([]domain.MemoryRelation, 0, len(facts)*2+1)
+	relations := make([]domain.MemoryRelation, 0, len(facts)*2+1+len(genericItems)*2)
 	if input.Summary.NodeID != "" {
 		for _, fact := range facts {
 			relations = append(relations, domain.MemoryRelation{
 				UserID:       userID,
 				SrcNodeID:    input.Summary.NodeID,
 				DstNodeID:    fact.NodeID,
-				RelationType: "derived_from",
+				RelationType: domain.MemoryRelationDerivedFrom,
 				Weight:       0.92,
 				Source:       "analysis",
 				Metadata: map[string]any{
@@ -136,7 +144,7 @@ func (s *Service) AnalyzeConversation(ctx context.Context, input Input) (Result,
 			UserID:       userID,
 			SrcNodeID:    input.Summary.NodeID,
 			DstNodeID:    impression.NodeID,
-			RelationType: "derived_from",
+			RelationType: domain.MemoryRelationDerivedFrom,
 			Weight:       0.78,
 			Source:       "analysis",
 			Metadata: map[string]any{
@@ -149,7 +157,7 @@ func (s *Service) AnalyzeConversation(ctx context.Context, input Input) (Result,
 			UserID:       userID,
 			SrcNodeID:    fact.NodeID,
 			DstNodeID:    impression.NodeID,
-			RelationType: "derived_from",
+			RelationType: domain.MemoryRelationDerivedFrom,
 			Weight:       0.8,
 			Source:       "analysis",
 			Metadata: map[string]any{
@@ -157,12 +165,14 @@ func (s *Service) AnalyzeConversation(ctx context.Context, input Input) (Result,
 			},
 		})
 	}
+	relations = append(relations, genericMemoryRelations(userID, conversationID, input.Summary.NodeID, genericItems)...)
 
 	return Result{
-		Fact:       facts[0],
-		Facts:      facts,
-		Impression: impression,
-		Relations:  relations,
+		Fact:         facts[0],
+		Facts:        facts,
+		Impression:   impression,
+		GenericItems: genericItems,
+		Relations:    relations,
 	}, nil
 }
 
@@ -219,6 +229,219 @@ func (s *Service) RunFallbackExtraction(ctx context.Context, summary string) (Fa
 		ImpressionContent:  impressionContent,
 		ImpressionMetadata: impressionMetadata,
 	}, nil
+}
+
+func (s *Service) ClassifyGenericMemoryItems(input Input, summary string) []domain.MemoryDocument {
+	policy := normalizeMemoryWritePolicy(input.WritePolicy)
+	if !policy.EnableGenericItems {
+		return nil
+	}
+	userID := firstNonEmpty(input.UserID, input.Conversation.UserID)
+	conversationID := firstNonEmpty(input.ConversationID, input.Conversation.ConversationID)
+	items := make([]domain.MemoryDocument, 0, policy.MaxGenericItems)
+	add := func(kind domain.MemoryType, content string, importance, decay float64, metadata map[string]any) {
+		if len(items) >= policy.MaxGenericItems {
+			return
+		}
+		if !domain.IsGenericMemoryType(kind) {
+			return
+		}
+		content = normalizeWhitespace(content)
+		if content == "" {
+			return
+		}
+		if metadata == nil {
+			metadata = map[string]any{}
+		}
+		metadata = cloneMap(metadata)
+		metadata["item_type"] = string(kind)
+		if _, ok := metadata["status"]; !ok {
+			metadata["status"] = defaultGenericItemStatus(kind)
+		}
+		if _, ok := metadata["review_status"]; !ok {
+			metadata["review_status"] = "auto"
+		}
+		if _, ok := metadata["confidence"]; !ok {
+			metadata["confidence"] = inferConfidence(content)
+		}
+		seed := genericItemSeed(kind, conversationID, content, metadata)
+		items = append(items, domain.MemoryDocument{
+			ID:             GenericMemoryDocumentID(userID, kind, conversationID, seed),
+			NodeID:         GenericMemoryNodeID(userID, kind, conversationID, seed),
+			UserID:         userID,
+			ConversationID: conversationID,
+			Type:           kind,
+			Content:        content,
+			Importance:     importance,
+			DecayFactor:    decay,
+			Metadata:       metadata,
+		})
+	}
+
+	summaryText := normalizeWhitespace(summary)
+	for _, sentence := range strictSentencesContainingAny(summaryText, "todo", "follow up", "deadline", "due ", "next week", "next month", "plan", "plans", "planned", "will ", "准备", "计划", "下周", "下个月") {
+		add(domain.MemoryTypeTask, "Task: "+truncate(sentence, 220), 1.15, 0.85, map[string]any{
+			"title":  "Follow-up",
+			"status": "pending",
+			"source": "summary",
+		})
+	}
+	for _, sentence := range strictSentencesContainingAny(summaryText, "decided", "completed", "resolved", "shipped", "deployed", "launched", "migrated", "incident", "failure", "fixed", "决定", "完成", "上线", "修复") {
+		add(domain.MemoryTypeEvent, "Event: "+truncate(sentence, 220), 1.05, 0.95, map[string]any{
+			"title":  "Conversation event",
+			"status": "current",
+			"source": "summary",
+		})
+	}
+	for _, sentence := range strictSentencesContainingAny(summaryText, "workflow", "procedure", "runbook", "use ", "prefer using", "steps", "command", "流程", "步骤", "使用") {
+		add(domain.MemoryTypeProcedure, "Procedure: "+truncate(sentence, 240), 1.08, 1.35, map[string]any{
+			"title":         "Workflow candidate",
+			"source":        "summary",
+			"review_status": "auto",
+		})
+	}
+	for _, entity := range entityCandidates(summaryText) {
+		add(domain.MemoryTypeEntity, "Entity: "+entity, 0.9, 1.4, map[string]any{
+			"title":       entity,
+			"status":      "current",
+			"source":      "summary",
+			"entity_kind": "topic",
+		})
+	}
+
+	toolResults := toolResultsByCallID(input.Conversation.Messages)
+	for messageIndex, message := range input.Conversation.Messages {
+		for _, call := range message.ToolCalls {
+			toolName := strings.TrimSpace(call.Name)
+			if toolName == "" {
+				continue
+			}
+			result, hasResult := toolResults[call.ID]
+			status := "called"
+			resultSummary := ""
+			if hasResult {
+				status = inferToolResultStatus(result)
+				resultSummary = summarizeToolResult(result)
+			}
+			content := "Agent action: used tool " + toolName
+			if resultSummary != "" {
+				content += " with result " + resultSummary
+			}
+			add(domain.MemoryTypeAgentAction, content, 0.9, 0.8, map[string]any{
+				"title":          toolName,
+				"status":         status,
+				"source":         "tool_call",
+				"tool_name":      toolName,
+				"tool_call_id":   strings.TrimSpace(call.ID),
+				"message_index":  messageIndex,
+				"result_summary": resultSummary,
+			})
+			add(domain.MemoryTypeEntity, "Tool entity: "+toolName, 0.8, 1.4, map[string]any{
+				"title":       toolName,
+				"status":      "current",
+				"source":      "tool_call",
+				"entity_kind": "tool",
+			})
+		}
+		for blockIndex, block := range message.Blocks {
+			if !block.HasSource() && block.Type != domain.ContentBlockFile && block.Type != domain.ContentBlockImage && block.Type != domain.ContentBlockAudio && block.Type != domain.ContentBlockVideo {
+				continue
+			}
+			label := firstNonEmpty(block.Filename, block.SourceURL, block.ProviderFileID, block.BlobID, string(block.Type))
+			content := fmt.Sprintf("Artifact: %s", label)
+			if text := strings.TrimSpace(block.TextProxy()); text != "" {
+				content += " - " + truncate(text, 180)
+			}
+			add(domain.MemoryTypeArtifact, content, 0.95, 1.2, map[string]any{
+				"title":            label,
+				"status":           "current",
+				"source":           "content_block",
+				"message_index":    messageIndex,
+				"block_index":      blockIndex,
+				"modality":         block.Modality(),
+				"blob_id":          block.BlobID,
+				"source_url":       block.SourceURL,
+				"provider_file_id": block.ProviderFileID,
+			})
+		}
+	}
+	for _, artifact := range input.Conversation.Artifacts {
+		label := firstNonEmpty(artifact.ArtifactType, artifact.ArtifactID)
+		content := "Artifact extraction: " + label
+		if text := strings.TrimSpace(artifact.TextContent); text != "" {
+			content += " - " + truncate(text, 220)
+		}
+		add(domain.MemoryTypeArtifact, content, 0.98, 1.2, map[string]any{
+			"title":         label,
+			"status":        statusOrCurrent(artifact.Status),
+			"source":        "message_part_artifact",
+			"artifact_id":   artifact.ArtifactID,
+			"artifact_type": artifact.ArtifactType,
+			"part_id":       artifact.PartID,
+			"confidence":    artifact.Confidence,
+		})
+	}
+	return dedupeGenericItems(items)
+}
+
+func normalizeMemoryWritePolicy(policy MemoryWritePolicy) MemoryWritePolicy {
+	if policy.MaxGenericItems < 0 {
+		return MemoryWritePolicy{EnableGenericItems: false}
+	}
+	if !policy.EnableGenericItems && policy.MaxGenericItems == 0 {
+		policy.EnableGenericItems = true
+	}
+	if policy.MaxGenericItems <= 0 {
+		policy.MaxGenericItems = 12
+	}
+	return policy
+}
+
+func genericMemoryRelations(userID, conversationID, summaryNodeID string, items []domain.MemoryDocument) []domain.MemoryRelation {
+	if len(items) == 0 {
+		return nil
+	}
+	relations := make([]domain.MemoryRelation, 0, len(items)*2)
+	toolEntityByName := map[string]string{}
+	for _, item := range items {
+		if item.Type == domain.MemoryTypeEntity && metadataString(item.Metadata, "entity_kind") == "tool" {
+			toolEntityByName[strings.ToLower(metadataString(item.Metadata, "title"))] = item.NodeID
+		}
+	}
+	for _, item := range items {
+		if summaryNodeID != "" {
+			relations = append(relations, domain.MemoryRelation{
+				UserID:       userID,
+				SrcNodeID:    summaryNodeID,
+				DstNodeID:    item.NodeID,
+				RelationType: domain.MemoryRelationDerivedFrom,
+				Weight:       0.74,
+				Source:       "analysis",
+				Metadata: map[string]any{
+					"conversation_id": conversationID,
+					"item_type":       string(item.Type),
+				},
+			})
+		}
+		if item.Type == domain.MemoryTypeAgentAction {
+			toolName := strings.ToLower(metadataString(item.Metadata, "tool_name"))
+			if toolNodeID := toolEntityByName[toolName]; toolNodeID != "" {
+				relations = append(relations, domain.MemoryRelation{
+					UserID:       userID,
+					SrcNodeID:    item.NodeID,
+					DstNodeID:    toolNodeID,
+					RelationType: domain.MemoryRelationUsedTool,
+					Weight:       0.92,
+					Source:       "analysis",
+					Metadata: map[string]any{
+						"conversation_id": conversationID,
+						"tool_name":       toolName,
+					},
+				})
+			}
+		}
+	}
+	return relations
 }
 
 func deriveStructuredFacts(summary string, keywords []string) []ExtractedFact {
@@ -600,6 +823,224 @@ func metadataString(metadata map[string]any, key string) string {
 	}
 }
 
+func defaultGenericItemStatus(kind domain.MemoryType) string {
+	if kind == domain.MemoryTypeTask {
+		return "pending"
+	}
+	return "current"
+}
+
+func statusOrCurrent(value string) string {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if value == "" {
+		return "current"
+	}
+	return value
+}
+
+func genericItemSeed(kind domain.MemoryType, conversationID, content string, metadata map[string]any) string {
+	builder := strings.Builder{}
+	builder.WriteString(string(kind))
+	builder.WriteByte('|')
+	builder.WriteString(conversationID)
+	builder.WriteByte('|')
+	builder.WriteString(metadataString(metadata, "source"))
+	builder.WriteByte('|')
+	builder.WriteString(metadataString(metadata, "tool_call_id"))
+	builder.WriteByte('|')
+	builder.WriteString(metadataString(metadata, "artifact_id"))
+	builder.WriteByte('|')
+	builder.WriteString(metadataString(metadata, "title"))
+	builder.WriteByte('|')
+	builder.WriteString(normalizeWhitespace(content))
+	sum := sha256.Sum256([]byte(builder.String()))
+	return hex.EncodeToString(sum[:])
+}
+
+func GenericMemoryDocumentID(userID string, kind domain.MemoryType, conversationID, seed string) string {
+	return string(kind) + ":" + sanitizeFactKey(userID) + ":" + sanitizeFactKey(conversationID) + ":" + lineageSuffix(seed)
+}
+
+func GenericMemoryNodeID(userID string, kind domain.MemoryType, conversationID, seed string) string {
+	return "node:" + string(kind) + ":" + sanitizeFactKey(userID) + ":" + sanitizeFactKey(conversationID) + ":" + lineageSuffix(seed)
+}
+
+func entityCandidates(summary string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, 4)
+	for _, marker := range []string{"project ", "service ", "repo ", "repository ", "tool ", "model ", "api ", "项目", "服务", "工具"} {
+		if suffix := suffixAfterMarker(strings.ToLower(summary), marker); suffix != "" {
+			if _, ok := seen[suffix]; ok {
+				continue
+			}
+			seen[suffix] = struct{}{}
+			out = append(out, suffix)
+			if len(out) == 4 {
+				break
+			}
+		}
+	}
+	return out
+}
+
+func toolResultsByCallID(messages []domain.UnifiedMessage) map[string]domain.ToolResult {
+	out := map[string]domain.ToolResult{}
+	for _, message := range messages {
+		for _, result := range message.ToolResults {
+			if result.ToolCallID != "" {
+				out[result.ToolCallID] = result
+			}
+		}
+	}
+	return out
+}
+
+func inferToolResultStatus(result domain.ToolResult) string {
+	text := strings.ToLower(fmt.Sprintf("%v", result.Output))
+	if containsAny(text, "error", "failed", "failure", "exception", "timeout") {
+		return "failed"
+	}
+	return "succeeded"
+}
+
+func summarizeToolResult(result domain.ToolResult) string {
+	switch output := result.Output.(type) {
+	case nil:
+		return ""
+	case map[string]any:
+		parts := make([]string, 0, 3)
+		if status := safeToolStatusValue(firstNonEmpty(
+			metadataString(output, "status"),
+			metadataString(output, "state"),
+			metadataString(output, "outcome"),
+			metadataString(output, "result"),
+		)); status != "" {
+			parts = append(parts, "status="+status)
+		}
+		if errorType := safeToolErrorTypeValue(firstNonEmpty(
+			metadataString(output, "error_type"),
+			metadataString(output, "error_kind"),
+			metadataString(output, "code"),
+		)); errorType != "" {
+			parts = append(parts, "error_type="+errorType)
+		} else if outputLooksFailed(output) {
+			parts = append(parts, "error")
+		}
+		parts = append(parts, fmt.Sprintf("%d output fields", len(output)))
+		return strings.Join(parts, ", ")
+	case []any:
+		return fmt.Sprintf("%d result items", len(output))
+	case string:
+		text := strings.TrimSpace(output)
+		if text == "" {
+			return ""
+		}
+		if containsAny(strings.ToLower(text), "error", "failed", "failure", "exception", "timeout") {
+			return "failed text result"
+		}
+		return "text result"
+	case bool:
+		if output {
+			return "boolean true result"
+		}
+		return "boolean false result"
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+		return "numeric result"
+	default:
+		typeName := fmt.Sprintf("%T", output)
+		if typeName == "" {
+			return "structured result"
+		}
+		return "structured " + safeToolSummaryValue(typeName) + " result"
+	}
+}
+
+func outputLooksFailed(output map[string]any) bool {
+	for key, value := range output {
+		key = strings.ToLower(strings.TrimSpace(key))
+		if containsAny(key, "error", "failure", "exception", "timeout") {
+			return true
+		}
+		valueText := strings.ToLower(fmt.Sprintf("%v", value))
+		if containsAny(valueText, "error", "failed", "failure", "exception", "timeout") {
+			return true
+		}
+	}
+	return false
+}
+
+func safeToolStatusValue(value string) string {
+	value = safeToolSummaryValue(value)
+	switch value {
+	case "ok", "success", "succeeded", "completed", "done":
+		return "succeeded"
+	case "failed", "failure", "error", "errored":
+		return "failed"
+	case "timeout", "timed_out":
+		return "timeout"
+	case "cancelled", "canceled":
+		return "cancelled"
+	case "partial", "pending", "not_found", "unauthorized", "forbidden", "rate_limited", "invalid", "rejected":
+		return value
+	default:
+		return ""
+	}
+}
+
+func safeToolErrorTypeValue(value string) string {
+	value = safeToolSummaryValue(value)
+	switch value {
+	case "validation_error", "auth_error", "permission_error", "not_found", "rate_limit", "rate_limited",
+		"timeout", "network_error", "server_error", "client_error", "parse_error", "tool_error",
+		"unknown_error", "conflict", "cancelled", "canceled", "invalid_request", "unauthorized",
+		"forbidden":
+		return value
+	default:
+		return ""
+	}
+}
+
+func safeToolSummaryValue(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '_' || r == '-' || r == '.':
+			b.WriteRune(r)
+		case r == ' ' || r == '/' || r == ':':
+			b.WriteRune('_')
+		}
+		if b.Len() >= 40 {
+			break
+		}
+	}
+	return strings.Trim(b.String(), "_")
+}
+
+func dedupeGenericItems(items []domain.MemoryDocument) []domain.MemoryDocument {
+	seen := map[string]struct{}{}
+	out := make([]domain.MemoryDocument, 0, len(items))
+	for _, item := range items {
+		key := string(item.Type) + "\x1f" + strings.ToLower(normalizeWhitespace(item.Content))
+		if key == "\x1f" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, item)
+	}
+	return out
+}
+
 func FactRevisionDocumentID(conversationID, factKey, revisionKey string) string {
 	return "fact:" + sanitizeFactKey(conversationID) + ":" + sanitizeFactKey(factKey) + ":" + lineageSuffix(revisionKey)
 }
@@ -704,6 +1145,22 @@ func sentencesContainingAny(value string, needles ...string) []string {
 	if len(out) == 0 {
 		if fallback := cleanLead(leadingSentence(value)); fallback != "" {
 			out = append(out, fallback)
+		}
+	}
+	return out
+}
+
+func strictSentencesContainingAny(value string, needles ...string) []string {
+	value = normalizeWhitespace(value)
+	if value == "" {
+		return nil
+	}
+	out := make([]string, 0)
+	for _, sentence := range splitFactSentences(value) {
+		if containsAny(strings.ToLower(sentence), needles...) {
+			if cleaned := cleanLead(sentence); cleaned != "" {
+				out = append(out, cleaned)
+			}
 		}
 	}
 	return out

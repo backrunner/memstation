@@ -68,6 +68,18 @@ func BaseWindowForMemoryType(memoryType MemoryType) time.Duration {
 		return 60 * 24 * time.Hour
 	case MemoryTypeKeyMemory:
 		return 180 * 24 * time.Hour
+	case MemoryTypeEvent:
+		return 45 * 24 * time.Hour
+	case MemoryTypeTask:
+		return 21 * 24 * time.Hour
+	case MemoryTypeProcedure:
+		return 180 * 24 * time.Hour
+	case MemoryTypeArtifact:
+		return 120 * 24 * time.Hour
+	case MemoryTypeEntity:
+		return 180 * 24 * time.Hour
+	case MemoryTypeAgentAction:
+		return 30 * 24 * time.Hour
 	default:
 		return 30 * 24 * time.Hour
 	}

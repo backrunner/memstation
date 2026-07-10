@@ -38,8 +38,10 @@ Starting from source snapshots and finalized conversations, the system should ma
 - summaries
 - facts
 - impressions
+- generic memory items: events, tasks, procedures, artifacts, entities, and agent actions
 - key memory updates
 - relations
+- evidences
 - embeddings
 
 This layer verifies extraction and write-path correctness rather than only top-k recall.
@@ -66,6 +68,9 @@ The memory injected into model requests should stay relevant, bounded, and safe:
 - relevant memories are included within token budget
 - stale or negative memories are excluded
 - key memories remain stable in top injection slots
+- pending/current tasks are admitted only when relevant
+- approved procedures are admitted only for matching workflow intent
+- low-confidence or cross-domain generic memory items are excluded
 
 ## Proposed Benchmark Layers
 
@@ -105,10 +110,22 @@ Required per-case expectations:
 - expected summary content fragments
 - expected fact IDs or fact content fragments
 - expected impression fragments
+- expected generic item types and content fragments
 - expected key memory keys and values
 - expected relations
+- expected evidence links to retained source parts, tool calls, tool results, or artifacts
+- expected embedding coverage by node id
 - forbidden stale facts
 - forbidden wrong-user entities
+
+Required generic memory cases:
+
+- `event_temporal_recall`: a time-anchored decision or status change must materialize as `event` and be recalled by temporal phrasing.
+- `task_status_recall`: follow-up, completion, blocked, and abandoned task states must materialize as `task` with current status metadata.
+- `procedure_tool_workflow_recall`: reusable tool usage preference or successful workflow must materialize as `procedure` and stay scoped to matching workflow queries.
+- `artifact_evidence_recall`: persistent files, reports, code changes, links, or generated deliverables must materialize as `artifact` and preserve evidence back to source snapshots.
+- `entity_disambiguation`: people, projects, services, tools, and organizations with similar names must materialize as `entity` nodes without cross-entity retrieval leakage.
+- `agent_action_outcome_error_recall`: promoted tool-call outcomes must materialize as `agent_action` with intent, tool name, summarized result, status, error type, and evidence links, without storing raw payloads.
 
 Suggested artifact outputs:
 
@@ -127,7 +144,9 @@ Then compare:
 
 - document coverage by logical type and conversation
 - normalized content similarity for summary/fact/impression outputs
+- generic item coverage by `event/task/procedure/artifact/entity/agent_action`
 - relation overlap
+- evidence overlap for materialized generic items
 - embedding count coverage
 - retrieval metrics when searching `A` vs `B`
 - key memory stability before and after activation
@@ -158,6 +177,11 @@ Per case verify:
 - injected memories contain required positives
 - injected memories omit negatives and stale facts
 - key memories appear when expected
+- tasks appear only when pending/current and relevant
+- procedures appear only when approved and relevant
+- events and agent actions appear only when they answer the current query
+- artifacts and entities appear only as supporting context, not ahead of key memory or active task slots
+- low-confidence, rejected, stale, or cross-domain generic items are excluded
 - injection stays under the configured token budget
 
 Suggested metrics:
@@ -183,6 +207,12 @@ Add more cases for:
 - manual key memory persistence across generations
 - segment-heavy conversations with `IncludeSegments=false`
 - injection budget pressure
+- event temporal recall
+- task status recall
+- procedure workflow recall
+- artifact evidence recall
+- entity disambiguation
+- agent action outcome and error recall
 
 ### 2. Source-Replay Golden
 
@@ -196,6 +226,7 @@ Each case should contain:
 - expected derived outputs
 - rebuild expectations
 - activation expectations
+- retained tool calls, tool results, content parts, and artifacts for source-replay materialization
 
 This dataset is the foundation for Layer B and Layer C.
 
@@ -216,16 +247,13 @@ It is not sufficient for:
 - activation safety
 - injection token-budget behavior
 
-## Recommended CI and Nightly Split
+## Recommended Execution Split
 
-### PR / CI
+These benchmark layers are diagnostic and regression-analysis tools. They must not become default CI or nightly redlines. Default CI and nightly reliability drills stay focused on correctness, generated diff, worker recovery, and backup/restore. Enable benchmark gates only in a local, manual, or dedicated evaluation environment.
 
-- existing retrieval smoke on repo-native golden
-- small source-replay materialization smoke
-- one same-model rebuild equivalence smoke
-- one injection reliability smoke
+If a temporary hard gate is needed, it must be opt-in via `MEMSTATION_ENFORCE_BENCHMARKS=true` and any performance threshold must be explicit via `MEMSTATION_PERF_P95_MS`.
 
-### Nightly
+### Local / Manual
 
 - full repo-native retrieval suite
 - external LOCOMO run
@@ -233,6 +261,13 @@ It is not sufficient for:
 - cross-generation rebuild equivalence suite
 - activation regression suite
 - performance smoke for search and rebuild
+
+### Dedicated Evaluation Environment
+
+- scheduled LOCOMO or LongMemEval runs
+- ranking ablation comparisons before memory-ranking changes
+- source-replay materialization and rebuild equivalence reports
+- injection reliability reports with artifact export
 
 ## Implementation Path
 
@@ -256,7 +291,7 @@ Deliverables:
 
 - retained snapshot fixtures
 - real worker-orchestrated derivation
-- expectation matching for summaries, facts, impressions, relations, key memories
+- expectation matching for summaries, facts, impressions, generic memory items, relations, evidences, embeddings, and key memories
 
 ### Phase 3
 
