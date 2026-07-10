@@ -19,8 +19,10 @@ import (
 )
 
 const (
-	defaultStructureVersion = 1
-	defaultEmbeddingVersion = 1
+	defaultStructureVersion             = 1
+	defaultEmbeddingVersion             = 1
+	defaultRetainedInactiveGenerations  = 1
+	defaultRetainedSnapshotsPerDialogue = 3
 )
 
 type CreateRebuildInput struct {
@@ -161,8 +163,7 @@ func (s *Service) GetInProgressGeneration(ctx context.Context, userID string) (d
 				continue
 			}
 			if generation.Status != domain.MemoryGenerationStatusQueued &&
-				generation.Status != domain.MemoryGenerationStatusRunning &&
-				generation.Status != domain.MemoryGenerationStatusCompleted {
+				generation.Status != domain.MemoryGenerationStatusRunning {
 				continue
 			}
 			items = append(items, generation)
@@ -178,7 +179,7 @@ func (s *Service) GetInProgressGeneration(ctx context.Context, userID string) (d
                embedding_version, embedding_model, activate_on_success, source_count, processed_count,
                embedding_count, failure_count, last_error, metadata, created_at, updated_at, activated_at
         FROM memory_generations
-        WHERE user_id = $1 AND is_active = FALSE AND status IN ('queued', 'running', 'completed')
+	        WHERE user_id = $1 AND is_active = FALSE AND status IN ('queued', 'running')
         ORDER BY created_at DESC
         LIMIT 1
     `, userID)
@@ -314,6 +315,10 @@ func (s *Service) IsCurrentGenerationSource(ctx context.Context, userID, generat
 	if db == nil {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
+		generation, ok := s.generations[generationID]
+		if !ok || generation.UserID != userID || generation.Status == domain.MemoryGenerationStatusDiscarded {
+			return false, nil
+		}
 		var target domain.MemoryGenerationSource
 		found := false
 		for _, id := range s.sourcesByGeneration[generationID] {
@@ -350,14 +355,17 @@ func (s *Service) IsCurrentGenerationSource(ctx context.Context, userID, generat
             WHERE gs.generation_id = $1 AND gs.user_id = $2 AND gs.snapshot_id = $3
             LIMIT 1
         )
-        SELECT gs.snapshot_id
-        FROM memory_generation_sources gs
-        JOIN memory_source_snapshots ss
+	        SELECT gs.snapshot_id
+	        FROM memory_generation_sources gs
+	        JOIN memory_generations generation
+	          ON generation.generation_id = gs.generation_id
+	         AND generation.user_id = gs.user_id
+	        JOIN memory_source_snapshots ss
           ON ss.snapshot_id = gs.snapshot_id
          AND ss.user_id = gs.user_id
         JOIN target t
           ON t.conversation_id = gs.conversation_id
-        WHERE gs.generation_id = $1 AND gs.user_id = $2
+	        WHERE gs.generation_id = $1 AND gs.user_id = $2 AND generation.status <> 'discarded'
         ORDER BY ss.snapshot_version DESC, gs.updated_at DESC, gs.created_at DESC
         LIMIT 1
     `, generationID, userID, snapshotID)
@@ -765,8 +773,7 @@ func (s *Service) AddSnapshotToGeneration(ctx context.Context, generationID stri
 		return domain.MemoryGenerationSource{}, false, err
 	}
 	if generation.IsActive || (generation.Status != domain.MemoryGenerationStatusQueued &&
-		generation.Status != domain.MemoryGenerationStatusRunning &&
-		generation.Status != domain.MemoryGenerationStatusCompleted) {
+		generation.Status != domain.MemoryGenerationStatusRunning) {
 		return domain.MemoryGenerationSource{}, false, nil
 	}
 
@@ -795,9 +802,6 @@ func (s *Service) AddSnapshotToGeneration(ctx context.Context, generationID stri
 		s.generationSources[item.ID] = item
 		s.sourcesByGeneration[generationID] = append(s.sourcesByGeneration[generationID], item.ID)
 		generation.SourceCount++
-		if generation.Status == domain.MemoryGenerationStatusCompleted {
-			generation.Status = domain.MemoryGenerationStatusRunning
-		}
 		generation.UpdatedAt = now
 		s.generations[generationID] = generation
 		return item, true, nil
@@ -853,10 +857,8 @@ func (s *Service) AddSnapshotToGeneration(ctx context.Context, generationID stri
 	}
 	_, err = tx.ExecContext(ctx, `
         UPDATE memory_generations
-        SET source_count = source_count + 1,
-            status = CASE WHEN status = 'completed' THEN 'running' ELSE status END,
-            updated_at = $1
-        WHERE generation_id = $2
+	        SET source_count = source_count + 1, updated_at = $1
+	        WHERE generation_id = $2
     `, now, generationID)
 	if err != nil {
 		return domain.MemoryGenerationSource{}, false, err
@@ -1069,6 +1071,7 @@ func (s *Service) ActivateGeneration(ctx context.Context, userID, generationID s
 			s.generations[id] = item
 		}
 		s.activeGenerations[userID] = generationID
+		s.pruneInMemoryHistoryLocked(userID, generationID, defaultRetainedInactiveGenerations, defaultRetainedSnapshotsPerDialogue)
 		return s.generations[generationID], nil
 	}
 	tx, err := db.BeginTx(ctx, nil)
@@ -1110,13 +1113,238 @@ func (s *Service) ActivateGeneration(ctx context.Context, userID, generationID s
               FROM memory_generation_sources
               WHERE generation_id = $4 AND user_id = $3
           )
-    `, conversationMetadata, now, userID, generationID); err != nil {
+	`, conversationMetadata, now, userID, generationID); err != nil {
+		return domain.MemoryGeneration{}, err
+	}
+	if err = pruneGenerationHistoryTx(ctx, tx, userID, generationID, defaultRetainedInactiveGenerations, now); err != nil {
+		return domain.MemoryGeneration{}, err
+	}
+	if err = pruneSourceSnapshotsTx(ctx, tx, userID, defaultRetainedSnapshotsPerDialogue); err != nil {
 		return domain.MemoryGeneration{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return domain.MemoryGeneration{}, err
 	}
 	return s.GetGeneration(ctx, userID, generationID)
+}
+
+func (s *Service) DiscardGeneration(ctx context.Context, userID, generationID string) (domain.MemoryGeneration, error) {
+	userID = strings.TrimSpace(userID)
+	generationID = strings.TrimSpace(generationID)
+	if userID == "" || generationID == "" {
+		return domain.MemoryGeneration{}, errors.New("user id and generation id are required")
+	}
+	if generationID == CurrentGenerationID(userID) {
+		return domain.MemoryGeneration{}, errors.New("the bootstrap generation cannot be discarded")
+	}
+	generation, err := s.GetGeneration(ctx, userID, generationID)
+	if err != nil {
+		return domain.MemoryGeneration{}, err
+	}
+	if generation.IsActive {
+		return domain.MemoryGeneration{}, errors.New("the active generation cannot be discarded")
+	}
+	now := time.Now().UTC()
+	db := s.currentDB()
+	if db == nil {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		generation = s.generations[generationID]
+		generation.Status = domain.MemoryGenerationStatusDiscarded
+		generation.UpdatedAt = now
+		if generation.Metadata == nil {
+			generation.Metadata = map[string]any{}
+		}
+		generation.Metadata["discarded_at"] = now.Format(time.RFC3339)
+		s.generations[generationID] = generation
+		for _, sourceID := range s.sourcesByGeneration[generationID] {
+			delete(s.generationSources, sourceID)
+		}
+		delete(s.sourcesByGeneration, generationID)
+		return generation, nil
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.MemoryGeneration{}, err
+	}
+	defer rollback(tx)
+	var active bool
+	if err = tx.QueryRowContext(ctx, `
+		SELECT is_active FROM memory_generations
+		WHERE generation_id = $1 AND user_id = $2
+		FOR UPDATE
+	`, generationID, userID).Scan(&active); err != nil {
+		return domain.MemoryGeneration{}, err
+	}
+	if active {
+		return domain.MemoryGeneration{}, errors.New("the active generation cannot be discarded")
+	}
+	if err = deleteGenerationDataTx(ctx, tx, userID, generationID); err != nil {
+		return domain.MemoryGeneration{}, err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM memory_generation_sources WHERE generation_id = $1 AND user_id = $2`, generationID, userID); err != nil {
+		return domain.MemoryGeneration{}, err
+	}
+	if _, err = tx.ExecContext(ctx, `
+		UPDATE memory_generations
+		SET status = $1,
+		    metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('discarded_at', $2::text),
+		    updated_at = $2
+		WHERE generation_id = $3 AND user_id = $4
+	`, string(domain.MemoryGenerationStatusDiscarded), now, generationID, userID); err != nil {
+		return domain.MemoryGeneration{}, err
+	}
+	if err = pruneSourceSnapshotsTx(ctx, tx, userID, defaultRetainedSnapshotsPerDialogue); err != nil {
+		return domain.MemoryGeneration{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return domain.MemoryGeneration{}, err
+	}
+	return s.GetGeneration(ctx, userID, generationID)
+}
+
+func (s *Service) pruneInMemoryHistoryLocked(userID, activeGenerationID string, retainGenerations, retainSnapshots int) {
+	items := make([]domain.MemoryGeneration, 0)
+	for _, generation := range s.generations {
+		if generation.UserID == userID && generation.GenerationID != activeGenerationID && !generation.IsActive && generation.Status == domain.MemoryGenerationStatusActivated {
+			items = append(items, generation)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].ActivatedAt == nil {
+			return false
+		}
+		if items[j].ActivatedAt == nil {
+			return true
+		}
+		return items[i].ActivatedAt.After(*items[j].ActivatedAt)
+	})
+	for idx := max(retainGenerations, 0); idx < len(items); idx++ {
+		generation := items[idx]
+		generation.Status = domain.MemoryGenerationStatusDiscarded
+		generation.UpdatedAt = time.Now().UTC()
+		if generation.Metadata == nil {
+			generation.Metadata = map[string]any{}
+		}
+		generation.Metadata["discarded_at"] = generation.UpdatedAt.Format(time.RFC3339)
+		s.generations[generation.GenerationID] = generation
+		for _, sourceID := range s.sourcesByGeneration[generation.GenerationID] {
+			delete(s.generationSources, sourceID)
+		}
+		delete(s.sourcesByGeneration, generation.GenerationID)
+	}
+
+	if retainSnapshots <= 0 {
+		return
+	}
+	referenced := map[string]struct{}{}
+	for _, source := range s.generationSources {
+		referenced[source.SnapshotID] = struct{}{}
+	}
+	prefix := strings.TrimSpace(userID) + "::"
+	for key, ids := range s.sourceByConversation {
+		if !strings.HasPrefix(key, prefix) || len(ids) <= retainSnapshots {
+			continue
+		}
+		keepFrom := len(ids) - retainSnapshots
+		kept := append([]string(nil), ids[keepFrom:]...)
+		for _, snapshotID := range ids[:keepFrom] {
+			if _, ok := referenced[snapshotID]; ok {
+				kept = append([]string{snapshotID}, kept...)
+				continue
+			}
+			delete(s.sourceSnapshots, snapshotID)
+		}
+		s.sourceByConversation[key] = kept
+	}
+}
+
+func pruneGenerationHistoryTx(ctx context.Context, tx *sqlpkg.Tx, userID, activeGenerationID string, retain int, now time.Time) error {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT generation_id
+		FROM memory_generations
+		WHERE user_id = $1 AND generation_id <> $2 AND is_active = FALSE AND status = 'activated'
+		ORDER BY activated_at DESC NULLS LAST, created_at DESC
+		OFFSET $3
+	`, userID, activeGenerationID, max(retain, 0))
+	if err != nil {
+		return err
+	}
+	ids := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	if err = rows.Close(); err != nil {
+		return err
+	}
+	for _, generationID := range ids {
+		if err = deleteGenerationDataTx(ctx, tx, userID, generationID); err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(ctx, `DELETE FROM memory_generation_sources WHERE generation_id = $1 AND user_id = $2`, generationID, userID); err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(ctx, `
+			UPDATE memory_generations
+			SET status = $1,
+			    metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('discarded_at', $2::text, 'discard_reason', 'retention'),
+			    updated_at = $2
+			WHERE generation_id = $3 AND user_id = $4
+		`, string(domain.MemoryGenerationStatusDiscarded), now, generationID, userID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func deleteGenerationDataTx(ctx context.Context, tx *sqlpkg.Tx, userID, generationID string) error {
+	queries := []string{
+		`DELETE FROM memory_keywords WHERE user_id = $1 AND summary_id IN (SELECT id FROM memory_summaries WHERE user_id = $1 AND generation_id = $2 UNION SELECT id FROM facts WHERE user_id = $1 AND generation_id = $2)`,
+		`DELETE FROM memory_evidences WHERE user_id = $1 AND generation_id = $2`,
+		`DELETE FROM memory_relations WHERE user_id = $1 AND generation_id = $2`,
+		`DELETE FROM memory_embeddings WHERE user_id = $1 AND generation_id = $2`,
+		`DELETE FROM memory_items WHERE user_id = $1 AND generation_id = $2`,
+		`DELETE FROM facts WHERE user_id = $1 AND generation_id = $2`,
+		`DELETE FROM impressions WHERE user_id = $1 AND generation_id = $2`,
+		`DELETE FROM memory_summaries WHERE user_id = $1 AND generation_id = $2`,
+		`DELETE FROM conversation_segments WHERE user_id = $1 AND generation_id = $2`,
+		`DELETE FROM memory_nodes WHERE user_id = $1 AND generation_id = $2`,
+	}
+	for _, query := range queries {
+		if _, err := tx.ExecContext(ctx, query, userID, generationID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func pruneSourceSnapshotsTx(ctx context.Context, tx *sqlpkg.Tx, userID string, retain int) error {
+	if retain <= 0 {
+		return nil
+	}
+	candidates := `
+		SELECT snapshot_id FROM (
+			SELECT snapshot_id,
+			       ROW_NUMBER() OVER (PARTITION BY conversation_id ORDER BY snapshot_version DESC, updated_at DESC) AS snapshot_rank
+			FROM memory_source_snapshots
+			WHERE user_id = $1
+		) ranked
+		WHERE snapshot_rank > $2
+		  AND NOT EXISTS (
+			SELECT 1 FROM memory_generation_sources source
+			WHERE source.snapshot_id = ranked.snapshot_id AND source.user_id = $1
+		  )`
+	if _, err := tx.ExecContext(ctx, `DELETE FROM memory_source_messages WHERE snapshot_id IN (`+candidates+`)`, userID, retain); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `DELETE FROM memory_source_snapshots WHERE snapshot_id IN (`+candidates+`)`, userID, retain)
+	return err
 }
 
 func (s *Service) latestSnapshotsForScope(ctx context.Context, userID, scope, conversationID string) ([]domain.MemorySourceSnapshot, error) {

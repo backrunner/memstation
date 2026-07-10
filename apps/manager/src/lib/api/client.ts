@@ -635,6 +635,15 @@ export function activateMemoryRebuild(target: MemStationTarget, userId: string, 
   }).then((payload) => normalizeMemoryGeneration(payload));
 }
 
+export function discardMemoryRebuild(target: MemStationTarget, userId: string, generationId: string): Promise<MemoryGeneration> {
+	const query = new URLSearchParams({ user_id: userId });
+	return adminRequest<Record<string, unknown>>(
+		target,
+		`/api/admin/memory/rebuilds/${encodeURIComponent(generationId)}?${query.toString()}`,
+		{ method: 'DELETE' }
+	).then((payload) => normalizeMemoryGeneration(payload));
+}
+
 export async function fetchTasks(target: MemStationTarget, options?: { limit?: number; states?: string[]; queue?: string }): Promise<QueueTaskRecord[]> {
   const query = new URLSearchParams();
   if (options?.limit) {

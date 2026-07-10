@@ -209,6 +209,7 @@ const (
 	MemoryGenerationStatusCompleted MemoryGenerationStatus = "completed"
 	MemoryGenerationStatusFailed    MemoryGenerationStatus = "failed"
 	MemoryGenerationStatusActivated MemoryGenerationStatus = "activated"
+	MemoryGenerationStatusDiscarded MemoryGenerationStatus = "discarded"
 )
 
 type MemoryGeneration struct {

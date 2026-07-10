@@ -128,6 +128,7 @@ func NewRouter(deps Dependencies) http.Handler {
 		r.Post("/api/admin/memory/rebuilds", adminMemoryRebuildCreateHandler(deps.Generations, deps.Publisher, deps.Audit))
 		r.Get("/api/admin/memory/rebuilds/{id}", adminMemoryRebuildGetHandler(deps.Generations))
 		r.Post("/api/admin/memory/rebuilds/{id}/activate", adminMemoryRebuildActivateHandler(deps.Generations, deps.Audit))
+		r.Delete("/api/admin/memory/rebuilds/{id}", adminMemoryRebuildDiscardHandler(deps.Generations, deps.Audit))
 		r.Get("/api/admin/memory/keys", adminMemoryKeysHandler(deps.Memory))
 		r.Post("/api/admin/memory/keys", adminMemoryKeyCreateHandler(deps.Memory, deps.Audit))
 		r.Get("/api/admin/memory/keys/{id}", adminMemoryKeyGetHandler(deps.Memory))
@@ -1108,6 +1109,29 @@ func adminMemoryRebuildActivateHandler(service *memorygenservice.Service, audit 
 			return
 		}
 		recordAdminAudit(r, audit, "activate_memory_generation", "memory_generation", item.GenerationID, map[string]any{
+			"user_id": userID,
+		})
+		writeJSON(w, http.StatusOK, item)
+	}
+}
+
+func adminMemoryRebuildDiscardHandler(service *memorygenservice.Service, audit *auditsvc.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if service == nil {
+			writeError(w, http.StatusServiceUnavailable, "memory_generation_unavailable", "memory generation service is not configured")
+			return
+		}
+		userID := strings.TrimSpace(r.URL.Query().Get("user_id"))
+		if userID == "" {
+			writeError(w, http.StatusBadRequest, "invalid_request", "user_id is required")
+			return
+		}
+		item, err := service.DiscardGeneration(r.Context(), userID, chi.URLParam(r, "id"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "memory_rebuild_discard_failed", err.Error())
+			return
+		}
+		recordAdminAudit(r, audit, "discard_memory_generation", "memory_generation", item.GenerationID, map[string]any{
 			"user_id": userID,
 		})
 		writeJSON(w, http.StatusOK, item)

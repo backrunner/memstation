@@ -371,7 +371,7 @@ func TestIsCurrentGenerationSourceTracksLatestSnapshotPerConversation(t *testing
 	}
 }
 
-func TestCompletedGenerationStillAcceptsNewSnapshots(t *testing.T) {
+func TestCompletedGenerationDoesNotBlockOrAbsorbLaterRebuilds(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -410,15 +410,12 @@ func TestCompletedGenerationStillAcceptsNewSnapshots(t *testing.T) {
 		t.Fatal("expected manual-activation generation to stay pending activation")
 	}
 
-	inProgress, ok, err := service.GetInProgressGeneration(ctx, "user-1")
+	_, ok, err := service.GetInProgressGeneration(ctx, "user-1")
 	if err != nil {
 		t.Fatalf("get in-progress generation: %v", err)
 	}
-	if !ok || inProgress.GenerationID != generation.GenerationID {
-		t.Fatalf("expected completed candidate generation to remain discoverable, got %+v ok=%v", inProgress, ok)
-	}
-	if inProgress.Status != domain.MemoryGenerationStatusCompleted {
-		t.Fatalf("expected completed candidate status, got %s", inProgress.Status)
+	if ok {
+		t.Fatal("expected completed candidate generation not to block later rebuilds")
 	}
 
 	second, _, err := service.CaptureSourceSnapshot(ctx, domain.ConversationRecord{
@@ -438,18 +435,31 @@ func TestCompletedGenerationStillAcceptsNewSnapshots(t *testing.T) {
 	}
 	if _, added, err := service.AddSnapshotToGeneration(ctx, generation.GenerationID, second); err != nil {
 		t.Fatalf("add second snapshot to completed generation: %v", err)
-	} else if !added {
-		t.Fatal("expected completed candidate generation to accept new snapshots")
+	} else if added {
+		t.Fatal("expected completed candidate generation not to absorb later snapshots")
 	}
 
-	updated, err := service.GetGeneration(ctx, "user-1", generation.GenerationID)
+	next, nextSources, err := service.CreateRebuildGeneration(ctx, CreateRebuildInput{
+		UserID:            "user-1",
+		Scope:             "conversation",
+		ConversationID:    second.ConversationID,
+		ActivateOnSuccess: false,
+	})
 	if err != nil {
-		t.Fatalf("reload updated generation: %v", err)
+		t.Fatalf("create later rebuild: %v", err)
 	}
-	if updated.SourceCount != 2 {
-		t.Fatalf("expected source count to grow to 2, got %d", updated.SourceCount)
+	if next.GenerationID == generation.GenerationID || len(nextSources) != 1 || nextSources[0].SnapshotID != second.SnapshotID {
+		t.Fatalf("unexpected later rebuild: generation=%+v sources=%+v", next, nextSources)
 	}
-	if updated.Status != domain.MemoryGenerationStatusRunning {
-		t.Fatalf("expected completed generation to return to running after new work arrives, got %s", updated.Status)
+
+	discarded, err := service.DiscardGeneration(ctx, "user-1", generation.GenerationID)
+	if err != nil {
+		t.Fatalf("discard completed generation: %v", err)
+	}
+	if discarded.Status != domain.MemoryGenerationStatusDiscarded {
+		t.Fatalf("expected discarded status, got %s", discarded.Status)
+	}
+	if current, err := service.IsCurrentGenerationSource(ctx, "user-1", generation.GenerationID, first.SnapshotID); err != nil || current {
+		t.Fatalf("expected discarded generation source to stop being current, current=%v err=%v", current, err)
 	}
 }

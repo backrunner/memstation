@@ -4,7 +4,7 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
 
-  import { activateMemoryRebuild, fetchMemoryRebuilds, fetchQueues, fetchTasks, requeueTask } from '$lib/api/client';
+	import { activateMemoryRebuild, discardMemoryRebuild, fetchMemoryRebuilds, fetchQueues, fetchTasks, requeueTask } from '$lib/api/client';
   import CodeBlock from '$lib/components/CodeBlock.svelte';
   import ConfirmActionDialog from '$lib/components/ConfirmActionDialog.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
@@ -140,10 +140,26 @@
     }
   }
 
-  async function activateGeneration(generationId: string): Promise<void> {
+	async function activateGeneration(generationId: string): Promise<void> {
     if (!$selectedTarget || !rebuildUserId.trim()) {
       return;
-    }
+	}
+
+	async function discardGeneration(generationId: string): Promise<void> {
+		if (!$selectedTarget || !rebuildUserId.trim()) return;
+		actionLoading = true;
+		error = '';
+		success = '';
+		try {
+			await discardMemoryRebuild($selectedTarget, rebuildUserId.trim(), generationId);
+			success = 'Generation discarded and its inactive graph data was removed.';
+			await loadTasks();
+		} catch (cause) {
+			error = cause instanceof Error ? cause.message : 'Failed to discard memory generation';
+		} finally {
+			actionLoading = false;
+		}
+	}
     actionLoading = true;
     error = '';
     success = '';
@@ -372,11 +388,13 @@
                     {#if rebuild.last_error}
                       <div class="helper-text" style="color: var(--danger);">{rebuild.last_error}</div>
                     {/if}
-                    {#if rebuild.scope === 'conversation'}
-                      <div class="helper-text">Conversation-scoped rebuilds are inspection-only candidates.</div>
-                    {:else if !rebuild.is_active && (rebuild.status === 'completed' || rebuild.status === 'activated')}
-                      <div class="inline-group" style="justify-content: flex-end;">
-                        <button
+					{#if rebuild.scope === 'conversation' && rebuild.status !== 'discarded'}
+						<div class="helper-text">Conversation-scoped rebuilds are inspection-only candidates.</div>
+					{/if}
+					{#if !rebuild.is_active && rebuild.status !== 'discarded'}
+						<div class="inline-group" style="justify-content: flex-end;">
+							{#if rebuild.scope !== 'conversation' && rebuild.status === 'completed'}
+							<button
                           class="btn-secondary btn-sm"
                           type="button"
                           disabled={actionLoading}
@@ -387,11 +405,24 @@
                             'Activate generation',
                             () => activateGeneration(rebuild.generation_id)
                           )}
-                        >
-                          {actionLoading ? 'Activating…' : 'Activate generation'}
-                        </button>
-                      </div>
-                    {/if}
+							>
+								{actionLoading ? 'Activating…' : 'Activate generation'}
+							</button>
+							{/if}
+							<button
+								class="btn-danger btn-sm"
+								type="button"
+								disabled={actionLoading}
+								on:click={() => requestConfirmation(
+									'Discard memory generation?',
+									'Inactive graph, vector, and source references for this generation will be removed.',
+									rebuild.generation_id,
+									'Discard generation',
+									() => discardGeneration(rebuild.generation_id)
+								)}
+							>Discard</button>
+						</div>
+					{/if}
                   </div>
                 {/each}
               </div>
