@@ -661,23 +661,32 @@ v1.x 后续路线：
 
 ### 14.2 未完成
 
-- 当前没有已确认的 v1 功能缺口；R1-R6 与 R5.5 所要求的仓库内实现均已落地
+- 2026-07-11 graph memory 复核确认 generation 生命周期存在阻塞缺陷：conversation-scoped rebuild 完成后保持 inactive completed，但仍会被 in-progress 查询命中且禁止激活，也没有 discard/cancel 路径，导致同一用户后续 rebuild 被阻塞
+- graph memory 人工编辑与 Key Memory 写入仍是关系库提交后同步更新向量/关系；向量调用失败时会出现“接口报错但关系数据已变更”、旧向量继续参与召回且审计未落地的非原子状态，需要改为 transactional outbox / versioned embedding 状态机
+- pgvector 当前使用不定维 `VECTOR` 且没有 HNSW/IVFFlat ANN 索引；relation 热路径也缺少 `(user_id, generation_id, dst_node_id)` 等双向遍历索引，真实数据规模下尚不能证明满足 memory retrieval P95
+- graph 表尚未用复合外键/check constraint 约束 relation、embedding、evidence 和业务实体到同用户 `MemoryNode` 的引用完整性；Ent schema 也未同步多数表的 `generation_id`，存在 schema/migration 双轨漂移
+- generic `entity` node ID 仍包含 `conversation_id` 与内容 seed，只能形成 conversation-local entity，尚缺 canonical entity key、alias/merge 和跨会话归并机制
+- generation、source snapshot 及其 graph/vector 数据尚无明确 retention / GC 策略，重复 rebuild 会持续保留历史 generation 数据
 - 原始 LOCOMO 数据仍然不会提交进仓库；手动 benchmark 可从上游公开地址拉取，运行仍受外部网络与许可证约束
 - backup/restore 实际演练仍要求运行环境具备 Docker Compose 与镜像拉取能力；在无 Docker 环境下只能执行 dry-run 形态校验
 - 压测与覆盖率门禁已具备基线实现，但后续仍应随着功能扩展逐步提高阈值，而不是长期停留在当前数值
 - 2026-04-25 本地复核中曾发现既有 format / lint 问题；截至 2026-07-11，后续复核已确认 `scripts/go/format.sh --check` 与 `scripts/go/lint.sh` 通过
 - 2026-06-27 复核 GitHub nightly 最近失败点为 `actions/upload-artifact` 存储配额已满；worker recovery nightly drill 与 backup/restore nightly drill 本身均通过。workflow 已将诊断 artifact 上传改为 3 天保留与非阻塞，并在定时 nightly 中加入同提交覆盖检查，后续仍需定期清理远端 Actions artifact 存储。
-- 当前主要剩余工作已从“补功能”转为“持续提高工程门禁和运维阈值”，而不是继续扩写新的 v1 范围
+- 当前主要剩余工作应先关闭上述 graph memory 正确性与容量缺口，再继续提高工程门禁和运维阈值；不扩写新的 v1 产品范围
 
 ### 14.3 重启检查点
 
 后续重启时默认按以下顺序恢复工作，而不是重新漫无目的盘点仓库：
 
-1. 在具备 Docker 的 CI / nightly 环境里持续观察 backup/restore 与 worker recovery artifact，按结果调高阈值
-2. 在本地或专用评测环境观察 repo-native smoke、LOCOMO / LongMemEval benchmark、perf smoke artifact；指标用于诊断与趋势分析，不作为 CI 红线
-3. 如果新增记忆类型、排序信号或 relation 规则，先更新 `apps/server/tests/eval/testdata/` 和 smoke expectations
-4. 如果新增 manager 核心模块，同步补 Vitest、Playwright 和 coverage gate
-5. 如果后续引入集群化或多节点恢复方案，把现有单实例 drill 扩展为跨节点恢复演练，而不是另起一套脚本
+1. 先修复 conversation-scoped generation 的终态/discard 语义与后续 rebuild 阻塞，并补数据库和 service 回归测试
+2. 将人工编辑、Key Memory 写入和向量更新改为可重试、可审计的 versioned embedding / outbox 链路，避免旧向量继续参与召回
+3. 补 pgvector ANN、relation 双向索引、graph 引用完整性约束，并用真实 PostgreSQL `EXPLAIN (ANALYZE, BUFFERS)` 和规模化数据验证 retrieval P95
+4. 设计 canonical entity / alias merge 与 generation retention / GC，再补 benchmark 和管理面板可观测性
+5. 在具备 Docker 的 CI / nightly 环境里持续观察 backup/restore 与 worker recovery artifact，按结果调高阈值
+6. 在本地或专用评测环境观察 repo-native smoke、LOCOMO / LongMemEval benchmark、perf smoke artifact；指标用于诊断与趋势分析，不作为 CI 红线
+7. 如果新增记忆类型、排序信号或 relation 规则，先更新 `apps/server/tests/eval/testdata/` 和 smoke expectations
+8. 如果新增 manager 核心模块，同步补 Vitest、Playwright 和 coverage gate
+9. 如果后续引入集群化或多节点恢复方案，把现有单实例 drill 扩展为跨节点恢复演练，而不是另起一套脚本
 
 ### 14.4 当前开发计划（as of 2026-07-11）
 
