@@ -214,6 +214,7 @@
                   <span class="helper-text mono">{impression.id}</span>
                 </div>
                 <div class="inline-group">
+                  <StatusBadge tone="muted" label="Audited" />
                   <StatusBadge tone="muted" label={impression.conversation_id ? 'conversation-linked' : 'manual'} />
                   <a class="btn-ghost btn-sm" href={memoryDetailHref('impressions', impression.id, activeUserId)}>Open</a>
                   {#if editingId === impression.id}

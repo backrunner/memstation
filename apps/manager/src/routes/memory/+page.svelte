@@ -7,7 +7,7 @@
   import FactLineagePanel from '$lib/components/FactLineagePanel.svelte';
   import MemoryWorkspaceNav from '$lib/components/MemoryWorkspaceNav.svelte';
   import MemoryKeywordSignals from '$lib/components/MemoryKeywordSignals.svelte';
-  import { memoryDetailHref } from '$lib/memory/routes';
+  import { memoryDetailHref, memoryRouteKindFromDocumentType } from '$lib/memory/routes';
   import { matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '$lib/memory/keyword-signals';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -116,9 +116,7 @@
 
 <section class="page-stack">
   <PageHeader
-    eyebrow="Inspect"
     title="Memory workspace"
-    description="Operator hub for semantic recall checks, summary QA, fact review, and long-lived key memory management."
     subtitle={activeUserId ? `Scoped to user ${activeUserId}` : ''}
   />
 
@@ -131,34 +129,10 @@
   {:else if loading}
     <div class="notice-card">Loading memory workspace…</div>
   {:else}
-    <div class="kpi-grid">
-      <article class="kpi-card">
-        <span class="kpi-label">Summaries</span>
-        <strong class="kpi-value">{workspace?.memorySummaries.length ?? 0}</strong>
-        <span class="kpi-meta">Conversation rollups ready for recall.</span>
-      </article>
-      <article class="kpi-card">
-        <span class="kpi-label">Impressions</span>
-        <strong class="kpi-value">{workspace?.impressions.length ?? 0}</strong>
-        <span class="kpi-meta">Behavioral or preference signals.</span>
-      </article>
-      <article class="kpi-card">
-        <span class="kpi-label">Facts</span>
-        <strong class="kpi-value">{workspace?.facts.length ?? 0}</strong>
-        <span class="kpi-meta">Structured factual statements.</span>
-      </article>
-      <article class="kpi-card">
-        <span class="kpi-label">Key memories</span>
-        <strong class="kpi-value">{workspace?.keyMemories.length ?? 0}</strong>
-        <span class="kpi-meta">Operator-managed stable slots.</span>
-      </article>
-    </div>
-
     <section class="card page-stack">
       <div class="page-header">
         <div class="page-header-meta">
           <h2 class="section-title">Semantic search</h2>
-          <p class="panel-meta">Test ranked recall against live memory data.</p>
         </div>
         {#if searchResult}
           <StatusBadge tone="brand" label={`${searchResult.total} matches`} />
@@ -198,15 +172,10 @@
         </button>
       </div>
 
-      {#if !searchResult}
-        <div class="empty-state">Run a search to inspect semantic score, effective score, and memory snippets.</div>
-      {:else}
-        <div class="inline-group" style="justify-content: space-between;">
-          <span class="helper-text">Query embedding tokens: <span class="mono">{searchResult.queryEmbeddingTokens}</span></span>
-          <span class="helper-text">Top {searchResult.memories.length} items shown</span>
-        </div>
+      {#if searchResult}
         <div class="stack-list">
           {#each searchResult.memories as memory}
+            {@const routeKind = memoryRouteKindFromDocumentType(memory.type)}
             <article class="memory-result-card">
               <header class="memory-result-head">
                 <div class="memory-result-head-main">
@@ -225,14 +194,10 @@
                     />
                   {/if}
                 </div>
-                {#if memory.type === 'summary' || memory.type === 'impression' || memory.type === 'fact'}
+                {#if routeKind && routeKind !== 'keys'}
                   <a
                     class="btn-ghost btn-sm"
-                    href={memoryDetailHref(
-                      memory.type === 'summary' ? 'summaries' : memory.type === 'impression' ? 'impressions' : 'facts',
-                      memory.id,
-                      activeUserId
-                    )}
+                    href={memoryDetailHref(routeKind, memory.id, activeUserId)}
                   >Open</a>
                 {/if}
               </header>
@@ -244,9 +209,11 @@
               {#if memory.type === 'fact'}
                 <FactLineagePanel lineage={memory.lineage} currentFactId={memory.id} userId={activeUserId} compact />
               {/if}
-              <div class="helper-text mono">
-                raw {memory.score?.toFixed?.(3) ?? memory.score} · effective {memory.effectiveScore?.toFixed?.(3) ?? memory.effectiveScore} · tier {memory.time_tier ?? 'n/a'} · activity {dateTimeLabel(memory.activity_at)}
-              </div>
+              {#if memory.time_tier || memory.activity_at}
+                <div class="helper-text mono">
+                  {memory.time_tier ?? ''}{#if memory.time_tier && memory.activity_at} · {/if}{#if memory.activity_at}{dateTimeLabel(memory.activity_at)}{/if}
+                </div>
+              {/if}
             </article>
           {/each}
         </div>
@@ -258,7 +225,6 @@
         <div class="page-header">
           <div class="page-header-meta">
             <h2 class="section-title">Collections</h2>
-            <p class="panel-meta">Memory stores at a glance.</p>
           </div>
         </div>
         <div class="list-table">
@@ -274,6 +240,10 @@
             <span>Facts</span>
             <span class="mono">{workspace?.facts.length ?? 0}</span>
           </a>
+          <a class="table-row-link" href={`/memory/items${userSuffix}`}>
+            <span>Agent memory</span>
+            <span class="mono">{workspace?.genericItems.length ?? 0}</span>
+          </a>
           <a class="table-row-link" href={`/memory/keys${userSuffix}`}>
             <span>Key memories</span>
             <span class="mono">{workspace?.keyMemories.length ?? 0}</span>
@@ -284,8 +254,7 @@
       <section class="card page-stack">
         <div class="page-header">
           <div class="page-header-meta">
-            <h2 class="section-title">Recent excerpts</h2>
-            <p class="panel-meta">Quick spot-check samples.</p>
+            <h2 class="section-title">Recent memory</h2>
           </div>
         </div>
         <div class="stack-list">
@@ -307,8 +276,20 @@
               <div class="message-body">{fact.content}</div>
             </article>
           {/each}
-          {#if (workspace?.memorySummaries.length ?? 0) === 0 && (workspace?.facts.length ?? 0) === 0}
-            <div class="empty-state">This target has not generated summaries or facts yet.</div>
+          {#each (workspace?.genericItems ?? []).slice(0, 1) as item}
+            {@const itemRouteKind = memoryRouteKindFromDocumentType(item.type)}
+            <article class="excerpt-card">
+              <header class="excerpt-head">
+                <strong>{item.type}</strong>
+                {#if itemRouteKind}
+                  <a class="btn-link" href={memoryDetailHref(itemRouteKind, item.id, activeUserId)}>Open</a>
+                {/if}
+              </header>
+              <div class="message-body">{item.content}</div>
+            </article>
+          {/each}
+          {#if (workspace?.memorySummaries.length ?? 0) === 0 && (workspace?.facts.length ?? 0) === 0 && (workspace?.genericItems.length ?? 0) === 0}
+            <div class="empty-state">This target has not generated memory documents yet.</div>
           {/if}
         </div>
       </section>

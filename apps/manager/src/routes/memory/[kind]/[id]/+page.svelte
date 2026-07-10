@@ -15,6 +15,7 @@
     updateAdminMemoryDocument
   } from '$lib/api/client';
   import ChatMessageCard from '$lib/components/ChatMessageCard.svelte';
+  import ConfirmActionDialog from '$lib/components/ConfirmActionDialog.svelte';
   import FactLineagePanel from '$lib/components/FactLineagePanel.svelte';
   import JsonView from '$lib/components/JsonView.svelte';
   import MemoryKeywordSignals from '$lib/components/MemoryKeywordSignals.svelte';
@@ -65,6 +66,7 @@
   let loading = true;
   let saving = false;
   let deleting = false;
+  let deleteConfirmOpen = false;
   let error = '';
   let success = '';
   let audits: AuditEventRecord[] = [];
@@ -310,6 +312,18 @@
         return 'Fact';
       case 'keys':
         return 'Key Memory';
+      case 'events':
+        return 'Event';
+      case 'tasks':
+        return 'Task';
+      case 'procedures':
+        return 'Procedure';
+      case 'artifacts':
+        return 'Artifact';
+      case 'entities':
+        return 'Entity';
+      case 'agent-actions':
+        return 'Agent Action';
       default:
         return 'Memory Item';
     }
@@ -325,6 +339,18 @@
         return 'Validate factual statements, graph links, and operator changes before they affect recall.';
       case 'keys':
         return 'Manage a stable operator-curated key slot and inspect every audited mutation.';
+      case 'events':
+        return 'Inspect durable event memories with time anchors, evidence, and graph links.';
+      case 'tasks':
+        return 'Review durable task state, commitments, follow-ups, and completion signals.';
+      case 'procedures':
+        return 'Review reusable workflows, tool practices, and operational preferences.';
+      case 'artifacts':
+        return 'Inspect persistent outputs or referenced resources preserved as retrievable memory.';
+      case 'entities':
+        return 'Inspect stable people, projects, tools, services, and organization graph anchors.';
+      case 'agent-actions':
+        return 'Inspect promoted agent or tool-call outcomes without retaining raw payloads.';
       default:
         return 'Inspect stored memory detail.';
     }
@@ -456,7 +482,7 @@
       </div>
       <div class="inline-group" style="flex-wrap: wrap;">
         {#if routeKind === 'keys'}
-          <button class="button-danger" type="button" disabled={deleting} on:click={deleteKeyMemory}>{deleting ? 'Deleting...' : 'Delete key memory'}</button>
+          <button class="button-danger" type="button" disabled={deleting} on:click={() => (deleteConfirmOpen = true)}>{deleting ? 'Deleting...' : 'Delete key memory'}</button>
         {/if}
         <button class="button" type="button" disabled={saving} on:click={save}>{saving ? 'Saving...' : 'Save changes'}</button>
       </div>
@@ -662,17 +688,24 @@
                 </div>
                 <div class="list-table">
                   {#each documentItem.related ?? [] as relation}
+                    {@const relationID = relation.document_id ?? ''}
+                    {@const relationLabel = relation.document_id ?? relation.node_id ?? ''}
+                    {@const relationType = relation.document_type ?? ''}
+                    {@const relationKind = memoryRouteKindFromDocumentType(relationType)}
                     <div class="table-row-link">
                       <div>
-                        <div style="font-weight: 600;">{relation.id}</div>
-                        <div class="subtle-text">{relation.type}</div>
+                        <div style="font-weight: 600;">{relationLabel}</div>
+                        <div class="subtle-text">{relation.relation_type ?? 'related'} · {relationType}</div>
+                        {#if relation.node_id}
+                          <div class="subtle-text mono">{relation.node_id}</div>
+                        {/if}
                       </div>
                       <div class="inline-group" style="flex-wrap: wrap; justify-content: flex-end;">
                         <StatusBadge tone="muted" label={`weight ${relation.weight.toFixed(2)}`} />
-                        {#if memoryRouteKindFromDocumentType(relation.type)}
+                        {#if relationKind && relationID}
                           <a
                             class="button-ghost"
-                            href={memoryDetailHref(memoryRouteKindFromDocumentType(relation.type) ?? 'summaries', relation.id, documentItem.user_id)}
+                            href={memoryDetailHref(relationKind, relationID, documentItem.user_id)}
                           >Open</a>
                         {/if}
                       </div>
@@ -812,3 +845,13 @@
     </div>
   {/if}
 </section>
+
+<ConfirmActionDialog
+  bind:open={deleteConfirmOpen}
+  title="Delete key memory?"
+  description="This permanently removes the key memory from active recall and memory tools."
+  subject={keyMemoryItem ? `${keyMemoryItem.key} · ${keyMemoryItem.id}` : $page.params.id}
+  confirmLabel="Delete key memory"
+  busy={deleting}
+  on:confirm={deleteKeyMemory}
+/>

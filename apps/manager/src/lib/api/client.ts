@@ -24,6 +24,7 @@ import type {
   MemoryGenerationSource,
   MemoryLineage,
   JSONValue,
+  MemoryDocumentKind,
   MemoryRebuildDetailPayload,
   MemorySourceSnapshot,
   MemoryPreviewPayload,
@@ -31,7 +32,9 @@ import type {
   QueueInfo,
   QueueTaskDetailPayload,
   QueueTaskRecord,
+  RelatedMemory,
   SearchMemoriesResult,
+  SearchMemoryType,
   TokenStatsResponse,
   ToolCall,
   UserDetailPayload,
@@ -366,11 +369,11 @@ export function saveConfig(target: MemStationTarget, payload: Record<string, unk
 
 export async function fetchAdminMemoryDocuments(
   target: MemStationTarget,
-  options?: { kind?: 'summary' | 'impression' | 'fact'; userId?: string; limit?: number }
+  options?: { kind?: MemoryDocumentKind | MemoryDocumentKind[]; userId?: string; limit?: number }
 ): Promise<MemoryDocument[]> {
   const query = new URLSearchParams();
   if (options?.kind) {
-    query.set('kind', options.kind);
+    query.set('kind', Array.isArray(options.kind) ? options.kind.join(',') : options.kind);
   }
   if (options?.userId?.trim()) {
     query.set('user_id', options.userId.trim());
@@ -385,7 +388,7 @@ export async function fetchAdminMemoryDocuments(
 
 export function fetchAdminMemoryDocument(
   target: MemStationTarget,
-  kind: 'summary' | 'impression' | 'fact',
+  kind: MemoryDocumentKind,
   id: string,
   userId?: string
 ): Promise<MemoryDocument> {
@@ -397,7 +400,7 @@ export function fetchAdminMemoryDocument(
 
 export function updateAdminMemoryDocument(
   target: MemStationTarget,
-  kind: 'summary' | 'impression' | 'fact',
+  kind: MemoryDocumentKind,
   id: string,
   content: string,
   userId?: string
@@ -414,7 +417,7 @@ export async function searchAdminMemories(
   payload: {
     query: string;
     topN?: number;
-    memoryTypes?: Array<'summary' | 'impression' | 'fact' | 'key_memory'>;
+    memoryTypes?: SearchMemoryType[];
     minScore?: number;
     userId?: string;
     dateFrom?: string;
@@ -1212,19 +1215,20 @@ function normalizeMemoryDocument(payload: Record<string, unknown>): MemoryDocume
     time_tier: stringOrUndefined(payload.time_tier),
     metadata: objectOrUndefined(payload.metadata),
     lineage,
-    related: Array.isArray(payload.related)
-      ? payload.related
-          .map((value) => value as Record<string, unknown>)
-          .filter((value) => typeof value.id === 'string')
-          .map((value) => ({
-            id: String(value.id),
-            type: String(value.type ?? ''),
-            weight: Number(value.weight ?? 0)
-          }))
-      : undefined,
+    related: Array.isArray(payload.related) ? payload.related.map((value) => normalizeRelatedMemory(value as Record<string, unknown>)) : undefined,
     evidences: Array.isArray(payload.evidences) ? payload.evidences.map((value) => normalizeMemoryEvidence(value as Record<string, unknown>)) : undefined,
     created_at: stringOrUndefined(payload.created_at),
     updated_at: stringOrUndefined(payload.updated_at)
+  };
+}
+
+function normalizeRelatedMemory(payload: Record<string, unknown>): RelatedMemory {
+  return {
+    weight: Number(payload.weight ?? 0),
+    node_id: stringOrUndefined(payload.node_id),
+    document_id: stringOrUndefined(payload.document_id),
+    document_type: stringOrUndefined(payload.document_type),
+    relation_type: stringOrUndefined(payload.relation_type)
   };
 }
 

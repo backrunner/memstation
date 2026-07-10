@@ -10,6 +10,7 @@
     { href: '/memory/summaries', label: 'Summaries' },
     { href: '/memory/impressions', label: 'Impressions' },
     { href: '/memory/facts', label: 'Facts' },
+    { href: '/memory/items', label: 'Agent Memory' },
     { href: '/memory/keys', label: 'Key Memories' }
   ];
 

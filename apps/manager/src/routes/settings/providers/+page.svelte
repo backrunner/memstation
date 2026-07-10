@@ -647,9 +647,12 @@
   >
     <div slot="actions">
       {#if $targetState.session.authenticated && !loading}
-        <button class="btn-primary" type="button" disabled={saving} on:click={persist}>
-          {saving ? 'Saving…' : 'Save provider settings'}
-        </button>
+        <div class="inline-group">
+          <span class="helper-text">Writes are audited.</span>
+          <button class="btn-primary" type="button" disabled={saving} on:click={persist}>
+            {saving ? 'Saving…' : 'Save provider settings'}
+          </button>
+        </div>
       {/if}
     </div>
   </PageHeader>
@@ -895,7 +898,7 @@
     font-size: var(--font-size-xs);
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0;
   }
 
   :global(.provider-route-trigger) {

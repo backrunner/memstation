@@ -7,9 +7,10 @@
 
   import { createMemoryRebuild, fetchConversation, fetchConversationMemory, fetchConversationSources, requeueTask } from '$lib/api/client';
   import ChatMessageCard from '$lib/components/ChatMessageCard.svelte';
+  import ConfirmActionDialog from '$lib/components/ConfirmActionDialog.svelte';
   import JsonView from '$lib/components/JsonView.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
-  import { memoryDetailHref } from '$lib/memory/routes';
+  import { memoryCollectionHref, memoryDetailHref, memoryRouteKindFromDocumentType } from '$lib/memory/routes';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
   import type { ConversationMemoryPayload, ConversationRecord, ConversationSourcesPayload } from '$lib/types';
@@ -19,6 +20,7 @@
   let actionMessage = '';
   let requeueing = false;
   let rebuilding = false;
+  let requeueConfirmOpen = false;
   let detail: ConversationRecord | null = null;
   let memory: ConversationMemoryPayload | null = null;
   let sources: ConversationSourcesPayload | null = null;
@@ -121,7 +123,7 @@
     description="Inspect the message timeline, worker lifecycle metadata, and memory artifacts linked to this conversation."
   >
     <div slot="actions">
-      <button class="btn-secondary btn-sm" type="button" disabled={requeueing} on:click={requeueAnalysis}>
+      <button class="btn-secondary btn-sm" type="button" disabled={requeueing} on:click={() => (requeueConfirmOpen = true)}>
         {requeueing ? 'Requeueing…' : 'Requeue analysis'}
       </button>
       <button class="btn-secondary btn-sm" type="button" disabled={rebuilding || !sources?.has_snapshot} on:click={rebuildConversation}>
@@ -331,6 +333,7 @@
           {:else}
             <div class="stack-list">
               {#each memory?.documents ?? [] as item}
+                {@const routeKind = memoryRouteKindFromDocumentType(item.type)}
                 <div class="debug-block debug-block-muted">
                   <div class="inline-group" style="justify-content: space-between;">
                     <div>
@@ -338,8 +341,10 @@
                       <div class="helper-text mono">{item.id}</div>
                     </div>
                     <div class="inline-group" style="gap: 4px;">
-                      <a class="btn-ghost btn-sm" href={memoryDetailHref(item.type === 'summary' ? 'summaries' : item.type === 'impression' ? 'impressions' : 'facts', item.id, detail.user_id)}>Open</a>
-                      <a class="btn-ghost btn-sm" href={`/memory/${item.type === 'summary' ? 'summaries' : item.type === 'impression' ? 'impressions' : 'facts'}?user_id=${detail.user_id}`}>Workspace</a>
+                      {#if routeKind}
+                        <a class="btn-ghost btn-sm" href={memoryDetailHref(routeKind, item.id, detail.user_id)}>Open</a>
+                        <a class="btn-ghost btn-sm" href={memoryCollectionHref(routeKind, detail.user_id)}>Workspace</a>
+                      {/if}
                     </div>
                   </div>
                   <div class="message-body">{item.content}</div>
@@ -352,6 +357,20 @@
     </div>
   {/if}
 </section>
+
+<ConfirmActionDialog
+  bind:open={requeueConfirmOpen}
+  title="Requeue conversation analysis?"
+  description="A new analysis task will be published for this conversation and may update derived memory."
+  subject={$page.params.id}
+  confirmLabel="Requeue analysis"
+  tone="primary"
+  busy={requeueing}
+  on:confirm={async () => {
+    await requeueAnalysis();
+    requeueConfirmOpen = false;
+  }}
+/>
 
 <style>
   .conversation-grid {
@@ -392,7 +411,7 @@
     font-size: var(--font-size-xs);
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0;
     margin: 0;
   }
 

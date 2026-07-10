@@ -90,21 +90,21 @@
 
   $: trendBuckets = buildTrend(filteredConversations, Number(range));
   $: trendOption = {
-    tooltip: { trigger: 'axis', backgroundColor: '#ffffff', borderColor: '#d6e0ea', textStyle: { color: '#102033' } },
+    tooltip: { trigger: 'axis', backgroundColor: '#fffefb', borderColor: '#d9ded7', textStyle: { color: '#1b2821' } },
     grid: { left: 44, right: 16, top: 16, bottom: 32 },
     xAxis: {
       type: 'category',
       boundaryGap: false,
       data: trendBuckets.map((item) => item.label),
-      axisLine: { lineStyle: { color: '#d6e0ea' } },
+      axisLine: { lineStyle: { color: '#d9ded7' } },
       axisTick: { show: false },
-      axisLabel: { color: '#5a6b7d', fontSize: 11 }
+      axisLabel: { color: '#6a776e', fontSize: 11 }
     },
     yAxis: {
       type: 'value',
       axisLine: { show: false },
-      splitLine: { lineStyle: { color: '#e3eaf2' } },
-      axisLabel: { color: '#5a6b7d', fontSize: 11 }
+      splitLine: { lineStyle: { color: '#e8ece6' } },
+      axisLabel: { color: '#6a776e', fontSize: 11 }
     },
     series: [
       {
@@ -112,43 +112,33 @@
         smooth: true,
         showSymbol: false,
         data: trendBuckets.map((item) => item.total),
-        lineStyle: { color: '#1e5aa8', width: 2 },
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(30, 90, 168, 0.18)' },
-              { offset: 1, color: 'rgba(30, 90, 168, 0.02)' }
-            ]
-          }
-        },
-        itemStyle: { color: '#1e5aa8' }
+        lineStyle: { color: '#0b7059', width: 2 },
+        itemStyle: { color: '#0b7059' }
       }
     ]
   };
 
   $: providerBreakdown = buildBreakdown(filteredConversations);
   $: providerOption = {
-    tooltip: { trigger: 'axis', backgroundColor: '#ffffff', borderColor: '#d6e0ea', textStyle: { color: '#102033' } },
+    tooltip: { trigger: 'axis', backgroundColor: '#fffefb', borderColor: '#d9ded7', textStyle: { color: '#1b2821' } },
     grid: { left: 44, right: 16, top: 16, bottom: 32 },
     xAxis: {
       type: 'category',
       data: providerBreakdown.map((item) => item.label),
-      axisLine: { lineStyle: { color: '#d6e0ea' } },
+      axisLine: { lineStyle: { color: '#d9ded7' } },
       axisTick: { show: false },
-      axisLabel: { color: '#5a6b7d', fontSize: 11 }
+      axisLabel: { color: '#6a776e', fontSize: 11 }
     },
     yAxis: {
       type: 'value',
-      splitLine: { lineStyle: { color: '#e3eaf2' } },
-      axisLabel: { color: '#5a6b7d', fontSize: 11 }
+      splitLine: { lineStyle: { color: '#e8ece6' } },
+      axisLabel: { color: '#6a776e', fontSize: 11 }
     },
     series: [
       {
         type: 'bar',
         data: providerBreakdown.map((item) => item.total),
-        itemStyle: { color: '#1e5aa8', borderRadius: [4, 4, 0, 0] },
+        itemStyle: { color: '#0b7059', borderRadius: [3, 3, 0, 0] },
         barWidth: '48%'
       }
     ]
@@ -194,11 +184,7 @@
 </script>
 
 <section class="page-stack">
-  <PageHeader
-    eyebrow="Inspect"
-    title="Token statistics"
-    description="Token load and provider mix across users and conversations."
-  />
+  <PageHeader title="Token usage" />
 
   {#if !$targetState.session.authenticated}
     <div class="notice-card">Connect this target to inspect token statistics.</div>
@@ -207,7 +193,7 @@
   {:else if loading}
     <div class="notice-card">Loading token analytics…</div>
   {:else}
-    <section class="card">
+    <section class="filter-bar">
       <div class="filters three-up">
         <label class="field">
           <span class="field-label">Time range</span>
@@ -269,7 +255,6 @@
         <div class="page-header">
           <div class="page-header-meta">
             <h2 class="section-title">Daily token totals</h2>
-            <p class="panel-meta">Sum of total tokens per day within range.</p>
           </div>
         </div>
         <EChart option={trendOption} height={260} />
@@ -279,7 +264,6 @@
         <div class="page-header">
           <div class="page-header-meta">
             <h2 class="section-title">Provider breakdown</h2>
-            <p class="panel-meta">Tokens grouped by gateway provider.</p>
           </div>
         </div>
         <EChart option={providerOption} height={260} />
@@ -290,7 +274,6 @@
       <div class="card-header">
         <div class="page-header-meta">
           <h2 class="section-title">Top conversations by tokens</h2>
-          <p class="panel-meta">Highest-token sessions in the current range.</p>
         </div>
       </div>
       <div class="table-scroll">

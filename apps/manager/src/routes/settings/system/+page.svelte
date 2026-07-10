@@ -4,6 +4,7 @@
   import { onMount } from 'svelte';
 
   import { fetchConfig, fetchHealth, saveConfig } from '$lib/api/client';
+  import ConfirmActionDialog from '$lib/components/ConfirmActionDialog.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import SelectField from '$lib/components/SelectField.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -53,6 +54,12 @@
   let databaseSaving = false;
   let error = '';
   let success = '';
+  let confirmOpen = false;
+  let confirmTitle = '';
+  let confirmDescription = '';
+  let confirmSubject = '';
+  let confirmLabel = '';
+  let pendingConfirmedAction: (() => Promise<void>) | null = null;
   let lastLoadKey = '';
   let ready: HealthPayload | null = null;
   let database = emptyDatabase();
@@ -707,6 +714,29 @@
     }
     return parts.join(' · ');
   }
+
+  function requestConfirmation(
+    title: string,
+    description: string,
+    subject: string,
+    label: string,
+    action: () => Promise<void>
+  ): void {
+    confirmTitle = title;
+    confirmDescription = description;
+    confirmSubject = subject;
+    confirmLabel = label;
+    pendingConfirmedAction = action;
+    confirmOpen = true;
+  }
+
+  async function confirmPendingAction(): Promise<void> {
+    const action = pendingConfirmedAction;
+    if (!action) return;
+    await action();
+    confirmOpen = false;
+    pendingConfirmedAction = null;
+  }
 </script>
 
 <section class="page-stack">
@@ -719,7 +749,19 @@
     <div slot="actions">
       {#if $targetState.session.authenticated && !loading}
         <div class="inline-group">
-          <button class="btn-secondary btn-sm" type="button" disabled={saving} on:click={resetAll}>Reset all overrides</button>
+          <span class="helper-text">Writes are audited.</span>
+          <button
+            class="btn-secondary btn-sm"
+            type="button"
+            disabled={saving}
+            on:click={() => requestConfirmation(
+              'Reset all runtime overrides?',
+              'Every stored runtime override will be cleared back to its deployment default.',
+              `${countDirty(runtime, runtimeSaved)} draft · ${countOverrides(runtimeSaved, runtimeDefaults)} active overrides`,
+              'Reset all overrides',
+              resetAll
+            )}
+          >Reset all overrides</button>
           <button class="btn-primary" type="button" disabled={saving} on:click={persist}>
             {saving ? 'Saving…' : 'Save system settings'}
           </button>
@@ -769,7 +811,18 @@
           error={databaseFieldError('url')}
         />
         <div class="inline-group" style="justify-content: flex-end;">
-          <button class="btn-secondary btn-sm" type="button" disabled={databaseSaving || database.source !== 'override'} on:click={clearDatabase}>
+          <button
+            class="btn-secondary btn-sm"
+            type="button"
+            disabled={databaseSaving || database.source !== 'override'}
+            on:click={() => requestConfirmation(
+              'Clear database override?',
+              'The target will return to its deployment-level database connection after this change.',
+              database.display ?? 'database override',
+              'Clear override',
+              clearDatabase
+            )}
+          >
             Clear override
           </button>
           <button class="btn-primary btn-sm" type="button" disabled={databaseSaving || !databaseInput.trim()} on:click={persistDatabase}>
@@ -950,7 +1003,18 @@
                     <button class="btn-ghost btn-sm" type="button" disabled={saving} on:click={() => revertDraft(key)}>Revert</button>
                   {/if}
                   {#if isCustomized(key)}
-                    <button class="btn-ghost btn-sm" type="button" disabled={saving} on:click={() => resetField(key)}>Clear</button>
+                    <button
+                      class="btn-ghost btn-sm"
+                      type="button"
+                      disabled={saving}
+                      on:click={() => requestConfirmation(
+                        'Clear runtime override?',
+                        'This field will return to its deployment default.',
+                        key,
+                        'Clear override',
+                        () => resetField(key)
+                      )}
+                    >Clear</button>
                   {/if}
                 </div>
               </div>
@@ -961,6 +1025,17 @@
     </div>
   {/if}
 </section>
+
+<ConfirmActionDialog
+  bind:open={confirmOpen}
+  title={confirmTitle}
+  description={confirmDescription}
+  subject={confirmSubject}
+  confirmLabel={confirmLabel}
+  busy={saving || databaseSaving}
+  on:cancel={() => (pendingConfirmedAction = null)}
+  on:confirm={confirmPendingAction}
+/>
 
 <style>
   .system-compact-grid {

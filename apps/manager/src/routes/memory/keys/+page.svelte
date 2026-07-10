@@ -10,6 +10,7 @@
     fetchAdminKeyMemories,
     updateAdminKeyMemory
   } from '$lib/api/client';
+  import ConfirmActionDialog from '$lib/components/ConfirmActionDialog.svelte';
   import JsonView from '$lib/components/JsonView.svelte';
   import MemoryWorkspaceNav from '$lib/components/MemoryWorkspaceNav.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
@@ -49,6 +50,7 @@
   let saving = false;
   let creating = false;
   let deletingId = '';
+  let deleteCandidate: KeyMemoryRecord | null = null;
   let error = '';
   let success = '';
   let filter = '';
@@ -439,7 +441,7 @@
                 {:else}
                   <button class="btn-secondary btn-sm" type="button" on:click={() => startEdit(keyMemory)}>Edit</button>
                 {/if}
-                <button class="btn-danger btn-sm" type="button" disabled={deletingId === keyMemory.id} on:click={() => removeItem(keyMemory)}>
+                <button class="btn-danger btn-sm" type="button" disabled={deletingId === keyMemory.id} on:click={() => (deleteCandidate = keyMemory)}>
                   {deletingId === keyMemory.id ? 'Deleting…' : 'Delete'}
                 </button>
               </div>
@@ -463,6 +465,22 @@
     </section>
   {/if}
 </section>
+
+<ConfirmActionDialog
+  open={Boolean(deleteCandidate)}
+  title="Delete key memory?"
+  description="This permanently removes the key memory from active recall and memory tools."
+  subject={deleteCandidate ? `${deleteCandidate.key} · ${deleteCandidate.id}` : ''}
+  confirmLabel="Delete key memory"
+  busy={Boolean(deletingId)}
+  on:cancel={() => (deleteCandidate = null)}
+  on:confirm={async () => {
+    if (!deleteCandidate) return;
+    const item = deleteCandidate;
+    await removeItem(item);
+    deleteCandidate = null;
+  }}
+/>
 
 <style>
   .keymem-card {

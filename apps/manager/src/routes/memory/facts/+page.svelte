@@ -215,6 +215,7 @@
                   <span class="helper-text mono">{fact.id}</span>
                 </div>
                 <div class="inline-group">
+                  <StatusBadge tone="muted" label="Audited" />
                   <StatusBadge tone="muted" label={fact.conversation_id ? 'conversation-linked' : 'manual'} />
                   {#if fact.lineage}
                     <StatusBadge

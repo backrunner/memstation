@@ -1,9 +1,11 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import type { RelatedMemory } from '$lib/types';
+
   export let centerLabel = 'Memory';
   export let centerType = 'memory';
-  export let items: Array<{ id: string; type: string; weight: number }> = [];
+  export let items: RelatedMemory[] = [];
 
   const size = 360;
   const center = { x: size / 2, y: size / 2 };
@@ -14,6 +16,8 @@
     const angle = (-Math.PI / 2) + ((Math.PI * 2) / Math.max(visibleItems.length, 1)) * index;
     return {
       ...item,
+      displayID: item.document_id ?? item.node_id ?? '',
+      displayType: item.document_type ?? 'memory',
       x: center.x + Math.cos(angle) * orbit,
       y: center.y + Math.sin(angle) * orbit
     };
@@ -33,6 +37,18 @@
         return 'var(--warning)';
       case 'key_memory':
         return 'var(--danger)';
+      case 'event':
+        return '#0f766e';
+      case 'task':
+        return '#2563eb';
+      case 'procedure':
+        return '#7c3aed';
+      case 'artifact':
+        return '#b45309';
+      case 'entity':
+        return '#475569';
+      case 'agent_action':
+        return '#be185d';
       default:
         return 'var(--text-secondary)';
     }
@@ -59,7 +75,7 @@
           y1={center.y}
           x2={node.x}
           y2={node.y}
-          stroke={tone(node.type)}
+          stroke={tone(node.displayType)}
           stroke-opacity={Math.max(0.3, Math.min(0.9, node.weight))}
           stroke-width={2 + Math.max(0, node.weight * 2)}
         />
@@ -70,9 +86,9 @@
       <text x={center.x} y={center.y + 18} text-anchor="middle" class="memory-graph-subtitle">{centerType}</text>
 
       {#each nodes as node}
-        <circle cx={node.x} cy={node.y} r="24" fill="white" stroke={tone(node.type)} stroke-width="2.5" />
-        <text x={node.x} y={node.y - 2} text-anchor="middle" class="memory-graph-title">{shortLabel(node.id)}</text>
-        <text x={node.x} y={node.y + 16} text-anchor="middle" class="memory-graph-subtitle">{node.type}</text>
+        <circle cx={node.x} cy={node.y} r="24" fill="white" stroke={tone(node.displayType)} stroke-width="2.5" />
+        <text x={node.x} y={node.y - 2} text-anchor="middle" class="memory-graph-title">{shortLabel(node.displayID)}</text>
+        <text x={node.x} y={node.y + 16} text-anchor="middle" class="memory-graph-subtitle">{node.relation_type ?? node.displayType}</text>
       {/each}
     </svg>
   </div>

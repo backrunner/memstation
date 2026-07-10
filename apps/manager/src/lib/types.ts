@@ -202,6 +202,19 @@ export interface ConversationListItem {
   metadata?: Record<string, unknown>;
 }
 
+export type GenericMemoryDocumentKind = 'event' | 'task' | 'procedure' | 'artifact' | 'entity' | 'agent_action';
+export type CoreMemoryDocumentKind = 'summary' | 'segment' | 'impression' | 'fact';
+export type MemoryDocumentKind = CoreMemoryDocumentKind | GenericMemoryDocumentKind;
+export type SearchMemoryType = MemoryDocumentKind | 'key_memory';
+
+export interface RelatedMemory {
+  weight: number;
+  node_id?: string;
+  document_id?: string;
+  document_type?: string;
+  relation_type?: string;
+}
+
 export interface MemoryDocument {
   id: string;
   node_id: string;
@@ -218,7 +231,7 @@ export interface MemoryDocument {
   time_tier?: string;
   metadata?: Record<string, unknown>;
   lineage?: MemoryLineage;
-  related?: Array<{ id: string; type: string; weight: number }>;
+  related?: RelatedMemory[];
   evidences?: MemoryEvidence[];
   created_at?: string;
   updated_at?: string;
@@ -284,7 +297,7 @@ export interface SearchMemoryItem {
   time_tier?: string;
   metadata?: Record<string, unknown>;
   lineage?: MemoryLineage;
-  related?: Array<{ id: string; type: string; weight: number }>;
+  related?: RelatedMemory[];
 }
 
 export interface SearchMemoriesResult {
@@ -385,6 +398,7 @@ export interface MemoryPreviewPayload {
   fact?: Record<string, unknown>;
   facts?: Array<Record<string, unknown>>;
   impression?: Record<string, unknown>;
+  generic_items?: Array<Record<string, unknown>>;
   key_memories?: Array<Record<string, unknown>>;
   metadata?: Record<string, unknown>;
 }

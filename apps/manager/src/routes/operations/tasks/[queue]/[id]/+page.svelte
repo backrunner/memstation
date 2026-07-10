@@ -5,6 +5,7 @@
   import { page } from '$app/stores';
 
   import { fetchAudit, fetchTaskDetail, requeueTask } from '$lib/api/client';
+  import ConfirmActionDialog from '$lib/components/ConfirmActionDialog.svelte';
   import JsonView from '$lib/components/JsonView.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
@@ -18,6 +19,7 @@
   let detail: QueueTaskDetailPayload | null = null;
   let audits: AuditEventRecord[] = [];
   let lastRouteKey = '';
+  let rerunConfirmOpen = false;
 
   onMount(async () => {
     await loadDetail();
@@ -136,7 +138,7 @@
         <div class="inline-group" style="justify-content: flex-end;">
           <a class="button-ghost" href={`/operations/queues/${encodeURIComponent(detail.item.queue)}`}>Open queue</a>
           <a class="button-ghost" href={`/operations/tasks?queue=${encodeURIComponent(detail.item.queue)}`}>Back to filtered tasks</a>
-          <button class="button" type="button" disabled={actionLoading} on:click={rerunTask}>{actionLoading ? 'Requeueing...' : 'Run task now'}</button>
+          <button class="button" type="button" disabled={actionLoading} on:click={() => (rerunConfirmOpen = true)}>{actionLoading ? 'Requeueing...' : 'Run task now'}</button>
         </div>
       </section>
 
@@ -231,3 +233,17 @@
     </div>
   {/if}
 </section>
+
+<ConfirmActionDialog
+  bind:open={rerunConfirmOpen}
+  title="Run this task again?"
+  description="The selected payload will be republished to its worker queue immediately."
+  subject={detail?.item ? `${detail.item.queue} · ${detail.item.id}` : $page.params.id}
+  confirmLabel="Run task now"
+  tone="primary"
+  busy={actionLoading}
+  on:confirm={async () => {
+    await rerunTask();
+    rerunConfirmOpen = false;
+  }}
+/>

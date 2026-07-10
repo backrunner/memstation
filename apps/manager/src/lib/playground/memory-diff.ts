@@ -65,7 +65,7 @@ export function buildMemoryTurnDiff(input: MemoryTurnDiffInput): MemoryTurnDiffR
       diffSection({
         id: 'persisted-documents',
         title: 'Persisted documents',
-        description: 'Summary, fact, and impression records now linked to the conversation after worker processing.',
+        description: 'Summary, fact, impression, and agent memory records now linked to the conversation after worker processing.',
         before: snapshotConversationDocuments(input.previousConversationMemory),
         after: snapshotConversationDocuments(input.conversationMemory)
       })
@@ -86,7 +86,7 @@ export function buildMemoryTurnDiff(input: MemoryTurnDiffInput): MemoryTurnDiffR
       diffSection({
         id: 'preview-documents',
         title: 'Preview extracted documents',
-        description: 'Dry-run summary, fact, and impression candidates the server would generate for this turn.',
+        description: 'Dry-run summary, fact, impression, and agent memory candidates the server would generate for this turn.',
         before: snapshotPreviewDocuments(input.previousMemoryPreview),
         after: snapshotPreviewDocuments(input.memoryPreview)
       })
@@ -270,6 +270,9 @@ function snapshotPreviewDocuments(payload?: MemoryPreviewPayload | null): Snapsh
     appendPreviewDocument(snapshots, 'fact', payload?.fact);
   }
   appendPreviewDocument(snapshots, 'impression', payload?.impression);
+  for (const item of asArray(payload?.generic_items)) {
+    appendPreviewDocument(snapshots, asString(asObject(item).type) || 'agent_memory', asObject(item));
+  }
   return snapshots;
 }
 
@@ -308,7 +311,7 @@ function snapshotPreviewKeywords(payload?: MemoryPreviewPayload | null): Snapsho
   }));
 }
 
-function appendPreviewDocument(target: SnapshotItem[], kind: 'summary' | 'fact' | 'impression', payload?: Record<string, unknown>): void {
+function appendPreviewDocument(target: SnapshotItem[], kind: string, payload?: Record<string, unknown>): void {
   const item = asObject(payload);
   if (Object.keys(item).length === 0) {
     return;

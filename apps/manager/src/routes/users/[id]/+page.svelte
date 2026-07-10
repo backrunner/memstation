@@ -14,6 +14,7 @@
     updateUserSettings
   } from '$lib/api/client';
   import CodeBlock from '$lib/components/CodeBlock.svelte';
+  import ConfirmActionDialog from '$lib/components/ConfirmActionDialog.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import SwitchField from '$lib/components/SwitchField.svelte';
@@ -63,6 +64,8 @@
   let maxInjectionTokens = 0;
   let rebuildRequired = false;
   let rebuilding = false;
+  let revokeCandidateId = '';
+  let rebuildConfirmOpen = false;
   let fieldErrors: Record<string, string> = {};
   let latestRebuild: MemoryRebuildDetailPayload | null = null;
   let rebuildPollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -528,6 +531,7 @@
         </div>
 
         <div class="inline-group" style="justify-content: flex-end; margin-top: 16px;">
+          <span class="helper-text">Writes are audited.</span>
           <button class="button" type="button" disabled={saving} on:click={saveSettings}>{saving ? 'Saving...' : 'Save User Settings'}</button>
         </div>
         </section>
@@ -536,6 +540,7 @@
           <div class="page-header">
             <div>
               <h2 class="section-title">API Keys</h2>
+              <p class="panel-meta">Creation and revocation are audited.</p>
             </div>
           </div>
           <div class="inline-group" style="align-items: end; margin-bottom: 14px;">
@@ -561,7 +566,7 @@
                   <div class="helper-text">Created {new Date(apiKey.created_at).toLocaleString()}</div>
                   {#if !apiKey.revoked_at}
                     <div class="inline-group" style="justify-content: flex-end; margin-top: 12px;">
-                      <button class="button-danger" type="button" on:click={() => revokeKey(apiKey.id)}>Revoke key</button>
+                      <button class="button-danger" type="button" on:click={() => (revokeCandidateId = apiKey.id)}>Revoke key</button>
                     </div>
                   {/if}
                 </div>
@@ -613,7 +618,7 @@
           <div class="notice-card" style="margin-top: 12px;">Current settings differ from the active memory generation. Trigger a rebuild to replay retained sources with the new configuration.</div>
         {/if}
         <div class="inline-group" style="justify-content: flex-end; margin-top: 12px;">
-          <button class="button" type="button" disabled={rebuilding || rebuildInFlight || (sources?.source_stats.snapshot_count ?? 0) === 0} on:click={rebuildAllRetainedMemory}>
+          <button class="button" type="button" disabled={rebuilding || rebuildInFlight || (sources?.source_stats.snapshot_count ?? 0) === 0} on:click={() => (rebuildConfirmOpen = true)}>
             {rebuilding ? 'Creating rebuild...' : rebuildInFlight ? 'Rebuild running...' : 'Rebuild all retained memory'}
           </button>
         </div>
@@ -709,6 +714,35 @@
     </div>
   {/if}
 </section>
+
+<ConfirmActionDialog
+  open={Boolean(revokeCandidateId)}
+  title="Revoke API key?"
+  description="Clients using this key will lose access immediately. This cannot be undone."
+  subject={revokeCandidateId}
+  confirmLabel="Revoke key"
+  on:cancel={() => (revokeCandidateId = '')}
+  on:confirm={async () => {
+    const keyId = revokeCandidateId;
+    if (!keyId) return;
+    await revokeKey(keyId);
+    revokeCandidateId = '';
+  }}
+/>
+
+<ConfirmActionDialog
+  bind:open={rebuildConfirmOpen}
+  title="Rebuild retained memory?"
+  description="The worker will replay every retained source and activate the resulting generation when it completes."
+  subject={$page.params.id}
+  confirmLabel="Start rebuild"
+  tone="primary"
+  busy={rebuilding}
+  on:confirm={async () => {
+    await rebuildAllRetainedMemory();
+    rebuildConfirmOpen = false;
+  }}
+/>
 
 <style>
   .user-detail-columns {

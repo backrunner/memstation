@@ -310,7 +310,7 @@
     font-size: var(--font-size-xs);
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0;
     margin: 0;
   }
 

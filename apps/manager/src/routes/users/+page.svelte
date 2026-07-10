@@ -5,6 +5,7 @@
 
   import { fetchUsers } from '$lib/api/client';
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import SelectField from '$lib/components/SelectField.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
   import { selectedTarget, targetState } from '$lib/stores/targets';
@@ -13,6 +14,7 @@
   let loading = true;
   let error = '';
   let search = '';
+  let sortBy = 'recent';
   let users: UserSummary[] = [];
   let lastLoadKey = '';
 
@@ -42,12 +44,26 @@
     }
   }
 
+  const sortItems = [
+    { value: 'recent', label: 'Most recently active' },
+    { value: 'tokens', label: 'Highest token usage' },
+    { value: 'memory', label: 'Most key memories' },
+    { value: 'conversations', label: 'Most conversations' },
+    { value: 'name', label: 'Name' }
+  ];
+
   $: filtered = users.filter((item) => {
     const query = search.trim().toLowerCase();
     if (!query) {
       return true;
     }
     return [item.user_id, item.name].join(' ').toLowerCase().includes(query);
+  }).sort((left, right) => {
+    if (sortBy === 'tokens') return right.total_tokens - left.total_tokens;
+    if (sortBy === 'memory') return right.key_memory_count - left.key_memory_count;
+    if (sortBy === 'conversations') return right.conversation_count - left.conversation_count;
+    if (sortBy === 'name') return left.name.localeCompare(right.name);
+    return new Date(right.recent_active_at ?? 0).getTime() - new Date(left.recent_active_at ?? 0).getTime();
   });
 </script>
 
@@ -62,14 +78,15 @@
     <div class="notice-card">Connect this target to inspect users.</div>
   {:else}
     <section class="card">
-      <div class="filters two-up">
+      <div class="filters three-up">
         <TextInputField
           label="Search"
           bind:value={search}
           placeholder="user id or display name"
           fieldClass="field-span-2"
         />
-        <div class="field" style="align-self: end;">
+        <SelectField label="Sort" bind:value={sortBy} items={sortItems} />
+        <div class="field field-span-3" style="align-self: end;">
           <div class="inline-group" style="justify-content: space-between;">
             <span class="helper-text">{filtered.length} of {users.length} users</span>
             <button class="btn-secondary btn-sm" type="button" on:click={loadUsers}>Refresh</button>

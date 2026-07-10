@@ -6,6 +6,7 @@
 
   import { activateMemoryRebuild, fetchMemoryRebuilds, fetchQueues, fetchTasks, requeueTask } from '$lib/api/client';
   import CodeBlock from '$lib/components/CodeBlock.svelte';
+  import ConfirmActionDialog from '$lib/components/ConfirmActionDialog.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import SelectField from '$lib/components/SelectField.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -38,6 +39,12 @@
   let manualTaskType = 'analysis.extract';
   let rebuildUserId = 'admin';
   let queueItems: Array<{ value: string; label: string }> = [{ value: '', label: 'All queues' }];
+  let confirmOpen = false;
+  let confirmTitle = '';
+  let confirmDescription = '';
+  let confirmSubject = '';
+  let confirmLabel = '';
+  let pendingAction: (() => Promise<void>) | null = null;
 
   $: queueItems = [{ value: '', label: 'All queues' }, ...queues.map((queue) => ({ value: queue.name, label: queue.name }))];
 
@@ -155,6 +162,29 @@
     if (state === 'archived' || state === 'retry') return 'warning';
     if (state === 'active') return 'brand';
     return 'muted';
+  }
+
+  function requestConfirmation(
+    title: string,
+    description: string,
+    subject: string,
+    label: string,
+    action: () => Promise<void>
+  ): void {
+    confirmTitle = title;
+    confirmDescription = description;
+    confirmSubject = subject;
+    confirmLabel = label;
+    pendingAction = action;
+    confirmOpen = true;
+  }
+
+  async function confirmPendingAction(): Promise<void> {
+    const action = pendingAction;
+    if (!action) return;
+    await action();
+    confirmOpen = false;
+    pendingAction = null;
   }
 </script>
 
@@ -295,7 +325,18 @@
                 <CodeBlock code={JSON.stringify(selectedTask.payload ?? {}, null, 2)} language="json" />
               </div>
               <div class="inline-group" style="justify-content: flex-end;">
-                <button class="btn-primary btn-sm" type="button" disabled={actionLoading} on:click={runSelectedTask}>
+                <button
+                  class="btn-primary btn-sm"
+                  type="button"
+                  disabled={actionLoading}
+                  on:click={() => selectedTask && requestConfirmation(
+                    'Run this task again?',
+                    'The selected payload will be republished to its worker queue immediately.',
+                    `${selectedTask.queue} · ${selectedTask.id}`,
+                    'Run task now',
+                    runSelectedTask
+                  )}
+                >
                   {actionLoading ? 'Requeueing…' : 'Run task now'}
                 </button>
               </div>
@@ -335,7 +376,18 @@
                       <div class="helper-text">Conversation-scoped rebuilds are inspection-only candidates.</div>
                     {:else if !rebuild.is_active && (rebuild.status === 'completed' || rebuild.status === 'activated')}
                       <div class="inline-group" style="justify-content: flex-end;">
-                        <button class="btn-secondary btn-sm" type="button" disabled={actionLoading} on:click={() => activateGeneration(rebuild.generation_id)}>
+                        <button
+                          class="btn-secondary btn-sm"
+                          type="button"
+                          disabled={actionLoading}
+                          on:click={() => requestConfirmation(
+                            'Activate memory generation?',
+                            'Active reads will switch to this completed generation for the selected user.',
+                            rebuild.generation_id,
+                            'Activate generation',
+                            () => activateGeneration(rebuild.generation_id)
+                          )}
+                        >
                           {actionLoading ? 'Activating…' : 'Activate generation'}
                         </button>
                       </div>
@@ -359,7 +411,18 @@
               <TextInputField label="Conversation ID" bind:value={manualConversationId} placeholder="conv-…" fieldClass="field-span-2" />
             </div>
             <div class="inline-group" style="justify-content: flex-end;">
-              <button class="btn-secondary btn-sm" type="button" disabled={actionLoading} on:click={runManualRequeue}>Publish task</button>
+              <button
+                class="btn-secondary btn-sm"
+                type="button"
+                disabled={actionLoading || !manualConversationId.trim()}
+                on:click={() => requestConfirmation(
+                  'Publish manual task?',
+                  'A new worker task will be queued for this conversation.',
+                  `${manualTaskType} · ${manualConversationId.trim()}`,
+                  'Publish task',
+                  runManualRequeue
+                )}
+              >Publish task</button>
             </div>
           </section>
         </div>
@@ -367,6 +430,18 @@
     {/if}
   {/if}
 </section>
+
+<ConfirmActionDialog
+  bind:open={confirmOpen}
+  title={confirmTitle}
+  description={confirmDescription}
+  subject={confirmSubject}
+  confirmLabel={confirmLabel}
+  tone="primary"
+  busy={actionLoading}
+  on:cancel={() => (pendingAction = null)}
+  on:confirm={confirmPendingAction}
+/>
 
 <style>
   .filter-bar {
@@ -403,7 +478,7 @@
     font-size: var(--font-size-xs);
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0;
     margin: 0;
   }
 

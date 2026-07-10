@@ -3,7 +3,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
 
-  import { fetchAudit, fetchConversations, fetchOverview, fetchQueues, fetchUsers } from '$lib/api/client';
+  import { fetchAudit, fetchConversations, fetchOverview, fetchQueues, fetchTasks, fetchUsers } from '$lib/api/client';
   import EChart from '$lib/components/EChart.svelte';
   import KpiCard from '$lib/components/KpiCard.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
@@ -14,6 +14,7 @@
     ConversationListItem,
     DashboardOverview,
     QueueInfo,
+    QueueTaskRecord,
     UserSummary
   } from '$lib/types';
 
@@ -26,6 +27,7 @@
   let auditItems: AuditEventRecord[] = [];
   let users: UserSummary[] = [];
   let conversations: ConversationListItem[] = [];
+  let failedTasks: QueueTaskRecord[] = [];
 
   onMount(async () => {
     await loadData();
@@ -45,11 +47,12 @@
     loading = true;
     error = '';
     try {
-      [overview, queues, auditItems, users] = await Promise.all([
+      [overview, queues, auditItems, users, failedTasks] = await Promise.all([
         fetchOverview($selectedTarget),
         fetchQueues($selectedTarget),
         fetchAudit($selectedTarget),
-        fetchUsers($selectedTarget)
+        fetchUsers($selectedTarget),
+        fetchTasks($selectedTarget, { limit: 100, states: ['retry', 'archived'] })
       ]);
       const conversationLists = await Promise.all(
         users.slice(0, 8).map((user) => fetchConversations($selectedTarget, { userId: user.user_id, limit: 25 }))
@@ -62,29 +65,27 @@
     }
   }
 
-  $: totalTokens = users.reduce((sum, user) => sum + user.total_tokens, 0);
   $: pendingTasks = queues.reduce((sum, item) => sum + (item.pending ?? 0), 0);
   $: retryTasks = queues.reduce((sum, item) => sum + (item.retry ?? 0), 0);
-  $: keyMemoryTotal = users.reduce((sum, user) => sum + (user.key_memory_count ?? 0), 0);
   $: recentConversations = conversations.filter(
     (item) => Date.now() - new Date(item.updated_at).getTime() <= range * 24 * 60 * 60 * 1000
   );
   $: tokenTrend = buildTrend(recentConversations, range);
   $: tokenTrendOption = {
-    tooltip: { trigger: 'axis', backgroundColor: '#ffffff', borderColor: '#d6e0ea', textStyle: { color: '#102033' } },
+    tooltip: { trigger: 'axis', backgroundColor: '#fffefb', borderColor: '#d9ded7', textStyle: { color: '#1b2821' } },
     grid: { left: 44, right: 16, top: 16, bottom: 32 },
     xAxis: {
       type: 'category',
       boundaryGap: false,
       data: tokenTrend.map((item) => item.label),
-      axisLine: { lineStyle: { color: '#d6e0ea' } },
+      axisLine: { lineStyle: { color: '#d9ded7' } },
       axisTick: { show: false },
-      axisLabel: { color: '#5a6b7d', fontSize: 11 }
+      axisLabel: { color: '#6a776e', fontSize: 11 }
     },
     yAxis: {
       type: 'value',
-      splitLine: { lineStyle: { color: '#e3eaf2' } },
-      axisLabel: { color: '#5a6b7d', fontSize: 11 }
+      splitLine: { lineStyle: { color: '#e8ece6' } },
+      axisLabel: { color: '#6a776e', fontSize: 11 }
     },
     series: [
       {
@@ -92,43 +93,33 @@
         smooth: true,
         showSymbol: false,
         data: tokenTrend.map((item) => item.total),
-        lineStyle: { color: '#1e5aa8', width: 2 },
-        areaStyle: {
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: 'rgba(30, 90, 168, 0.18)' },
-              { offset: 1, color: 'rgba(30, 90, 168, 0.02)' }
-            ]
-          }
-        },
-        itemStyle: { color: '#1e5aa8' }
+        lineStyle: { color: '#0b7059', width: 2 },
+        itemStyle: { color: '#0b7059' }
       }
     ]
   };
 
-  $: userFootprint = [...users].sort((a, b) => b.total_tokens - a.total_tokens).slice(0, 6);
+  $: userFootprint = [...users].sort((a, b) => b.key_memory_count - a.key_memory_count).slice(0, 6);
   $: footprintOption = {
-    tooltip: { trigger: 'axis', backgroundColor: '#ffffff', borderColor: '#d6e0ea', textStyle: { color: '#102033' } },
+    tooltip: { trigger: 'axis', backgroundColor: '#fffefb', borderColor: '#d9ded7', textStyle: { color: '#1b2821' } },
     grid: { left: 44, right: 16, top: 16, bottom: 48 },
     xAxis: {
       type: 'category',
       data: userFootprint.map((item) => item.name),
-      axisLine: { lineStyle: { color: '#d6e0ea' } },
+      axisLine: { lineStyle: { color: '#d9ded7' } },
       axisTick: { show: false },
-      axisLabel: { color: '#5a6b7d', fontSize: 11, rotate: 16 }
+      axisLabel: { color: '#6a776e', fontSize: 11, rotate: 16 }
     },
     yAxis: {
       type: 'value',
-      splitLine: { lineStyle: { color: '#e3eaf2' } },
-      axisLabel: { color: '#5a6b7d', fontSize: 11 }
+      splitLine: { lineStyle: { color: '#e8ece6' } },
+      axisLabel: { color: '#6a776e', fontSize: 11 }
     },
     series: [
       {
         type: 'bar',
-        data: userFootprint.map((item) => item.total_tokens),
-        itemStyle: { color: '#1e5aa8', borderRadius: [4, 4, 0, 0] },
+        data: userFootprint.map((item) => item.key_memory_count),
+        itemStyle: { color: '#0b7059', borderRadius: [3, 3, 0, 0] },
         barWidth: '48%'
       }
     ]
@@ -162,9 +153,7 @@
 
 <section class="page-stack">
   <PageHeader
-    eyebrow="Overview"
     title="Dashboard"
-    description="Signal of live load, queue posture, and recent sensitive activity for the selected target."
   />
 
   {#if !$targetState.session.authenticated}
@@ -174,7 +163,7 @@
   {:else if loading}
     <div class="notice-card">Loading dashboard metrics…</div>
   {:else}
-    <div class="kpi-grid six-up">
+    <div class="kpi-grid dashboard-metrics">
       <KpiCard
         label="Active Conversations"
         value={String(overview?.active_conversations ?? 0)}
@@ -187,26 +176,26 @@
       />
       <KpiCard
         label="Key Memories"
-        value={String(keyMemoryTotal)}
+        value={String(overview?.key_memory_count ?? 0)}
         href="/memory/keys"
       />
       <KpiCard
-        label="Pending Tasks"
+        label="Queue Backlog"
         value={String(pendingTasks)}
         meta={`${retryTasks} in retry`}
         href="/operations/queues"
       />
       <KpiCard
-        label="Audit Events"
-        value={String(auditItems.length)}
-        meta="Last 100 actions"
-        href="/audit"
+        label="Failed Tasks"
+        value={String(failedTasks.length)}
+        meta="Retry + archived"
+        href="/operations/tasks"
       />
       <KpiCard
-        label="Total Tokens"
-        value={totalTokens.toLocaleString()}
-        meta="Sum across users"
-        href="/statistics/tokens"
+        label="Recent Audit"
+        value={String(overview?.recent_audit_events ?? auditItems.length)}
+        meta="Last 24 hours"
+        href="/audit"
       />
     </div>
 
@@ -215,7 +204,6 @@
         <div class="page-header">
           <div class="page-header-meta">
             <h2 class="section-title">Token load</h2>
-            <p class="panel-meta">Total tokens by day across active users.</p>
           </div>
           <div class="segmented-control" role="tablist" aria-label="Range">
             {#each [7, 30] as item}
@@ -234,8 +222,7 @@
       <section class="card page-stack">
         <div class="page-header">
           <div class="page-header-meta">
-            <h2 class="section-title">Top users by tokens</h2>
-            <p class="panel-meta">Lifetime tokens per user, top six.</p>
+            <h2 class="section-title">Key memory footprint</h2>
           </div>
         </div>
         <EChart option={footprintOption} height={260} />
@@ -247,7 +234,6 @@
         <div class="card-header">
           <div class="page-header-meta">
             <h2 class="section-title">Worker queues</h2>
-            <p class="panel-meta">Current depth across durable worker queues.</p>
           </div>
           <a class="btn-secondary btn-sm" href="/operations/queues">Queue details</a>
         </div>
@@ -298,7 +284,6 @@
         <div class="card-header">
           <div class="page-header-meta">
             <h2 class="section-title">Recent sensitive actions</h2>
-            <p class="panel-meta">Audited operations on this target.</p>
           </div>
           <a class="btn-secondary btn-sm" href="/audit">Open audit</a>
         </div>

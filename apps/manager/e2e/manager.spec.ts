@@ -29,7 +29,7 @@ async function configureTarget(page: Page): Promise<void> {
 
 async function login(page: Page): Promise<void> {
   await page.goto('/login');
-  await expect(page.getByRole('heading', { name: /^Connect an instance$/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Connect target$/i })).toBeVisible();
   await page.getByLabel('Connection URI or base URL').fill(targetConfig.baseUrl);
   await page.getByLabel('Label').fill(targetConfig.label);
   await page.getByPlaceholder('MEMSTATION_ADMIN_TOKEN').fill(adminToken);
@@ -93,8 +93,7 @@ test.beforeEach(async ({ page }) => {
 test('target manager accepts URI tokens without storing them with targets', async ({ page }) => {
   await page.context().clearCookies();
   await page.goto('/login');
-  await expect(page.getByRole('heading', { name: /^Connect an instance$/i })).toBeVisible();
-  await expect(page.getByText('The admin token is exchanged once for a secure server session.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Connect target$/i })).toBeVisible();
   await expect(page.getByText('Target initialization')).toHaveCount(0);
   await expect(page.locator('.target-preview')).toHaveCount(0);
 
@@ -141,7 +140,7 @@ test('target manager removes saved targets from the row context menu after confi
   const removableTargetLabel = 'Removable Target';
   const removableTargetUrl = 'http://127.0.0.1:18081';
 
-  await page.getByRole('button', { name: 'Targets' }).click();
+  await page.getByRole('button', { name: 'Manage targets' }).click();
   const targetDialog = page.getByRole('dialog', { name: 'Target connections' });
   await expect(targetDialog).toBeVisible();
   await expect(targetDialog.getByRole('button', { name: /^Remove$/i })).toHaveCount(0);
@@ -157,7 +156,7 @@ test('target manager removes saved targets from the row context menu after confi
   await expect(draftRow).toContainText(removableTargetUrl);
   await targetDialog.getByRole('button', { name: 'Save target' }).click();
   await expect(targetDialog).toBeHidden();
-  await page.getByRole('button', { name: 'Targets' }).click();
+  await page.getByRole('button', { name: 'Manage targets' }).click();
   await expect(targetDialog).toBeVisible();
   const removableRow = targetDialog.locator('.target-row').filter({ hasText: removableTargetLabel }).first();
   await expect(removableRow).toBeVisible();
@@ -180,6 +179,9 @@ test('target manager removes saved targets from the row context menu after confi
 
 test('dashboard and major workspaces load live target data', async ({ page }) => {
   await expect(page.getByText('Stored Memories')).toBeVisible();
+  await expect(page.getByText('Key Memories').first()).toBeVisible();
+  await expect(page.getByText('Failed Tasks').first()).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Cache' })).toBeVisible();
   await expect(page.getByText('default').first()).toBeVisible();
   await expect(page.getByText('memory_document_create').first()).toBeVisible();
 
@@ -207,7 +209,7 @@ test('dashboard and major workspaces load live target data', async ({ page }) =>
   await expectRouteHealthy(page, '/operations/tasks/memory/task-2', /^task-2$/i);
   await expect(page.getByText('fixture analysis timeout').first()).toBeVisible();
 
-  await expectRouteHealthy(page, '/statistics/tokens', /Token statistics/i);
+  await expectRouteHealthy(page, '/statistics/tokens', /Token usage/i);
   await expect(page.getByText('Filtered tokens').first()).toBeVisible();
 
   await expectRouteHealthy(page, '/settings/providers', /^Providers$/i);
@@ -219,8 +221,10 @@ test('dashboard and major workspaces load live target data', async ({ page }) =>
   await expect(page.getByText('streamed').first()).toBeVisible();
 });
 
-test('memory summary edits persist and update the audit trail', async ({ page }) => {
+test('summary, impression, and fact corrections persist with audit history', async ({ page }) => {
   const updatedContent = 'Updated summary from Playwright audit validation.';
+  const updatedImpression = 'Updated impression from Playwright operator review.';
+  const updatedFact = 'Updated fact from Playwright operator review.';
 
   await page.goto('/memory/summaries');
   await expect(page.getByRole('heading', { name: /^Summaries$/i })).toBeVisible();
@@ -239,6 +243,20 @@ test('memory summary edits persist and update the audit trail', async ({ page })
 
   await page.reload();
   await expect(contentField).toHaveValue(updatedContent);
+
+  await page.goto('/memory/impressions/impression-1');
+  await expect(page.getByRole('heading', { name: /^impression-1$/i })).toBeVisible();
+  await page.locator('textarea').first().fill(updatedImpression);
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByText('Impression updated and reloaded from the target.')).toBeVisible();
+  await expect(page.getByText(updatedImpression)).toBeVisible();
+
+  await page.goto('/memory/facts/fact-1');
+  await expect(page.getByRole('heading', { name: /^fact-1$/i })).toBeVisible();
+  await page.locator('textarea').first().fill(updatedFact);
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByText('Fact updated and reloaded from the target.')).toBeVisible();
+  await expect(page.getByText(updatedFact)).toBeVisible();
 });
 
 test('key memory CRUD works end to end from the manager', async ({ page }) => {
@@ -265,6 +283,9 @@ test('key memory CRUD works end to end from the manager', async ({ page }) => {
   await expect(keyCard.getByText(updatedValue)).toBeVisible();
 
   await keyCard.getByRole('button', { name: 'Delete' }).click();
+  const deleteDialog = page.getByRole('alertdialog', { name: 'Delete key memory?' });
+  await expect(deleteDialog.getByText('This action is recorded in Audit.')).toBeVisible();
+  await deleteDialog.getByRole('button', { name: 'Delete key memory' }).click();
   await expect(page.locator('.keymem-card').filter({ hasText: keyName })).toHaveCount(0);
 });
 
@@ -279,11 +300,15 @@ test('user API key lifecycle and task rerun flows are operable', async ({ page }
   const apiKeyCard = page.locator('.debug-block').filter({ hasText: 'playwright-managed-key' }).first();
   await expect(apiKeyCard).toBeVisible();
   await apiKeyCard.getByRole('button', { name: 'Revoke key' }).click();
+  const revokeDialog = page.getByRole('alertdialog', { name: 'Revoke API key?' });
+  await expect(revokeDialog.getByText('This action is recorded in Audit.')).toBeVisible();
+  await revokeDialog.getByRole('button', { name: 'Revoke key' }).click();
   await expect(apiKeyCard.getByText('Revoked')).toBeVisible();
 
   await page.goto('/operations/tasks/memory/task-2');
   await expect(page.getByRole('heading', { name: /^task-2$/i })).toBeVisible();
   await page.getByRole('button', { name: 'Run task now' }).click();
+  await page.getByRole('alertdialog', { name: 'Run this task again?' }).getByRole('button', { name: 'Run task now' }).click();
   await expect(page.getByText('1 reruns')).toBeVisible();
   await expect(page.getByText('requeue_task').first()).toBeVisible();
 });
@@ -517,6 +542,7 @@ test('system runtime settings persist direct target overrides and can reset to d
   await expect(page.getByLabel('Rerank blend weight')).toHaveValue('0.5');
 
   await page.getByRole('button', { name: 'Reset All Overrides' }).click();
+  await page.getByRole('alertdialog', { name: 'Reset all runtime overrides?' }).getByRole('button', { name: 'Reset all overrides' }).click();
   await expect(page.getByText('All system runtime overrides were cleared back to deployment defaults.')).toBeVisible();
   await expect(page.getByLabel('Provider timeout')).toHaveValue('60');
   await expect(page.getByLabel('Cache TTL')).toHaveValue('120');
@@ -539,6 +565,7 @@ test('database connection overrides can be applied and cleared from system setti
   await expect(page.getByLabel('Connection URI')).toHaveValue('');
 
   await page.getByRole('button', { name: 'Clear Override' }).click();
+  await page.getByRole('alertdialog', { name: 'Clear database override?' }).getByRole('button', { name: 'Clear override' }).click();
   await expect(page.getByText('Database override cleared. The target is now using the deployment default, if one exists.')).toBeVisible();
   await expect(page.getByText('postgres://fixture:****@127.0.0.1:5432/memstation?sslmode=disable')).toBeVisible();
 });
@@ -610,8 +637,7 @@ test('memory workspaces connect ranked recall, memory detail, and source convers
 
   await page.getByLabel('Query').fill('gateway memory');
   await page.getByRole('button', { name: 'Run search' }).click();
-  await expect(page.getByText(/Query embedding tokens:/)).toBeVisible();
-  await expect(page.getByText('12').first()).toBeVisible();
+  await expect(page.getByText(/\d+ matches/)).toBeVisible();
   const summaryResult = page.locator('.memory-result-card').filter({ hasText: 'MemStation launch tracks gateway rollout' }).first();
   await expect(summaryResult).toBeVisible();
   await expect(summaryResult.getByText('Matched keywords')).toBeVisible();
@@ -623,6 +649,7 @@ test('memory workspaces connect ranked recall, memory detail, and source convers
 
   await expect(page.getByRole('heading', { name: /^conv-seed-1$/i })).toBeVisible();
   await page.getByRole('button', { name: 'Requeue analysis' }).click();
+  await page.getByRole('alertdialog', { name: 'Requeue conversation analysis?' }).getByRole('button', { name: 'Requeue analysis' }).click();
   await expect(page.getByText('Analysis task requeued on the selected target.')).toBeVisible();
   await expect(page.locator('.message-body').filter({ hasText: 'MemStation launch tracks gateway rollout, memory verification, and admin observability.' }).first()).toBeVisible();
 

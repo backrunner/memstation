@@ -5,6 +5,7 @@ import {
 } from '$lib/api/client';
 import type {
   FactRecord,
+  GenericMemoryDocumentKind,
   ImpressionRecord,
   KeyMemoryRecord,
   MemStationTarget,
@@ -17,8 +18,11 @@ export interface MemoryWorkspaceData {
   memorySummaries: MemorySummaryRecord[];
   impressions: ImpressionRecord[];
   facts: FactRecord[];
+  genericItems: MemoryDocument[];
   keyMemories: KeyMemoryRecord[];
 }
+
+export const genericMemoryKinds: GenericMemoryDocumentKind[] = ['event', 'task', 'procedure', 'artifact', 'entity', 'agent_action'];
 
 function toSummaryRecord(item: MemoryDocument): MemorySummaryRecord {
   return {
@@ -43,10 +47,11 @@ function toFactRecord(item: MemoryDocument): FactRecord {
 }
 
 export async function fetchMemoryWorkspace(target: MemStationTarget, userId?: string): Promise<MemoryWorkspaceData> {
-  const [summaries, impressions, facts, keyMemories] = await Promise.all([
+  const [summaries, impressions, facts, genericItems, keyMemories] = await Promise.all([
     fetchAdminMemoryDocuments(target, { kind: 'summary', userId, limit: 200 }),
     fetchAdminMemoryDocuments(target, { kind: 'impression', userId, limit: 200 }),
     fetchAdminMemoryDocuments(target, { kind: 'fact', userId, limit: 200 }),
+    fetchAdminMemoryDocuments(target, { kind: genericMemoryKinds, userId, limit: 200 }),
     fetchAdminKeyMemories(target, { userId, limit: 200 })
   ]);
 
@@ -54,6 +59,7 @@ export async function fetchMemoryWorkspace(target: MemStationTarget, userId?: st
     memorySummaries: summaries.map(toSummaryRecord),
     impressions: impressions.map(toImpressionRecord),
     facts: facts.map(toFactRecord),
+    genericItems,
     keyMemories
   };
 }

@@ -5,6 +5,7 @@
   import { env } from '$env/dynamic/public';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
+  import { Network } from 'lucide-svelte';
 
   import { fetchHealth, loginAdmin } from '$lib/api/client';
   import TextInputField from '$lib/components/TextInputField.svelte';
@@ -97,21 +98,17 @@
 <section class="auth-shell connect-shell">
   <div class="auth-card connect-card">
     <div class="auth-brand">
-      <span class="auth-brand-mark">MS</span>
-      <span class="auth-brand-name">MemStation Manager</span>
+      <span class="auth-brand-mark" aria-hidden="true"><Network size={18} strokeWidth={1.9} /></span>
+      <span class="auth-brand-name">MemStation</span>
     </div>
 
-    <h1 class="auth-title">Connect an instance</h1>
-    <p class="auth-subtitle">
-      Add the first MemStation target. The admin token is exchanged once for a secure server session.
-    </p>
+    <h1 class="auth-title">Connect target</h1>
 
     <form class="auth-actions" on:submit|preventDefault={submit}>
       <TextInputField
         label="Connection URI or base URL"
         bind:value={connectionInput}
         placeholder="memstation://127.0.0.1:8080?label=Debug&key=..."
-        help="Use http://, https://, memstation://, or memstations://. A key= value is used only for the initial session exchange."
         inputClass="input-mono"
         error={locatorPreview.error}
       />
@@ -125,7 +122,6 @@
           type="password"
           autocomplete="off"
           placeholder="MEMSTATION_ADMIN_TOKEN"
-          help="Required without key= in the connection URI. The token is never saved in browser storage."
           inputClass="input-mono"
         />
       {/if}

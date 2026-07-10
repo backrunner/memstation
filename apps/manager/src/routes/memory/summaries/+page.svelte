@@ -215,6 +215,7 @@
                   <span class="helper-text mono">{summary.id}</span>
                 </div>
                 <div class="inline-group">
+                  <StatusBadge tone="muted" label="Audited" />
                   <StatusBadge tone="muted" label={summary.conversation_id ? 'conversation-linked' : 'manual'} />
                   <a class="btn-ghost btn-sm" href={memoryDetailHref('summaries', summary.id, activeUserId)}>Open</a>
                   {#if editingId === summary.id}

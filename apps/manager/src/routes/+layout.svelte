@@ -16,10 +16,12 @@
     ChevronDown,
     ChevronRight,
     ClipboardList,
-    HardDrive,
+    Database,
     LayoutDashboard,
+    LogOut,
     Menu,
     MessageSquareText,
+    Network,
     PlugZap,
     RefreshCw,
     Search,
@@ -57,15 +59,18 @@
     items: NavItem[];
   };
 
-  // Nav structure aligns with frontend-panel.md §5.1 — nine modules grouped
-  // by operator intent: observe → test → inspect → administer.
   const navSections: NavSection[] = [
     {
-      label: 'Overview',
-      items: [{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }]
+      label: 'Workspace',
+      items: [
+        { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { href: '/conversations', label: 'Conversations', icon: MessageSquareText },
+        { href: '/memory', label: 'Memory', icon: Brain },
+        { href: '/users', label: 'Users', icon: Users }
+      ]
     },
     {
-      label: 'Playground',
+      label: 'Test',
       items: [
         { href: '/playground/chat', label: 'Chat', icon: Sparkles },
         { href: '/playground/memory', label: 'Recall', icon: Search },
@@ -73,30 +78,22 @@
       ]
     },
     {
-      label: 'Inspect',
-      items: [
-        { href: '/conversations', label: 'Conversations', icon: MessageSquareText },
-        { href: '/memory', label: 'Memory', icon: Brain },
-        { href: '/users', label: 'Users', icon: Users },
-        { href: '/statistics/tokens', label: 'Statistics', icon: BarChart3 }
-      ]
-    },
-    {
-      label: 'Operate',
+      label: 'Operations',
       items: [
         { href: '/operations/health', label: 'Health', icon: Activity },
         { href: '/operations/queues', label: 'Queues', icon: Workflow },
         { href: '/operations/tasks', label: 'Tasks', icon: ClipboardList },
-        { href: '/operations/cache', label: 'Cache', icon: HardDrive }
+        { href: '/operations/cache', label: 'Cache', icon: Database },
+        { href: '/statistics/tokens', label: 'Usage', icon: BarChart3 },
+        { href: '/audit', label: 'Audit', icon: ShieldCheck }
       ]
     },
     {
-      label: 'Administer',
+      label: 'Settings',
       items: [
         { href: '/settings/system', label: 'System', icon: Settings },
         { href: '/settings/models', label: 'Models', icon: Boxes },
-        { href: '/settings/providers', label: 'Providers', icon: PlugZap },
-        { href: '/audit', label: 'Audit', icon: ShieldCheck }
+        { href: '/settings/providers', label: 'Providers', icon: PlugZap }
       ]
     }
   ];
@@ -318,12 +315,6 @@
     return 'Session required';
   }
 
-  function adminInitials(): string {
-    if ($targetState.session.authenticated) {
-      return 'OK';
-    }
-    return '—';
-  }
 </script>
 
 <svelte:head>
@@ -341,7 +332,7 @@
   <div class="app-shell" class:is-sidebar-open={mobileSidebarOpen}>
     <aside class="app-sidebar" aria-label="Primary navigation">
       <div class="sidebar-brand">
-        <span class="sidebar-brand-mark">MS</span>
+        <span class="sidebar-brand-mark" aria-hidden="true"><Network size={17} strokeWidth={1.9} /></span>
         <span class="sidebar-brand-name">MemStation</span>
       </div>
 
@@ -390,7 +381,7 @@
           >
             <Menu size={17} strokeWidth={1.8} />
           </button>
-          <span class="sidebar-brand-mark">MS</span>
+          <span class="sidebar-brand-mark" aria-hidden="true"><Network size={16} strokeWidth={1.9} /></span>
         </div>
 
         <nav class="topbar-breadcrumb" aria-label="Breadcrumb">
@@ -419,6 +410,7 @@
               onValueChange={(value) => selectTarget(value)}
             >
               <Select.Trigger class="target-selector-trigger" aria-label="Switch target">
+                <span class={`status-dot ${sessionStatusTone()}`} title={sessionStatusLabel()}></span>
                 {#if activeTargetItem}
                   <span class="target-selector-label">{activeTargetItem.endpoint}</span>
                 {:else}
@@ -458,23 +450,23 @@
           </button>
 
           <button
-            class="btn-secondary btn-sm topbar-targets"
+            class="btn-ghost btn-icon topbar-targets"
             type="button"
             on:click={() => (targetDialogOpen = true)}
+            title="Manage targets"
+            aria-label="Manage targets"
           >
-            <Blocks size={13} strokeWidth={1.75} />
-            Targets
+            <Blocks size={16} strokeWidth={1.75} />
           </button>
 
-          <span class="topbar-divider topbar-session-divider" aria-hidden="true"></span>
-
-          <div class="connection-pill" title={sessionStatusLabel()}>
-            <span class={`status-dot ${sessionStatusTone()}`}></span>
-            <span class="session-menu-initials">{adminInitials()}</span>
-          </div>
-
-          <button class="btn-ghost btn-sm" type="button" on:click={resetConnections}>
-            Reset
+          <button
+            class="btn-ghost btn-icon"
+            type="button"
+            on:click={resetConnections}
+            title="Disconnect targets"
+            aria-label="Disconnect targets"
+          >
+            <LogOut size={16} strokeWidth={1.75} />
           </button>
         </div>
       </header>

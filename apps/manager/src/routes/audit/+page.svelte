@@ -14,12 +14,15 @@
   let loading = true;
   let error = '';
   let events: AuditEventRecord[] = [];
+  let visibleEvents: AuditEventRecord[] = [];
   let selected: AuditEventRecord | null = null;
   let limit = 100;
   let actorType = '';
   let action = '';
   let targetType = '';
   let targetId = '';
+  let dateFrom = '';
+  let dateTo = '';
   let lastFilterKey = '';
   let lastLoadedKey = '';
 
@@ -46,6 +49,17 @@
   $: if (loadKey !== lastLoadedKey && !$targetState.session.checking) {
     lastLoadedKey = loadKey;
     void loadAudit();
+  }
+
+  $: visibleEvents = events.filter((event) => {
+    const createdAt = event.created_at ? new Date(event.created_at).getTime() : 0;
+    const from = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : Number.NEGATIVE_INFINITY;
+    const to = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : Number.POSITIVE_INFINITY;
+    return createdAt >= from && createdAt <= to;
+  });
+
+  $: if (selected && !visibleEvents.some((event) => event.id === selected?.id)) {
+    selected = visibleEvents[0] ?? null;
   }
 
   async function loadAudit(): Promise<void> {
@@ -102,6 +116,8 @@
         <TextInputField label="Target type" bind:value={targetType} placeholder="summary, key_memory, api_key…" />
         <TextInputField label="Target ID" bind:value={targetId} placeholder="memory id, task id, api key id…" />
         <TextInputField label="Actor type" bind:value={actorType} placeholder="admin, tool, system…" />
+        <TextInputField label="Date from" bind:value={dateFrom} type="date" />
+        <TextInputField label="Date to" bind:value={dateTo} type="date" />
         <TextInputField label="Limit" bind:value={limit} type="number" min="1" max="500" />
       </div>
     </section>
@@ -118,7 +134,7 @@
               </tr>
             </thead>
             <tbody>
-              {#each events as event}
+              {#each visibleEvents as event}
                 <tr
                   class="is-selectable"
                   class:is-active={selected?.id === event.id}
@@ -135,7 +151,7 @@
                   <td class="subtle-text no-wrap">{event.created_at ? new Date(event.created_at).toLocaleString() : 'n/a'}</td>
                 </tr>
               {/each}
-              {#if events.length === 0}
+              {#if visibleEvents.length === 0}
                 <tr>
                   <td colspan="3">
                     <div class="empty-state" style="border: none; padding: 12px 0;">No audit events match the current filter.</div>
@@ -204,7 +220,7 @@
     font-size: var(--font-size-xs);
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0;
     margin: 0;
   }
 

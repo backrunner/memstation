@@ -294,6 +294,7 @@
           </div>
 
           <div class="inline-group" style="justify-content: flex-end;">
+            <span class="helper-text">Writes are audited.</span>
             <button class="btn-primary" type="button" disabled={saving} on:click={persist}>
               {saving ? 'Saving…' : 'Save settings'}
             </button>
