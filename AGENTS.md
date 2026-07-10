@@ -620,15 +620,17 @@ v1.x 后续路线：
 
 ---
 
-## 14. 当前实现状态（as of 2026-05-15）
+## 14. 当前实现状态（as of 2026-07-11）
 
 本节用于重启时快速恢复上下文；如后续实现进度发生变化，必须同步更新本节，而不能只改代码不改状态。
 
 ### 14.1 已完成
 
 - server-first 业务核心已落地，`apps/server` 已具备 gateway、memory、admin、worker 基础能力
-- manager 核心控制台、playground、memory/admin 页面已成型，可直连指定 MemStation target
-- manager 真实 fixture E2E 已覆盖主要交互链路，包括 dashboard、memory、playground、settings、audit、tasks 等关键路径
+- manager 已按 `.agents/plan/frontend-panel.md` 完成 v1.0 全量核对，可直连指定 MemStation target；Dashboard、Playground、Conversations、Memory、Users、Usage、Settings、Health、Queues、Tasks、Cache、Audit 均具备正式操作入口
+- manager 已统一为专业、明亮、高密度的 ToB 运维界面；Dashboard 补齐 Key Memory 与失败任务信号，Conversations 补齐 provider/mode/finalize/date 筛选，Users 补齐排序，Audit 补齐日期筛选，Cache 恢复主导航入口
+- manager 关键删除、撤销、重跑、generation 激活和 override 清理操作已统一二次确认并提示审计；Summary、Impression、Fact 人工修正及 Key Memory CRUD 均有真实 fixture E2E 覆盖
+- manager 真实 fixture E2E 已覆盖 dashboard、memory、playground、settings、audit、tasks 等关键路径，2026-07-11 本地结果为 `19/19`；桌面 `1440x1000` 与移动端 `390x844` 已完成视觉复核
 - `apps/server/tests/eval` 已落地 repo-native golden dataset、LOCOMO adapter、artifact writer、perf smoke 与 benchmark runner
 - worker backlog recovery drill、artifact writer、CI smoke 与 nightly recovery 回归已落地
 - backup/export/restore drill、Compose 恢复校验文档、CI dry-run 与 nightly 实际演练入口已落地
@@ -637,6 +639,7 @@ v1.x 后续路线：
 - `pnpm dev` 已切换为 devcontainer-first 联调入口：先启动 `workspace` devcontainer，再在容器内并发运行后端 watch 热重启与 manager 调试服务
 - 本地可通过 `pnpm dev:container:portless` 继续把 server、manager、PostgreSQL、Redis 全部跑在 devcontainer 内，并用 Portless alias 暴露 `https://memstation-manager.localhost`
 - 本地 full-stack 调试可选通过 `pnpm dev:portless` 同时启动热重载 MemStation server 与 Portless Manager；后端已运行时仍可用 `pnpm dev:manager:portless` 只启动 Manager 代理
+- Apple Silicon 本机可通过 `pnpm dev:apple` 使用 Apple Container 1.0.0 启动 workspace、PostgreSQL、Redis 与 full-stack debug；`pnpm dev:apple:stop` 保留数据卷，`pnpm dev:apple:reset` 同时清理持久化开发数据
 - HTTP CORS 已统一覆盖 manager/admin API 与普通 API；`cors_allowed_origins` 为空时默认反射当前请求 `Origin`，配置后按白名单限制
 - 手动 LOCOMO benchmark 默认会从 Snap Research 官方公开地址下载 `locomo10.json`，仍允许通过环境变量覆盖数据源
 - CI 已补齐 `golangci-lint`、严格 generated diff 校验、Atlas migration lint/dry-run、manager Playwright、coverage gate；retrieval/ranking benchmark 已从 CI / nightly 红线中移除，仅保留本地 / 手动评测入口
@@ -645,12 +648,16 @@ v1.x 后续路线：
 - `serve` 已并行暴露 HTTP/GraphQL 与独立 gRPC 端口，`apps/server/proto/memstation/v1/api.proto` 已落地 Gateway、Memory、Admin、Health 的正式 proto 定义与生成代码
 - Go 代码质量门禁已统一为 `scripts/go/format.sh` + `scripts/go/lint.sh`，并接入 `apps/server` 本地脚本与 CI 的 format check / golangci-lint
 - 记忆切片 rewrite 的 stale segment 清理链路已补强，能够按 `conversation_id + keep set` 删除残留 segment graph node、relation 与 vector，避免重试或侧表已覆盖后的脏数据残留
-- 记忆注入已补强为结构化 User Profile / Relevant Memories / Relevant Facts / Relevant Impressions 格式，并按 Key Memory、Summary、Fact、Impression 的固定优先级装包
+- 通用 Agent Memory 融合已落地：新增 `memory_items` 统一承载 `event`、`task`、`procedure`、`artifact`、`entity`、`agent_action`，所有泛化记录仍同步写入 `MemoryNode`、走 `MemoryEmbedding`，并保留 Fact / Key Memory 的既有语义边界
+- analysis worker 已加入受控 `MemoryWritePolicy`/classifier，从 summary、tool calls/results、message blocks 与 artifacts 提升 durable generic memory；raw payload 仍保留在 source snapshot/message 层，写入类 tool 仍不直接修改核心 fact/key memory
+- 记忆注入已补强为结构化 User Profile / Active Tasks / Relevant Procedures / Relevant Facts / Relevant Events / Relevant Agent Actions / Relevant Artifacts / Relevant Entities / Relevant Memories / Relevant Impressions 格式，并按 Key Memory、Task、Procedure、Fact、Event、Agent Action、Artifact、Entity、Summary/Segment、Impression 的固定优先级装包
+- Manager / REST / gRPC / GraphQL 已扩展通用 memory DTO 与 related memory 字段，Manager 新增 Agent Memory 集合页并在详情页展示 metadata、evidence 与 typed relations
 - Fact fallback extraction 已使用规范化 category taxonomy 和轻量多事实输出，并通过 `fact_key / lineage_group_id / revision_seq + supersedes_fact_ids` 在写入侧同步旧 fact 的 `is_superseded / superseded_by_id` 与专用 `supersedes` lineage relation；supersession 写入已收紧为必须携带明确 lineage 锚点和可解析目标，不再从旧事实指针或旧 topic ID 反推
 - Fact lineage 已产品化到存储、检索和管理面板：搜索默认折叠到 current head，GraphQL / gRPC / REST / Manager 返回或展示 `lineage_path`、`superseded_alias_node_ids`、`revision_depth` 与 current-head 状态
 - Summary worker 已加入 `summary_chunk_max_tokens=6000`、`summary_chunk_overlap=600` 的长上下文 chunking 入口，并写入 chunk metadata
 - Gateway / Memory / Worker 热路径已补充 Go `Benchmark*` 函数，`go test -bench=.` 可发现并执行非流式代理、流式代理、注入、记忆检索、outbox relay 等基准
 - 此前已确认通过的本地门禁包括：`pnpm lint`、`pnpm --filter @memstation/server format:check`、`pnpm --filter @memstation/server lint`、`go test ./...`
+- 2026-07-11 本地复核中，既有 `scripts/go/format.sh --check`、`scripts/go/lint.sh`、`go test ./...` 通过结论未被本轮 Manager 改动影响；本轮已重新确认 manager lint、Svelte check、Vitest、production build 与 Playwright E2E 通过
 
 ### 14.2 未完成
 
@@ -658,7 +665,7 @@ v1.x 后续路线：
 - 原始 LOCOMO 数据仍然不会提交进仓库；手动 benchmark 可从上游公开地址拉取，运行仍受外部网络与许可证约束
 - backup/restore 实际演练仍要求运行环境具备 Docker Compose 与镜像拉取能力；在无 Docker 环境下只能执行 dry-run 形态校验
 - 压测与覆盖率门禁已具备基线实现，但后续仍应随着功能扩展逐步提高阈值，而不是长期停留在当前数值
-- 2026-04-25 本地复核中，`go test ./...` 与新增 benchmark smoke 已通过；`scripts/go/format.sh --check` 和 `scripts/go/lint.sh` 当前在未触及文件报告既有格式 / lint 问题，需要后续独立收敛后恢复门禁全绿
+- 2026-04-25 本地复核中曾发现既有 format / lint 问题；截至 2026-07-11，后续复核已确认 `scripts/go/format.sh --check` 与 `scripts/go/lint.sh` 通过
 - 2026-06-27 复核 GitHub nightly 最近失败点为 `actions/upload-artifact` 存储配额已满；worker recovery nightly drill 与 backup/restore nightly drill 本身均通过。workflow 已将诊断 artifact 上传改为 3 天保留与非阻塞，并在定时 nightly 中加入同提交覆盖检查，后续仍需定期清理远端 Actions artifact 存储。
 - 当前主要剩余工作已从“补功能”转为“持续提高工程门禁和运维阈值”，而不是继续扩写新的 v1 范围
 
@@ -672,7 +679,7 @@ v1.x 后续路线：
 4. 如果新增 manager 核心模块，同步补 Vitest、Playwright 和 coverage gate
 5. 如果后续引入集群化或多节点恢复方案，把现有单实例 drill 扩展为跨节点恢复演练，而不是另起一套脚本
 
-### 14.4 当前开发计划（as of 2026-05-15）
+### 14.4 当前开发计划（as of 2026-07-11）
 
 当前开发计划不再以“补齐 v1 基础功能”为主，而是固定按以下顺序推进：
 

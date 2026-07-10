@@ -45,12 +45,12 @@ memstation/
 ### Memory
 
 - 异步记忆写入：`conversation.finalize -> summary.generate -> embedding.generate -> analysis.extract -> keymemory.reconcile`
-- 业务记忆实体：Summary、Keyword、Impression、Fact、Key Memory
+- 业务记忆实体：Summary、Keyword、Impression、Fact、Key Memory，以及承载 `event/task/procedure/artifact/entity/agent_action` 的通用 `memory_items`
 - 图结构：`MemoryNode + MemoryRelation + MemoryEmbedding`
 - 会话切片：对用户/助手对话做 segment 化写入，并建立 `follows_segment`、`summarized_into` 等图关系
 - 时间能力：`importance * time_decay` 排序、`activity_at`、`time_tier`、temporal graph
 - 记忆检索：向量候选 + SQL hydrate + 1-2 hop relation expansion + 混合 key memory 注入
-- 记忆注入：结构化 User Profile / Relevant Memories / Relevant Facts / Relevant Impressions，上下文装包按 Key Memory、Summary、Fact、Impression 优先级执行
+- 记忆注入：结构化 User Profile / Active Tasks / Relevant Procedures / Relevant Facts / Relevant Events / Relevant Agent Actions / Relevant Artifacts / Relevant Entities / Relevant Memories / Relevant Impressions，上下文装包按 Key Memory、Task、Procedure、Fact、Event、Agent Action、Artifact、Entity、Summary/Segment、Impression 分区优先级执行
 - Fact 写入：fallback extraction 使用规范化 category taxonomy 和轻量多事实输出，按 `fact_key` / `lineage_group_id` / `revision_seq` 聚合版本；supersession 写入必须带明确 lineage 锚点和可解析目标，并在新 fact supersede 旧 fact 时同步 current head、`superseded_by_id` 与专用 `supersedes` 图边
 - Fact 检索与管理：默认折叠到 current head，搜索 / GraphQL / gRPC / Manager 均返回 lineage metadata，包括 `lineage_path`、`superseded_alias_node_ids` 与 `revision_depth`
 - Summary 写入：长上下文按 `summary_chunk_max_tokens=6000`、`summary_chunk_overlap=600` 进行 chunking，并保留 chunk metadata
@@ -72,15 +72,14 @@ memstation/
 - Admin / Health gRPC：`HealthService.GetStatus`、`AdminService.Overview`、`AdminService.ListConversations`、`AdminService.GetConversation`、`AdminService.GetConversationMemory`
 - 服务端 session 登录，浏览器不存储 admin token
 - 管理面板已覆盖：
-  - Dashboard
-  - Conversations list/detail
-  - Memory workspace、detail、manual edit
-  - Key Memory 管理
-  - Users / API Keys / Settings
-  - Token statistics
-  - Provider / Model / System settings
-  - Health / Cache / Queues / Tasks / Audit
-  - Playground Chat / Memory Preview / Protocol Playground
+  - Dashboard：活跃对话、记忆、Key Memory、队列积压、失败任务、审计与趋势
+  - Conversations：多用户聚合列表、组合筛选、timeline、usage、metadata、关联记忆与 requeue/rebuild
+  - Memory：Workspace、Summary、Impression、Fact、Agent Memory、Key Memory 集合与详情；人工修正与 Key Memory CRUD
+  - Users / API Keys / Settings / memory generation rebuild
+  - Token statistics：时间范围、用户、provider 与高消耗对话
+  - Provider / Model / System settings：草稿、校验、drift、diagnostics 与审计提示
+  - Health / Cache / Queues / Tasks / Audit：危险操作统一二次确认
+  - Playground Chat / Memory Recall / Protocol Playground
 
 ### Eval / Ops
 
@@ -241,6 +240,21 @@ pnpm dev:manager:portless
 
 `pnpm dev:manager:portless` 只启动 Manager，要求 `MEMSTATION_MANAGER_DEV_PROXY_TARGET` 指向一个可用的 MemStation server，默认 `http://127.0.0.1:8080`。
 
+### 方式四：Apple Container 本机开发
+
+在已安装 Apple Container `1.0.0+` 的 Apple Silicon Mac 上，可以使用原生 container runtime 启动开发环境：
+
+```bash
+pnpm dev:apple
+```
+
+该入口会创建独立 network 和持久化 volume，启动 pgvector PostgreSQL、Redis、workspace container，并在 workspace 内运行 full-stack debug。只准备容器但不启动调试进程可执行 `pnpm dev:apple:container`。
+
+```bash
+pnpm dev:apple:stop   # 停止容器，保留数据卷
+pnpm dev:apple:reset  # 停止并清理开发数据卷与 network
+```
+
 ## 常用命令
 
 ### 根目录
@@ -349,6 +363,7 @@ Embedding 已接入真实 provider 调用，采用 OpenAI-compatible embedding �
 - Manager 可以保存多个 target，并在不同 MemStation 实例之间切换
 - Manager 支持直接粘贴 `memstation://host:port?key=...` / `memstations://...` 形式的连接 URI；`key=` 必须是服务端生成的 Argon2id admin token hash，不应放入原始明文 admin token
 - 一套 MemStation 服务视为一个运行环境，Manager target 只暴露 label、endpoint 和 admin token 连接信息
+- Manager 默认采用专业、明亮、高密度的 ToB 运维视觉，桌面与移动端均可操作；Cache 等运维模块保留明确主导航入口
 - 本地 full-stack 调试可通过 `pnpm dev:portless` 启动热重载 MemStation server 与 Portless Manager；如后端已单独运行，也可通过 `pnpm dev:manager:portless` 只启动 Manager 代理
 
 ## 测试与评测
@@ -392,8 +407,12 @@ Nightly 的 worker recovery drill 与 backup/restore drill 仍是阻塞门禁；
 
 按当前仓库实现，R1-R6 与 R5.5 的代码范围均已落地，适合作为 v1.0 的开发和迭代基线继续推进。
 
-2026-04-25 本地复核：`go test ./...` 与新增 hot-path benchmark smoke 已通过；`scripts/go/format.sh --check` 和 `scripts/go/lint.sh` 当前在未触及文件报告既有格式 / lint 问题，需后续单独收敛后恢复门禁全绿。
+2026-04-25 本地复核曾发现既有 format / lint 问题；该问题已在后续复核中收敛，当前以 `AGENTS.md` 第 14 节的最新门禁状态为准。
 
 2026-05-15 更新：CI / nightly 已移除 retrieval/ranking benchmark 与 benchmark 性能红线；相关脚本仅作为本地、手动或专用评测入口保留。
 
 2026-06-27 更新：最近 nightly 失败点定位为 `actions/upload-artifact` 触发 GitHub artifact storage quota，而 worker recovery 与 backup/restore drill 均已通过；workflow 已将诊断 artifact 上传改为短保留、非阻塞，并为定时 nightly 增加“同提交已覆盖则跳过”的前置检查以减少 Actions 额度消耗。
+
+2026-07-07 更新：通用 Agent Memory 融合已落地，新增 `memory_items`、六类通用长期记忆、受控 analysis classifier、source evidence 克隆、embedding/rebuild/recovery 支持、GraphQL/gRPC/REST DTO 扩展、Manager Agent Memory 集合页，以及 repo-native/eval reliability case 更新；`scripts/go/format.sh --check`、`scripts/go/lint.sh`、`go test ./...`、manager lint 与 Vitest 已通过。
+
+2026-07-11 更新：Manager 已按 `AGENTS.md` 与 `.agents/plan/frontend-panel.md` 完成全量需求核对和专业化 UI 收口，补齐 Dashboard 必需信号、Conversations 组合筛选、Users 排序、Audit 日期筛选、Cache 导航与关键写操作确认；Svelte check 为 `0 errors / 0 warnings`，Vitest `15/15`、Playwright fixture E2E `19/19`，桌面与移动端已完成视觉复核。
