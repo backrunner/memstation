@@ -34,6 +34,20 @@ func (_u *ImpressionUpdate) SetUpdatedAt(v time.Time) *ImpressionUpdate {
 	return _u
 }
 
+// SetGenerationID sets the "generation_id" field.
+func (_u *ImpressionUpdate) SetGenerationID(v string) *ImpressionUpdate {
+	_u.mutation.SetGenerationID(v)
+	return _u
+}
+
+// SetNillableGenerationID sets the "generation_id" field if the given value is not nil.
+func (_u *ImpressionUpdate) SetNillableGenerationID(v *string) *ImpressionUpdate {
+	if v != nil {
+		_u.SetGenerationID(*v)
+	}
+	return _u
+}
+
 // SetUserID sets the "user_id" field.
 func (_u *ImpressionUpdate) SetUserID(v string) *ImpressionUpdate {
 	_u.mutation.SetUserID(v)
@@ -243,6 +257,9 @@ func (_u *ImpressionUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(impression.FieldUpdatedAt, field.TypeTime, value)
 	}
+	if value, ok := _u.mutation.GenerationID(); ok {
+		_spec.SetField(impression.FieldGenerationID, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(impression.FieldUserID, field.TypeString, value)
 	}
@@ -308,6 +325,20 @@ type ImpressionUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *ImpressionUpdateOne) SetUpdatedAt(v time.Time) *ImpressionUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetGenerationID sets the "generation_id" field.
+func (_u *ImpressionUpdateOne) SetGenerationID(v string) *ImpressionUpdateOne {
+	_u.mutation.SetGenerationID(v)
+	return _u
+}
+
+// SetNillableGenerationID sets the "generation_id" field if the given value is not nil.
+func (_u *ImpressionUpdateOne) SetNillableGenerationID(v *string) *ImpressionUpdateOne {
+	if v != nil {
+		_u.SetGenerationID(*v)
+	}
 	return _u
 }
 
@@ -549,6 +580,9 @@ func (_u *ImpressionUpdateOne) sqlSave(ctx context.Context) (_node *Impression, 
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(impression.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.GenerationID(); ok {
+		_spec.SetField(impression.FieldGenerationID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(impression.FieldUserID, field.TypeString, value)

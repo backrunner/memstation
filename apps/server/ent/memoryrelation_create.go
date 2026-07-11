@@ -48,6 +48,20 @@ func (_c *MemoryRelationCreate) SetNillableUpdatedAt(v *time.Time) *MemoryRelati
 	return _c
 }
 
+// SetGenerationID sets the "generation_id" field.
+func (_c *MemoryRelationCreate) SetGenerationID(v string) *MemoryRelationCreate {
+	_c.mutation.SetGenerationID(v)
+	return _c
+}
+
+// SetNillableGenerationID sets the "generation_id" field if the given value is not nil.
+func (_c *MemoryRelationCreate) SetNillableGenerationID(v *string) *MemoryRelationCreate {
+	if v != nil {
+		_c.SetGenerationID(*v)
+	}
+	return _c
+}
+
 // SetUserID sets the "user_id" field.
 func (_c *MemoryRelationCreate) SetUserID(v string) *MemoryRelationCreate {
 	_c.mutation.SetUserID(v)
@@ -149,6 +163,10 @@ func (_c *MemoryRelationCreate) defaults() {
 		v := memoryrelation.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.GenerationID(); !ok {
+		v := memoryrelation.DefaultGenerationID
+		_c.mutation.SetGenerationID(v)
+	}
 	if _, ok := _c.mutation.Weight(); !ok {
 		v := memoryrelation.DefaultWeight
 		_c.mutation.SetWeight(v)
@@ -167,6 +185,9 @@ func (_c *MemoryRelationCreate) check() error {
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "MemoryRelation.updated_at"`)}
 	}
+	if _, ok := _c.mutation.GenerationID(); !ok {
+		return &ValidationError{Name: "generation_id", err: errors.New(`ent: missing required field "MemoryRelation.generation_id"`)}
+	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "MemoryRelation.user_id"`)}
 	}
@@ -179,8 +200,18 @@ func (_c *MemoryRelationCreate) check() error {
 	if _, ok := _c.mutation.RelationType(); !ok {
 		return &ValidationError{Name: "relation_type", err: errors.New(`ent: missing required field "MemoryRelation.relation_type"`)}
 	}
+	if v, ok := _c.mutation.RelationType(); ok {
+		if err := memoryrelation.RelationTypeValidator(v); err != nil {
+			return &ValidationError{Name: "relation_type", err: fmt.Errorf(`ent: validator failed for field "MemoryRelation.relation_type": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.Weight(); !ok {
 		return &ValidationError{Name: "weight", err: errors.New(`ent: missing required field "MemoryRelation.weight"`)}
+	}
+	if v, ok := _c.mutation.Weight(); ok {
+		if err := memoryrelation.WeightValidator(v); err != nil {
+			return &ValidationError{Name: "weight", err: fmt.Errorf(`ent: validator failed for field "MemoryRelation.weight": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.Source(); !ok {
 		return &ValidationError{Name: "source", err: errors.New(`ent: missing required field "MemoryRelation.source"`)}
@@ -218,6 +249,10 @@ func (_c *MemoryRelationCreate) createSpec() (*MemoryRelation, *sqlgraph.CreateS
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(memoryrelation.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
+	}
+	if value, ok := _c.mutation.GenerationID(); ok {
+		_spec.SetField(memoryrelation.FieldGenerationID, field.TypeString, value)
+		_node.GenerationID = value
 	}
 	if value, ok := _c.mutation.UserID(); ok {
 		_spec.SetField(memoryrelation.FieldUserID, field.TypeString, value)

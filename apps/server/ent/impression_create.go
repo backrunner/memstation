@@ -48,6 +48,20 @@ func (_c *ImpressionCreate) SetNillableUpdatedAt(v *time.Time) *ImpressionCreate
 	return _c
 }
 
+// SetGenerationID sets the "generation_id" field.
+func (_c *ImpressionCreate) SetGenerationID(v string) *ImpressionCreate {
+	_c.mutation.SetGenerationID(v)
+	return _c
+}
+
+// SetNillableGenerationID sets the "generation_id" field if the given value is not nil.
+func (_c *ImpressionCreate) SetNillableGenerationID(v *string) *ImpressionCreate {
+	if v != nil {
+		_c.SetGenerationID(*v)
+	}
+	return _c
+}
+
 // SetUserID sets the "user_id" field.
 func (_c *ImpressionCreate) SetUserID(v string) *ImpressionCreate {
 	_c.mutation.SetUserID(v)
@@ -185,6 +199,10 @@ func (_c *ImpressionCreate) defaults() {
 		v := impression.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.GenerationID(); !ok {
+		v := impression.DefaultGenerationID
+		_c.mutation.SetGenerationID(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -194,6 +212,9 @@ func (_c *ImpressionCreate) check() error {
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Impression.updated_at"`)}
+	}
+	if _, ok := _c.mutation.GenerationID(); !ok {
+		return &ValidationError{Name: "generation_id", err: errors.New(`ent: missing required field "Impression.generation_id"`)}
 	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "Impression.user_id"`)}
@@ -240,6 +261,10 @@ func (_c *ImpressionCreate) createSpec() (*Impression, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(impression.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
+	}
+	if value, ok := _c.mutation.GenerationID(); ok {
+		_spec.SetField(impression.FieldGenerationID, field.TypeString, value)
+		_node.GenerationID = value
 	}
 	if value, ok := _c.mutation.UserID(); ok {
 		_spec.SetField(impression.FieldUserID, field.TypeString, value)

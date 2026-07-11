@@ -22,6 +22,8 @@ type MemoryRelation struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// GenerationID holds the value of the "generation_id" field.
+	GenerationID string `json:"generation_id,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID string `json:"user_id,omitempty"`
 	// SrcNodeID holds the value of the "src_node_id" field.
@@ -50,7 +52,7 @@ func (*MemoryRelation) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullFloat64)
 		case memoryrelation.FieldID:
 			values[i] = new(sql.NullInt64)
-		case memoryrelation.FieldUserID, memoryrelation.FieldSrcNodeID, memoryrelation.FieldDstNodeID, memoryrelation.FieldRelationType, memoryrelation.FieldSource:
+		case memoryrelation.FieldGenerationID, memoryrelation.FieldUserID, memoryrelation.FieldSrcNodeID, memoryrelation.FieldDstNodeID, memoryrelation.FieldRelationType, memoryrelation.FieldSource:
 			values[i] = new(sql.NullString)
 		case memoryrelation.FieldCreatedAt, memoryrelation.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -86,6 +88,12 @@ func (_m *MemoryRelation) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
+			}
+		case memoryrelation.FieldGenerationID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field generation_id", values[i])
+			} else if value.Valid {
+				_m.GenerationID = value.String
 			}
 		case memoryrelation.FieldUserID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -172,6 +180,9 @@ func (_m *MemoryRelation) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	builder.WriteString("generation_id=")
+	builder.WriteString(_m.GenerationID)
 	builder.WriteString(", ")
 	builder.WriteString("user_id=")
 	builder.WriteString(_m.UserID)

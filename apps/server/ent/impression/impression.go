@@ -17,6 +17,8 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// FieldGenerationID holds the string denoting the generation_id field in the database.
+	FieldGenerationID = "generation_id"
 	// FieldUserID holds the string denoting the user_id field in the database.
 	FieldUserID = "user_id"
 	// FieldConversationID holds the string denoting the conversation_id field in the database.
@@ -44,6 +46,7 @@ var Columns = []string{
 	FieldID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
+	FieldGenerationID,
 	FieldUserID,
 	FieldConversationID,
 	FieldNodeID,
@@ -72,6 +75,8 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultGenerationID holds the default value on creation for the "generation_id" field.
+	DefaultGenerationID string
 )
 
 // OrderOption defines the ordering options for the Impression queries.
@@ -90,6 +95,11 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// ByGenerationID orders the results by the generation_id field.
+func ByGenerationID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldGenerationID, opts...).ToFunc()
 }
 
 // ByUserID orders the results by the user_id field.

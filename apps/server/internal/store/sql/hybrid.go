@@ -143,6 +143,10 @@ type HybridMemoryRepository struct {
 	fallback *InMemoryMemoryRepository
 }
 
+func (r *HybridMemoryRepository) HasTransactionalMemoryOutbox() bool {
+	return currentDB(r.db) != nil
+}
+
 func NewHybridMemoryRepository(db runtimeconfig.DBHandle) *HybridMemoryRepository {
 	return &HybridMemoryRepository{
 		db:       db,
@@ -351,6 +355,13 @@ func (r *HybridMemoryRepository) ReplaceEvidences(ctx context.Context, userID, n
 		return NewPostgresMemoryRepository(db).ReplaceEvidences(ctx, userID, nodeID, evidences)
 	}
 	return r.fallback.ReplaceEvidences(ctx, userID, nodeID, evidences)
+}
+
+func (r *HybridMemoryRepository) MergeEvidences(ctx context.Context, userID, nodeID string, evidences []domain.MemoryEvidence) error {
+	if db := currentDB(r.db); db != nil {
+		return NewPostgresMemoryRepository(db).MergeEvidences(ctx, userID, nodeID, evidences)
+	}
+	return r.fallback.MergeEvidences(ctx, userID, nodeID, evidences)
 }
 
 func (r *HybridMemoryRepository) ListEvidences(ctx context.Context, userID, nodeID string) ([]domain.MemoryEvidence, error) {

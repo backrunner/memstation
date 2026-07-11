@@ -205,13 +205,13 @@ func TestPostgresMemoryRepositoryUpdateDocumentUpdatesNodeState(t *testing.T) {
 	if driver.commitCount != 1 {
 		t.Fatalf("expected one transaction commit, got %d", driver.commitCount)
 	}
-	if len(driver.execQueries) != 2 {
-		t.Fatalf("expected two exec queries, got %d", len(driver.execQueries))
+	if len(driver.execQueries) != 3 {
+		t.Fatalf("expected document, node, and outbox writes, got %d", len(driver.execQueries))
 	}
 	if !strings.Contains(driver.execQueries[1], "UPDATE memory_nodes") {
 		t.Fatalf("expected node update query, got %q", driver.execQueries[1])
 	}
-	if len(driver.execArgs[1]) != 5 {
+	if len(driver.execArgs[1]) != 6 {
 		t.Fatalf("expected node update args, got %#v", driver.execArgs[1])
 	}
 	if _, ok := driver.execArgs[1][0].(time.Time); !ok {
@@ -219,6 +219,9 @@ func TestPostgresMemoryRepositoryUpdateDocumentUpdatesNodeState(t *testing.T) {
 	}
 	if driver.execArgs[1][1] != "active" {
 		t.Fatalf("expected active time tier, got %#v", driver.execArgs[1][1])
+	}
+	if !strings.Contains(driver.execQueries[2], "INSERT INTO outbox_events") {
+		t.Fatalf("expected transactional embedding outbox write, got %q", driver.execQueries[2])
 	}
 }
 
@@ -267,14 +270,17 @@ func TestPostgresMemoryRepositoryUpdateGenericDocumentUsesMemoryItems(t *testing
 
 	driver.mu.Lock()
 	defer driver.mu.Unlock()
-	if len(driver.execQueries) != 2 {
-		t.Fatalf("expected two exec queries, got %d", len(driver.execQueries))
+	if len(driver.execQueries) != 3 {
+		t.Fatalf("expected document, node, and outbox writes, got %d", len(driver.execQueries))
 	}
 	if !strings.Contains(driver.execQueries[0], "UPDATE memory_items") {
 		t.Fatalf("expected memory_items update query, got %q", driver.execQueries[0])
 	}
 	if len(driver.execArgs[0]) != 5 || driver.execArgs[0][4] != "task" {
 		t.Fatalf("expected generic update args to include item type, got %#v", driver.execArgs[0])
+	}
+	if !strings.Contains(driver.execQueries[2], "INSERT INTO outbox_events") {
+		t.Fatalf("expected transactional embedding outbox write, got %q", driver.execQueries[2])
 	}
 }
 

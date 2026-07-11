@@ -29,6 +29,7 @@ type Services struct {
 	Conversations        ports.ConversationRepository
 	MediaStore           ports.MediaRepository
 	Memories             ports.MemoryRepository
+	MemoryService        *memoryservice.Service
 	Generations          *memorygenservice.Service
 	Vectors              ports.VectorStore
 	Publisher            ports.TaskPublisher
@@ -47,6 +48,8 @@ func NewServeMux(logger *slog.Logger, services Services) *asynq.ServeMux {
 	mux.HandleFunc(TypeMediaExtract, handleMediaExtract(logger, services))
 	mux.HandleFunc(TypeSummaryGenerate, handleSummaryGenerate(logger, services))
 	mux.HandleFunc(TypeEmbeddingGenerate, handleEmbeddingGenerate(logger, services))
+	mux.HandleFunc(TypeEmbeddingDelete, handleEmbeddingDelete(logger, services))
+	mux.HandleFunc(TypeKeyMemoryGraphSync, handleKeyMemoryGraphSync(logger, services))
 	mux.HandleFunc(TypeAnalysisExtract, handleAnalysisExtract(logger, services))
 	mux.HandleFunc(TypeKeyMemoryReconcile, handleKeyMemoryReconcile(logger, services))
 	mux.HandleFunc(TypeMemoryRebuildConversation, handleMemoryRebuildConversation(logger, services))
@@ -453,6 +456,14 @@ func handleEmbeddingGenerate(logger *slog.Logger, services Services) func(contex
 		userID := payload.UserID
 		nodeType := payload.NodeType
 		content := payload.Content
+		if payload.EmbeddingVersion <= 0 && services.Generations != nil {
+			generation, err := services.Generations.ResolveGeneration(ctx, payload.UserID, payload.GenerationID)
+			if err != nil {
+				return err
+			}
+			payload.EmbeddingVersion = generation.EmbeddingVersion
+			payload.EmbeddingModel = generation.EmbeddingModel
+		}
 		if current, ok, err := currentStoredDocumentForEmbeddingByNode(ctx, services, payload.UserID, payload.GenerationID, payload.NodeID, payload.NodeType); err != nil {
 			return err
 		} else if ok {
@@ -467,14 +478,41 @@ func handleEmbeddingGenerate(logger *slog.Logger, services Services) func(contex
 			content = payload.NodeID
 		}
 		return services.Vectors.Upsert(ctx, domain.VectorUpsertRequest{
-			UserID:           userID,
-			GenerationID:     payload.GenerationID,
-			NodeID:           payload.NodeID,
-			NodeType:         nodeType,
-			EmbeddingVersion: payload.EmbeddingVersion,
-			EmbeddingModel:   payload.EmbeddingModel,
-			Content:          content,
+			UserID:            userID,
+			GenerationID:      payload.GenerationID,
+			NodeID:            payload.NodeID,
+			NodeType:          nodeType,
+			EmbeddingVersion:  payload.EmbeddingVersion,
+			EmbeddingModel:    payload.EmbeddingModel,
+			EmbeddingRevision: payload.EmbeddingRevision,
+			Content:           content,
 		})
+	}
+}
+
+func handleEmbeddingDelete(_ *slog.Logger, services Services) func(context.Context, *asynq.Task) error {
+	return func(ctx context.Context, task *asynq.Task) error {
+		var payload EmbeddingDeletePayload
+		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+			return err
+		}
+		if services.Vectors == nil {
+			return fmt.Errorf("vector store is not configured")
+		}
+		return services.Vectors.DeleteByNode(ctx, payload.UserID, payload.NodeID)
+	}
+}
+
+func handleKeyMemoryGraphSync(_ *slog.Logger, services Services) func(context.Context, *asynq.Task) error {
+	return func(ctx context.Context, task *asynq.Task) error {
+		var payload KeyMemoryGraphSyncPayload
+		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+			return err
+		}
+		if services.MemoryService == nil {
+			return fmt.Errorf("memory service is not configured")
+		}
+		return services.MemoryService.SyncKeyMemoryGraph(ctx, payload.UserID, payload.Key)
 	}
 }
 
@@ -588,6 +626,7 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 		genericDocs := append([]domain.MemoryDocument(nil), result.GenericItems...)
 		for idx := range genericDocs {
 			genericDocs[idx] = applyGenerationToDocument(payload.UserID, payload.GenerationID, genericDocs[idx])
+			genericDocs[idx] = mergeCanonicalEntityDocument(ctx, services, genericDocs[idx])
 			applyDocumentScore(ctx, services.Scorer, &genericDocs[idx], conversation.UpdatedAt)
 			if err := services.Memories.StoreDocument(ctx, genericDocs[idx]); err != nil {
 				markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
@@ -595,9 +634,15 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 			}
 			if len(summaryEvidences) > 0 {
 				itemEvidences := cloneNodeEvidences(payload.UserID, payload.GenerationID, genericDocs[idx].NodeID, summaryEvidences)
-				if err := services.Memories.ReplaceEvidences(ctx, payload.UserID, genericDocs[idx].NodeID, itemEvidences); err != nil {
+				var evidenceErr error
+				if genericDocs[idx].Type == domain.MemoryTypeEntity {
+					evidenceErr = services.Memories.MergeEvidences(ctx, payload.UserID, genericDocs[idx].NodeID, itemEvidences)
+				} else {
+					evidenceErr = services.Memories.ReplaceEvidences(ctx, payload.UserID, genericDocs[idx].NodeID, itemEvidences)
+				}
+				if evidenceErr != nil {
 					markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
-					return err
+					return evidenceErr
 				}
 			}
 		}
@@ -712,6 +757,49 @@ func memoryDocumentIDs(items []domain.MemoryDocument) []string {
 			continue
 		}
 		out = append(out, item.ID)
+	}
+	return out
+}
+
+func mergeCanonicalEntityDocument(ctx context.Context, services Services, doc domain.MemoryDocument) domain.MemoryDocument {
+	if doc.Type != domain.MemoryTypeEntity || services.Memories == nil {
+		return doc
+	}
+	existing, err := services.Memories.ListDocumentsByNodeIDsInGeneration(ctx, doc.UserID, doc.GenerationID, []string{doc.NodeID})
+	if err != nil || len(existing) == 0 {
+		return doc
+	}
+	current := existing[0]
+	if doc.Metadata == nil {
+		doc.Metadata = map[string]any{}
+	}
+	doc.Metadata["aliases"] = mergeUniqueStrings(stringSliceValue(current.Metadata, "aliases"), stringSliceValue(doc.Metadata, "aliases"))
+	doc.Metadata["mention_conversation_ids"] = mergeUniqueStrings(
+		stringSliceValue(current.Metadata, "mention_conversation_ids"),
+		stringSliceValue(doc.Metadata, "mention_conversation_ids"),
+	)
+	if !current.CreatedAt.IsZero() {
+		doc.CreatedAt = current.CreatedAt
+	}
+	return doc
+}
+
+func mergeUniqueStrings(groups ...[]string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0)
+	for _, group := range groups {
+		for _, item := range group {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			key := strings.ToLower(item)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, item)
+		}
 	}
 	return out
 }

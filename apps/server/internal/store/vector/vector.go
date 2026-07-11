@@ -86,26 +86,34 @@ func (s *PGVectorStore) Search(ctx context.Context, input domain.VectorSearchInp
 	vectorArgPosition := 3
 	limitArgPosition := 4
 	filterClause := ""
+	vectorColumn := "e.vector"
+	vectorParameterCast := "vector"
+	if vectorType, ok := annVectorType(len(queryVector)); ok {
+		vectorColumn = fmt.Sprintf("e.vector::%s(%d)", vectorType, len(queryVector))
+		vectorParameterCast = fmt.Sprintf("%s(%d)", vectorType, len(queryVector))
+		filterClause += fmt.Sprintf(" AND vector_dims(e.vector) = %d", len(queryVector))
+	}
 	args := []any{input.UserID, input.EmbeddingVersion}
 	if strings.TrimSpace(input.GenerationID) != "" {
-		filterClause += " AND (generation_id = $3 OR (generation_id = '' AND node_type = 'key_memory'))"
+		filterClause += " AND (e.generation_id = $3 OR (e.generation_id = '' AND e.node_type = 'key_memory'))"
 		args = append(args, input.GenerationID)
 		vectorArgPosition = 4
 		limitArgPosition = 5
 	}
 	if strings.TrimSpace(embeddingModel) != "" {
-		filterClause += fmt.Sprintf(" AND embedding_model = $%d", len(args)+1)
+		filterClause += fmt.Sprintf(" AND e.embedding_model = $%d", len(args)+1)
 		args = append(args, embeddingModel)
 		vectorArgPosition++
 		limitArgPosition++
 	}
 	query := fmt.Sprintf(`
-        SELECT node_id, node_type, 1 - (vector <=> $%d::vector) AS score
-        FROM memory_embeddings
-        WHERE user_id = $1 AND embedding_version = $2%s
-        ORDER BY vector <=> $%d::vector ASC
-        LIMIT $%d
-    `, vectorArgPosition, filterClause, vectorArgPosition, limitArgPosition)
+	        SELECT e.node_id, e.node_type, 1 - (%s <=> $%d::%s) AS score
+	        FROM memory_embeddings e
+	        JOIN memory_nodes n ON n.id = e.node_id AND n.user_id = e.user_id AND n.embedding_status = 'ready'
+	        WHERE e.user_id = $1 AND e.embedding_version = $2%s
+	        ORDER BY %s <=> $%d::%s ASC
+	        LIMIT $%d
+	    `, vectorColumn, vectorArgPosition, vectorParameterCast, filterClause, vectorColumn, vectorArgPosition, vectorParameterCast, limitArgPosition)
 	args = append(args, vectorLiteral(queryVector), limit)
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -129,6 +137,17 @@ func (s *PGVectorStore) Search(ctx context.Context, input domain.VectorSearchInp
 		}
 	}
 	return out, rows.Err()
+}
+
+func annVectorType(dimension int) (string, bool) {
+	switch dimension {
+	case 3, 768, 1024, 1536:
+		return "vector", true
+	case 3072:
+		return "halfvec", true
+	default:
+		return "", false
+	}
 }
 
 func (s *PGVectorStore) Upsert(ctx context.Context, input domain.VectorUpsertRequest) error {
@@ -168,22 +187,50 @@ func (s *PGVectorStore) Upsert(ctx context.Context, input domain.VectorUpsertReq
 
 	now := time.Now().UTC()
 	embeddingID := fmt.Sprintf("%s:%s:%d", input.UserID, input.NodeID, input.EmbeddingVersion)
-	if _, err := db.ExecContext(ctx, `
-        INSERT INTO memory_embeddings (
-            embedding_id, generation_id, user_id, node_id, node_type, embedding_version, embedding_model,
-            content_hash, vector, created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::vector,$10,$10)
-        ON CONFLICT (user_id, node_id, embedding_version) DO UPDATE SET
-            generation_id = EXCLUDED.generation_id,
+	insertPrefix := `INSERT INTO memory_embeddings (
+	            embedding_id, generation_id, user_id, node_id, node_type, embedding_version, embedding_model,
+	            content_hash, vector, created_at, updated_at
+	        ) `
+	valuesClause := `VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::vector,$10,$10)`
+	if input.EmbeddingRevision > 0 {
+		valuesClause = `SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9::vector,$10,$10
+			WHERE EXISTS (
+				SELECT 1 FROM memory_nodes
+				WHERE id = $4 AND user_id = $3 AND embedding_revision = $11 AND embedding_status = 'pending'
+			)`
+	}
+	query := insertPrefix + valuesClause + `
+	        ON CONFLICT (user_id, node_id, embedding_version) DO UPDATE SET
+	            generation_id = EXCLUDED.generation_id,
             node_type = EXCLUDED.node_type,
             embedding_model = EXCLUDED.embedding_model,
             content_hash = EXCLUDED.content_hash,
             vector = EXCLUDED.vector,
-            updated_at = EXCLUDED.updated_at
-    `, embeddingID, input.GenerationID, input.UserID, input.NodeID, input.NodeType, input.EmbeddingVersion, input.EmbeddingModel, input.ContentHash, vectorLiteral(input.Vector), now); err != nil {
+	            updated_at = EXCLUDED.updated_at`
+	args := []any{embeddingID, input.GenerationID, input.UserID, input.NodeID, input.NodeType, input.EmbeddingVersion, input.EmbeddingModel, input.ContentHash, vectorLiteral(input.Vector), now}
+	if input.EmbeddingRevision > 0 {
+		args = append(args, input.EmbeddingRevision)
+	}
+	result, err := db.ExecContext(ctx, query, args...)
+	if err != nil {
 		return err
 	}
-	_, err := db.ExecContext(ctx, `UPDATE memory_nodes SET embedding_status = 'ready', updated_at = $1 WHERE id = $2 AND user_id = $3`, now, input.NodeID, input.UserID)
+	if input.EmbeddingRevision > 0 {
+		rows, rowsErr := result.RowsAffected()
+		if rowsErr != nil {
+			return rowsErr
+		}
+		if rows == 0 {
+			return nil
+		}
+	}
+	readyQuery := `UPDATE memory_nodes SET embedding_status = 'ready', updated_at = $1 WHERE id = $2 AND user_id = $3`
+	readyArgs := []any{now, input.NodeID, input.UserID}
+	if input.EmbeddingRevision > 0 {
+		readyQuery += ` AND embedding_revision = $4`
+		readyArgs = append(readyArgs, input.EmbeddingRevision)
+	}
+	_, err = db.ExecContext(ctx, readyQuery, readyArgs...)
 	return err
 }
 

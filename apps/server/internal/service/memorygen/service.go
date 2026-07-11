@@ -1189,7 +1189,7 @@ func (s *Service) DiscardGeneration(ctx context.Context, userID, generationID st
 	if _, err = tx.ExecContext(ctx, `
 		UPDATE memory_generations
 		SET status = $1,
-		    metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('discarded_at', $2::text),
+		    metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('discarded_at', $2::timestamptz),
 		    updated_at = $2
 		WHERE generation_id = $3 AND user_id = $4
 	`, string(domain.MemoryGenerationStatusDiscarded), now, generationID, userID); err != nil {
@@ -1293,7 +1293,7 @@ func pruneGenerationHistoryTx(ctx context.Context, tx *sqlpkg.Tx, userID, active
 		if _, err = tx.ExecContext(ctx, `
 			UPDATE memory_generations
 			SET status = $1,
-			    metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('discarded_at', $2::text, 'discard_reason', 'retention'),
+			    metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('discarded_at', $2::timestamptz, 'discard_reason', 'retention'),
 			    updated_at = $2
 			WHERE generation_id = $3 AND user_id = $4
 		`, string(domain.MemoryGenerationStatusDiscarded), now, generationID, userID); err != nil {

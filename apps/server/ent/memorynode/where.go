@@ -64,6 +64,11 @@ func UpdatedAt(v time.Time) predicate.MemoryNode {
 	return predicate.MemoryNode(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
+// GenerationID applies equality check predicate on the "generation_id" field. It's identical to GenerationIDEQ.
+func GenerationID(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEQ(FieldGenerationID, v))
+}
+
 // UserID applies equality check predicate on the "user_id" field. It's identical to UserIDEQ.
 func UserID(v string) predicate.MemoryNode {
 	return predicate.MemoryNode(sql.FieldEQ(FieldUserID, v))
@@ -102,6 +107,11 @@ func TimeTier(v string) predicate.MemoryNode {
 // EmbeddingStatus applies equality check predicate on the "embedding_status" field. It's identical to EmbeddingStatusEQ.
 func EmbeddingStatus(v string) predicate.MemoryNode {
 	return predicate.MemoryNode(sql.FieldEQ(FieldEmbeddingStatus, v))
+}
+
+// EmbeddingRevision applies equality check predicate on the "embedding_revision" field. It's identical to EmbeddingRevisionEQ.
+func EmbeddingRevision(v int64) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEQ(FieldEmbeddingRevision, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
@@ -182,6 +192,71 @@ func UpdatedAtLT(v time.Time) predicate.MemoryNode {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.MemoryNode {
 	return predicate.MemoryNode(sql.FieldLTE(FieldUpdatedAt, v))
+}
+
+// GenerationIDEQ applies the EQ predicate on the "generation_id" field.
+func GenerationIDEQ(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEQ(FieldGenerationID, v))
+}
+
+// GenerationIDNEQ applies the NEQ predicate on the "generation_id" field.
+func GenerationIDNEQ(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldNEQ(FieldGenerationID, v))
+}
+
+// GenerationIDIn applies the In predicate on the "generation_id" field.
+func GenerationIDIn(vs ...string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldIn(FieldGenerationID, vs...))
+}
+
+// GenerationIDNotIn applies the NotIn predicate on the "generation_id" field.
+func GenerationIDNotIn(vs ...string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldNotIn(FieldGenerationID, vs...))
+}
+
+// GenerationIDGT applies the GT predicate on the "generation_id" field.
+func GenerationIDGT(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldGT(FieldGenerationID, v))
+}
+
+// GenerationIDGTE applies the GTE predicate on the "generation_id" field.
+func GenerationIDGTE(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldGTE(FieldGenerationID, v))
+}
+
+// GenerationIDLT applies the LT predicate on the "generation_id" field.
+func GenerationIDLT(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldLT(FieldGenerationID, v))
+}
+
+// GenerationIDLTE applies the LTE predicate on the "generation_id" field.
+func GenerationIDLTE(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldLTE(FieldGenerationID, v))
+}
+
+// GenerationIDContains applies the Contains predicate on the "generation_id" field.
+func GenerationIDContains(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldContains(FieldGenerationID, v))
+}
+
+// GenerationIDHasPrefix applies the HasPrefix predicate on the "generation_id" field.
+func GenerationIDHasPrefix(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldHasPrefix(FieldGenerationID, v))
+}
+
+// GenerationIDHasSuffix applies the HasSuffix predicate on the "generation_id" field.
+func GenerationIDHasSuffix(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldHasSuffix(FieldGenerationID, v))
+}
+
+// GenerationIDEqualFold applies the EqualFold predicate on the "generation_id" field.
+func GenerationIDEqualFold(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEqualFold(FieldGenerationID, v))
+}
+
+// GenerationIDContainsFold applies the ContainsFold predicate on the "generation_id" field.
+func GenerationIDContainsFold(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldContainsFold(FieldGenerationID, v))
 }
 
 // UserIDEQ applies the EQ predicate on the "user_id" field.
@@ -637,6 +712,46 @@ func EmbeddingStatusEqualFold(v string) predicate.MemoryNode {
 // EmbeddingStatusContainsFold applies the ContainsFold predicate on the "embedding_status" field.
 func EmbeddingStatusContainsFold(v string) predicate.MemoryNode {
 	return predicate.MemoryNode(sql.FieldContainsFold(FieldEmbeddingStatus, v))
+}
+
+// EmbeddingRevisionEQ applies the EQ predicate on the "embedding_revision" field.
+func EmbeddingRevisionEQ(v int64) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEQ(FieldEmbeddingRevision, v))
+}
+
+// EmbeddingRevisionNEQ applies the NEQ predicate on the "embedding_revision" field.
+func EmbeddingRevisionNEQ(v int64) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldNEQ(FieldEmbeddingRevision, v))
+}
+
+// EmbeddingRevisionIn applies the In predicate on the "embedding_revision" field.
+func EmbeddingRevisionIn(vs ...int64) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldIn(FieldEmbeddingRevision, vs...))
+}
+
+// EmbeddingRevisionNotIn applies the NotIn predicate on the "embedding_revision" field.
+func EmbeddingRevisionNotIn(vs ...int64) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldNotIn(FieldEmbeddingRevision, vs...))
+}
+
+// EmbeddingRevisionGT applies the GT predicate on the "embedding_revision" field.
+func EmbeddingRevisionGT(v int64) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldGT(FieldEmbeddingRevision, v))
+}
+
+// EmbeddingRevisionGTE applies the GTE predicate on the "embedding_revision" field.
+func EmbeddingRevisionGTE(v int64) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldGTE(FieldEmbeddingRevision, v))
+}
+
+// EmbeddingRevisionLT applies the LT predicate on the "embedding_revision" field.
+func EmbeddingRevisionLT(v int64) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldLT(FieldEmbeddingRevision, v))
+}
+
+// EmbeddingRevisionLTE applies the LTE predicate on the "embedding_revision" field.
+func EmbeddingRevisionLTE(v int64) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldLTE(FieldEmbeddingRevision, v))
 }
 
 // And groups predicates with the AND operator between them.

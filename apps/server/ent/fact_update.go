@@ -34,6 +34,20 @@ func (_u *FactUpdate) SetUpdatedAt(v time.Time) *FactUpdate {
 	return _u
 }
 
+// SetGenerationID sets the "generation_id" field.
+func (_u *FactUpdate) SetGenerationID(v string) *FactUpdate {
+	_u.mutation.SetGenerationID(v)
+	return _u
+}
+
+// SetNillableGenerationID sets the "generation_id" field if the given value is not nil.
+func (_u *FactUpdate) SetNillableGenerationID(v *string) *FactUpdate {
+	if v != nil {
+		_u.SetGenerationID(*v)
+	}
+	return _u
+}
+
 // SetUserID sets the "user_id" field.
 func (_u *FactUpdate) SetUserID(v string) *FactUpdate {
 	_u.mutation.SetUserID(v)
@@ -339,6 +353,9 @@ func (_u *FactUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(fact.FieldUpdatedAt, field.TypeTime, value)
 	}
+	if value, ok := _u.mutation.GenerationID(); ok {
+		_spec.SetField(fact.FieldGenerationID, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(fact.FieldUserID, field.TypeString, value)
 	}
@@ -431,6 +448,20 @@ type FactUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *FactUpdateOne) SetUpdatedAt(v time.Time) *FactUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetGenerationID sets the "generation_id" field.
+func (_u *FactUpdateOne) SetGenerationID(v string) *FactUpdateOne {
+	_u.mutation.SetGenerationID(v)
+	return _u
+}
+
+// SetNillableGenerationID sets the "generation_id" field if the given value is not nil.
+func (_u *FactUpdateOne) SetNillableGenerationID(v *string) *FactUpdateOne {
+	if v != nil {
+		_u.SetGenerationID(*v)
+	}
 	return _u
 }
 
@@ -768,6 +799,9 @@ func (_u *FactUpdateOne) sqlSave(ctx context.Context) (_node *Fact, err error) {
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(fact.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.GenerationID(); ok {
+		_spec.SetField(fact.FieldGenerationID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(fact.FieldUserID, field.TypeString, value)

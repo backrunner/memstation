@@ -34,6 +34,20 @@ func (_u *MemoryRelationUpdate) SetUpdatedAt(v time.Time) *MemoryRelationUpdate 
 	return _u
 }
 
+// SetGenerationID sets the "generation_id" field.
+func (_u *MemoryRelationUpdate) SetGenerationID(v string) *MemoryRelationUpdate {
+	_u.mutation.SetGenerationID(v)
+	return _u
+}
+
+// SetNillableGenerationID sets the "generation_id" field if the given value is not nil.
+func (_u *MemoryRelationUpdate) SetNillableGenerationID(v *string) *MemoryRelationUpdate {
+	if v != nil {
+		_u.SetGenerationID(*v)
+	}
+	return _u
+}
+
 // SetUserID sets the "user_id" field.
 func (_u *MemoryRelationUpdate) SetUserID(v string) *MemoryRelationUpdate {
 	_u.mutation.SetUserID(v)
@@ -178,7 +192,25 @@ func (_u *MemoryRelationUpdate) defaults() {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (_u *MemoryRelationUpdate) check() error {
+	if v, ok := _u.mutation.RelationType(); ok {
+		if err := memoryrelation.RelationTypeValidator(v); err != nil {
+			return &ValidationError{Name: "relation_type", err: fmt.Errorf(`ent: validator failed for field "MemoryRelation.relation_type": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.Weight(); ok {
+		if err := memoryrelation.WeightValidator(v); err != nil {
+			return &ValidationError{Name: "weight", err: fmt.Errorf(`ent: validator failed for field "MemoryRelation.weight": %w`, err)}
+		}
+	}
+	return nil
+}
+
 func (_u *MemoryRelationUpdate) sqlSave(ctx context.Context) (_node int, err error) {
+	if err := _u.check(); err != nil {
+		return _node, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(memoryrelation.Table, memoryrelation.Columns, sqlgraph.NewFieldSpec(memoryrelation.FieldID, field.TypeInt))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
@@ -189,6 +221,9 @@ func (_u *MemoryRelationUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(memoryrelation.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.GenerationID(); ok {
+		_spec.SetField(memoryrelation.FieldGenerationID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(memoryrelation.FieldUserID, field.TypeString, value)
@@ -240,6 +275,20 @@ type MemoryRelationUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *MemoryRelationUpdateOne) SetUpdatedAt(v time.Time) *MemoryRelationUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetGenerationID sets the "generation_id" field.
+func (_u *MemoryRelationUpdateOne) SetGenerationID(v string) *MemoryRelationUpdateOne {
+	_u.mutation.SetGenerationID(v)
+	return _u
+}
+
+// SetNillableGenerationID sets the "generation_id" field if the given value is not nil.
+func (_u *MemoryRelationUpdateOne) SetNillableGenerationID(v *string) *MemoryRelationUpdateOne {
+	if v != nil {
+		_u.SetGenerationID(*v)
+	}
 	return _u
 }
 
@@ -400,7 +449,25 @@ func (_u *MemoryRelationUpdateOne) defaults() {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (_u *MemoryRelationUpdateOne) check() error {
+	if v, ok := _u.mutation.RelationType(); ok {
+		if err := memoryrelation.RelationTypeValidator(v); err != nil {
+			return &ValidationError{Name: "relation_type", err: fmt.Errorf(`ent: validator failed for field "MemoryRelation.relation_type": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.Weight(); ok {
+		if err := memoryrelation.WeightValidator(v); err != nil {
+			return &ValidationError{Name: "weight", err: fmt.Errorf(`ent: validator failed for field "MemoryRelation.weight": %w`, err)}
+		}
+	}
+	return nil
+}
+
 func (_u *MemoryRelationUpdateOne) sqlSave(ctx context.Context) (_node *MemoryRelation, err error) {
+	if err := _u.check(); err != nil {
+		return _node, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(memoryrelation.Table, memoryrelation.Columns, sqlgraph.NewFieldSpec(memoryrelation.FieldID, field.TypeInt))
 	id, ok := _u.mutation.ID()
 	if !ok {
@@ -428,6 +495,9 @@ func (_u *MemoryRelationUpdateOne) sqlSave(ctx context.Context) (_node *MemoryRe
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(memoryrelation.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.GenerationID(); ok {
+		_spec.SetField(memoryrelation.FieldGenerationID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(memoryrelation.FieldUserID, field.TypeString, value)

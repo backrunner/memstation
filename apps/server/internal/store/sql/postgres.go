@@ -1970,6 +1970,13 @@ func (r *PostgresMemoryRepository) UpdateDocument(ctx context.Context, userID, i
 	default:
 		return domain.MemoryDocument{}, fmt.Errorf("unsupported memory type: %s", kind)
 	}
+	document, err := r.GetDocument(ctx, userID, id, kind)
+	if err != nil {
+		return domain.MemoryDocument{}, err
+	}
+	nodeID := document.NodeID
+	generationID := document.GenerationID
+	embeddingRevision := now.UnixNano()
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return domain.MemoryDocument{}, err
@@ -1985,13 +1992,31 @@ func (r *PostgresMemoryRepository) UpdateDocument(ctx context.Context, userID, i
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `
-        UPDATE memory_nodes
-        SET activity_at = $1,
-            time_tier = $2,
-            embedding_status = 'pending',
-            updated_at = $1
-        WHERE user_id = $3 AND entity_id = $4 AND node_type = $5
-    `, now, string(domain.ClassifyTimeTier(now, now)), userID, id, string(kind)); err != nil {
+	        UPDATE memory_nodes
+	        SET activity_at = $1,
+	            time_tier = $2,
+	            embedding_status = 'pending',
+	            embedding_revision = $6,
+	            updated_at = $1
+	        WHERE user_id = $3 AND entity_id = $4 AND node_type = $5
+	    `, now, string(domain.ClassifyTimeTier(now, now)), userID, id, string(kind), embeddingRevision); err != nil {
+		return domain.MemoryDocument{}, err
+	}
+	if err := insertMemoryMutationOutboxTx(ctx, tx, domain.OutboxEvent{
+		ID:            fmt.Sprintf("%s:%s:%d", domain.TaskTypeEmbeddingGenerate, nodeID, embeddingRevision),
+		UserID:        userID,
+		EventType:     domain.TaskTypeEmbeddingGenerate,
+		AggregateType: "memory_node",
+		AggregateID:   nodeID,
+		Payload: map[string]any{
+			"user_id":            userID,
+			"generation_id":      generationID,
+			"node_id":            nodeID,
+			"node_type":          string(kind),
+			"embedding_revision": embeddingRevision,
+		},
+		CreatedAt: now,
+	}); err != nil {
 		return domain.MemoryDocument{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -1999,6 +2024,8 @@ func (r *PostgresMemoryRepository) UpdateDocument(ctx context.Context, userID, i
 	}
 	return r.GetDocument(ctx, userID, id, kind)
 }
+
+func (r *PostgresMemoryRepository) HasTransactionalMemoryOutbox() bool { return true }
 
 func (r *PostgresMemoryRepository) ListFactLineage(ctx context.Context, userID, generationID, factID string) (domain.FactLineage, error) {
 	anchor, err := r.GetDocumentInGeneration(ctx, userID, generationID, factID, domain.MemoryTypeFact)
@@ -2276,7 +2303,7 @@ func replaceMemoryKeywordsTx(ctx context.Context, tx *sqlpkg.Tx, userID, summary
 	return nil
 }
 
-func insertMemoryEvidencesTx(ctx context.Context, tx *sqlpkg.Tx, evidences []domain.MemoryEvidence) error {
+func insertMemoryEvidencesTx(ctx context.Context, tx *sqlpkg.Tx, evidences []domain.MemoryEvidence, merge bool) error {
 	if tx == nil || len(evidences) == 0 {
 		return nil
 	}
@@ -2311,10 +2338,26 @@ func insertMemoryEvidencesTx(ctx context.Context, tx *sqlpkg.Tx, evidences []dom
 			)
 		}
 		query := `
-            INSERT INTO memory_evidences (
+	            INSERT INTO memory_evidences (
                 id, generation_id, user_id, node_id, conversation_id, sequence_num, part_id, artifact_id,
                 page_index, start_ms, end_ms, evidence_kind, excerpt_text, weight, metadata, created_at
-            ) VALUES ` + strings.Join(valueGroups, ",")
+	            ) VALUES ` + strings.Join(valueGroups, ",")
+		if merge {
+			query += ` ON CONFLICT (id) DO UPDATE SET
+				generation_id = EXCLUDED.generation_id,
+				conversation_id = EXCLUDED.conversation_id,
+				sequence_num = EXCLUDED.sequence_num,
+				part_id = EXCLUDED.part_id,
+				artifact_id = EXCLUDED.artifact_id,
+				page_index = EXCLUDED.page_index,
+				start_ms = EXCLUDED.start_ms,
+				end_ms = EXCLUDED.end_ms,
+				evidence_kind = EXCLUDED.evidence_kind,
+				excerpt_text = EXCLUDED.excerpt_text,
+				weight = EXCLUDED.weight,
+				metadata = EXCLUDED.metadata
+			WHERE memory_evidences.user_id = EXCLUDED.user_id AND memory_evidences.node_id = EXCLUDED.node_id`
+		}
 		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 			return err
 		}
@@ -2570,18 +2613,20 @@ func (r *PostgresMemoryRepository) UpsertKeyMemory(ctx context.Context, km domai
 	if km.CreatedAt.IsZero() {
 		km.CreatedAt = now
 	}
+	embeddingRevision := now.UnixNano()
 	_, err = tx.ExecContext(ctx, `
-	        INSERT INTO memory_nodes (id, user_id, node_type, entity_id, importance, decay_factor, activity_at, time_tier, embedding_status, created_at, updated_at)
-	        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-	        ON CONFLICT (id) DO UPDATE SET
-	            importance = EXCLUDED.importance,
-	            decay_factor = EXCLUDED.decay_factor,
-	            activity_at = EXCLUDED.activity_at,
-	            time_tier = EXCLUDED.time_tier,
-	            embedding_status = EXCLUDED.embedding_status,
-	            updated_at = EXCLUDED.updated_at
-	        WHERE memory_nodes.user_id = EXCLUDED.user_id
-	`, nodeID, km.UserID, string(domain.MemoryTypeKeyMemory), km.ID, km.Importance, km.DecayFactor, km.ActivityAt, string(km.TimeTier), "pending", km.CreatedAt, now)
+		        INSERT INTO memory_nodes (id, generation_id, user_id, node_type, entity_id, importance, decay_factor, activity_at, time_tier, embedding_status, embedding_revision, created_at, updated_at)
+		        VALUES ($1,'',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+		        ON CONFLICT (id) DO UPDATE SET
+		            importance = EXCLUDED.importance,
+		            decay_factor = EXCLUDED.decay_factor,
+		            activity_at = EXCLUDED.activity_at,
+		            time_tier = EXCLUDED.time_tier,
+		            embedding_status = 'pending',
+		            embedding_revision = EXCLUDED.embedding_revision,
+		            updated_at = EXCLUDED.updated_at
+		        WHERE memory_nodes.user_id = EXCLUDED.user_id
+		`, nodeID, km.UserID, string(domain.MemoryTypeKeyMemory), km.ID, km.Importance, km.DecayFactor, km.ActivityAt, string(km.TimeTier), "pending", embeddingRevision, km.CreatedAt, now)
 	if err != nil {
 		return err
 	}
@@ -2604,31 +2649,98 @@ func (r *PostgresMemoryRepository) UpsertKeyMemory(ctx context.Context, km domai
 	if err = syncTemporalRelationsTx(tx, km.UserID, "", nodeID, km.ActivityAt, km.TimeTier, now); err != nil {
 		return err
 	}
+	for _, event := range []domain.OutboxEvent{
+		{
+			ID:            fmt.Sprintf("%s:%s:%d", domain.TaskTypeEmbeddingGenerate, nodeID, embeddingRevision),
+			UserID:        km.UserID,
+			EventType:     domain.TaskTypeEmbeddingGenerate,
+			AggregateType: "memory_node",
+			AggregateID:   nodeID,
+			Payload: map[string]any{
+				"user_id":            km.UserID,
+				"node_id":            nodeID,
+				"node_type":          string(domain.MemoryTypeKeyMemory),
+				"embedding_revision": embeddingRevision,
+			},
+			CreatedAt: now,
+		},
+		{
+			ID:            fmt.Sprintf("%s:%s:%d", domain.TaskTypeKeyMemoryGraphSync, nodeID, embeddingRevision),
+			UserID:        km.UserID,
+			EventType:     domain.TaskTypeKeyMemoryGraphSync,
+			AggregateType: "key_memory",
+			AggregateID:   nodeID,
+			Payload: map[string]any{
+				"user_id": km.UserID,
+				"key":     km.Key,
+			},
+			CreatedAt: now,
+		},
+	} {
+		if err = insertMemoryMutationOutboxTx(ctx, tx, event); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 
 func (r *PostgresMemoryRepository) DeleteKeyMemory(ctx context.Context, userID, key string) error {
-	_, err := r.db.ExecContext(ctx, `
-	        WITH target AS (
-	            SELECT node_id
-	            FROM key_memories
-	            WHERE user_id = $2 AND key = $3
-	        ), deleted AS (
-	            UPDATE key_memories
-	            SET deleted_at = $1, updated_at = $1
-	            WHERE user_id = $2 AND key = $3
-	        )
-	        DELETE FROM memory_relations
-	        WHERE user_id = $2
-	          AND (
-	              src_node_id IN (SELECT node_id FROM target)
-	              OR dst_node_id IN (SELECT node_id FROM target)
-	          )
-	    `, time.Now().UTC(), userID, key)
-	return err
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer rollback(tx)
+	var nodeID string
+	if err = tx.QueryRowContext(ctx, `SELECT node_id FROM key_memories WHERE user_id = $1 AND key = $2`, userID, key).Scan(&nodeID); err != nil {
+		if errors.Is(err, sqlpkg.ErrNoRows) {
+			return tx.Commit()
+		}
+		return err
+	}
+	now := time.Now().UTC()
+	if _, err = tx.ExecContext(ctx, `UPDATE key_memories SET deleted_at = $1, updated_at = $1 WHERE user_id = $2 AND key = $3`, now, userID, key); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM memory_relations WHERE user_id = $1 AND (src_node_id = $2 OR dst_node_id = $2)`, userID, nodeID); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM memory_embeddings WHERE user_id = $1 AND node_id = $2`, userID, nodeID); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE memory_nodes SET embedding_status = 'deleted', embedding_revision = embedding_revision + 1, updated_at = $1 WHERE user_id = $2 AND id = $3`, now, userID, nodeID); err != nil {
+		return err
+	}
+	if err = insertMemoryMutationOutboxTx(ctx, tx, domain.OutboxEvent{
+		ID:            fmt.Sprintf("%s:%s:%d", domain.TaskTypeEmbeddingDelete, nodeID, now.UnixNano()),
+		UserID:        userID,
+		EventType:     domain.TaskTypeEmbeddingDelete,
+		AggregateType: "memory_node",
+		AggregateID:   nodeID,
+		Payload: map[string]any{
+			"user_id": userID,
+			"node_id": nodeID,
+		},
+		CreatedAt: now,
+	}); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (r *PostgresMemoryRepository) LinkDocuments(ctx context.Context, relation domain.MemoryRelation) error {
+	relation.UserID = strings.TrimSpace(relation.UserID)
+	relation.SrcNodeID = strings.TrimSpace(relation.SrcNodeID)
+	relation.DstNodeID = strings.TrimSpace(relation.DstNodeID)
+	relation.RelationType = strings.TrimSpace(relation.RelationType)
+	if relation.UserID == "" || relation.SrcNodeID == "" || relation.DstNodeID == "" || relation.RelationType == "" {
+		return errors.New("relation user, endpoints, and type are required")
+	}
+	if relation.SrcNodeID == relation.DstNodeID {
+		return errors.New("memory relation cannot link a node to itself")
+	}
+	if relation.Weight < 0 || relation.Weight > 1 {
+		return errors.New("memory relation weight must be between 0 and 1")
+	}
 	if relation.ID == "" {
 		relation.ID = uuid.NewString()
 	}
@@ -2731,6 +2843,14 @@ func (r *PostgresMemoryRepository) ReplaceEvidences(ctx context.Context, userID,
     `, userID, nodeID); err != nil {
 		return err
 	}
+	normalized := normalizeMemoryEvidences(userID, nodeID, evidences)
+	if err = insertMemoryEvidencesTx(ctx, tx, normalized, false); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func normalizeMemoryEvidences(userID, nodeID string, evidences []domain.MemoryEvidence) []domain.MemoryEvidence {
 	now := time.Now().UTC()
 	normalized := append([]domain.MemoryEvidence(nil), evidences...)
 	for idx := range normalized {
@@ -2750,7 +2870,17 @@ func (r *PostgresMemoryRepository) ReplaceEvidences(ctx context.Context, userID,
 			normalized[idx].CreatedAt = now
 		}
 	}
-	if err = insertMemoryEvidencesTx(ctx, tx, normalized); err != nil {
+	return normalized
+}
+
+func (r *PostgresMemoryRepository) MergeEvidences(ctx context.Context, userID, nodeID string, evidences []domain.MemoryEvidence) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer rollback(tx)
+	normalized := normalizeMemoryEvidences(userID, nodeID, evidences)
+	if err = insertMemoryEvidencesTx(ctx, tx, normalized, true); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -3016,6 +3146,29 @@ func temporalMetadata(userID string, activityAt time.Time, tier domain.TimeTier)
 
 type PostgresOutboxRepository struct {
 	db *sqlpkg.DB
+}
+
+func insertMemoryMutationOutboxTx(ctx context.Context, tx *sqlpkg.Tx, event domain.OutboxEvent) error {
+	if event.ID == "" {
+		event.ID = uuid.NewString()
+	}
+	if event.CreatedAt.IsZero() {
+		event.CreatedAt = time.Now().UTC()
+	}
+	if event.AvailableAt.IsZero() {
+		event.AvailableAt = event.CreatedAt
+	}
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO outbox_events (id, user_id, event_type, aggregate_type, aggregate_id, payload, status, available_at, processed_at, retry_count, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,'pending',$7,NULL,0,$8,$8)
+		ON CONFLICT (id) DO UPDATE SET
+			payload = EXCLUDED.payload,
+			status = 'pending',
+			available_at = EXCLUDED.available_at,
+			processed_at = NULL,
+			updated_at = EXCLUDED.updated_at
+	`, event.ID, event.UserID, event.EventType, event.AggregateType, event.AggregateID, marshalJSON(event.Payload), event.AvailableAt, event.CreatedAt)
+	return err
 }
 
 func NewPostgresOutboxRepository(db *sqlpkg.DB) *PostgresOutboxRepository {

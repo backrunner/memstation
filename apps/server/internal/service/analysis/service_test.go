@@ -310,3 +310,39 @@ func TestSummarizeConversationAndHelpers(t *testing.T) {
 		t.Fatalf("unexpected first non-empty value: %q", got)
 	}
 }
+
+func TestEntityNodesAreCanonicalAcrossConversations(t *testing.T) {
+	t.Parallel()
+
+	service := NewService()
+	classify := func(conversationID string) domain.MemoryDocument {
+		items := service.ClassifyGenericMemoryItems(Input{
+			UserID:         "user-1",
+			ConversationID: conversationID,
+			Conversation: domain.ConversationRecord{
+				UserID:         "user-1",
+				ConversationID: conversationID,
+				Messages: []domain.UnifiedMessage{{
+					Role:      domain.RoleAssistant,
+					ToolCalls: []domain.ToolCall{{ID: "call-" + conversationID, Name: "inspect_assets"}},
+				}},
+			},
+		}, "The workflow should use inspect_assets.")
+		for _, item := range items {
+			if item.Type == domain.MemoryTypeEntity && metadataString(item.Metadata, "entity_kind") == "tool" {
+				return item
+			}
+		}
+		t.Fatalf("tool entity not found for %s", conversationID)
+		return domain.MemoryDocument{}
+	}
+
+	first := classify("conv-1")
+	second := classify("conv-2")
+	if first.ID != second.ID || first.NodeID != second.NodeID {
+		t.Fatalf("expected canonical entity identity, first=%+v second=%+v", first, second)
+	}
+	if first.Metadata["canonical_key"] != "tool:inspect_assets" {
+		t.Fatalf("unexpected canonical key: %+v", first.Metadata)
+	}
+}

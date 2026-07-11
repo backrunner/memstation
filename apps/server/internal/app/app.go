@@ -386,6 +386,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		Conversations:        conversationRepo,
 		MediaStore:           mediaRepo,
 		Memories:             memoryRepo,
+		MemoryService:        memories,
 		Generations:          generations,
 		Vectors:              vectorStore,
 		Publisher:            publisher,

@@ -265,9 +265,19 @@ func (s *Service) ClassifyGenericMemoryItems(input Input, summary string) []doma
 			metadata["confidence"] = inferConfidence(content)
 		}
 		seed := genericItemSeed(kind, conversationID, content, metadata)
+		documentID := GenericMemoryDocumentID(userID, kind, conversationID, seed)
+		nodeID := GenericMemoryNodeID(userID, kind, conversationID, seed)
+		if kind == domain.MemoryTypeEntity {
+			canonicalKey := canonicalEntityKey(content, metadata)
+			metadata["canonical_key"] = canonicalKey
+			metadata["aliases"] = []string{firstNonEmpty(metadataString(metadata, "title"), content)}
+			metadata["mention_conversation_ids"] = []string{conversationID}
+			documentID = CanonicalEntityDocumentID(userID, canonicalKey)
+			nodeID = CanonicalEntityNodeID(userID, canonicalKey)
+		}
 		items = append(items, domain.MemoryDocument{
-			ID:             GenericMemoryDocumentID(userID, kind, conversationID, seed),
-			NodeID:         GenericMemoryNodeID(userID, kind, conversationID, seed),
+			ID:             documentID,
+			NodeID:         nodeID,
 			UserID:         userID,
 			ConversationID: conversationID,
 			Type:           kind,
@@ -863,6 +873,26 @@ func GenericMemoryDocumentID(userID string, kind domain.MemoryType, conversation
 
 func GenericMemoryNodeID(userID string, kind domain.MemoryType, conversationID, seed string) string {
 	return "node:" + string(kind) + ":" + sanitizeFactKey(userID) + ":" + sanitizeFactKey(conversationID) + ":" + lineageSuffix(seed)
+}
+
+func CanonicalEntityDocumentID(userID, canonicalKey string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(canonicalKey)))
+	return "entity:" + sanitizeFactKey(userID) + ":" + lineageSuffix(hex.EncodeToString(sum[:]))
+}
+
+func CanonicalEntityNodeID(userID, canonicalKey string) string {
+	return "node:" + CanonicalEntityDocumentID(userID, canonicalKey)
+}
+
+func canonicalEntityKey(content string, metadata map[string]any) string {
+	kind := strings.ToLower(strings.TrimSpace(metadataString(metadata, "entity_kind")))
+	if kind == "" {
+		kind = "topic"
+	}
+	name := firstNonEmpty(metadataString(metadata, "title"), strings.TrimPrefix(content, "Entity: "), strings.TrimPrefix(content, "Tool entity: "))
+	name = strings.ToLower(normalizeWhitespace(name))
+	name = strings.Trim(name, " \t\r\n.,:;!?()[]{}\"'")
+	return kind + ":" + name
 }
 
 func entityCandidates(summary string) []string {

@@ -72,6 +72,7 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "generation_id", Type: field.TypeString, Default: ""},
 		{Name: "user_id", Type: field.TypeString},
 		{Name: "conversation_id", Type: field.TypeString},
 		{Name: "node_id", Type: field.TypeString, Unique: true},
@@ -98,6 +99,7 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "generation_id", Type: field.TypeString, Default: ""},
 		{Name: "user_id", Type: field.TypeString},
 		{Name: "conversation_id", Type: field.TypeString},
 		{Name: "node_id", Type: field.TypeString, Unique: true},
@@ -141,6 +143,7 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "embedding_id", Type: field.TypeString, Unique: true},
+		{Name: "generation_id", Type: field.TypeString, Default: ""},
 		{Name: "user_id", Type: field.TypeString},
 		{Name: "node_id", Type: field.TypeString},
 		{Name: "node_type", Type: field.TypeString},
@@ -154,6 +157,13 @@ var (
 		Name:       "memory_embeddings",
 		Columns:    MemoryEmbeddingsColumns,
 		PrimaryKey: []*schema.Column{MemoryEmbeddingsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "memoryembedding_user_id_node_id_embedding_version",
+				Unique:  true,
+				Columns: []*schema.Column{MemoryEmbeddingsColumns[5], MemoryEmbeddingsColumns[6], MemoryEmbeddingsColumns[8]},
+			},
+		},
 	}
 	// MemoryItemsColumns holds the columns for the "memory_items" table.
 	MemoryItemsColumns = []*schema.Column{
@@ -202,6 +212,7 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "generation_id", Type: field.TypeString, Default: ""},
 		{Name: "user_id", Type: field.TypeString},
 		{Name: "node_type", Type: field.TypeString},
 		{Name: "entity_id", Type: field.TypeString},
@@ -210,18 +221,27 @@ var (
 		{Name: "activity_at", Type: field.TypeTime, Nullable: true},
 		{Name: "time_tier", Type: field.TypeString, Default: ""},
 		{Name: "embedding_status", Type: field.TypeString, Default: "pending"},
+		{Name: "embedding_revision", Type: field.TypeInt64, Default: 0},
 	}
 	// MemoryNodesTable holds the schema information for the "memory_nodes" table.
 	MemoryNodesTable = &schema.Table{
 		Name:       "memory_nodes",
 		Columns:    MemoryNodesColumns,
 		PrimaryKey: []*schema.Column{MemoryNodesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "memorynode_user_id_node_type_entity_id",
+				Unique:  true,
+				Columns: []*schema.Column{MemoryNodesColumns[4], MemoryNodesColumns[5], MemoryNodesColumns[6]},
+			},
+		},
 	}
 	// MemoryRelationsColumns holds the columns for the "memory_relations" table.
 	MemoryRelationsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "generation_id", Type: field.TypeString, Default: ""},
 		{Name: "user_id", Type: field.TypeString},
 		{Name: "src_node_id", Type: field.TypeString},
 		{Name: "dst_node_id", Type: field.TypeString},
@@ -235,12 +255,30 @@ var (
 		Name:       "memory_relations",
 		Columns:    MemoryRelationsColumns,
 		PrimaryKey: []*schema.Column{MemoryRelationsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "memoryrelation_user_id_src_node_id_dst_node_id_relation_type",
+				Unique:  true,
+				Columns: []*schema.Column{MemoryRelationsColumns[4], MemoryRelationsColumns[5], MemoryRelationsColumns[6], MemoryRelationsColumns[7]},
+			},
+			{
+				Name:    "memoryrelation_user_id_generation_id_src_node_id",
+				Unique:  false,
+				Columns: []*schema.Column{MemoryRelationsColumns[4], MemoryRelationsColumns[3], MemoryRelationsColumns[5]},
+			},
+			{
+				Name:    "memoryrelation_user_id_generation_id_dst_node_id",
+				Unique:  false,
+				Columns: []*schema.Column{MemoryRelationsColumns[4], MemoryRelationsColumns[3], MemoryRelationsColumns[6]},
+			},
+		},
 	}
 	// MemorySummariesColumns holds the columns for the "memory_summaries" table.
 	MemorySummariesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "generation_id", Type: field.TypeString, Default: ""},
 		{Name: "user_id", Type: field.TypeString},
 		{Name: "conversation_id", Type: field.TypeString},
 		{Name: "node_id", Type: field.TypeString, Unique: true},

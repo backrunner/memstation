@@ -219,6 +219,7 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 	for idx := range genericDocs {
 		genericDocs[idx] = applyGenerationToDocument(snapshot.UserID, generation.GenerationID, genericDocs[idx])
 		genericDocs[idx].Metadata = mergeMetadata(genericDocs[idx].Metadata, snapshotMetadata(snapshot))
+		genericDocs[idx] = mergeCanonicalEntityDocument(ctx, services, genericDocs[idx])
 		applyDocumentScore(ctx, services.Scorer, &genericDocs[idx], conversation.UpdatedAt)
 		if err := ensureCurrentGenerationSource(ctx, services, snapshot.UserID, generation.GenerationID, snapshot.SnapshotID); err != nil {
 			return 0, err
@@ -228,8 +229,14 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 		}
 		if len(summaryEvidences) > 0 {
 			itemEvidences := cloneNodeEvidences(snapshot.UserID, generation.GenerationID, genericDocs[idx].NodeID, summaryEvidences)
-			if err := services.Memories.ReplaceEvidences(ctx, snapshot.UserID, genericDocs[idx].NodeID, itemEvidences); err != nil {
-				return 0, err
+			var evidenceErr error
+			if genericDocs[idx].Type == domain.MemoryTypeEntity {
+				evidenceErr = services.Memories.MergeEvidences(ctx, snapshot.UserID, genericDocs[idx].NodeID, itemEvidences)
+			} else {
+				evidenceErr = services.Memories.ReplaceEvidences(ctx, snapshot.UserID, genericDocs[idx].NodeID, itemEvidences)
+			}
+			if evidenceErr != nil {
+				return 0, evidenceErr
 			}
 		}
 	}

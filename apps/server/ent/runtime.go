@@ -104,16 +104,20 @@ func init() {
 	fact.DefaultUpdatedAt = factDescUpdatedAt.Default.(func() time.Time)
 	// fact.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	fact.UpdateDefaultUpdatedAt = factDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// factDescGenerationID is the schema descriptor for generation_id field.
+	factDescGenerationID := factFields[0].Descriptor()
+	// fact.DefaultGenerationID holds the default value on creation for the generation_id field.
+	fact.DefaultGenerationID = factDescGenerationID.Default.(string)
 	// factDescRevisionSeq is the schema descriptor for revision_seq field.
-	factDescRevisionSeq := factFields[7].Descriptor()
+	factDescRevisionSeq := factFields[8].Descriptor()
 	// fact.DefaultRevisionSeq holds the default value on creation for the revision_seq field.
 	fact.DefaultRevisionSeq = factDescRevisionSeq.Default.(int)
 	// factDescConfidence is the schema descriptor for confidence field.
-	factDescConfidence := factFields[9].Descriptor()
+	factDescConfidence := factFields[10].Descriptor()
 	// fact.DefaultConfidence holds the default value on creation for the confidence field.
 	fact.DefaultConfidence = factDescConfidence.Default.(float64)
 	// factDescIsSuperseded is the schema descriptor for is_superseded field.
-	factDescIsSuperseded := factFields[10].Descriptor()
+	factDescIsSuperseded := factFields[11].Descriptor()
 	// fact.DefaultIsSuperseded holds the default value on creation for the is_superseded field.
 	fact.DefaultIsSuperseded = factDescIsSuperseded.Default.(bool)
 	impressionMixin := schema.Impression{}.Mixin()
@@ -131,6 +135,10 @@ func init() {
 	impression.DefaultUpdatedAt = impressionDescUpdatedAt.Default.(func() time.Time)
 	// impression.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	impression.UpdateDefaultUpdatedAt = impressionDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// impressionDescGenerationID is the schema descriptor for generation_id field.
+	impressionDescGenerationID := impressionFields[0].Descriptor()
+	// impression.DefaultGenerationID holds the default value on creation for the generation_id field.
+	impression.DefaultGenerationID = impressionDescGenerationID.Default.(string)
 	keymemoryMixin := schema.KeyMemory{}.Mixin()
 	keymemoryMixinFields0 := keymemoryMixin[0].Fields()
 	_ = keymemoryMixinFields0
@@ -165,8 +173,12 @@ func init() {
 	memoryembedding.DefaultUpdatedAt = memoryembeddingDescUpdatedAt.Default.(func() time.Time)
 	// memoryembedding.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	memoryembedding.UpdateDefaultUpdatedAt = memoryembeddingDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// memoryembeddingDescGenerationID is the schema descriptor for generation_id field.
+	memoryembeddingDescGenerationID := memoryembeddingFields[1].Descriptor()
+	// memoryembedding.DefaultGenerationID holds the default value on creation for the generation_id field.
+	memoryembedding.DefaultGenerationID = memoryembeddingDescGenerationID.Default.(string)
 	// memoryembeddingDescEmbeddingVersion is the schema descriptor for embedding_version field.
-	memoryembeddingDescEmbeddingVersion := memoryembeddingFields[4].Descriptor()
+	memoryembeddingDescEmbeddingVersion := memoryembeddingFields[5].Descriptor()
 	// memoryembedding.DefaultEmbeddingVersion holds the default value on creation for the embedding_version field.
 	memoryembedding.DefaultEmbeddingVersion = memoryembeddingDescEmbeddingVersion.Default.(int)
 	memoryitemMixin := schema.MemoryItem{}.Mixin()
@@ -242,22 +254,32 @@ func init() {
 	memorynode.DefaultUpdatedAt = memorynodeDescUpdatedAt.Default.(func() time.Time)
 	// memorynode.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	memorynode.UpdateDefaultUpdatedAt = memorynodeDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// memorynodeDescGenerationID is the schema descriptor for generation_id field.
+	memorynodeDescGenerationID := memorynodeFields[0].Descriptor()
+	// memorynode.DefaultGenerationID holds the default value on creation for the generation_id field.
+	memorynode.DefaultGenerationID = memorynodeDescGenerationID.Default.(string)
 	// memorynodeDescImportance is the schema descriptor for importance field.
-	memorynodeDescImportance := memorynodeFields[3].Descriptor()
+	memorynodeDescImportance := memorynodeFields[4].Descriptor()
 	// memorynode.DefaultImportance holds the default value on creation for the importance field.
 	memorynode.DefaultImportance = memorynodeDescImportance.Default.(float64)
 	// memorynodeDescDecayFactor is the schema descriptor for decay_factor field.
-	memorynodeDescDecayFactor := memorynodeFields[4].Descriptor()
+	memorynodeDescDecayFactor := memorynodeFields[5].Descriptor()
 	// memorynode.DefaultDecayFactor holds the default value on creation for the decay_factor field.
 	memorynode.DefaultDecayFactor = memorynodeDescDecayFactor.Default.(float64)
 	// memorynodeDescTimeTier is the schema descriptor for time_tier field.
-	memorynodeDescTimeTier := memorynodeFields[6].Descriptor()
+	memorynodeDescTimeTier := memorynodeFields[7].Descriptor()
 	// memorynode.DefaultTimeTier holds the default value on creation for the time_tier field.
 	memorynode.DefaultTimeTier = memorynodeDescTimeTier.Default.(string)
 	// memorynodeDescEmbeddingStatus is the schema descriptor for embedding_status field.
-	memorynodeDescEmbeddingStatus := memorynodeFields[7].Descriptor()
+	memorynodeDescEmbeddingStatus := memorynodeFields[8].Descriptor()
 	// memorynode.DefaultEmbeddingStatus holds the default value on creation for the embedding_status field.
 	memorynode.DefaultEmbeddingStatus = memorynodeDescEmbeddingStatus.Default.(string)
+	// memorynodeDescEmbeddingRevision is the schema descriptor for embedding_revision field.
+	memorynodeDescEmbeddingRevision := memorynodeFields[9].Descriptor()
+	// memorynode.DefaultEmbeddingRevision holds the default value on creation for the embedding_revision field.
+	memorynode.DefaultEmbeddingRevision = memorynodeDescEmbeddingRevision.Default.(int64)
+	// memorynode.EmbeddingRevisionValidator is a validator for the "embedding_revision" field. It is called by the builders before save.
+	memorynode.EmbeddingRevisionValidator = memorynodeDescEmbeddingRevision.Validators[0].(func(int64) error)
 	memoryrelationMixin := schema.MemoryRelation{}.Mixin()
 	memoryrelationMixinFields0 := memoryrelationMixin[0].Fields()
 	_ = memoryrelationMixinFields0
@@ -273,12 +295,22 @@ func init() {
 	memoryrelation.DefaultUpdatedAt = memoryrelationDescUpdatedAt.Default.(func() time.Time)
 	// memoryrelation.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	memoryrelation.UpdateDefaultUpdatedAt = memoryrelationDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// memoryrelationDescGenerationID is the schema descriptor for generation_id field.
+	memoryrelationDescGenerationID := memoryrelationFields[0].Descriptor()
+	// memoryrelation.DefaultGenerationID holds the default value on creation for the generation_id field.
+	memoryrelation.DefaultGenerationID = memoryrelationDescGenerationID.Default.(string)
+	// memoryrelationDescRelationType is the schema descriptor for relation_type field.
+	memoryrelationDescRelationType := memoryrelationFields[4].Descriptor()
+	// memoryrelation.RelationTypeValidator is a validator for the "relation_type" field. It is called by the builders before save.
+	memoryrelation.RelationTypeValidator = memoryrelationDescRelationType.Validators[0].(func(string) error)
 	// memoryrelationDescWeight is the schema descriptor for weight field.
-	memoryrelationDescWeight := memoryrelationFields[4].Descriptor()
+	memoryrelationDescWeight := memoryrelationFields[5].Descriptor()
 	// memoryrelation.DefaultWeight holds the default value on creation for the weight field.
 	memoryrelation.DefaultWeight = memoryrelationDescWeight.Default.(float64)
+	// memoryrelation.WeightValidator is a validator for the "weight" field. It is called by the builders before save.
+	memoryrelation.WeightValidator = memoryrelationDescWeight.Validators[0].(func(float64) error)
 	// memoryrelationDescSource is the schema descriptor for source field.
-	memoryrelationDescSource := memoryrelationFields[5].Descriptor()
+	memoryrelationDescSource := memoryrelationFields[6].Descriptor()
 	// memoryrelation.DefaultSource holds the default value on creation for the source field.
 	memoryrelation.DefaultSource = memoryrelationDescSource.Default.(string)
 	memorysummaryMixin := schema.MemorySummary{}.Mixin()
@@ -296,16 +328,20 @@ func init() {
 	memorysummary.DefaultUpdatedAt = memorysummaryDescUpdatedAt.Default.(func() time.Time)
 	// memorysummary.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	memorysummary.UpdateDefaultUpdatedAt = memorysummaryDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// memorysummaryDescGenerationID is the schema descriptor for generation_id field.
+	memorysummaryDescGenerationID := memorysummaryFields[0].Descriptor()
+	// memorysummary.DefaultGenerationID holds the default value on creation for the generation_id field.
+	memorysummary.DefaultGenerationID = memorysummaryDescGenerationID.Default.(string)
 	// memorysummaryDescSummaryVersion is the schema descriptor for summary_version field.
-	memorysummaryDescSummaryVersion := memorysummaryFields[5].Descriptor()
+	memorysummaryDescSummaryVersion := memorysummaryFields[6].Descriptor()
 	// memorysummary.DefaultSummaryVersion holds the default value on creation for the summary_version field.
 	memorysummary.DefaultSummaryVersion = memorysummaryDescSummaryVersion.Default.(int)
 	// memorysummaryDescChunkIndex is the schema descriptor for chunk_index field.
-	memorysummaryDescChunkIndex := memorysummaryFields[6].Descriptor()
+	memorysummaryDescChunkIndex := memorysummaryFields[7].Descriptor()
 	// memorysummary.DefaultChunkIndex holds the default value on creation for the chunk_index field.
 	memorysummary.DefaultChunkIndex = memorysummaryDescChunkIndex.Default.(int)
 	// memorysummaryDescChunkTotal is the schema descriptor for chunk_total field.
-	memorysummaryDescChunkTotal := memorysummaryFields[7].Descriptor()
+	memorysummaryDescChunkTotal := memorysummaryFields[8].Descriptor()
 	// memorysummary.DefaultChunkTotal holds the default value on creation for the chunk_total field.
 	memorysummary.DefaultChunkTotal = memorysummaryDescChunkTotal.Default.(int)
 	messageMixin := schema.Message{}.Mixin()

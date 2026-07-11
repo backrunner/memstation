@@ -34,6 +34,20 @@ func (_u *MemorySummaryUpdate) SetUpdatedAt(v time.Time) *MemorySummaryUpdate {
 	return _u
 }
 
+// SetGenerationID sets the "generation_id" field.
+func (_u *MemorySummaryUpdate) SetGenerationID(v string) *MemorySummaryUpdate {
+	_u.mutation.SetGenerationID(v)
+	return _u
+}
+
+// SetNillableGenerationID sets the "generation_id" field if the given value is not nil.
+func (_u *MemorySummaryUpdate) SetNillableGenerationID(v *string) *MemorySummaryUpdate {
+	if v != nil {
+		_u.SetGenerationID(*v)
+	}
+	return _u
+}
+
 // SetUserID sets the "user_id" field.
 func (_u *MemorySummaryUpdate) SetUserID(v string) *MemorySummaryUpdate {
 	_u.mutation.SetUserID(v)
@@ -226,6 +240,9 @@ func (_u *MemorySummaryUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(memorysummary.FieldUpdatedAt, field.TypeTime, value)
 	}
+	if value, ok := _u.mutation.GenerationID(); ok {
+		_spec.SetField(memorysummary.FieldGenerationID, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(memorysummary.FieldUserID, field.TypeString, value)
 	}
@@ -285,6 +302,20 @@ type MemorySummaryUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *MemorySummaryUpdateOne) SetUpdatedAt(v time.Time) *MemorySummaryUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetGenerationID sets the "generation_id" field.
+func (_u *MemorySummaryUpdateOne) SetGenerationID(v string) *MemorySummaryUpdateOne {
+	_u.mutation.SetGenerationID(v)
+	return _u
+}
+
+// SetNillableGenerationID sets the "generation_id" field if the given value is not nil.
+func (_u *MemorySummaryUpdateOne) SetNillableGenerationID(v *string) *MemorySummaryUpdateOne {
+	if v != nil {
+		_u.SetGenerationID(*v)
+	}
 	return _u
 }
 
@@ -509,6 +540,9 @@ func (_u *MemorySummaryUpdateOne) sqlSave(ctx context.Context) (_node *MemorySum
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(memorysummary.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.GenerationID(); ok {
+		_spec.SetField(memorysummary.FieldGenerationID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(memorysummary.FieldUserID, field.TypeString, value)

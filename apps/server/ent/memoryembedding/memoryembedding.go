@@ -19,6 +19,8 @@ const (
 	FieldUpdatedAt = "updated_at"
 	// FieldEmbeddingID holds the string denoting the embedding_id field in the database.
 	FieldEmbeddingID = "embedding_id"
+	// FieldGenerationID holds the string denoting the generation_id field in the database.
+	FieldGenerationID = "generation_id"
 	// FieldUserID holds the string denoting the user_id field in the database.
 	FieldUserID = "user_id"
 	// FieldNodeID holds the string denoting the node_id field in the database.
@@ -43,6 +45,7 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldUpdatedAt,
 	FieldEmbeddingID,
+	FieldGenerationID,
 	FieldUserID,
 	FieldNodeID,
 	FieldNodeType,
@@ -69,6 +72,8 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultGenerationID holds the default value on creation for the "generation_id" field.
+	DefaultGenerationID string
 	// DefaultEmbeddingVersion holds the default value on creation for the "embedding_version" field.
 	DefaultEmbeddingVersion int
 )
@@ -94,6 +99,11 @@ func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByEmbeddingID orders the results by the embedding_id field.
 func ByEmbeddingID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEmbeddingID, opts...).ToFunc()
+}
+
+// ByGenerationID orders the results by the generation_id field.
+func ByGenerationID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldGenerationID, opts...).ToFunc()
 }
 
 // ByUserID orders the results by the user_id field.

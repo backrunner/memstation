@@ -56,3 +56,17 @@ func TestRelayKeepsOutboxPendingWhenPublishFails(t *testing.T) {
 		t.Fatal("expected outbox event to remain unprocessed")
 	}
 }
+
+func TestMemoryMutationOutboxUsesEventIdentityForTaskDeduplication(t *testing.T) {
+	t.Parallel()
+	event := domain.OutboxEvent{
+		ID:          "embedding.generate:node-1:42",
+		EventType:   TypeEmbeddingGenerate,
+		AggregateID: "node-1",
+		Payload:     map[string]any{"embedding_revision": 42},
+	}
+	task := mapOutboxToTask(event)
+	if task.UniqueKey != TypeEmbeddingGenerate+":"+event.ID {
+		t.Fatalf("expected revision-specific task identity, got %q", task.UniqueKey)
+	}
+}

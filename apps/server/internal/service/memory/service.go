@@ -125,8 +125,10 @@ func (s *Service) UpdateDocument(ctx context.Context, userID, id string, kind do
 	if err != nil {
 		return domain.MemoryDocument{}, err
 	}
-	if err := s.syncDocumentEmbedding(ctx, item); err != nil {
-		return domain.MemoryDocument{}, err
+	if !hasTransactionalMemoryOutbox(s.repo) {
+		if err := s.syncDocumentEmbedding(ctx, item); err != nil {
+			return domain.MemoryDocument{}, err
+		}
 	}
 	s.hydrateRelatedDocuments(ctx, &item)
 	return item, nil
@@ -292,7 +294,7 @@ func (s *Service) UpsertKeyMemory(ctx context.Context, km domain.KeyMemory) (dom
 			nodeID = storedNodeID
 		}
 	}
-	if s.vectors != nil {
+	if s.vectors != nil && !hasTransactionalMemoryOutbox(s.repo) {
 		if err := s.vectors.Upsert(ctx, domain.VectorUpsertRequest{
 			UserID:           km.UserID,
 			NodeID:           nodeID,
@@ -303,8 +305,10 @@ func (s *Service) UpsertKeyMemory(ctx context.Context, km domain.KeyMemory) (dom
 			return domain.KeyMemory{}, err
 		}
 	}
-	if err := s.syncKeyMemoryRelations(ctx, km, nodeID); err != nil {
-		return domain.KeyMemory{}, err
+	if !hasTransactionalMemoryOutbox(s.repo) {
+		if err := s.syncKeyMemoryRelations(ctx, km, nodeID); err != nil {
+			return domain.KeyMemory{}, err
+		}
 	}
 	s.invalidateKeyMemoryCache(ctx, km.UserID)
 	return km, nil
@@ -319,7 +323,7 @@ func (s *Service) DeleteKeyMemory(ctx context.Context, userID, memoryKey string)
 	if err := s.repo.DeleteKeyMemory(ctx, userID, memoryKey); err != nil {
 		return err
 	}
-	if s.vectors != nil {
+	if s.vectors != nil && !hasTransactionalMemoryOutbox(s.repo) {
 		nodeID := keyMemoryNodeID(userID, memoryKey)
 		if hasExisting {
 			if existingNodeID := stringMetadataValue(existing.Metadata, "node_id"); existingNodeID != "" {
@@ -332,6 +336,23 @@ func (s *Service) DeleteKeyMemory(ctx context.Context, userID, memoryKey string)
 	}
 	s.invalidateKeyMemoryCache(ctx, userID)
 	return nil
+}
+
+func (s *Service) SyncKeyMemoryGraph(ctx context.Context, userID, memoryKey string) error {
+	km, ok, err := s.GetKeyMemory(ctx, userID, strings.TrimSpace(memoryKey))
+	if err != nil || !ok {
+		return err
+	}
+	nodeID := stringMetadataValue(km.Metadata, "node_id")
+	if nodeID == "" {
+		nodeID = keyMemoryNodeID(userID, km.Key)
+	}
+	return s.syncKeyMemoryRelations(ctx, km, nodeID)
+}
+
+func hasTransactionalMemoryOutbox(repo ports.MemoryRepository) bool {
+	typed, ok := repo.(interface{ HasTransactionalMemoryOutbox() bool })
+	return ok && typed.HasTransactionalMemoryOutbox()
 }
 
 func (s *Service) applyKeyMemoryScore(ctx context.Context, km domain.KeyMemory) domain.KeyMemory {

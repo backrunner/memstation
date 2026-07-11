@@ -48,6 +48,20 @@ func (_c *MemoryNodeCreate) SetNillableUpdatedAt(v *time.Time) *MemoryNodeCreate
 	return _c
 }
 
+// SetGenerationID sets the "generation_id" field.
+func (_c *MemoryNodeCreate) SetGenerationID(v string) *MemoryNodeCreate {
+	_c.mutation.SetGenerationID(v)
+	return _c
+}
+
+// SetNillableGenerationID sets the "generation_id" field if the given value is not nil.
+func (_c *MemoryNodeCreate) SetNillableGenerationID(v *string) *MemoryNodeCreate {
+	if v != nil {
+		_c.SetGenerationID(*v)
+	}
+	return _c
+}
+
 // SetUserID sets the "user_id" field.
 func (_c *MemoryNodeCreate) SetUserID(v string) *MemoryNodeCreate {
 	_c.mutation.SetUserID(v)
@@ -136,6 +150,20 @@ func (_c *MemoryNodeCreate) SetNillableEmbeddingStatus(v *string) *MemoryNodeCre
 	return _c
 }
 
+// SetEmbeddingRevision sets the "embedding_revision" field.
+func (_c *MemoryNodeCreate) SetEmbeddingRevision(v int64) *MemoryNodeCreate {
+	_c.mutation.SetEmbeddingRevision(v)
+	return _c
+}
+
+// SetNillableEmbeddingRevision sets the "embedding_revision" field if the given value is not nil.
+func (_c *MemoryNodeCreate) SetNillableEmbeddingRevision(v *int64) *MemoryNodeCreate {
+	if v != nil {
+		_c.SetEmbeddingRevision(*v)
+	}
+	return _c
+}
+
 // Mutation returns the MemoryNodeMutation object of the builder.
 func (_c *MemoryNodeCreate) Mutation() *MemoryNodeMutation {
 	return _c.mutation
@@ -179,6 +207,10 @@ func (_c *MemoryNodeCreate) defaults() {
 		v := memorynode.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.GenerationID(); !ok {
+		v := memorynode.DefaultGenerationID
+		_c.mutation.SetGenerationID(v)
+	}
 	if _, ok := _c.mutation.Importance(); !ok {
 		v := memorynode.DefaultImportance
 		_c.mutation.SetImportance(v)
@@ -195,6 +227,10 @@ func (_c *MemoryNodeCreate) defaults() {
 		v := memorynode.DefaultEmbeddingStatus
 		_c.mutation.SetEmbeddingStatus(v)
 	}
+	if _, ok := _c.mutation.EmbeddingRevision(); !ok {
+		v := memorynode.DefaultEmbeddingRevision
+		_c.mutation.SetEmbeddingRevision(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -204,6 +240,9 @@ func (_c *MemoryNodeCreate) check() error {
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "MemoryNode.updated_at"`)}
+	}
+	if _, ok := _c.mutation.GenerationID(); !ok {
+		return &ValidationError{Name: "generation_id", err: errors.New(`ent: missing required field "MemoryNode.generation_id"`)}
 	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "MemoryNode.user_id"`)}
@@ -225,6 +264,14 @@ func (_c *MemoryNodeCreate) check() error {
 	}
 	if _, ok := _c.mutation.EmbeddingStatus(); !ok {
 		return &ValidationError{Name: "embedding_status", err: errors.New(`ent: missing required field "MemoryNode.embedding_status"`)}
+	}
+	if _, ok := _c.mutation.EmbeddingRevision(); !ok {
+		return &ValidationError{Name: "embedding_revision", err: errors.New(`ent: missing required field "MemoryNode.embedding_revision"`)}
+	}
+	if v, ok := _c.mutation.EmbeddingRevision(); ok {
+		if err := memorynode.EmbeddingRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "embedding_revision", err: fmt.Errorf(`ent: validator failed for field "MemoryNode.embedding_revision": %w`, err)}
+		}
 	}
 	return nil
 }
@@ -260,6 +307,10 @@ func (_c *MemoryNodeCreate) createSpec() (*MemoryNode, *sqlgraph.CreateSpec) {
 		_spec.SetField(memorynode.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
 	}
+	if value, ok := _c.mutation.GenerationID(); ok {
+		_spec.SetField(memorynode.FieldGenerationID, field.TypeString, value)
+		_node.GenerationID = value
+	}
 	if value, ok := _c.mutation.UserID(); ok {
 		_spec.SetField(memorynode.FieldUserID, field.TypeString, value)
 		_node.UserID = value
@@ -291,6 +342,10 @@ func (_c *MemoryNodeCreate) createSpec() (*MemoryNode, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.EmbeddingStatus(); ok {
 		_spec.SetField(memorynode.FieldEmbeddingStatus, field.TypeString, value)
 		_node.EmbeddingStatus = value
+	}
+	if value, ok := _c.mutation.EmbeddingRevision(); ok {
+		_spec.SetField(memorynode.FieldEmbeddingRevision, field.TypeInt64, value)
+		_node.EmbeddingRevision = value
 	}
 	return _node, _spec
 }

@@ -2,6 +2,8 @@ package worker
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -82,7 +84,7 @@ func buildNodeEvidences(userID, generationID, nodeID, conversationID string, par
 		if len(partArtifacts) > 0 {
 			for idx, artifact := range partArtifacts {
 				evidences = append(evidences, domain.MemoryEvidence{
-					ID:             fmt.Sprintf("evidence:%s:%03d", nodeID, len(evidences)+idx),
+					ID:             memoryEvidenceID(nodeID, conversationID, part.PartID, artifact.ArtifactID, part.SequenceNum, len(evidences)+idx),
 					GenerationID:   generationID,
 					UserID:         userID,
 					NodeID:         nodeID,
@@ -107,7 +109,7 @@ func buildNodeEvidences(userID, generationID, nodeID, conversationID string, par
 			continue
 		}
 		evidences = append(evidences, domain.MemoryEvidence{
-			ID:             fmt.Sprintf("evidence:%s:%03d", nodeID, len(evidences)),
+			ID:             memoryEvidenceID(nodeID, conversationID, part.PartID, "", part.SequenceNum, len(evidences)),
 			GenerationID:   generationID,
 			UserID:         userID,
 			NodeID:         nodeID,
@@ -125,6 +127,12 @@ func buildNodeEvidences(userID, generationID, nodeID, conversationID string, par
 		})
 	}
 	return evidences
+}
+
+func memoryEvidenceID(nodeID, conversationID, partID, artifactID string, sequenceNum, index int) string {
+	seed := fmt.Sprintf("%s|%s|%s|%s|%d|%d", nodeID, conversationID, partID, artifactID, sequenceNum, index)
+	sum := sha256.Sum256([]byte(seed))
+	return "evidence:" + hex.EncodeToString(sum[:12])
 }
 
 func storeDocumentEvidences(ctx context.Context, services Services, userID, generationID, nodeID, conversationID string, evidences []domain.MemoryEvidence) error {
@@ -150,7 +158,7 @@ func cloneNodeEvidences(userID, generationID, nodeID string, source []domain.Mem
 	out := make([]domain.MemoryEvidence, 0, len(source))
 	for idx, evidence := range source {
 		cloned := evidence
-		cloned.ID = fmt.Sprintf("evidence:%s:%03d", nodeID, idx)
+		cloned.ID = memoryEvidenceID(nodeID, evidence.ConversationID, evidence.PartID, evidence.ArtifactID, evidence.SequenceNum, idx)
 		cloned.UserID = userID
 		cloned.NodeID = nodeID
 		cloned.GenerationID = generationID

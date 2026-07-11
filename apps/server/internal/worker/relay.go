@@ -54,10 +54,14 @@ func mapOutboxToTask(event domain.OutboxEvent) domain.TaskMessage {
 	if event.EventType == TypeConversationFinalize {
 		queue = QueueCritical
 	}
+	uniqueID := event.AggregateID
+	if event.EventType == TypeEmbeddingGenerate || event.EventType == TypeEmbeddingDelete || event.EventType == TypeKeyMemoryGraphSync {
+		uniqueID = event.ID
+	}
 	return domain.TaskMessage{
 		Type:      event.EventType,
 		Queue:     queue,
-		UniqueKey: event.EventType + ":" + event.AggregateID,
+		UniqueKey: event.EventType + ":" + uniqueID,
 		Payload:   event.Payload,
 	}
 }

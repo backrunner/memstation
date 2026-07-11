@@ -2,6 +2,12 @@ package domain
 
 import "time"
 
+const (
+	TaskTypeEmbeddingGenerate  = "embedding.generate"
+	TaskTypeEmbeddingDelete    = "embedding.delete"
+	TaskTypeKeyMemoryGraphSync = "keymemory.graph.sync"
+)
+
 type OutboxEvent struct {
 	ID            string         `json:"id"`
 	UserID        string         `json:"user_id"`

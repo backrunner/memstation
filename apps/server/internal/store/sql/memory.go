@@ -908,6 +908,19 @@ func (r *InMemoryMemoryRepository) removeRelationsForNodeLocked(userID, nodeID s
 }
 
 func (r *InMemoryMemoryRepository) LinkDocuments(_ context.Context, relation domain.MemoryRelation) error {
+	relation.UserID = strings.TrimSpace(relation.UserID)
+	relation.SrcNodeID = strings.TrimSpace(relation.SrcNodeID)
+	relation.DstNodeID = strings.TrimSpace(relation.DstNodeID)
+	relation.RelationType = strings.TrimSpace(relation.RelationType)
+	if relation.UserID == "" || relation.SrcNodeID == "" || relation.DstNodeID == "" || relation.RelationType == "" {
+		return errors.New("relation user, endpoints, and type are required")
+	}
+	if relation.SrcNodeID == relation.DstNodeID {
+		return errors.New("memory relation cannot link a node to itself")
+	}
+	if relation.Weight < 0 || relation.Weight > 1 {
+		return errors.New("memory relation weight must be between 0 and 1")
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if relation.ID == "" {
@@ -1022,6 +1035,45 @@ func (r *InMemoryMemoryRepository) ReplaceEvidences(_ context.Context, userID, n
 		next = append(next, evidence)
 	}
 	r.evidences[key(userID, nodeID)] = next
+	return nil
+}
+
+func (r *InMemoryMemoryRepository) MergeEvidences(_ context.Context, userID, nodeID string, evidences []domain.MemoryEvidence) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(nodeID) == "" {
+		return nil
+	}
+	items := append([]domain.MemoryEvidence(nil), r.evidences[key(userID, nodeID)]...)
+	byID := make(map[string]int, len(items))
+	for idx, item := range items {
+		byID[item.ID] = idx
+	}
+	for _, evidence := range evidences {
+		if evidence.ID == "" {
+			evidence.ID = uuid.NewString()
+		}
+		if evidence.UserID == "" {
+			evidence.UserID = userID
+		}
+		if evidence.NodeID == "" {
+			evidence.NodeID = nodeID
+		}
+		if evidence.Weight == 0 {
+			evidence.Weight = 1
+		}
+		if evidence.CreatedAt.IsZero() {
+			evidence.CreatedAt = time.Now().UTC()
+		}
+		evidence.Metadata = cloneMetadata(evidence.Metadata)
+		if idx, ok := byID[evidence.ID]; ok {
+			items[idx] = evidence
+			continue
+		}
+		byID[evidence.ID] = len(items)
+		items = append(items, evidence)
+	}
+	r.evidences[key(userID, nodeID)] = items
 	return nil
 }
 

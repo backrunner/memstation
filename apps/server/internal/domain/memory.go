@@ -190,15 +190,16 @@ type RerankResult struct {
 }
 
 type VectorUpsertRequest struct {
-	UserID           string    `json:"user_id"`
-	GenerationID     string    `json:"generation_id,omitempty"`
-	NodeID           string    `json:"node_id"`
-	NodeType         string    `json:"node_type"`
-	EmbeddingVersion int       `json:"embedding_version"`
-	EmbeddingModel   string    `json:"embedding_model"`
-	Content          string    `json:"content"`
-	ContentHash      string    `json:"content_hash"`
-	Vector           []float32 `json:"vector"`
+	UserID            string    `json:"user_id"`
+	GenerationID      string    `json:"generation_id,omitempty"`
+	NodeID            string    `json:"node_id"`
+	NodeType          string    `json:"node_type"`
+	EmbeddingVersion  int       `json:"embedding_version"`
+	EmbeddingModel    string    `json:"embedding_model"`
+	Content           string    `json:"content"`
+	ContentHash       string    `json:"content_hash"`
+	EmbeddingRevision int64     `json:"embedding_revision,omitempty"`
+	Vector            []float32 `json:"vector"`
 }
 
 type MemoryGenerationStatus string

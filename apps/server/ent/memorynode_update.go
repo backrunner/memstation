@@ -34,6 +34,20 @@ func (_u *MemoryNodeUpdate) SetUpdatedAt(v time.Time) *MemoryNodeUpdate {
 	return _u
 }
 
+// SetGenerationID sets the "generation_id" field.
+func (_u *MemoryNodeUpdate) SetGenerationID(v string) *MemoryNodeUpdate {
+	_u.mutation.SetGenerationID(v)
+	return _u
+}
+
+// SetNillableGenerationID sets the "generation_id" field if the given value is not nil.
+func (_u *MemoryNodeUpdate) SetNillableGenerationID(v *string) *MemoryNodeUpdate {
+	if v != nil {
+		_u.SetGenerationID(*v)
+	}
+	return _u
+}
+
 // SetUserID sets the "user_id" field.
 func (_u *MemoryNodeUpdate) SetUserID(v string) *MemoryNodeUpdate {
 	_u.mutation.SetUserID(v)
@@ -166,6 +180,27 @@ func (_u *MemoryNodeUpdate) SetNillableEmbeddingStatus(v *string) *MemoryNodeUpd
 	return _u
 }
 
+// SetEmbeddingRevision sets the "embedding_revision" field.
+func (_u *MemoryNodeUpdate) SetEmbeddingRevision(v int64) *MemoryNodeUpdate {
+	_u.mutation.ResetEmbeddingRevision()
+	_u.mutation.SetEmbeddingRevision(v)
+	return _u
+}
+
+// SetNillableEmbeddingRevision sets the "embedding_revision" field if the given value is not nil.
+func (_u *MemoryNodeUpdate) SetNillableEmbeddingRevision(v *int64) *MemoryNodeUpdate {
+	if v != nil {
+		_u.SetEmbeddingRevision(*v)
+	}
+	return _u
+}
+
+// AddEmbeddingRevision adds value to the "embedding_revision" field.
+func (_u *MemoryNodeUpdate) AddEmbeddingRevision(v int64) *MemoryNodeUpdate {
+	_u.mutation.AddEmbeddingRevision(v)
+	return _u
+}
+
 // Mutation returns the MemoryNodeMutation object of the builder.
 func (_u *MemoryNodeUpdate) Mutation() *MemoryNodeMutation {
 	return _u.mutation
@@ -207,7 +242,20 @@ func (_u *MemoryNodeUpdate) defaults() {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (_u *MemoryNodeUpdate) check() error {
+	if v, ok := _u.mutation.EmbeddingRevision(); ok {
+		if err := memorynode.EmbeddingRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "embedding_revision", err: fmt.Errorf(`ent: validator failed for field "MemoryNode.embedding_revision": %w`, err)}
+		}
+	}
+	return nil
+}
+
 func (_u *MemoryNodeUpdate) sqlSave(ctx context.Context) (_node int, err error) {
+	if err := _u.check(); err != nil {
+		return _node, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(memorynode.Table, memorynode.Columns, sqlgraph.NewFieldSpec(memorynode.FieldID, field.TypeInt))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
@@ -218,6 +266,9 @@ func (_u *MemoryNodeUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(memorynode.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.GenerationID(); ok {
+		_spec.SetField(memorynode.FieldGenerationID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(memorynode.FieldUserID, field.TypeString, value)
@@ -252,6 +303,12 @@ func (_u *MemoryNodeUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if value, ok := _u.mutation.EmbeddingStatus(); ok {
 		_spec.SetField(memorynode.FieldEmbeddingStatus, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.EmbeddingRevision(); ok {
+		_spec.SetField(memorynode.FieldEmbeddingRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedEmbeddingRevision(); ok {
+		_spec.AddField(memorynode.FieldEmbeddingRevision, field.TypeInt64, value)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{memorynode.Label}
@@ -275,6 +332,20 @@ type MemoryNodeUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *MemoryNodeUpdateOne) SetUpdatedAt(v time.Time) *MemoryNodeUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetGenerationID sets the "generation_id" field.
+func (_u *MemoryNodeUpdateOne) SetGenerationID(v string) *MemoryNodeUpdateOne {
+	_u.mutation.SetGenerationID(v)
+	return _u
+}
+
+// SetNillableGenerationID sets the "generation_id" field if the given value is not nil.
+func (_u *MemoryNodeUpdateOne) SetNillableGenerationID(v *string) *MemoryNodeUpdateOne {
+	if v != nil {
+		_u.SetGenerationID(*v)
+	}
 	return _u
 }
 
@@ -410,6 +481,27 @@ func (_u *MemoryNodeUpdateOne) SetNillableEmbeddingStatus(v *string) *MemoryNode
 	return _u
 }
 
+// SetEmbeddingRevision sets the "embedding_revision" field.
+func (_u *MemoryNodeUpdateOne) SetEmbeddingRevision(v int64) *MemoryNodeUpdateOne {
+	_u.mutation.ResetEmbeddingRevision()
+	_u.mutation.SetEmbeddingRevision(v)
+	return _u
+}
+
+// SetNillableEmbeddingRevision sets the "embedding_revision" field if the given value is not nil.
+func (_u *MemoryNodeUpdateOne) SetNillableEmbeddingRevision(v *int64) *MemoryNodeUpdateOne {
+	if v != nil {
+		_u.SetEmbeddingRevision(*v)
+	}
+	return _u
+}
+
+// AddEmbeddingRevision adds value to the "embedding_revision" field.
+func (_u *MemoryNodeUpdateOne) AddEmbeddingRevision(v int64) *MemoryNodeUpdateOne {
+	_u.mutation.AddEmbeddingRevision(v)
+	return _u
+}
+
 // Mutation returns the MemoryNodeMutation object of the builder.
 func (_u *MemoryNodeUpdateOne) Mutation() *MemoryNodeMutation {
 	return _u.mutation
@@ -464,7 +556,20 @@ func (_u *MemoryNodeUpdateOne) defaults() {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (_u *MemoryNodeUpdateOne) check() error {
+	if v, ok := _u.mutation.EmbeddingRevision(); ok {
+		if err := memorynode.EmbeddingRevisionValidator(v); err != nil {
+			return &ValidationError{Name: "embedding_revision", err: fmt.Errorf(`ent: validator failed for field "MemoryNode.embedding_revision": %w`, err)}
+		}
+	}
+	return nil
+}
+
 func (_u *MemoryNodeUpdateOne) sqlSave(ctx context.Context) (_node *MemoryNode, err error) {
+	if err := _u.check(); err != nil {
+		return _node, err
+	}
 	_spec := sqlgraph.NewUpdateSpec(memorynode.Table, memorynode.Columns, sqlgraph.NewFieldSpec(memorynode.FieldID, field.TypeInt))
 	id, ok := _u.mutation.ID()
 	if !ok {
@@ -492,6 +597,9 @@ func (_u *MemoryNodeUpdateOne) sqlSave(ctx context.Context) (_node *MemoryNode, 
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(memorynode.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.GenerationID(); ok {
+		_spec.SetField(memorynode.FieldGenerationID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(memorynode.FieldUserID, field.TypeString, value)
@@ -525,6 +633,12 @@ func (_u *MemoryNodeUpdateOne) sqlSave(ctx context.Context) (_node *MemoryNode, 
 	}
 	if value, ok := _u.mutation.EmbeddingStatus(); ok {
 		_spec.SetField(memorynode.FieldEmbeddingStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.EmbeddingRevision(); ok {
+		_spec.SetField(memorynode.FieldEmbeddingRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedEmbeddingRevision(); ok {
+		_spec.AddField(memorynode.FieldEmbeddingRevision, field.TypeInt64, value)
 	}
 	_node = &MemoryNode{config: _u.config}
 	_spec.Assign = _node.assignValues

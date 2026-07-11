@@ -1,10 +1,14 @@
 package worker
 
+import "memstation/apps/server/internal/domain"
+
 const (
 	TypeConversationFinalize      = "conversation.finalize"
 	TypeMediaExtract              = "media.extract"
 	TypeSummaryGenerate           = "summary.generate"
-	TypeEmbeddingGenerate         = "embedding.generate"
+	TypeEmbeddingGenerate         = domain.TaskTypeEmbeddingGenerate
+	TypeEmbeddingDelete           = domain.TaskTypeEmbeddingDelete
+	TypeKeyMemoryGraphSync        = domain.TaskTypeKeyMemoryGraphSync
 	TypeAnalysisExtract           = "analysis.extract"
 	TypeKeyMemoryReconcile        = "keymemory.reconcile"
 	TypeMemoryRebuildConversation = "memory.rebuild.conversation"
@@ -38,13 +42,24 @@ type MediaExtractPayload struct {
 }
 
 type EmbeddingPayload struct {
-	UserID           string `json:"user_id"`
-	GenerationID     string `json:"generation_id"`
-	NodeID           string `json:"node_id"`
-	NodeType         string `json:"node_type"`
-	EmbeddingVersion int    `json:"embedding_version"`
-	Content          string `json:"content"`
-	EmbeddingModel   string `json:"embedding_model"`
+	UserID            string `json:"user_id"`
+	GenerationID      string `json:"generation_id"`
+	NodeID            string `json:"node_id"`
+	NodeType          string `json:"node_type"`
+	EmbeddingVersion  int    `json:"embedding_version"`
+	Content           string `json:"content"`
+	EmbeddingModel    string `json:"embedding_model"`
+	EmbeddingRevision int64  `json:"embedding_revision"`
+}
+
+type EmbeddingDeletePayload struct {
+	UserID string `json:"user_id"`
+	NodeID string `json:"node_id"`
+}
+
+type KeyMemoryGraphSyncPayload struct {
+	UserID string `json:"user_id"`
+	Key    string `json:"key"`
 }
 
 type AnalysisPayload struct {

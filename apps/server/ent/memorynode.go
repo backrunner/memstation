@@ -21,6 +21,8 @@ type MemoryNode struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// GenerationID holds the value of the "generation_id" field.
+	GenerationID string `json:"generation_id,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID string `json:"user_id,omitempty"`
 	// NodeType holds the value of the "node_type" field.
@@ -37,7 +39,9 @@ type MemoryNode struct {
 	TimeTier string `json:"time_tier,omitempty"`
 	// EmbeddingStatus holds the value of the "embedding_status" field.
 	EmbeddingStatus string `json:"embedding_status,omitempty"`
-	selectValues    sql.SelectValues
+	// EmbeddingRevision holds the value of the "embedding_revision" field.
+	EmbeddingRevision int64 `json:"embedding_revision,omitempty"`
+	selectValues      sql.SelectValues
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -47,9 +51,9 @@ func (*MemoryNode) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case memorynode.FieldImportance, memorynode.FieldDecayFactor:
 			values[i] = new(sql.NullFloat64)
-		case memorynode.FieldID:
+		case memorynode.FieldID, memorynode.FieldEmbeddingRevision:
 			values[i] = new(sql.NullInt64)
-		case memorynode.FieldUserID, memorynode.FieldNodeType, memorynode.FieldEntityID, memorynode.FieldTimeTier, memorynode.FieldEmbeddingStatus:
+		case memorynode.FieldGenerationID, memorynode.FieldUserID, memorynode.FieldNodeType, memorynode.FieldEntityID, memorynode.FieldTimeTier, memorynode.FieldEmbeddingStatus:
 			values[i] = new(sql.NullString)
 		case memorynode.FieldCreatedAt, memorynode.FieldUpdatedAt, memorynode.FieldActivityAt:
 			values[i] = new(sql.NullTime)
@@ -85,6 +89,12 @@ func (_m *MemoryNode) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
+			}
+		case memorynode.FieldGenerationID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field generation_id", values[i])
+			} else if value.Valid {
+				_m.GenerationID = value.String
 			}
 		case memorynode.FieldUserID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -134,6 +144,12 @@ func (_m *MemoryNode) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.EmbeddingStatus = value.String
 			}
+		case memorynode.FieldEmbeddingRevision:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field embedding_revision", values[i])
+			} else if value.Valid {
+				_m.EmbeddingRevision = value.Int64
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -176,6 +192,9 @@ func (_m *MemoryNode) String() string {
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
 	builder.WriteString(", ")
+	builder.WriteString("generation_id=")
+	builder.WriteString(_m.GenerationID)
+	builder.WriteString(", ")
 	builder.WriteString("user_id=")
 	builder.WriteString(_m.UserID)
 	builder.WriteString(", ")
@@ -199,6 +218,9 @@ func (_m *MemoryNode) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("embedding_status=")
 	builder.WriteString(_m.EmbeddingStatus)
+	builder.WriteString(", ")
+	builder.WriteString("embedding_revision=")
+	builder.WriteString(fmt.Sprintf("%v", _m.EmbeddingRevision))
 	builder.WriteByte(')')
 	return builder.String()
 }

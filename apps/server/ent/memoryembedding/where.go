@@ -69,6 +69,11 @@ func EmbeddingID(v string) predicate.MemoryEmbedding {
 	return predicate.MemoryEmbedding(sql.FieldEQ(FieldEmbeddingID, v))
 }
 
+// GenerationID applies equality check predicate on the "generation_id" field. It's identical to GenerationIDEQ.
+func GenerationID(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldEQ(FieldGenerationID, v))
+}
+
 // UserID applies equality check predicate on the "user_id" field. It's identical to UserIDEQ.
 func UserID(v string) predicate.MemoryEmbedding {
 	return predicate.MemoryEmbedding(sql.FieldEQ(FieldUserID, v))
@@ -247,6 +252,71 @@ func EmbeddingIDEqualFold(v string) predicate.MemoryEmbedding {
 // EmbeddingIDContainsFold applies the ContainsFold predicate on the "embedding_id" field.
 func EmbeddingIDContainsFold(v string) predicate.MemoryEmbedding {
 	return predicate.MemoryEmbedding(sql.FieldContainsFold(FieldEmbeddingID, v))
+}
+
+// GenerationIDEQ applies the EQ predicate on the "generation_id" field.
+func GenerationIDEQ(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldEQ(FieldGenerationID, v))
+}
+
+// GenerationIDNEQ applies the NEQ predicate on the "generation_id" field.
+func GenerationIDNEQ(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldNEQ(FieldGenerationID, v))
+}
+
+// GenerationIDIn applies the In predicate on the "generation_id" field.
+func GenerationIDIn(vs ...string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldIn(FieldGenerationID, vs...))
+}
+
+// GenerationIDNotIn applies the NotIn predicate on the "generation_id" field.
+func GenerationIDNotIn(vs ...string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldNotIn(FieldGenerationID, vs...))
+}
+
+// GenerationIDGT applies the GT predicate on the "generation_id" field.
+func GenerationIDGT(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldGT(FieldGenerationID, v))
+}
+
+// GenerationIDGTE applies the GTE predicate on the "generation_id" field.
+func GenerationIDGTE(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldGTE(FieldGenerationID, v))
+}
+
+// GenerationIDLT applies the LT predicate on the "generation_id" field.
+func GenerationIDLT(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldLT(FieldGenerationID, v))
+}
+
+// GenerationIDLTE applies the LTE predicate on the "generation_id" field.
+func GenerationIDLTE(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldLTE(FieldGenerationID, v))
+}
+
+// GenerationIDContains applies the Contains predicate on the "generation_id" field.
+func GenerationIDContains(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldContains(FieldGenerationID, v))
+}
+
+// GenerationIDHasPrefix applies the HasPrefix predicate on the "generation_id" field.
+func GenerationIDHasPrefix(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldHasPrefix(FieldGenerationID, v))
+}
+
+// GenerationIDHasSuffix applies the HasSuffix predicate on the "generation_id" field.
+func GenerationIDHasSuffix(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldHasSuffix(FieldGenerationID, v))
+}
+
+// GenerationIDEqualFold applies the EqualFold predicate on the "generation_id" field.
+func GenerationIDEqualFold(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldEqualFold(FieldGenerationID, v))
+}
+
+// GenerationIDContainsFold applies the ContainsFold predicate on the "generation_id" field.
+func GenerationIDContainsFold(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldContainsFold(FieldGenerationID, v))
 }
 
 // UserIDEQ applies the EQ predicate on the "user_id" field.

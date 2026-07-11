@@ -17,6 +17,8 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// FieldGenerationID holds the string denoting the generation_id field in the database.
+	FieldGenerationID = "generation_id"
 	// FieldUserID holds the string denoting the user_id field in the database.
 	FieldUserID = "user_id"
 	// FieldNodeType holds the string denoting the node_type field in the database.
@@ -33,6 +35,8 @@ const (
 	FieldTimeTier = "time_tier"
 	// FieldEmbeddingStatus holds the string denoting the embedding_status field in the database.
 	FieldEmbeddingStatus = "embedding_status"
+	// FieldEmbeddingRevision holds the string denoting the embedding_revision field in the database.
+	FieldEmbeddingRevision = "embedding_revision"
 	// Table holds the table name of the memorynode in the database.
 	Table = "memory_nodes"
 )
@@ -42,6 +46,7 @@ var Columns = []string{
 	FieldID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
+	FieldGenerationID,
 	FieldUserID,
 	FieldNodeType,
 	FieldEntityID,
@@ -50,6 +55,7 @@ var Columns = []string{
 	FieldActivityAt,
 	FieldTimeTier,
 	FieldEmbeddingStatus,
+	FieldEmbeddingRevision,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -69,6 +75,8 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultGenerationID holds the default value on creation for the "generation_id" field.
+	DefaultGenerationID string
 	// DefaultImportance holds the default value on creation for the "importance" field.
 	DefaultImportance float64
 	// DefaultDecayFactor holds the default value on creation for the "decay_factor" field.
@@ -77,6 +85,10 @@ var (
 	DefaultTimeTier string
 	// DefaultEmbeddingStatus holds the default value on creation for the "embedding_status" field.
 	DefaultEmbeddingStatus string
+	// DefaultEmbeddingRevision holds the default value on creation for the "embedding_revision" field.
+	DefaultEmbeddingRevision int64
+	// EmbeddingRevisionValidator is a validator for the "embedding_revision" field. It is called by the builders before save.
+	EmbeddingRevisionValidator func(int64) error
 )
 
 // OrderOption defines the ordering options for the MemoryNode queries.
@@ -95,6 +107,11 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// ByGenerationID orders the results by the generation_id field.
+func ByGenerationID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldGenerationID, opts...).ToFunc()
 }
 
 // ByUserID orders the results by the user_id field.
@@ -135,4 +152,9 @@ func ByTimeTier(opts ...sql.OrderTermOption) OrderOption {
 // ByEmbeddingStatus orders the results by the embedding_status field.
 func ByEmbeddingStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEmbeddingStatus, opts...).ToFunc()
+}
+
+// ByEmbeddingRevision orders the results by the embedding_revision field.
+func ByEmbeddingRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEmbeddingRevision, opts...).ToFunc()
 }

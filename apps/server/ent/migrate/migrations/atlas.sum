@@ -1,4 +1,4 @@
-h1:EbeTuM2K1Hy+2pLtuhnGgU7zEFv3c/r/XqcdX8tPTKE=
+h1:LKDnFd3iCyexBY53i1d6gwN9BZ0DkvZp5g1eb0Bapl8=
 202603160001_init.sql h1:ecZzJiW+oq76K0Huh5JvCblYWZkn0IA1m2ZmPEYoi+A=
 202603220001_conversation_segments.sql h1:pJyav1BaIrN3+3LGiqMXyHsVJtDMGp9TbIl6sCpT6Og=
 202604080001_memory_rebuild.sql h1:NkMTZr8zkRgiZvUskf8qdxkBPNbPk1lWDiPIz+rcipQ=
@@ -9,3 +9,4 @@ h1:EbeTuM2K1Hy+2pLtuhnGgU7zEFv3c/r/XqcdX8tPTKE=
 202605290001_fact_lineage.sql h1:dxXbDhezvtDGuSOYltVEJR3h1EPyUYQ5OWumF2EI5Ac=
 202607070001_memory_items.sql h1:sSgQFn3Z7JY7Ddk9bJNr5fkf9zVlqUb90fCuChKewUU=
 202607070002_source_snapshot_artifacts.sql h1:Xv4CDN0IylUzisMV8YmReQnT6L+i+WAEv4CTFI8FNBA=
+202607110001_graph_memory_hardening.sql h1:KmxuTi6pqZz56DO6jO6mhJZT650gEaHDUqPZlDv5yek=

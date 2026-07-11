@@ -21,6 +21,8 @@ type Impression struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// GenerationID holds the value of the "generation_id" field.
+	GenerationID string `json:"generation_id,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID string `json:"user_id,omitempty"`
 	// ConversationID holds the value of the "conversation_id" field.
@@ -49,7 +51,7 @@ func (*Impression) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case impression.FieldID:
 			values[i] = new(sql.NullInt64)
-		case impression.FieldUserID, impression.FieldConversationID, impression.FieldNodeID, impression.FieldSubject, impression.FieldSubjectType, impression.FieldEvaluation, impression.FieldSentiment, impression.FieldFamiliarity, impression.FieldDescription:
+		case impression.FieldGenerationID, impression.FieldUserID, impression.FieldConversationID, impression.FieldNodeID, impression.FieldSubject, impression.FieldSubjectType, impression.FieldEvaluation, impression.FieldSentiment, impression.FieldFamiliarity, impression.FieldDescription:
 			values[i] = new(sql.NullString)
 		case impression.FieldCreatedAt, impression.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -85,6 +87,12 @@ func (_m *Impression) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
+			}
+		case impression.FieldGenerationID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field generation_id", values[i])
+			} else if value.Valid {
+				_m.GenerationID = value.String
 			}
 		case impression.FieldUserID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -181,6 +189,9 @@ func (_m *Impression) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	builder.WriteString("generation_id=")
+	builder.WriteString(_m.GenerationID)
 	builder.WriteString(", ")
 	builder.WriteString("user_id=")
 	builder.WriteString(_m.UserID)

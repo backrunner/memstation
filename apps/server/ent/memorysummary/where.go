@@ -64,6 +64,11 @@ func UpdatedAt(v time.Time) predicate.MemorySummary {
 	return predicate.MemorySummary(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
+// GenerationID applies equality check predicate on the "generation_id" field. It's identical to GenerationIDEQ.
+func GenerationID(v string) predicate.MemorySummary {
+	return predicate.MemorySummary(sql.FieldEQ(FieldGenerationID, v))
+}
+
 // UserID applies equality check predicate on the "user_id" field. It's identical to UserIDEQ.
 func UserID(v string) predicate.MemorySummary {
 	return predicate.MemorySummary(sql.FieldEQ(FieldUserID, v))
@@ -182,6 +187,71 @@ func UpdatedAtLT(v time.Time) predicate.MemorySummary {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.MemorySummary {
 	return predicate.MemorySummary(sql.FieldLTE(FieldUpdatedAt, v))
+}
+
+// GenerationIDEQ applies the EQ predicate on the "generation_id" field.
+func GenerationIDEQ(v string) predicate.MemorySummary {
+	return predicate.MemorySummary(sql.FieldEQ(FieldGenerationID, v))
+}
+
+// GenerationIDNEQ applies the NEQ predicate on the "generation_id" field.
+func GenerationIDNEQ(v string) predicate.MemorySummary {
+	return predicate.MemorySummary(sql.FieldNEQ(FieldGenerationID, v))
+}
+
+// GenerationIDIn applies the In predicate on the "generation_id" field.
+func GenerationIDIn(vs ...string) predicate.MemorySummary {
+	return predicate.MemorySummary(sql.FieldIn(FieldGenerationID, vs...))
+}
+
+// GenerationIDNotIn applies the NotIn predicate on the "generation_id" field.
+func GenerationIDNotIn(vs ...string) predicate.MemorySummary {
+	return predicate.MemorySummary(sql.FieldNotIn(FieldGenerationID, vs...))
+}
+
+// GenerationIDGT applies the GT predicate on the "generation_id" field.
+func GenerationIDGT(v string) predicate.MemorySummary {
+	return predicate.MemorySummary(sql.FieldGT(FieldGenerationID, v))
+}
+
+// GenerationIDGTE applies the GTE predicate on the "generation_id" field.
+func GenerationIDGTE(v string) predicate.MemorySummary {
+	return predicate.MemorySummary(sql.FieldGTE(FieldGenerationID, v))
+}
+
+// GenerationIDLT applies the LT predicate on the "generation_id" field.
+func GenerationIDLT(v string) predicate.MemorySummary {
+	return predicate.MemorySummary(sql.FieldLT(FieldGenerationID, v))
+}
+
+// GenerationIDLTE applies the LTE predicate on the "generation_id" field.
+func GenerationIDLTE(v string) predicate.MemorySummary {
+	return predicate.MemorySummary(sql.FieldLTE(FieldGenerationID, v))
+}
+
+// GenerationIDContains applies the Contains predicate on the "generation_id" field.
+func GenerationIDContains(v string) predicate.MemorySummary {
+	return predicate.MemorySummary(sql.FieldContains(FieldGenerationID, v))
+}
+
+// GenerationIDHasPrefix applies the HasPrefix predicate on the "generation_id" field.
+func GenerationIDHasPrefix(v string) predicate.MemorySummary {
+	return predicate.MemorySummary(sql.FieldHasPrefix(FieldGenerationID, v))
+}
+
+// GenerationIDHasSuffix applies the HasSuffix predicate on the "generation_id" field.
+func GenerationIDHasSuffix(v string) predicate.MemorySummary {
+	return predicate.MemorySummary(sql.FieldHasSuffix(FieldGenerationID, v))
+}
+
+// GenerationIDEqualFold applies the EqualFold predicate on the "generation_id" field.
+func GenerationIDEqualFold(v string) predicate.MemorySummary {
+	return predicate.MemorySummary(sql.FieldEqualFold(FieldGenerationID, v))
+}
+
+// GenerationIDContainsFold applies the ContainsFold predicate on the "generation_id" field.
+func GenerationIDContainsFold(v string) predicate.MemorySummary {
+	return predicate.MemorySummary(sql.FieldContainsFold(FieldGenerationID, v))
 }
 
 // UserIDEQ applies the EQ predicate on the "user_id" field.

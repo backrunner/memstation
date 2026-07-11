@@ -8,6 +8,7 @@ type Impression struct{ ent.Schema }
 func (Impression) Mixin() []ent.Mixin { return []ent.Mixin{TimeMixin{}} }
 func (Impression) Fields() []ent.Field {
 	return []ent.Field{
+		field.String("generation_id").Default(""),
 		field.String("user_id"),
 		field.String("conversation_id"),
 		field.String("node_id").Unique(),

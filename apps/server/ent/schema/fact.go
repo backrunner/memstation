@@ -8,6 +8,7 @@ type Fact struct{ ent.Schema }
 func (Fact) Mixin() []ent.Mixin { return []ent.Mixin{TimeMixin{}} }
 func (Fact) Fields() []ent.Field {
 	return []ent.Field{
+		field.String("generation_id").Default(""),
 		field.String("user_id"),
 		field.String("conversation_id"),
 		field.String("node_id").Unique(),

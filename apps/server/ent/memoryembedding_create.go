@@ -54,6 +54,20 @@ func (_c *MemoryEmbeddingCreate) SetEmbeddingID(v string) *MemoryEmbeddingCreate
 	return _c
 }
 
+// SetGenerationID sets the "generation_id" field.
+func (_c *MemoryEmbeddingCreate) SetGenerationID(v string) *MemoryEmbeddingCreate {
+	_c.mutation.SetGenerationID(v)
+	return _c
+}
+
+// SetNillableGenerationID sets the "generation_id" field if the given value is not nil.
+func (_c *MemoryEmbeddingCreate) SetNillableGenerationID(v *string) *MemoryEmbeddingCreate {
+	if v != nil {
+		_c.SetGenerationID(*v)
+	}
+	return _c
+}
+
 // SetUserID sets the "user_id" field.
 func (_c *MemoryEmbeddingCreate) SetUserID(v string) *MemoryEmbeddingCreate {
 	_c.mutation.SetUserID(v)
@@ -147,6 +161,10 @@ func (_c *MemoryEmbeddingCreate) defaults() {
 		v := memoryembedding.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.GenerationID(); !ok {
+		v := memoryembedding.DefaultGenerationID
+		_c.mutation.SetGenerationID(v)
+	}
 	if _, ok := _c.mutation.EmbeddingVersion(); !ok {
 		v := memoryembedding.DefaultEmbeddingVersion
 		_c.mutation.SetEmbeddingVersion(v)
@@ -163,6 +181,9 @@ func (_c *MemoryEmbeddingCreate) check() error {
 	}
 	if _, ok := _c.mutation.EmbeddingID(); !ok {
 		return &ValidationError{Name: "embedding_id", err: errors.New(`ent: missing required field "MemoryEmbedding.embedding_id"`)}
+	}
+	if _, ok := _c.mutation.GenerationID(); !ok {
+		return &ValidationError{Name: "generation_id", err: errors.New(`ent: missing required field "MemoryEmbedding.generation_id"`)}
 	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "MemoryEmbedding.user_id"`)}
@@ -219,6 +240,10 @@ func (_c *MemoryEmbeddingCreate) createSpec() (*MemoryEmbedding, *sqlgraph.Creat
 	if value, ok := _c.mutation.EmbeddingID(); ok {
 		_spec.SetField(memoryembedding.FieldEmbeddingID, field.TypeString, value)
 		_node.EmbeddingID = value
+	}
+	if value, ok := _c.mutation.GenerationID(); ok {
+		_spec.SetField(memoryembedding.FieldGenerationID, field.TypeString, value)
+		_node.GenerationID = value
 	}
 	if value, ok := _c.mutation.UserID(); ok {
 		_spec.SetField(memoryembedding.FieldUserID, field.TypeString, value)

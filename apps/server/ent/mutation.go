@@ -2627,6 +2627,7 @@ type FactMutation struct {
 	id               *int
 	created_at       *time.Time
 	updated_at       *time.Time
+	generation_id    *string
 	user_id          *string
 	conversation_id  *string
 	node_id          *string
@@ -2817,6 +2818,42 @@ func (m *FactMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *FactMutation) ResetUpdatedAt() {
 	m.updated_at = nil
+}
+
+// SetGenerationID sets the "generation_id" field.
+func (m *FactMutation) SetGenerationID(s string) {
+	m.generation_id = &s
+}
+
+// GenerationID returns the value of the "generation_id" field in the mutation.
+func (m *FactMutation) GenerationID() (r string, exists bool) {
+	v := m.generation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGenerationID returns the old "generation_id" field's value of the Fact entity.
+// If the Fact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *FactMutation) OldGenerationID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGenerationID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGenerationID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGenerationID: %w", err)
+	}
+	return oldValue.GenerationID, nil
+}
+
+// ResetGenerationID resets all changes to the "generation_id" field.
+func (m *FactMutation) ResetGenerationID() {
+	m.generation_id = nil
 }
 
 // SetUserID sets the "user_id" field.
@@ -3488,12 +3525,15 @@ func (m *FactMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *FactMutation) Fields() []string {
-	fields := make([]string, 0, 16)
+	fields := make([]string, 0, 17)
 	if m.created_at != nil {
 		fields = append(fields, fact.FieldCreatedAt)
 	}
 	if m.updated_at != nil {
 		fields = append(fields, fact.FieldUpdatedAt)
+	}
+	if m.generation_id != nil {
+		fields = append(fields, fact.FieldGenerationID)
 	}
 	if m.user_id != nil {
 		fields = append(fields, fact.FieldUserID)
@@ -3549,6 +3589,8 @@ func (m *FactMutation) Field(name string) (ent.Value, bool) {
 		return m.CreatedAt()
 	case fact.FieldUpdatedAt:
 		return m.UpdatedAt()
+	case fact.FieldGenerationID:
+		return m.GenerationID()
 	case fact.FieldUserID:
 		return m.UserID()
 	case fact.FieldConversationID:
@@ -3590,6 +3632,8 @@ func (m *FactMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldCreatedAt(ctx)
 	case fact.FieldUpdatedAt:
 		return m.OldUpdatedAt(ctx)
+	case fact.FieldGenerationID:
+		return m.OldGenerationID(ctx)
 	case fact.FieldUserID:
 		return m.OldUserID(ctx)
 	case fact.FieldConversationID:
@@ -3640,6 +3684,13 @@ func (m *FactMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUpdatedAt(v)
+		return nil
+	case fact.FieldGenerationID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGenerationID(v)
 		return nil
 	case fact.FieldUserID:
 		v, ok := value.(string)
@@ -3866,6 +3917,9 @@ func (m *FactMutation) ResetField(name string) error {
 	case fact.FieldUpdatedAt:
 		m.ResetUpdatedAt()
 		return nil
+	case fact.FieldGenerationID:
+		m.ResetGenerationID()
+		return nil
 	case fact.FieldUserID:
 		m.ResetUserID()
 		return nil
@@ -3968,6 +4022,7 @@ type ImpressionMutation struct {
 	id              *int
 	created_at      *time.Time
 	updated_at      *time.Time
+	generation_id   *string
 	user_id         *string
 	conversation_id *string
 	node_id         *string
@@ -4151,6 +4206,42 @@ func (m *ImpressionMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *ImpressionMutation) ResetUpdatedAt() {
 	m.updated_at = nil
+}
+
+// SetGenerationID sets the "generation_id" field.
+func (m *ImpressionMutation) SetGenerationID(s string) {
+	m.generation_id = &s
+}
+
+// GenerationID returns the value of the "generation_id" field in the mutation.
+func (m *ImpressionMutation) GenerationID() (r string, exists bool) {
+	v := m.generation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGenerationID returns the old "generation_id" field's value of the Impression entity.
+// If the Impression object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ImpressionMutation) OldGenerationID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGenerationID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGenerationID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGenerationID: %w", err)
+	}
+	return oldValue.GenerationID, nil
+}
+
+// ResetGenerationID resets all changes to the "generation_id" field.
+func (m *ImpressionMutation) ResetGenerationID() {
+	m.generation_id = nil
 }
 
 // SetUserID sets the "user_id" field.
@@ -4576,12 +4667,15 @@ func (m *ImpressionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ImpressionMutation) Fields() []string {
-	fields := make([]string, 0, 11)
+	fields := make([]string, 0, 12)
 	if m.created_at != nil {
 		fields = append(fields, impression.FieldCreatedAt)
 	}
 	if m.updated_at != nil {
 		fields = append(fields, impression.FieldUpdatedAt)
+	}
+	if m.generation_id != nil {
+		fields = append(fields, impression.FieldGenerationID)
 	}
 	if m.user_id != nil {
 		fields = append(fields, impression.FieldUserID)
@@ -4622,6 +4716,8 @@ func (m *ImpressionMutation) Field(name string) (ent.Value, bool) {
 		return m.CreatedAt()
 	case impression.FieldUpdatedAt:
 		return m.UpdatedAt()
+	case impression.FieldGenerationID:
+		return m.GenerationID()
 	case impression.FieldUserID:
 		return m.UserID()
 	case impression.FieldConversationID:
@@ -4653,6 +4749,8 @@ func (m *ImpressionMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldCreatedAt(ctx)
 	case impression.FieldUpdatedAt:
 		return m.OldUpdatedAt(ctx)
+	case impression.FieldGenerationID:
+		return m.OldGenerationID(ctx)
 	case impression.FieldUserID:
 		return m.OldUserID(ctx)
 	case impression.FieldConversationID:
@@ -4693,6 +4791,13 @@ func (m *ImpressionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUpdatedAt(v)
+		return nil
+	case impression.FieldGenerationID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGenerationID(v)
 		return nil
 	case impression.FieldUserID:
 		v, ok := value.(string)
@@ -4844,6 +4949,9 @@ func (m *ImpressionMutation) ResetField(name string) error {
 		return nil
 	case impression.FieldUpdatedAt:
 		m.ResetUpdatedAt()
+		return nil
+	case impression.FieldGenerationID:
+		m.ResetGenerationID()
 		return nil
 	case impression.FieldUserID:
 		m.ResetUserID()
@@ -5878,6 +5986,7 @@ type MemoryEmbeddingMutation struct {
 	created_at           *time.Time
 	updated_at           *time.Time
 	embedding_id         *string
+	generation_id        *string
 	user_id              *string
 	node_id              *string
 	node_type            *string
@@ -6096,6 +6205,42 @@ func (m *MemoryEmbeddingMutation) OldEmbeddingID(ctx context.Context) (v string,
 // ResetEmbeddingID resets all changes to the "embedding_id" field.
 func (m *MemoryEmbeddingMutation) ResetEmbeddingID() {
 	m.embedding_id = nil
+}
+
+// SetGenerationID sets the "generation_id" field.
+func (m *MemoryEmbeddingMutation) SetGenerationID(s string) {
+	m.generation_id = &s
+}
+
+// GenerationID returns the value of the "generation_id" field in the mutation.
+func (m *MemoryEmbeddingMutation) GenerationID() (r string, exists bool) {
+	v := m.generation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGenerationID returns the old "generation_id" field's value of the MemoryEmbedding entity.
+// If the MemoryEmbedding object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryEmbeddingMutation) OldGenerationID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGenerationID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGenerationID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGenerationID: %w", err)
+	}
+	return oldValue.GenerationID, nil
+}
+
+// ResetGenerationID resets all changes to the "generation_id" field.
+func (m *MemoryEmbeddingMutation) ResetGenerationID() {
+	m.generation_id = nil
 }
 
 // SetUserID sets the "user_id" field.
@@ -6417,7 +6562,7 @@ func (m *MemoryEmbeddingMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *MemoryEmbeddingMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 11)
 	if m.created_at != nil {
 		fields = append(fields, memoryembedding.FieldCreatedAt)
 	}
@@ -6426,6 +6571,9 @@ func (m *MemoryEmbeddingMutation) Fields() []string {
 	}
 	if m.embedding_id != nil {
 		fields = append(fields, memoryembedding.FieldEmbeddingID)
+	}
+	if m.generation_id != nil {
+		fields = append(fields, memoryembedding.FieldGenerationID)
 	}
 	if m.user_id != nil {
 		fields = append(fields, memoryembedding.FieldUserID)
@@ -6462,6 +6610,8 @@ func (m *MemoryEmbeddingMutation) Field(name string) (ent.Value, bool) {
 		return m.UpdatedAt()
 	case memoryembedding.FieldEmbeddingID:
 		return m.EmbeddingID()
+	case memoryembedding.FieldGenerationID:
+		return m.GenerationID()
 	case memoryembedding.FieldUserID:
 		return m.UserID()
 	case memoryembedding.FieldNodeID:
@@ -6491,6 +6641,8 @@ func (m *MemoryEmbeddingMutation) OldField(ctx context.Context, name string) (en
 		return m.OldUpdatedAt(ctx)
 	case memoryembedding.FieldEmbeddingID:
 		return m.OldEmbeddingID(ctx)
+	case memoryembedding.FieldGenerationID:
+		return m.OldGenerationID(ctx)
 	case memoryembedding.FieldUserID:
 		return m.OldUserID(ctx)
 	case memoryembedding.FieldNodeID:
@@ -6534,6 +6686,13 @@ func (m *MemoryEmbeddingMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetEmbeddingID(v)
+		return nil
+	case memoryembedding.FieldGenerationID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGenerationID(v)
 		return nil
 	case memoryembedding.FieldUserID:
 		v, ok := value.(string)
@@ -6665,6 +6824,9 @@ func (m *MemoryEmbeddingMutation) ResetField(name string) error {
 		return nil
 	case memoryembedding.FieldEmbeddingID:
 		m.ResetEmbeddingID()
+		return nil
+	case memoryembedding.FieldGenerationID:
+		m.ResetGenerationID()
 		return nil
 	case memoryembedding.FieldUserID:
 		m.ResetUserID()
@@ -8631,25 +8793,28 @@ func (m *MemoryKeywordMutation) ResetEdge(name string) error {
 // MemoryNodeMutation represents an operation that mutates the MemoryNode nodes in the graph.
 type MemoryNodeMutation struct {
 	config
-	op               Op
-	typ              string
-	id               *int
-	created_at       *time.Time
-	updated_at       *time.Time
-	user_id          *string
-	node_type        *string
-	entity_id        *string
-	importance       *float64
-	addimportance    *float64
-	decay_factor     *float64
-	adddecay_factor  *float64
-	activity_at      *time.Time
-	time_tier        *string
-	embedding_status *string
-	clearedFields    map[string]struct{}
-	done             bool
-	oldValue         func(context.Context) (*MemoryNode, error)
-	predicates       []predicate.MemoryNode
+	op                    Op
+	typ                   string
+	id                    *int
+	created_at            *time.Time
+	updated_at            *time.Time
+	generation_id         *string
+	user_id               *string
+	node_type             *string
+	entity_id             *string
+	importance            *float64
+	addimportance         *float64
+	decay_factor          *float64
+	adddecay_factor       *float64
+	activity_at           *time.Time
+	time_tier             *string
+	embedding_status      *string
+	embedding_revision    *int64
+	addembedding_revision *int64
+	clearedFields         map[string]struct{}
+	done                  bool
+	oldValue              func(context.Context) (*MemoryNode, error)
+	predicates            []predicate.MemoryNode
 }
 
 var _ ent.Mutation = (*MemoryNodeMutation)(nil)
@@ -8820,6 +8985,42 @@ func (m *MemoryNodeMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *MemoryNodeMutation) ResetUpdatedAt() {
 	m.updated_at = nil
+}
+
+// SetGenerationID sets the "generation_id" field.
+func (m *MemoryNodeMutation) SetGenerationID(s string) {
+	m.generation_id = &s
+}
+
+// GenerationID returns the value of the "generation_id" field in the mutation.
+func (m *MemoryNodeMutation) GenerationID() (r string, exists bool) {
+	v := m.generation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGenerationID returns the old "generation_id" field's value of the MemoryNode entity.
+// If the MemoryNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryNodeMutation) OldGenerationID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGenerationID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGenerationID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGenerationID: %w", err)
+	}
+	return oldValue.GenerationID, nil
+}
+
+// ResetGenerationID resets all changes to the "generation_id" field.
+func (m *MemoryNodeMutation) ResetGenerationID() {
+	m.generation_id = nil
 }
 
 // SetUserID sets the "user_id" field.
@@ -9163,6 +9364,62 @@ func (m *MemoryNodeMutation) ResetEmbeddingStatus() {
 	m.embedding_status = nil
 }
 
+// SetEmbeddingRevision sets the "embedding_revision" field.
+func (m *MemoryNodeMutation) SetEmbeddingRevision(i int64) {
+	m.embedding_revision = &i
+	m.addembedding_revision = nil
+}
+
+// EmbeddingRevision returns the value of the "embedding_revision" field in the mutation.
+func (m *MemoryNodeMutation) EmbeddingRevision() (r int64, exists bool) {
+	v := m.embedding_revision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEmbeddingRevision returns the old "embedding_revision" field's value of the MemoryNode entity.
+// If the MemoryNode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryNodeMutation) OldEmbeddingRevision(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEmbeddingRevision is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEmbeddingRevision requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEmbeddingRevision: %w", err)
+	}
+	return oldValue.EmbeddingRevision, nil
+}
+
+// AddEmbeddingRevision adds i to the "embedding_revision" field.
+func (m *MemoryNodeMutation) AddEmbeddingRevision(i int64) {
+	if m.addembedding_revision != nil {
+		*m.addembedding_revision += i
+	} else {
+		m.addembedding_revision = &i
+	}
+}
+
+// AddedEmbeddingRevision returns the value that was added to the "embedding_revision" field in this mutation.
+func (m *MemoryNodeMutation) AddedEmbeddingRevision() (r int64, exists bool) {
+	v := m.addembedding_revision
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetEmbeddingRevision resets all changes to the "embedding_revision" field.
+func (m *MemoryNodeMutation) ResetEmbeddingRevision() {
+	m.embedding_revision = nil
+	m.addembedding_revision = nil
+}
+
 // Where appends a list predicates to the MemoryNodeMutation builder.
 func (m *MemoryNodeMutation) Where(ps ...predicate.MemoryNode) {
 	m.predicates = append(m.predicates, ps...)
@@ -9197,12 +9454,15 @@ func (m *MemoryNodeMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *MemoryNodeMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 12)
 	if m.created_at != nil {
 		fields = append(fields, memorynode.FieldCreatedAt)
 	}
 	if m.updated_at != nil {
 		fields = append(fields, memorynode.FieldUpdatedAt)
+	}
+	if m.generation_id != nil {
+		fields = append(fields, memorynode.FieldGenerationID)
 	}
 	if m.user_id != nil {
 		fields = append(fields, memorynode.FieldUserID)
@@ -9228,6 +9488,9 @@ func (m *MemoryNodeMutation) Fields() []string {
 	if m.embedding_status != nil {
 		fields = append(fields, memorynode.FieldEmbeddingStatus)
 	}
+	if m.embedding_revision != nil {
+		fields = append(fields, memorynode.FieldEmbeddingRevision)
+	}
 	return fields
 }
 
@@ -9240,6 +9503,8 @@ func (m *MemoryNodeMutation) Field(name string) (ent.Value, bool) {
 		return m.CreatedAt()
 	case memorynode.FieldUpdatedAt:
 		return m.UpdatedAt()
+	case memorynode.FieldGenerationID:
+		return m.GenerationID()
 	case memorynode.FieldUserID:
 		return m.UserID()
 	case memorynode.FieldNodeType:
@@ -9256,6 +9521,8 @@ func (m *MemoryNodeMutation) Field(name string) (ent.Value, bool) {
 		return m.TimeTier()
 	case memorynode.FieldEmbeddingStatus:
 		return m.EmbeddingStatus()
+	case memorynode.FieldEmbeddingRevision:
+		return m.EmbeddingRevision()
 	}
 	return nil, false
 }
@@ -9269,6 +9536,8 @@ func (m *MemoryNodeMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldCreatedAt(ctx)
 	case memorynode.FieldUpdatedAt:
 		return m.OldUpdatedAt(ctx)
+	case memorynode.FieldGenerationID:
+		return m.OldGenerationID(ctx)
 	case memorynode.FieldUserID:
 		return m.OldUserID(ctx)
 	case memorynode.FieldNodeType:
@@ -9285,6 +9554,8 @@ func (m *MemoryNodeMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldTimeTier(ctx)
 	case memorynode.FieldEmbeddingStatus:
 		return m.OldEmbeddingStatus(ctx)
+	case memorynode.FieldEmbeddingRevision:
+		return m.OldEmbeddingRevision(ctx)
 	}
 	return nil, fmt.Errorf("unknown MemoryNode field %s", name)
 }
@@ -9307,6 +9578,13 @@ func (m *MemoryNodeMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUpdatedAt(v)
+		return nil
+	case memorynode.FieldGenerationID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGenerationID(v)
 		return nil
 	case memorynode.FieldUserID:
 		v, ok := value.(string)
@@ -9364,6 +9642,13 @@ func (m *MemoryNodeMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetEmbeddingStatus(v)
 		return nil
+	case memorynode.FieldEmbeddingRevision:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEmbeddingRevision(v)
+		return nil
 	}
 	return fmt.Errorf("unknown MemoryNode field %s", name)
 }
@@ -9378,6 +9663,9 @@ func (m *MemoryNodeMutation) AddedFields() []string {
 	if m.adddecay_factor != nil {
 		fields = append(fields, memorynode.FieldDecayFactor)
 	}
+	if m.addembedding_revision != nil {
+		fields = append(fields, memorynode.FieldEmbeddingRevision)
+	}
 	return fields
 }
 
@@ -9390,6 +9678,8 @@ func (m *MemoryNodeMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedImportance()
 	case memorynode.FieldDecayFactor:
 		return m.AddedDecayFactor()
+	case memorynode.FieldEmbeddingRevision:
+		return m.AddedEmbeddingRevision()
 	}
 	return nil, false
 }
@@ -9412,6 +9702,13 @@ func (m *MemoryNodeMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddDecayFactor(v)
+		return nil
+	case memorynode.FieldEmbeddingRevision:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddEmbeddingRevision(v)
 		return nil
 	}
 	return fmt.Errorf("unknown MemoryNode numeric field %s", name)
@@ -9455,6 +9752,9 @@ func (m *MemoryNodeMutation) ResetField(name string) error {
 	case memorynode.FieldUpdatedAt:
 		m.ResetUpdatedAt()
 		return nil
+	case memorynode.FieldGenerationID:
+		m.ResetGenerationID()
+		return nil
 	case memorynode.FieldUserID:
 		m.ResetUserID()
 		return nil
@@ -9478,6 +9778,9 @@ func (m *MemoryNodeMutation) ResetField(name string) error {
 		return nil
 	case memorynode.FieldEmbeddingStatus:
 		m.ResetEmbeddingStatus()
+		return nil
+	case memorynode.FieldEmbeddingRevision:
+		m.ResetEmbeddingRevision()
 		return nil
 	}
 	return fmt.Errorf("unknown MemoryNode field %s", name)
@@ -9539,6 +9842,7 @@ type MemoryRelationMutation struct {
 	id            *int
 	created_at    *time.Time
 	updated_at    *time.Time
+	generation_id *string
 	user_id       *string
 	src_node_id   *string
 	dst_node_id   *string
@@ -9721,6 +10025,42 @@ func (m *MemoryRelationMutation) OldUpdatedAt(ctx context.Context) (v time.Time,
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *MemoryRelationMutation) ResetUpdatedAt() {
 	m.updated_at = nil
+}
+
+// SetGenerationID sets the "generation_id" field.
+func (m *MemoryRelationMutation) SetGenerationID(s string) {
+	m.generation_id = &s
+}
+
+// GenerationID returns the value of the "generation_id" field in the mutation.
+func (m *MemoryRelationMutation) GenerationID() (r string, exists bool) {
+	v := m.generation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGenerationID returns the old "generation_id" field's value of the MemoryRelation entity.
+// If the MemoryRelation object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryRelationMutation) OldGenerationID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGenerationID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGenerationID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGenerationID: %w", err)
+	}
+	return oldValue.GenerationID, nil
+}
+
+// ResetGenerationID resets all changes to the "generation_id" field.
+func (m *MemoryRelationMutation) ResetGenerationID() {
+	m.generation_id = nil
 }
 
 // SetUserID sets the "user_id" field.
@@ -10042,12 +10382,15 @@ func (m *MemoryRelationMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *MemoryRelationMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 10)
 	if m.created_at != nil {
 		fields = append(fields, memoryrelation.FieldCreatedAt)
 	}
 	if m.updated_at != nil {
 		fields = append(fields, memoryrelation.FieldUpdatedAt)
+	}
+	if m.generation_id != nil {
+		fields = append(fields, memoryrelation.FieldGenerationID)
 	}
 	if m.user_id != nil {
 		fields = append(fields, memoryrelation.FieldUserID)
@@ -10082,6 +10425,8 @@ func (m *MemoryRelationMutation) Field(name string) (ent.Value, bool) {
 		return m.CreatedAt()
 	case memoryrelation.FieldUpdatedAt:
 		return m.UpdatedAt()
+	case memoryrelation.FieldGenerationID:
+		return m.GenerationID()
 	case memoryrelation.FieldUserID:
 		return m.UserID()
 	case memoryrelation.FieldSrcNodeID:
@@ -10109,6 +10454,8 @@ func (m *MemoryRelationMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldCreatedAt(ctx)
 	case memoryrelation.FieldUpdatedAt:
 		return m.OldUpdatedAt(ctx)
+	case memoryrelation.FieldGenerationID:
+		return m.OldGenerationID(ctx)
 	case memoryrelation.FieldUserID:
 		return m.OldUserID(ctx)
 	case memoryrelation.FieldSrcNodeID:
@@ -10145,6 +10492,13 @@ func (m *MemoryRelationMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUpdatedAt(v)
+		return nil
+	case memoryrelation.FieldGenerationID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGenerationID(v)
 		return nil
 	case memoryrelation.FieldUserID:
 		v, ok := value.(string)
@@ -10274,6 +10628,9 @@ func (m *MemoryRelationMutation) ResetField(name string) error {
 	case memoryrelation.FieldUpdatedAt:
 		m.ResetUpdatedAt()
 		return nil
+	case memoryrelation.FieldGenerationID:
+		m.ResetGenerationID()
+		return nil
 	case memoryrelation.FieldUserID:
 		m.ResetUserID()
 		return nil
@@ -10355,6 +10712,7 @@ type MemorySummaryMutation struct {
 	id                 *int
 	created_at         *time.Time
 	updated_at         *time.Time
+	generation_id      *string
 	user_id            *string
 	conversation_id    *string
 	node_id            *string
@@ -10540,6 +10898,42 @@ func (m *MemorySummaryMutation) OldUpdatedAt(ctx context.Context) (v time.Time, 
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *MemorySummaryMutation) ResetUpdatedAt() {
 	m.updated_at = nil
+}
+
+// SetGenerationID sets the "generation_id" field.
+func (m *MemorySummaryMutation) SetGenerationID(s string) {
+	m.generation_id = &s
+}
+
+// GenerationID returns the value of the "generation_id" field in the mutation.
+func (m *MemorySummaryMutation) GenerationID() (r string, exists bool) {
+	v := m.generation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGenerationID returns the old "generation_id" field's value of the MemorySummary entity.
+// If the MemorySummary object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemorySummaryMutation) OldGenerationID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGenerationID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGenerationID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGenerationID: %w", err)
+	}
+	return oldValue.GenerationID, nil
+}
+
+// ResetGenerationID resets all changes to the "generation_id" field.
+func (m *MemorySummaryMutation) ResetGenerationID() {
+	m.generation_id = nil
 }
 
 // SetUserID sets the "user_id" field.
@@ -10937,12 +11331,15 @@ func (m *MemorySummaryMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *MemorySummaryMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 11)
 	if m.created_at != nil {
 		fields = append(fields, memorysummary.FieldCreatedAt)
 	}
 	if m.updated_at != nil {
 		fields = append(fields, memorysummary.FieldUpdatedAt)
+	}
+	if m.generation_id != nil {
+		fields = append(fields, memorysummary.FieldGenerationID)
 	}
 	if m.user_id != nil {
 		fields = append(fields, memorysummary.FieldUserID)
@@ -10980,6 +11377,8 @@ func (m *MemorySummaryMutation) Field(name string) (ent.Value, bool) {
 		return m.CreatedAt()
 	case memorysummary.FieldUpdatedAt:
 		return m.UpdatedAt()
+	case memorysummary.FieldGenerationID:
+		return m.GenerationID()
 	case memorysummary.FieldUserID:
 		return m.UserID()
 	case memorysummary.FieldConversationID:
@@ -11009,6 +11408,8 @@ func (m *MemorySummaryMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldCreatedAt(ctx)
 	case memorysummary.FieldUpdatedAt:
 		return m.OldUpdatedAt(ctx)
+	case memorysummary.FieldGenerationID:
+		return m.OldGenerationID(ctx)
 	case memorysummary.FieldUserID:
 		return m.OldUserID(ctx)
 	case memorysummary.FieldConversationID:
@@ -11047,6 +11448,13 @@ func (m *MemorySummaryMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUpdatedAt(v)
+		return nil
+	case memorysummary.FieldGenerationID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGenerationID(v)
 		return nil
 	case memorysummary.FieldUserID:
 		v, ok := value.(string)
@@ -11206,6 +11614,9 @@ func (m *MemorySummaryMutation) ResetField(name string) error {
 		return nil
 	case memorysummary.FieldUpdatedAt:
 		m.ResetUpdatedAt()
+		return nil
+	case memorysummary.FieldGenerationID:
+		m.ResetGenerationID()
 		return nil
 	case memorysummary.FieldUserID:
 		m.ResetUserID()

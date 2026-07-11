@@ -48,6 +48,20 @@ func (_u *MemoryEmbeddingUpdate) SetNillableEmbeddingID(v *string) *MemoryEmbedd
 	return _u
 }
 
+// SetGenerationID sets the "generation_id" field.
+func (_u *MemoryEmbeddingUpdate) SetGenerationID(v string) *MemoryEmbeddingUpdate {
+	_u.mutation.SetGenerationID(v)
+	return _u
+}
+
+// SetNillableGenerationID sets the "generation_id" field if the given value is not nil.
+func (_u *MemoryEmbeddingUpdate) SetNillableGenerationID(v *string) *MemoryEmbeddingUpdate {
+	if v != nil {
+		_u.SetGenerationID(*v)
+	}
+	return _u
+}
+
 // SetUserID sets the "user_id" field.
 func (_u *MemoryEmbeddingUpdate) SetUserID(v string) *MemoryEmbeddingUpdate {
 	_u.mutation.SetUserID(v)
@@ -207,6 +221,9 @@ func (_u *MemoryEmbeddingUpdate) sqlSave(ctx context.Context) (_node int, err er
 	if value, ok := _u.mutation.EmbeddingID(); ok {
 		_spec.SetField(memoryembedding.FieldEmbeddingID, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.GenerationID(); ok {
+		_spec.SetField(memoryembedding.FieldGenerationID, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(memoryembedding.FieldUserID, field.TypeString, value)
 	}
@@ -270,6 +287,20 @@ func (_u *MemoryEmbeddingUpdateOne) SetEmbeddingID(v string) *MemoryEmbeddingUpd
 func (_u *MemoryEmbeddingUpdateOne) SetNillableEmbeddingID(v *string) *MemoryEmbeddingUpdateOne {
 	if v != nil {
 		_u.SetEmbeddingID(*v)
+	}
+	return _u
+}
+
+// SetGenerationID sets the "generation_id" field.
+func (_u *MemoryEmbeddingUpdateOne) SetGenerationID(v string) *MemoryEmbeddingUpdateOne {
+	_u.mutation.SetGenerationID(v)
+	return _u
+}
+
+// SetNillableGenerationID sets the "generation_id" field if the given value is not nil.
+func (_u *MemoryEmbeddingUpdateOne) SetNillableGenerationID(v *string) *MemoryEmbeddingUpdateOne {
+	if v != nil {
+		_u.SetGenerationID(*v)
 	}
 	return _u
 }
@@ -462,6 +493,9 @@ func (_u *MemoryEmbeddingUpdateOne) sqlSave(ctx context.Context) (_node *MemoryE
 	}
 	if value, ok := _u.mutation.EmbeddingID(); ok {
 		_spec.SetField(memoryembedding.FieldEmbeddingID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.GenerationID(); ok {
+		_spec.SetField(memoryembedding.FieldGenerationID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(memoryembedding.FieldUserID, field.TypeString, value)

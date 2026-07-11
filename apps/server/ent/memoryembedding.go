@@ -23,6 +23,8 @@ type MemoryEmbedding struct {
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 	// EmbeddingID holds the value of the "embedding_id" field.
 	EmbeddingID string `json:"embedding_id,omitempty"`
+	// GenerationID holds the value of the "generation_id" field.
+	GenerationID string `json:"generation_id,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID string `json:"user_id,omitempty"`
 	// NodeID holds the value of the "node_id" field.
@@ -49,7 +51,7 @@ func (*MemoryEmbedding) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case memoryembedding.FieldID, memoryembedding.FieldEmbeddingVersion:
 			values[i] = new(sql.NullInt64)
-		case memoryembedding.FieldEmbeddingID, memoryembedding.FieldUserID, memoryembedding.FieldNodeID, memoryembedding.FieldNodeType, memoryembedding.FieldEmbeddingModel, memoryembedding.FieldContentHash:
+		case memoryembedding.FieldEmbeddingID, memoryembedding.FieldGenerationID, memoryembedding.FieldUserID, memoryembedding.FieldNodeID, memoryembedding.FieldNodeType, memoryembedding.FieldEmbeddingModel, memoryembedding.FieldContentHash:
 			values[i] = new(sql.NullString)
 		case memoryembedding.FieldCreatedAt, memoryembedding.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -91,6 +93,12 @@ func (_m *MemoryEmbedding) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field embedding_id", values[i])
 			} else if value.Valid {
 				_m.EmbeddingID = value.String
+			}
+		case memoryembedding.FieldGenerationID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field generation_id", values[i])
+			} else if value.Valid {
+				_m.GenerationID = value.String
 			}
 		case memoryembedding.FieldUserID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -178,6 +186,9 @@ func (_m *MemoryEmbedding) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("embedding_id=")
 	builder.WriteString(_m.EmbeddingID)
+	builder.WriteString(", ")
+	builder.WriteString("generation_id=")
+	builder.WriteString(_m.GenerationID)
 	builder.WriteString(", ")
 	builder.WriteString("user_id=")
 	builder.WriteString(_m.UserID)
