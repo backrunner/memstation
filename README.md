@@ -152,6 +152,7 @@ pnpm dev:container:portless
 
 更多说明见：
 
+- `docs/local-debugging.md`
 - `deploy/compose/DEVELOPMENT.md`
 - `deploy/compose/BACKUP_RESTORE.md`
 
