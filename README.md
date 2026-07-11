@@ -47,6 +47,10 @@ memstation/
 - 异步记忆写入：`conversation.finalize -> summary.generate -> embedding.generate -> analysis.extract -> keymemory.reconcile`
 - 业务记忆实体：Summary、Keyword、Impression、Fact、Key Memory，以及承载 `event/task/procedure/artifact/entity/agent_action` 的通用 `memory_items`
 - 图结构：`MemoryNode + MemoryRelation + MemoryEmbedding`
+- Generation 生命周期：rebuild 在 inactive generation 隔离执行，支持显式 activate/discard；激活后保留当前代与上一代并回收更旧 graph/vector 数据，conversation source snapshot 默认保留最近 3 份未引用版本
+- 写入一致性：人工编辑与 Key Memory 写入通过 transactional outbox 驱动 embedding、graph sync 和 vector delete；`embedding_revision` CAS 防止旧任务覆盖新向量，在线检索只读取 ready node
+- 图存储约束：PostgreSQL 以复合外键和 check constraint 保证同用户 node 引用、relation endpoint/type/weight 完整性，并为 relation 双向遍历和常用 embedding 维度提供索引与 HNSW ANN 路径
+- Entity 归并：generic entity 以 `entity_kind + normalized title` 形成 generation-scoped canonical identity，同一 generation 内跨 conversation 合并 aliases、mentions 和 evidence
 - 会话切片：对用户/助手对话做 segment 化写入，并建立 `follows_segment`、`summarized_into` 等图关系
 - 时间能力：`importance * time_decay` 排序、`activity_at`、`time_tier`、temporal graph
 - 记忆检索：向量候选 + SQL hydrate + 1-2 hop relation expansion + 混合 key memory 注入
