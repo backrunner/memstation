@@ -140,26 +140,10 @@
     }
   }
 
-	async function activateGeneration(generationId: string): Promise<void> {
+  async function activateGeneration(generationId: string): Promise<void> {
     if (!$selectedTarget || !rebuildUserId.trim()) {
       return;
-	}
-
-	async function discardGeneration(generationId: string): Promise<void> {
-		if (!$selectedTarget || !rebuildUserId.trim()) return;
-		actionLoading = true;
-		error = '';
-		success = '';
-		try {
-			await discardMemoryRebuild($selectedTarget, rebuildUserId.trim(), generationId);
-			success = 'Generation discarded and its inactive graph data was removed.';
-			await loadTasks();
-		} catch (cause) {
-			error = cause instanceof Error ? cause.message : 'Failed to discard memory generation';
-		} finally {
-			actionLoading = false;
-		}
-	}
+    }
     actionLoading = true;
     error = '';
     success = '';
@@ -169,6 +153,22 @@
       await loadTasks();
     } catch (cause) {
       error = cause instanceof Error ? cause.message : 'Failed to activate memory generation';
+    } finally {
+      actionLoading = false;
+    }
+  }
+
+  async function discardGeneration(generationId: string): Promise<void> {
+    if (!$selectedTarget || !rebuildUserId.trim()) return;
+    actionLoading = true;
+    error = '';
+    success = '';
+    try {
+      await discardMemoryRebuild($selectedTarget, rebuildUserId.trim(), generationId);
+      success = 'Generation discarded and its inactive graph data was removed.';
+      await loadTasks();
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : 'Failed to discard memory generation';
     } finally {
       actionLoading = false;
     }
