@@ -1,7 +1,7 @@
 {
   "name": "memstation",
   "private": true,
-  "packageManager": "pnpm@10.32.1",
+  "packageManager": "pnpm@12.3.4",
   "scripts": {
     "dev": "bash ./scripts/devcontainer/start-fullstack-debug.sh",
     "dev:container": "bash ./scripts/devcontainer/start-workspace.sh",

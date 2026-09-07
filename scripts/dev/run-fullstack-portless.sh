@@ -45,7 +45,7 @@ ensure_pnpm() {
     exit 1
   fi
   corepack enable >/dev/null 2>&1
-  corepack prepare pnpm@10.32.1 --activate >/dev/null 2>&1
+  corepack prepare pnpm@12.3.4 --activate >/dev/null 2>&1
 }
 
 docker_ready() {

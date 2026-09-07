@@ -101,7 +101,7 @@ memstation/
 
 - Backend: Go `1.26.1`, Chi, Cobra, Ent, gqlgen, Asynq, PostgreSQL 16 + pgvector, Redis 7, OpenTelemetry
 - Frontend: SvelteKit, Svelte 5, Bits UI, shadcn-svelte, Tailwind 4, ECharts, Playwright, Vitest
-- Monorepo: pnpm `10.32.1`, Turbo
+- Monorepo: pnpm `12.3.4`, Turbo
 
 ## 快速开始
 
@@ -110,7 +110,7 @@ memstation/
 前置条件：
 
 - Docker
-- pnpm `10.32.1`
+- pnpm `12.3.4`
 - 可选：本机已安装 `devcontainer` CLI；如果未安装，脚本会自动通过 `pnpm dlx @devcontainers/cli@0.85.0` 拉起
 
 执行：
@@ -189,7 +189,7 @@ pnpm dev:reset
 
 - Go `1.26.1`
 - Node.js `24.11+`
-- pnpm `10.32.1`
+- pnpm `12.3.4`
 - PostgreSQL 16+
 - Redis 7
 

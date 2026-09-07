@@ -416,7 +416,7 @@ v1.0 默认目标：
 | 类别 | 依赖 | 版本 |
 |------|------|------|
 | Node.js | `node` | `24.11+` |
-| Package manager | `pnpm` | `10.32.1` |
+| Package manager | `pnpm` | `12.3.4` |
 | Monorepo | `turbo` | `2.8.16` |
 | App framework | `@sveltejs/kit` | `2.54.0` |
 | UI runtime | `svelte` | `5.53.11` |

@@ -6,7 +6,7 @@
 
 ### Apple Silicon：Apple Container
 
-前置条件：Apple Container `1.0.0+`、Node.js `24.11+`、pnpm `10.32.1`。
+前置条件：Apple Container `1.0.0+`、Node.js `24.11+`、pnpm `12.3.4`。
 
 ```bash
 pnpm dev:apple
@@ -31,7 +31,7 @@ pnpm dev:apple:reset  # 删除容器、network 和开发数据
 
 ### Docker：devcontainer
 
-前置条件：Docker、Node.js `24.11+`、pnpm `10.32.1`。
+前置条件：Docker、Node.js `24.11+`、pnpm `12.3.4`。
 
 ```bash
 pnpm dev
@@ -179,6 +179,6 @@ pnpm dev:reset
 - Provider 请求失败：检查 Provider 密钥、base URL、模型映射和 server 终端日志。
 - `ready` 检查失败：先检查 PostgreSQL 和 Redis，再检查 migration 是否完成。
 - 端口被占用：Apple Container 可通过 `MEMSTATION_APPLE_HTTP_PORT`、`MEMSTATION_APPLE_GRPC_PORT`、`MEMSTATION_APPLE_MANAGER_PORT` 等变量覆盖端口。
-- pnpm 版本不一致：使用 `corepack prepare pnpm@10.32.1 --activate`。
+- pnpm 版本不一致：使用 `corepack prepare pnpm@12.3.4 --activate`。
 - 本地状态难以判断：先保留当前日志，再执行对应 runtime 的 stop/reset；reset 会删除开发数据。
 
