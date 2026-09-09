@@ -466,6 +466,10 @@ v1.0 默认目标：
 - 不使用“紫色 + 默认深色”的泛化 AI 控制台风格
 - 字体建议：`IBM Plex Sans` 或 `Geist`，代码字体 `JetBrains Mono`
 - 组件风格强调监控、数据密度、运维信息可读性
+- 避免装饰性状态灯、渐变、发光、悬浮位移动效及重复胶囊标签；常规状态和元数据用文字呈现，填色提示用于失败、重试、历史事实等需要注意的状态
+- 各端优先展示搜索、结果和主要操作，次要筛选按需展开并保留所选条件；不重复展示导航已有入口、无操作意义的正常状态或原始记录
+- 同类按钮、输入框、表单和记录列表使用共享尺寸与间距；普通记录用分隔线组织，避免卡片层层嵌套。高频编辑内容优先，运行元数据和原始 JSON 按需展开；关系视图必须有可读标识与真实跳转入口
+- 移动端主要控件保持至少 44px 触控高度，文本输入避免 iOS 聚焦缩放；短屏弹窗可滚动，保存操作不得遮住最后一组字段，横向栏目切换应露出当前项
 
 ---
 
@@ -620,12 +624,26 @@ v1.x 后续路线：
 
 ---
 
-## 14. 当前实现状态（as of 2026-07-11）
+## 14. 当前实现状态（as of 2026-09-09）
 
 本节用于重启时快速恢复上下文；如后续实现进度发生变化，必须同步更新本节，而不能只改代码不改状态。
 
 ### 14.1 已完成
 
+- 2026-09-09 graph / eval 复核：关系 generation 改为双端一致性校验，拒绝跨代与跨用户写入并隔离旧冲突边；待应用的 generation backfill migration 改为只补齐可确定的关系、保留历史边，真实 PostgreSQL 16.14 空库迁移重放、关系隔离与迁移幂等/保留回归通过；未操作已有用户数据库
+- 2026-09-09 评测正确性修复：LOCOMO 原始对话轨道不再索引人工标注事件摘要及上游生成记忆，统一 sample principal 并保留 speaker/date；LongMemEval 索引去除 `has_answer`/question type 标签；修复 nDCG 截断分母、重复结果加分、relation hit 去重、QA 重复 ID 与覆盖率报告；repo-native/perf benchmark tests 改为显式运行，默认 Go 正确性测试不执行 benchmark 阈值门禁
+- 2026-09-09 已核对 LOCOMO / LongMemEval / LongMemEval-V2 / MemoryAgentBench 官方仓库并记录固定 revision；当前代码支持 LOCOMO raw-dialogue retrieval 与 cleaned LongMemEval V1 retrieval / QA，未把 V1 分数称为 V2 成绩。方法、验证和范围见 `apps/server/tests/eval/REVIEW-2026-09-09.md`；本地 20 条 native 与 1,532 条 LOCOMO 离线评测已导出 artifact，确定性向量结果仅验证执行链路
+- Go lint 工具从无法读取当前 Go export data 的 v1.64.8 升级至明确版本 v2.13.2，使用官方配置迁移保留原有 correctness linters / exclusions，入口仍为 `scripts/go/lint.sh`；完整 Go 测试与 lint（0 issues）通过，新的数据库回归使用隔离测试实例；报告输出和工具消息判断完成等价的静态检查修正
+- 2026-09-09 Manager 视觉调整：合并重复主题覆盖，采用浅色导航与中性表面，移除装饰状态灯和渐变；常规状态、关键词、检索分数与 lineage 版本改为文字元数据，保留异常提示；Dashboard 使用汇总数字行与用户记忆数量表，修复移动端图表及导航横向溢出
+- 2026-09-09 Manager 交互与布局补强：统一共享表单的 SSR 标签关联、帮助/错误描述与键盘操作；修复 inactive tab 被布局样式显示并拦截点击、审计筛选焦点丢失与旧响应覆盖、图表时间范围不刷新及卸载后的异步初始化、章节面包屑错误路径；移动导航使用受控 Dialog 约束焦点，target 操作补齐触屏菜单，确认操作等待期间禁止重复提交及 Escape 关闭
+- 2026-09-09 Manager 页面整理：修正表单跨列、筛选栏与操作区对齐、长内容及 JSON 溢出；System / Providers 固定保存区，Audit / Tasks / Queue detail 支持键盘选择行；Key Memory 改为弹窗创建，列表直接显示内容并折叠原始记录
+- 2026-09-09 Manager 移动端与信息密度补强：Conversations / Users / Audit / Memory / Key Memory / Tasks 使用可折叠筛选；移除 Memory workspace 重复集合卡片与列表常驻审计标签，最近记忆只请求所需的 3 类、最多 4 条记录；保留搜索失败后的输入和重试入口
+- 移动端增加 44px 主要触控区域与 16px 文本输入；平板保持双列表单，手机配置数值采用双列、保存操作固定到底部；弹窗跟随 visual viewport，记忆导航在视口变化后露出当前项，显式链接焦点声明与关闭后焦点恢复修复 WebKit 移动端键盘及触屏导航问题
+- 修复任务队列选择被 URL 重置、重复请求及旧响应覆盖、取消全部任务状态仍返回数据；Memory / Key Memory / Conversations / Users 的读取补齐挂载去重和作用域校验；修复放大触控区后的 Provider 行窄屏溢出
+- 2026-09-09 UI 组件与页面组织重构：统一旧 button 别名到共享按钮体系、表单混排对齐与 12/13/14px 信息层级；自托管 Google Fonts v23 IBM Plex Sans Latin variable 字体并附 SIL OFL，无新增 npm 依赖；列表改为分隔行，列表危险操作弱化，确认弹窗仍保留明确危险色
+- System 新增共用 SettingsSection 与栏目跳转，运行参数优先、数据库配置独立分区；Providers 的标题、路由选择与编辑行统一排列；Models 精简重复 provider 清单，Users 与运维汇总统一数字栏，Tasks 的 generation / manual 表单按需展开
+- Memory detail 优先展示编辑内容，运行字段与 metadata / audit payload 可展开；移除发光圆形图和重复关系列表，关联节点采用可读、可点击的有界关系视图；fixture 关联记录字段已同步正式 RelatedMemory JSON 契约，并新增用户作用域跳转回归
+- 本轮 UI 验证：Manager lint / Svelte check（0 errors / 0 warnings）、Vitest（15/15）、production build 通过；Playwright 使用 production preview 与正式 fixture，Chrome `33/33`、WebKit iPhone 13 模拟 `9/9` 分别完整通过；移动回归包含触控事件、导航焦点恢复、横竖屏切换、筛选保留、请求竞态、空状态、弹窗创建删除、底部保存区、栏目跳转保留草稿和关联节点用户作用域，已加入 CI；记忆人工修正回归同时验证审计 payload 展开及刷新后持久化。26 个主要路由在 1440 / 1024 / 768 / 390 / 320px 与 844×390 横屏共 156 次布局检查未发现整页横向溢出或浏览器运行错误；截图与验证摘要位于本地 `.artifacts/ui-quality/`，使用 fixture 数据，尚未进行真实 iOS 设备验收
 - server-first 业务核心已落地，`apps/server` 已具备 gateway、memory、admin、worker 基础能力
 - manager 已按 `.agents/plan/frontend-panel.md` 完成 v1.0 全量核对，可直连指定 MemStation target；Dashboard、Playground、Conversations、Memory、Users、Usage、Settings、Health、Queues、Tasks、Cache、Audit 均具备正式操作入口
 - manager 已统一为专业、明亮、高密度的 ToB 运维界面；Dashboard 补齐 Key Memory 与失败任务信号，Conversations 补齐 provider/mode/finalize/date 筛选，Users 补齐排序，Audit 补齐日期筛选，Cache 恢复主导航入口

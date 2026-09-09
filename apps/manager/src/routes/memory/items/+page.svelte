@@ -158,12 +158,12 @@
       {#if visibleItems.length === 0}
         <div class="empty-state">No agent memory items match the current filter.</div>
       {:else}
-        <div class="stack-list">
+        <div class="stack-list data-list">
           {#each visibleItems as item}
             {@const routeKind = memoryRouteKindFromDocumentType(item.type)}
             {@const status = metadataString(item.metadata, 'status')}
             {@const reviewStatus = metadataString(item.metadata, 'review_status')}
-            <article class="agent-memory-card">
+            <article class="agent-memory-card data-list-row">
               <header class="agent-memory-head">
                 <div class="agent-memory-head-main">
                   <strong>{titleForItem(item)}</strong>
@@ -201,10 +201,6 @@
   .agent-memory-card {
     display: grid;
     gap: 8px;
-    padding: 12px 14px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
   }
 
   .agent-memory-head {

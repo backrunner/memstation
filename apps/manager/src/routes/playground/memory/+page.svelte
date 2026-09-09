@@ -243,7 +243,7 @@
       <section class="card page-stack">
         <div class="page-header">
           <div class="page-header-meta">
-            <h2 class="section-title">Recall</h2>
+            <h2 class="section-title">Search results</h2>
             <p class="panel-meta">Top results ranked by effective score.</p>
           </div>
           {#if searchResult}

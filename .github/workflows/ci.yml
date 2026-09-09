@@ -65,7 +65,7 @@ jobs:
       - name: Coverage thresholds
         run: bash ./scripts/test/check-coverage.sh
       - name: Install Playwright browser
-        run: cd apps/manager && pnpm exec playwright install --with-deps chromium
+        run: cd apps/manager && pnpm exec playwright install --with-deps chromium webkit
       - name: Manager Playwright E2E
         run: pnpm test:e2e:manager
       - name: Upload ops artifacts

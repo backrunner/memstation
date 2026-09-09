@@ -1,13 +1,10 @@
 import {
-  fetchAdminKeyMemories,
   fetchAdminMemoryDocuments,
   searchAdminMemories
 } from '$lib/api/client';
 import type {
   FactRecord,
   GenericMemoryDocumentKind,
-  ImpressionRecord,
-  KeyMemoryRecord,
   MemStationTarget,
   MemoryDocument,
   MemorySummaryRecord,
@@ -16,10 +13,8 @@ import type {
 
 export interface MemoryWorkspaceData {
   memorySummaries: MemorySummaryRecord[];
-  impressions: ImpressionRecord[];
   facts: FactRecord[];
   genericItems: MemoryDocument[];
-  keyMemories: KeyMemoryRecord[];
 }
 
 export const genericMemoryKinds: GenericMemoryDocumentKind[] = ['event', 'task', 'procedure', 'artifact', 'entity', 'agent_action'];
@@ -32,13 +27,6 @@ function toSummaryRecord(item: MemoryDocument): MemorySummaryRecord {
   };
 }
 
-function toImpressionRecord(item: MemoryDocument): ImpressionRecord {
-  return {
-    id: item.id,
-    description: item.content
-  };
-}
-
 function toFactRecord(item: MemoryDocument): FactRecord {
   return {
     id: item.id,
@@ -47,20 +35,16 @@ function toFactRecord(item: MemoryDocument): FactRecord {
 }
 
 export async function fetchMemoryWorkspace(target: MemStationTarget, userId?: string): Promise<MemoryWorkspaceData> {
-  const [summaries, impressions, facts, genericItems, keyMemories] = await Promise.all([
-    fetchAdminMemoryDocuments(target, { kind: 'summary', userId, limit: 200 }),
-    fetchAdminMemoryDocuments(target, { kind: 'impression', userId, limit: 200 }),
-    fetchAdminMemoryDocuments(target, { kind: 'fact', userId, limit: 200 }),
-    fetchAdminMemoryDocuments(target, { kind: genericMemoryKinds, userId, limit: 200 }),
-    fetchAdminKeyMemories(target, { userId, limit: 200 })
+  const [summaries, facts, genericItems] = await Promise.all([
+    fetchAdminMemoryDocuments(target, { kind: 'summary', userId, limit: 2 }),
+    fetchAdminMemoryDocuments(target, { kind: 'fact', userId, limit: 1 }),
+    fetchAdminMemoryDocuments(target, { kind: genericMemoryKinds, userId, limit: 1 }),
   ]);
 
   return {
     memorySummaries: summaries.map(toSummaryRecord),
-    impressions: impressions.map(toImpressionRecord),
     facts: facts.map(toFactRecord),
-    genericItems,
-    keyMemories
+    genericItems
   };
 }
 

@@ -5,28 +5,19 @@
 </script>
 
 {#if matchedKeywords.length > 0 || sourceKeywords.length > 0}
-  <div class="page-stack" style="gap: 10px; margin-top: 12px;">
+  <div class="keyword-signals">
     {#if matchedKeywords.length > 0}
-      <div class="page-stack" style="gap: 6px;">
-        <div class="sidebar-label">Matched keywords</div>
-        <div class="memory-diff-meta">
-          {#each matchedKeywords as keyword}
-            <span class="memory-diff-chip">{keyword}</span>
-          {/each}
-        </div>
-      </div>
+      <p><span>Matched keywords</span> {matchedKeywords.join(', ')}</p>
     {/if}
 
     {#if sourceKeywords.length > 0}
-      <div class="page-stack" style="gap: 6px;">
-        <div class="sidebar-label">Keyword source</div>
-        <div class="helper-text">{sourceLabel}</div>
-        <div class="memory-diff-meta">
-          {#each sourceKeywords as keyword}
-            <span class="memory-diff-chip">{keyword}</span>
-          {/each}
-        </div>
-      </div>
+      <p><span>Keyword source · {sourceLabel}</span> {sourceKeywords.join(', ')}</p>
     {/if}
   </div>
 {/if}
+
+<style>
+  .keyword-signals { display: grid; gap: 4px; margin-top: 12px; font-size: 12px; color: var(--text-secondary); }
+  p { margin: 0; overflow-wrap: anywhere; }
+  span { color: var(--text-muted); margin-right: 8px; }
+</style>

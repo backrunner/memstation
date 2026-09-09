@@ -380,7 +380,6 @@
         <div class="page-header">
           <div class="page-header-meta">
             <h2 class="section-title">Request</h2>
-            <p class="panel-meta">{headerLine()}</p>
           </div>
           <div class="inline-group">
             <button class="btn-secondary btn-sm" type="button" on:click={() => applyTemplate(protocol)}>Reset template</button>
@@ -421,7 +420,7 @@
         <div class="page-header">
           <div class="page-header-meta">
             <h2 class="section-title">Response</h2>
-            <p class="panel-meta">{responseMeta()}</p>
+            {#if !responseIsEmpty}<p class="panel-meta">{responseMeta()}</p>{/if}
           </div>
           {#if responseStatus > 0}
             <StatusBadge

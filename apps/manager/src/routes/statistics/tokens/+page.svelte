@@ -243,7 +243,7 @@
       </div>
     </section>
 
-    <div class="kpi-grid">
+    <div class="kpi-grid summary-metrics">
       <KpiCard label="Filtered tokens" value={totalTokens.toLocaleString()} />
       <KpiCard label="Conversations" value={String(filteredConversations.length)} />
       <KpiCard label="Active users" value={String(activeUsers)} />

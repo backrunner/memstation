@@ -136,9 +136,9 @@
         </div>
 
         <div class="inline-group" style="justify-content: flex-end;">
-          <a class="button-ghost" href={`/operations/queues/${encodeURIComponent(detail.item.queue)}`}>Open queue</a>
-          <a class="button-ghost" href={`/operations/tasks?queue=${encodeURIComponent(detail.item.queue)}`}>Back to filtered tasks</a>
-          <button class="button" type="button" disabled={actionLoading} on:click={() => (rerunConfirmOpen = true)}>{actionLoading ? 'Requeueing...' : 'Run task now'}</button>
+          <a class="btn-ghost" href={`/operations/queues/${encodeURIComponent(detail.item.queue)}`}>Open queue</a>
+          <a class="btn-ghost" href={`/operations/tasks?queue=${encodeURIComponent(detail.item.queue)}`}>Back to filtered tasks</a>
+          <button class="btn-primary" type="button" disabled={actionLoading} on:click={() => (rerunConfirmOpen = true)}>{actionLoading ? 'Requeueing...' : 'Run task now'}</button>
         </div>
       </section>
 
@@ -209,7 +209,7 @@
             <div class="sidebar-label">Rerun Audit</div>
             <h2 class="page-title" style="font-size: 1.35rem;">Recorded rerun actions for this queue task</h2>
           </div>
-          <a class="button-ghost" href={`/audit?action=requeue_task&target_type=queue_task&target_id=${encodeURIComponent(detail.item.id)}`}>Open audit</a>
+          <a class="btn-ghost" href={`/audit?action=requeue_task&target_type=queue_task&target_id=${encodeURIComponent(detail.item.id)}`}>Open audit</a>
         </div>
         {#if audits.length === 0}
           <div class="empty-state">No admin rerun actions have been recorded for this queue task yet.</div>

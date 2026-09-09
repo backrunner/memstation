@@ -4,9 +4,10 @@
   import '$lib/styles/app.css';
 
   import { onMount } from 'svelte';
+  import type { Snippet } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { Select } from 'bits-ui';
+  import { Dialog, Select } from 'bits-ui';
   import {
     Activity,
     BarChart3,
@@ -30,7 +31,8 @@
     Sparkles,
     Terminal,
     Users,
-    Workflow
+    Workflow,
+    X
   } from 'lucide-svelte';
 
   import TargetManagerDialog from '$lib/components/TargetManagerDialog.svelte';
@@ -53,6 +55,8 @@
     label: string;
     icon: typeof LayoutDashboard;
   };
+
+  export let children: Snippet | undefined = undefined;
 
   type NavSection = {
     label: string;
@@ -128,6 +132,8 @@
 
   let targetDialogOpen = false;
   let mobileSidebarOpen = false;
+  let mobileNavTrigger: HTMLButtonElement | null = null;
+  let mobileViewport = false;
   let lastTargetId = '';
   let mounted = false;
   let targetVersions: Record<string, string> = {};
@@ -144,10 +150,32 @@
   $: needsInitialConnect = mounted && $targetState.targets.length === 0;
   $: breadcrumbs = buildBreadcrumbs($page.url.pathname);
 
-  onMount(async () => {
+  onMount(() => {
+    const viewport = window.visualViewport;
+    const syncDialogViewport = () => {
+      document.documentElement.style.setProperty('--visual-viewport-height', `${viewport?.height ?? window.innerHeight}px`);
+      document.documentElement.style.setProperty('--visual-viewport-top', `${viewport?.offsetTop ?? 0}px`);
+    };
+    syncDialogViewport();
+    viewport?.addEventListener('resize', syncDialogViewport);
+    viewport?.addEventListener('scroll', syncDialogViewport);
+    const media = window.matchMedia('(max-width: 1024px)');
+    const syncViewport = () => {
+      mobileViewport = media.matches;
+      if (!mobileViewport) mobileSidebarOpen = false;
+    };
+    syncViewport();
+    media.addEventListener('change', syncViewport);
     mounted = true;
     initializeTargets();
     void refreshSelectedTarget();
+    return () => {
+      media.removeEventListener('change', syncViewport);
+      viewport?.removeEventListener('resize', syncDialogViewport);
+      viewport?.removeEventListener('scroll', syncDialogViewport);
+      document.documentElement.style.removeProperty('--visual-viewport-height');
+      document.documentElement.style.removeProperty('--visual-viewport-top');
+    };
   });
 
   $: if (mounted && $selectedTarget?.id && $selectedTarget.id !== lastTargetId) {
@@ -209,12 +237,6 @@
     mobileSidebarOpen = false;
   }
 
-  function handleWindowKeydown(event: KeyboardEvent): void {
-    if (event.key === 'Escape') {
-      closeMobileSidebar();
-    }
-  }
-
   function buildBreadcrumbs(pathname: string): Array<{ label: string; href: string; isLast: boolean }> {
     const segments = pathname.split('/').filter(Boolean);
     if (segments.length === 0) {
@@ -225,7 +247,16 @@
       accumulated += `/${segment}`;
       const isLast = index === segments.length - 1;
       const label = routeLabels[segment] ?? decodeSegment(segment);
-      return { label, href: accumulated, isLast };
+      const sectionDestinations: Record<string, string> = {
+        '/operations': '/operations/health',
+        '/settings': '/settings/system',
+        '/statistics': '/statistics/tokens',
+        '/playground': '/playground/chat'
+      };
+      const href = segments[0] === 'operations' && segments[1] === 'tasks' && index === 2
+        ? `/operations/queues/${segment}`
+        : sectionDestinations[accumulated] ?? accumulated;
+      return { label, href, isLast };
     });
   }
 
@@ -301,13 +332,6 @@
     }
   }
 
-  function sessionStatusTone(): 'success' | 'warning' | 'danger' | 'muted' {
-    if ($targetState.session.checking) return 'muted';
-    if ($targetState.session.error) return 'danger';
-    if ($targetState.session.authenticated) return 'success';
-    return 'warning';
-  }
-
   function sessionStatusLabel(): string {
     if ($targetState.session.checking) return 'Checking target…';
     if ($targetState.session.error) return $targetState.session.error;
@@ -322,18 +346,13 @@
   <meta name="color-scheme" content="light" />
 </svelte:head>
 
-<svelte:window on:keydown={handleWindowKeydown} />
-
-{#if isAuthRoute || needsInitialConnect}
-  <div class="app-shell is-auth">
-    <slot />
-  </div>
-{:else}
-  <div class="app-shell" class:is-sidebar-open={mobileSidebarOpen}>
-    <aside class="app-sidebar" aria-label="Primary navigation">
+{#snippet sidebarNavigation(mobile = false)}
       <div class="sidebar-brand">
         <span class="sidebar-brand-mark" aria-hidden="true"><Network size={17} strokeWidth={1.9} /></span>
         <span class="sidebar-brand-name">MemStation</span>
+        {#if mobile}
+          <Dialog.Close class="btn-ghost btn-icon sidebar-close" aria-label="Close navigation"><X size={16} /></Dialog.Close>
+        {/if}
       </div>
 
       <nav class="sidebar-nav" aria-label="Primary navigation">
@@ -344,7 +363,9 @@
               {#each section.items as item}
                 <a
                   class="sidebar-nav-link"
+                  tabindex="0"
                   class:is-active={isActive($page.url.pathname, item.href)}
+                  aria-current={isActive($page.url.pathname, item.href) ? 'page' : undefined}
                   href={item.href}
                   on:click={closeMobileSidebar}
                 >
@@ -359,29 +380,27 @@
         {/each}
       </nav>
 
+{/snippet}
+
+{#if isAuthRoute || needsInitialConnect}
+  <div class="app-shell is-auth">
+    {@render children?.()}
+  </div>
+{:else}
+  <Dialog.Root bind:open={mobileSidebarOpen}>
+  <div class="app-shell">
+    {#if !mobileViewport}
+    <aside class="app-sidebar" aria-label="Primary navigation">
+      {@render sidebarNavigation()}
     </aside>
-    {#if mobileSidebarOpen}
-      <button
-        class="sidebar-scrim"
-        type="button"
-        aria-label="Close navigation"
-        on:click={closeMobileSidebar}
-      ></button>
     {/if}
 
     <main class="app-main">
       <header class="app-topbar">
         <div class="mobile-topbar-brand">
-          <button
-            class="btn-ghost btn-icon mobile-nav-trigger"
-            type="button"
-            aria-label="Open navigation"
-            aria-expanded={mobileSidebarOpen}
-            on:click={() => (mobileSidebarOpen = true)}
-          >
+          <Dialog.Trigger bind:ref={mobileNavTrigger} class="btn-ghost btn-icon mobile-nav-trigger" aria-label="Open navigation">
             <Menu size={17} strokeWidth={1.8} />
-          </button>
-          <span class="sidebar-brand-mark" aria-hidden="true"><Network size={16} strokeWidth={1.9} /></span>
+          </Dialog.Trigger>
         </div>
 
         <nav class="topbar-breadcrumb" aria-label="Breadcrumb">
@@ -409,8 +428,7 @@
               items={targetItems}
               onValueChange={(value) => selectTarget(value)}
             >
-              <Select.Trigger class="target-selector-trigger" aria-label="Switch target">
-                <span class={`status-dot ${sessionStatusTone()}`} title={sessionStatusLabel()}></span>
+              <Select.Trigger class="target-selector-trigger" aria-label="Switch target" title={sessionStatusLabel()}>
                 {#if activeTargetItem}
                   <span class="target-selector-label">{activeTargetItem.endpoint}</span>
                 {:else}
@@ -470,12 +488,34 @@
           </button>
         </div>
       </header>
+      {#if $targetState.session.checking || $targetState.session.error || !$targetState.session.authenticated}
+        <p class="connection-notice" class:is-error={Boolean($targetState.session.error)} role="status">
+          {sessionStatusLabel()}
+        </p>
+      {/if}
 
       <div class="app-content">
-        <slot />
+        {@render children?.()}
       </div>
     </main>
   </div>
+  {#if mobileViewport}
+    <Dialog.Portal>
+      <Dialog.Overlay class="dialog-overlay" />
+      <Dialog.Content
+        class="app-sidebar mobile-sidebar"
+        onCloseAutoFocus={(event) => {
+          // Touch opening in WebKit does not focus the trigger automatically.
+          event.preventDefault();
+          mobileNavTrigger?.focus({ preventScroll: true });
+        }}
+      >
+        <Dialog.Title class="sr-only">Navigation</Dialog.Title>
+        {@render sidebarNavigation(true)}
+      </Dialog.Content>
+    </Dialog.Portal>
+  {/if}
+  </Dialog.Root>
 {/if}
 
 <TargetManagerDialog

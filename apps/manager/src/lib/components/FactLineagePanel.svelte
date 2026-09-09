@@ -30,13 +30,13 @@
           <span class="mono subtle-text">{lineage.fact_key}</span>
         {/if}
       </div>
-      <div class="inline-group" style="flex-wrap: wrap;">
+      <div class="metadata-row">
         <StatusBadge tone={isCurrentHead ? 'success' : 'warning'} label={isCurrentHead ? 'current head' : 'historical'} />
         {#if lineage?.revision_seq}
-          <StatusBadge tone="muted" label={`rev ${lineage.revision_seq}`} />
+          <span>Revision {lineage.revision_seq}</span>
         {/if}
         {#if lineage?.revision_depth}
-          <StatusBadge tone="muted" label={`${lineage.revision_depth} deep`} />
+          <span>Depth {lineage.revision_depth}</span>
         {/if}
       </div>
     </div>
@@ -134,18 +134,18 @@
     padding: 6px 8px;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    color: var(--text-primary);
+    color: var(--text);
     background: var(--surface);
     text-decoration: none;
   }
 
   .lineage-node.is-active {
     border-color: var(--brand-strong);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-strong) 24%, transparent);
+    text-decoration: underline;
   }
 
   .lineage-node.is-head {
-    background: color-mix(in srgb, var(--success) 8%, var(--surface));
+    font-weight: 600;
   }
 
   .lineage-node-index {
@@ -153,8 +153,6 @@
     place-items: center;
     width: 18px;
     height: 18px;
-    border-radius: 999px;
-    background: var(--bg-panel-muted);
     color: var(--text-secondary);
     font-size: 0.72rem;
     font-weight: 700;

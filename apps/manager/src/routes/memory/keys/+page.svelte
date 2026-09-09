@@ -2,6 +2,8 @@
 
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { Dialog } from 'bits-ui';
+  import { Plus, X } from 'lucide-svelte';
   import { page } from '$app/stores';
 
   import {
@@ -13,6 +15,7 @@
   import ConfirmActionDialog from '$lib/components/ConfirmActionDialog.svelte';
   import JsonView from '$lib/components/JsonView.svelte';
   import MemoryWorkspaceNav from '$lib/components/MemoryWorkspaceNav.svelte';
+  import FilterToolbar from '$lib/components/FilterToolbar.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import { memoryDetailHref } from '$lib/memory/routes';
   import SelectField from '$lib/components/SelectField.svelte';
@@ -49,6 +52,8 @@
   let loading = true;
   let saving = false;
   let creating = false;
+  let createOpen = false;
+  let createError = '';
   let deletingId = '';
   let deleteCandidate: KeyMemoryRecord | null = null;
   let error = '';
@@ -58,6 +63,8 @@
   let dateTo = '';
   let selectedTiers: string[] = [];
   let lastTargetKey = '';
+  let mounted = false;
+  let loadRevision = 0;
   let editingId = '';
   let draftValue = '';
   let draftCategory = '';
@@ -96,7 +103,7 @@
     draftReady = true;
   }
   $: routeKey = `${$selectedTarget?.id ?? 'none'}:${activeUserId ?? 'admin'}:${$targetState.session.authenticated ? 'auth' : 'anon'}`;
-  $: if (routeKey !== lastTargetKey && !$targetState.session.checking) {
+  $: if (mounted && routeKey !== lastTargetKey && !$targetState.session.checking) {
     lastTargetKey = routeKey;
     void loadData();
   }
@@ -118,8 +125,9 @@
     writeSessionDraft(activeDraftKey, keyMemoriesDraftVersion, currentDraft);
   }
 
-  onMount(async () => {
-    await loadData();
+  onMount(() => {
+    mounted = true;
+    return () => { loadRevision++; };
   });
 
   $: visibleKeyMemories = keyMemories;
@@ -184,6 +192,8 @@
   }
 
   async function loadData(): Promise<void> {
+    const revision = ++loadRevision;
+    const scope = routeKey;
     if (!$selectedTarget || !$targetState.session.authenticated) {
       loading = false;
       draftReady = false;
@@ -201,15 +211,16 @@
         dateTo: endOfDayISO(dateTo),
         timeTiers: selectedTiers
       });
+      if (revision !== loadRevision || scope !== routeKey) return;
       keyMemories = nextKeyMemories;
       hydratingDraft = true;
       applyDraft(readSessionDraft<KeyMemoriesDraft>(keyMemoriesDraftKey, keyMemoriesDraftVersion), nextKeyMemories);
       hydratingDraft = false;
       draftReady = true;
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Failed to load key memories';
+      if (revision === loadRevision && scope === routeKey) error = cause instanceof Error ? cause.message : 'Failed to load key memories';
     } finally {
-      loading = false;
+      if (revision === loadRevision && scope === routeKey) loading = false;
     }
   }
 
@@ -254,11 +265,11 @@
   }
 
   async function createItem(): Promise<void> {
-    if (!$selectedTarget || !createKey.trim() || !createValue.trim()) {
+    if (creating || !$selectedTarget || !createKey.trim() || !createValue.trim()) {
       return;
     }
     creating = true;
-    error = '';
+    createError = '';
     success = '';
     try {
       const created = await createAdminKeyMemory($selectedTarget, {
@@ -273,9 +284,10 @@
       createValue = '';
       createCategory = '';
       createReviewStatus = 'pending';
+      createOpen = false;
       success = 'Key memory created and audited on the target.';
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Failed to create key memory';
+      createError = cause instanceof Error ? cause.message : 'Failed to create key memory';
     } finally {
       creating = false;
     }
@@ -323,114 +335,79 @@
     }
     return new Date(`${value}T23:59:59.999`).toISOString();
   }
-
-  function dateTimeLabel(value?: string): string {
-    if (!value) {
-      return 'n/a';
-    }
-    return new Date(value).toLocaleString();
-  }
 </script>
 
+<Dialog.Root bind:open={createOpen}>
 <section class="page-stack">
   <PageHeader
     eyebrow="Inspect / Memory"
     title="Key memories"
     description="Whitelisted slots backing memory tools and admin workflows: preferences, recent markers, operator-curated notes."
     subtitle={activeUserId ? `Scoped to user ${activeUserId}` : ''}
-  />
+  >
+    <div slot="actions">
+      <Dialog.Trigger class="btn-primary" disabled={!$targetState.session.authenticated} onclick={() => (createError = '')}><Plus size={15} /> New key memory</Dialog.Trigger>
+    </div>
+  </PageHeader>
 
   <MemoryWorkspaceNav current="/memory/keys" />
 
   {#if !$targetState.session.authenticated}
     <div class="notice-card">Connect this target to inspect key memories.</div>
-  {:else if error}
-    <div class="error-state">{error}</div>
-  {:else if loading}
-    <div class="notice-card">Loading key memories…</div>
   {:else}
     {#if success}
       <div class="notice-card is-success">{success}</div>
     {/if}
 
     <section class="card page-stack">
-      <div class="page-header">
-        <div class="page-header-meta">
-          <h2 class="section-title">Create key memory</h2>
-          <p class="panel-meta">New writes are audited on the target.</p>
-        </div>
-      </div>
-      <div class="form-grid two-up">
-        <TextInputField label="Key" bind:value={createKey} placeholder="preferred_name or recent_conversation" />
-        <TextInputField label="Category" bind:value={createCategory} placeholder="profile, workflow, system" />
-        <TextareaField label="Value" bind:value={createValue} rows={4} fieldClass="field-span-2" />
-        <SelectField label="Review status" items={reviewStatusItems} bind:value={createReviewStatus} />
-      </div>
-      <div class="inline-group" style="justify-content: flex-end;">
-        <button class="btn-primary" type="button" disabled={creating || !createKey.trim() || !createValue.trim()} on:click={createItem}>
-          {creating ? 'Creating…' : 'Create key memory'}
-        </button>
-      </div>
-    </section>
+      <form on:submit|preventDefault={loadData}>
+      <FilterToolbar activeCount={Number(Boolean(dateFrom)) + Number(Boolean(dateTo)) + selectedTiers.length} summary={`${visibleKeyMemories.length} key memories`}>
+        <TextInputField label="Filter" bind:value={filter} placeholder="Search keys and values…" />
+        {#snippet actions()}
+          <button class="btn-secondary" type="submit" disabled={loading}>{loading ? 'Loading…' : 'Apply filters'}</button>
+        {/snippet}
+        {#snippet filters()}
+          <div class="filters two-up">
+            <TextInputField label="Date from" bind:value={dateFrom} type="date" />
+            <TextInputField label="Date to" bind:value={dateTo} type="date" />
+          </div>
+          <div class="field">
+            <span class="field-label">Time tier</span>
+            <div class="segmented-control" style="flex-wrap: wrap;">
+              {#each timeTierOptions as option}
+                <button class="segmented-control-item" type="button" data-state={selectedTiers.includes(option.value) ? 'on' : 'off'} aria-pressed={selectedTiers.includes(option.value)} on:click={() => toggleTier(option.value)}>{option.label}</button>
+              {/each}
+            </div>
+          </div>
+        {/snippet}
+      </FilterToolbar>
+      </form>
 
-    <section class="card page-stack">
-      <div class="page-header">
-        <div class="page-header-meta">
-          <h2 class="section-title">Filters</h2>
-          <p class="panel-meta">{visibleKeyMemories.length} key memor{visibleKeyMemories.length === 1 ? 'y' : 'ies'} returned</p>
-        </div>
-        <button class="btn-secondary btn-sm" type="button" on:click={loadData}>Apply filters</button>
-      </div>
-      <div class="filters two-up">
-        <TextInputField
-          label="Filter"
-          bind:value={filter}
-          placeholder="key, category, value, review status…"
-          fieldClass="field-span-2"
-        />
-        <TextInputField label="Date from" bind:value={dateFrom} type="date" />
-        <TextInputField label="Date to" bind:value={dateTo} type="date" />
-      </div>
-      <div class="inline-group">
-        <span class="field-label">Time tier</span>
-        <div class="segmented-control" style="flex-wrap: wrap;">
-          {#each timeTierOptions as option}
-            <button
-              class="segmented-control-item"
-              type="button"
-              data-state={selectedTiers.includes(option.value) ? 'on' : 'off'}
-              on:click={() => toggleTier(option.value)}
-            >{option.label}</button>
-          {/each}
-        </div>
-      </div>
-
-      {#if visibleKeyMemories.length === 0}
+      {#if error}
+        <div class="error-state" role="alert">{error}</div>
+      {:else if loading}
+        <div class="notice-card">Loading key memories…</div>
+      {:else if visibleKeyMemories.length === 0}
         <div class="empty-state">No key memories match the current filter.</div>
       {:else}
-        <div class="stack-list">
+        <div class="stack-list data-list">
           {#each visibleKeyMemories as keyMemory}
-            <article class="keymem-card">
+            <article class="keymem-card data-list-row">
               <header class="keymem-head">
                 <div class="keymem-head-main">
                   <strong>{keyMemory.key}</strong>
-                  <span class="helper-text mono">{keyMemory.id}</span>
                 </div>
                 <div class="inline-group">
-                  {#if keyMemory.time_tier}
-                    <StatusBadge tone="muted" label={keyMemory.time_tier} />
-                  {/if}
-                  <StatusBadge tone="muted" label={keyMemory.category ?? 'uncategorized'} />
-                  <StatusBadge
-                    tone={keyMemory.review_status === 'approved' ? 'success' : keyMemory.review_status === 'rejected' ? 'danger' : 'warning'}
-                    label={keyMemory.review_status ?? 'pending'}
-                  />
-                  {#if keyMemory.effective_score !== undefined}
-                    <StatusBadge tone="brand" label={`effective ${keyMemory.effective_score.toFixed(3)}`} />
+                  {#if keyMemory.category}<span class="helper-text">{keyMemory.category}</span>{/if}
+                  {#if keyMemory.review_status !== 'approved'}
+                    <StatusBadge tone={keyMemory.review_status === 'rejected' ? 'danger' : 'warning'} label={keyMemory.review_status ?? 'pending'} />
                   {/if}
                 </div>
               </header>
 
+              {#if editingId !== keyMemory.id}
+                <div class="keymem-value">{keyMemory.value}</div>
+              {/if}
               <div class="keymem-actions">
                 <a class="btn-ghost btn-sm" href={memoryDetailHref('keys', keyMemory.id, activeUserId)}>Open</a>
                 {#if editingId === keyMemory.id}
@@ -441,7 +418,7 @@
                 {:else}
                   <button class="btn-secondary btn-sm" type="button" on:click={() => startEdit(keyMemory)}>Edit</button>
                 {/if}
-                <button class="btn-danger btn-sm" type="button" disabled={deletingId === keyMemory.id} on:click={() => (deleteCandidate = keyMemory)}>
+                <button class="btn-danger is-quiet btn-sm" type="button" disabled={deletingId === keyMemory.id} on:click={() => (deleteCandidate = keyMemory)}>
                   {deletingId === keyMemory.id ? 'Deleting…' : 'Delete'}
                 </button>
               </div>
@@ -453,10 +430,10 @@
                   <SelectField label="Review status" items={reviewStatusItems} bind:value={draftReviewStatus} />
                 </div>
               {:else}
-                <div class="helper-text mono">
-                  activity {dateTimeLabel(keyMemory.activity_at)} · importance {(keyMemory.importance ?? 0).toFixed(3)} · decay {(keyMemory.decay_factor ?? 0).toFixed(3)}
-                </div>
-                <JsonView value={keyMemory} />
+                <details class="record-details">
+                  <summary>Record details</summary>
+                  <JsonView value={keyMemory} />
+                </details>
               {/if}
             </article>
           {/each}
@@ -465,6 +442,35 @@
     </section>
   {/if}
 </section>
+
+  <Dialog.Portal>
+    <Dialog.Overlay class="dialog-overlay" />
+    <Dialog.Content class="dialog-card" escapeKeydownBehavior={creating ? 'ignore' : 'close'} interactOutsideBehavior={creating ? 'ignore' : 'close'}>
+      <div class="page-header keymem-dialog-header">
+        <div class="page-header-meta">
+          <Dialog.Title class="section-title">Create key memory</Dialog.Title>
+          <Dialog.Description class="helper-text">Add a preference or note. New writes are audited.</Dialog.Description>
+        </div>
+        <Dialog.Close class="btn-ghost btn-icon" aria-label="Close" disabled={creating}><X size={16} aria-hidden="true" /></Dialog.Close>
+      </div>
+      <form class="page-stack" on:submit|preventDefault={createItem}>
+        {#if createError}<p class="error-state" role="alert">{createError}</p>{/if}
+      <div class="form-grid two-up">
+        <TextInputField label="Key" required bind:value={createKey} placeholder="preferred_name or recent_conversation" />
+        <TextInputField label="Category" bind:value={createCategory} placeholder="profile, workflow, system" />
+        <TextareaField label="Value" required bind:value={createValue} rows={4} fieldClass="field-span-2" />
+        <SelectField label="Review status" items={reviewStatusItems} bind:value={createReviewStatus} />
+      </div>
+      <div class="inline-group" style="justify-content: flex-end;">
+        <Dialog.Close class="btn-secondary" disabled={creating}>Cancel</Dialog.Close>
+        <button class="btn-primary" type="submit" disabled={creating || !createKey.trim() || !createValue.trim()}>
+          {creating ? 'Creating…' : 'Create key memory'}
+        </button>
+      </div>
+      </form>
+    </Dialog.Content>
+  </Dialog.Portal>
+</Dialog.Root>
 
 <ConfirmActionDialog
   open={Boolean(deleteCandidate)}
@@ -483,13 +489,14 @@
 />
 
 <style>
+  .keymem-dialog-header { align-items: flex-start; flex-wrap: nowrap; }
+  .keymem-value { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; }
+  .record-details { min-width: 0; }
+  .record-details summary { cursor: pointer; color: var(--text-muted); font-size: 12px; padding-block: 6px; }
+
   .keymem-card {
     display: grid;
     gap: 8px;
-    padding: 12px 14px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
   }
 
   .keymem-head {

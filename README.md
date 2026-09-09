@@ -75,6 +75,7 @@ memstation/
 - Admin REST：overview、users、conversations、memory、config、providers、queues、tasks、cache、audit
 - Admin / Health gRPC：`HealthService.GetStatus`、`AdminService.Overview`、`AdminService.ListConversations`、`AdminService.GetConversation`、`AdminService.GetConversationMemory`
 - 服务端 session 登录，浏览器不存储 admin token
+- Manager 默认浅色、中性配色与紧凑布局；常规状态和元数据以文字呈现，异常状态保留明确提示，减少装饰性指示器与重复徽章
 - 管理面板已覆盖：
   - Dashboard：活跃对话、记忆、Key Memory、队列积压、失败任务、审计与趋势
   - Conversations：多用户聚合列表、组合筛选、timeline、usage、metadata、关联记忆与 requeue/rebuild
@@ -369,9 +370,18 @@ Embedding 已接入真实 provider 调用，采用 OpenAI-compatible embedding �
 - Manager 支持直接粘贴 `memstation://host:port?key=...` / `memstations://...` 形式的连接 URI；`key=` 必须是服务端生成的 Argon2id admin token hash，不应放入原始明文 admin token
 - 一套 MemStation 服务视为一个运行环境，Manager target 只暴露 label、endpoint 和 admin token 连接信息
 - Manager 默认采用专业、明亮、高密度的 ToB 运维视觉，桌面与移动端均可操作；Cache 等运维模块保留明确主导航入口
+- 组件使用统一按钮、表单、列表间距及自托管 IBM Plex Sans 字体；System 提供分区表单与栏目跳转，Providers 保持固定操作排列。记忆详情优先编辑，关联记录支持直接跳转，原始字段和 JSON 按需展开
+- 共享表单支持稳定的标签关联、键盘选择与错误提示；移动导航支持焦点约束及 Escape 关闭，target 操作提供触屏可用菜单
+- Key Memory 通过弹窗创建，列表优先展示实际内容并折叠原始记录；长配置页提供固定保存操作，审计筛选保留输入焦点并防止旧请求覆盖新结果
+- 各端将次要筛选按需展开，优先显示搜索与结果；Memory workspace 不再重复展示集合导航或拉取整组集合计数。搜索失败保留输入，可直接重试
+- 手机主要控件提供 44px 触控高度与 16px 文本输入，System / Providers 的保存操作固定在底部；短屏弹窗随可视区域调整，平板表单保持双列。任务队列选择、筛选请求竞态与 WebKit 导航焦点均有回归覆盖
 - 本地 full-stack 调试可通过 `pnpm dev:portless` 启动热重载 MemStation server 与 Portless Manager；如后端已单独运行，也可通过 `pnpm dev:manager:portless` 只启动 Manager 代理
 
 ## 测试与评测
+
+Manager E2E 包含 Chromium 全量回归与 WebKit（iPhone 13 模拟）移动交互用例。首次运行使用 `pnpm --dir apps/manager test:e2e:install` 安装 Chromium 与 WebKit；CI 同样安装两种浏览器。模拟测试覆盖窄屏、横屏、触控、筛选、导航和弹窗，不替代真实 iOS 设备验收。 2026-09-09 本地 production preview 验证：Chrome `33/33`、WebKit `9/9`，26 个路由 × 6 种视口共 156 次布局检查通过；Manager lint、15 项单元测试和生产构建通过。截图与机器可读验证摘要位于 `.artifacts/ui-quality/`。
+
+2026-09-09 的 [graph / 评测复核](apps/server/tests/eval/REVIEW-2026-09-09.md) 记录了官方 benchmark 版本、数据泄漏修复、指标口径和验证范围。LOCOMO 原始对话检索、LongMemEval V1 证据检索与 QA 分开报告；本地确定性向量 smoke 不代表外部准确率。Go lint 入口已固定为 v2.13.2，并通过官方配置迁移保留既有检查范围，以兼容当前 Go 工具链。
 
 当前仓库已覆盖：
 

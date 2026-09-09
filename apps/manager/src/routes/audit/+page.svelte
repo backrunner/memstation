@@ -1,10 +1,11 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { page } from '$app/stores';
 
   import { fetchAudit } from '$lib/api/client';
+  import FilterToolbar from '$lib/components/FilterToolbar.svelte';
   import JsonView from '$lib/components/JsonView.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
@@ -25,10 +26,12 @@
   let dateTo = '';
   let lastFilterKey = '';
   let lastLoadedKey = '';
+  let mounted = false;
+  let requestRevision = 0;
+  let reloadTimer: ReturnType<typeof setTimeout> | undefined;
 
-  onMount(async () => {
-    await loadAudit();
-  });
+  onMount(() => { mounted = true; });
+  onDestroy(() => { clearTimeout(reloadTimer); requestRevision += 1; });
 
   $: routeAction = $page.url.searchParams.get('action') ?? '';
   $: routeTargetType = $page.url.searchParams.get('target_type') ?? '';
@@ -46,9 +49,10 @@
   }
 
   $: loadKey = `${$selectedTarget?.id ?? 'none'}:${action}:${targetType}:${targetId}:${actorType}:${limit}:${$targetState.session.authenticated ? 'auth' : 'anon'}`;
-  $: if (loadKey !== lastLoadedKey && !$targetState.session.checking) {
+  $: if (mounted && loadKey !== lastLoadedKey && !$targetState.session.checking) {
     lastLoadedKey = loadKey;
-    void loadAudit();
+    clearTimeout(reloadTimer);
+    reloadTimer = setTimeout(() => { void loadAudit(); }, 200);
   }
 
   $: visibleEvents = events.filter((event) => {
@@ -63,6 +67,9 @@
   }
 
   async function loadAudit(): Promise<void> {
+    clearTimeout(reloadTimer);
+    const revision = ++requestRevision;
+    const requestKey = loadKey;
     if (!$selectedTarget || !$targetState.session.authenticated) {
       loading = false;
       return;
@@ -70,18 +77,22 @@
     loading = true;
     error = '';
     try {
-      events = await fetchAudit($selectedTarget, {
+      const result = await fetchAudit($selectedTarget, {
         limit,
         actorType,
         action,
         targetType,
         targetId
       });
-      selected = events[0] ?? null;
+      if (revision !== requestRevision || requestKey !== loadKey) return;
+      events = result;
+      selected = events.find((event) => event.id === selected?.id) ?? events[0] ?? null;
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Failed to load audit events';
+      if (revision === requestRevision && requestKey === loadKey) {
+        error = cause instanceof Error ? cause.message : 'Failed to load audit events';
+      }
     } finally {
-      loading = false;
+      if (revision === requestRevision) loading = false;
     }
   }
 </script>
@@ -99,30 +110,27 @@
 
   {#if !$targetState.session.authenticated}
     <div class="notice-card">Connect this target to load audit history.</div>
-  {:else if error}
-    <div class="error-state">{error}</div>
-  {:else if loading}
-    <div class="notice-card">Loading audit events…</div>
+
   {:else}
-    <section class="card page-stack">
-      <div class="page-header">
-        <div class="page-header-meta">
-          <h2 class="section-title">Filters</h2>
-          <p class="panel-meta">Refine by action, target, actor, and limit.</p>
-        </div>
-      </div>
-      <div class="filters three-up">
-        <TextInputField label="Action" bind:value={action} placeholder="update_memory_document" />
-        <TextInputField label="Target type" bind:value={targetType} placeholder="summary, key_memory, api_key…" />
-        <TextInputField label="Target ID" bind:value={targetId} placeholder="memory id, task id, api key id…" />
-        <TextInputField label="Actor type" bind:value={actorType} placeholder="admin, tool, system…" />
-        <TextInputField label="Date from" bind:value={dateFrom} type="date" />
-        <TextInputField label="Date to" bind:value={dateTo} type="date" />
-        <TextInputField label="Limit" bind:value={limit} type="number" min="1" max="500" />
-      </div>
+    <section class="filter-bar">
+      <FilterToolbar activeCount={[targetType, targetId, actorType, dateFrom, dateTo, limit !== 100].filter(Boolean).length}>
+        <TextInputField label="Action" bind:value={action} placeholder="Filter by action" />
+        {#snippet filters()}
+          <div class="filters three-up">
+            <TextInputField label="Target type" bind:value={targetType} placeholder="summary, key_memory, api_key…" />
+            <TextInputField label="Target ID" bind:value={targetId} placeholder="Memory, task or API key ID" />
+            <TextInputField label="Actor type" bind:value={actorType} placeholder="admin, tool, system…" />
+            <TextInputField label="Date from" bind:value={dateFrom} type="date" />
+            <TextInputField label="Date to" bind:value={dateTo} type="date" />
+            <TextInputField label="Limit" bind:value={limit} type="number" min="1" max="500" />
+          </div>
+        {/snippet}
+      </FilterToolbar>
     </section>
 
-    <div class="page-columns">
+    {#if error}<div class="error-state" role="alert">{error}</div>{/if}
+    {#if loading}<p class="helper-text" role="status">Loading audit events…</p>{/if}
+    <div class="page-columns" aria-busy={loading}>
       <section class="table-card">
         <div class="table-scroll">
           <table class="data-table">
@@ -141,7 +149,7 @@
                   on:click={() => (selected = event)}
                 >
                   <td>
-                    <strong class="mono">{event.action}</strong>
+                    <button class="table-select-button mono" type="button" aria-pressed={selected?.id === event.id} on:click={() => (selected = event)}>{event.action}</button>
                     <div class="subtle-text">{event.actor_type ?? 'system'} · {event.actor_id ?? 'unknown'}</div>
                   </td>
                   <td>
@@ -167,7 +175,6 @@
         <div class="page-header">
           <div class="page-header-meta">
             <h2 class="section-title">Event detail</h2>
-            <p class="panel-meta">Payload captured when this action was performed.</p>
           </div>
         </div>
         {#if selected}

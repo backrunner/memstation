@@ -5,6 +5,7 @@
   import { RefreshCw } from 'lucide-svelte';
 
   import { fetchConversations, fetchUsers } from '$lib/api/client';
+  import FilterToolbar from '$lib/components/FilterToolbar.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import SelectField from '$lib/components/SelectField.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -15,6 +16,8 @@
   let loading = true;
   let error = '';
   let lastLoadKey = '';
+  let mounted = false;
+  let loadRevision = 0;
   let search = '';
   let providerFilter = '';
   let modeFilter = '';
@@ -23,35 +26,41 @@
   let dateTo = '';
   let conversations: ConversationListItem[] = [];
 
-  onMount(async () => {
-    await loadConversations();
+  onMount(() => {
+    mounted = true;
+    return () => { loadRevision++; };
   });
 
   $: loadKey = `${$selectedTarget?.id ?? 'none'}:${$targetState.session.authenticated ? 'auth' : 'anon'}`;
-  $: if (loadKey !== lastLoadKey && !$targetState.session.checking) {
+  $: if (mounted && loadKey !== lastLoadKey && !$targetState.session.checking) {
     lastLoadKey = loadKey;
     void loadConversations();
   }
 
   async function loadConversations(): Promise<void> {
-    if (!$selectedTarget || !$targetState.session.authenticated) {
+    const revision = ++loadRevision;
+    const scope = loadKey;
+    const target = $selectedTarget;
+    if (!target || !$targetState.session.authenticated) {
       loading = false;
       return;
     }
     loading = true;
     error = '';
     try {
-      const users = await fetchUsers($selectedTarget);
+      const users = await fetchUsers(target);
+      if (revision !== loadRevision || scope !== loadKey) return;
       const lists = await Promise.all(
         (users.length > 0 ? users : [{ user_id: 'admin' }]).map((user) =>
-          fetchConversations($selectedTarget, { userId: user.user_id, limit: 100 })
+          fetchConversations(target, { userId: user.user_id, limit: 100 })
         )
       );
+      if (revision !== loadRevision || scope !== loadKey) return;
       conversations = lists.flat().sort((left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime());
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Failed to load conversations';
+      if (revision === loadRevision && scope === loadKey) error = cause instanceof Error ? cause.message : 'Failed to load conversations';
     } finally {
-      loading = false;
+      if (revision === loadRevision && scope === loadKey) loading = false;
     }
   }
 
@@ -116,34 +125,26 @@
     <div class="notice-card">Connect this target to inspect conversation history.</div>
   {:else}
     <section class="filter-bar">
-      <div class="filters three-up">
-        <TextInputField
-          label="Search"
-          bind:value={search}
-          placeholder="conversation id, provider, protocol, mode…"
-          fieldClass="field-span-3"
-        />
-        <SelectField label="Provider" bind:value={providerFilter} items={providerItems} />
-        <SelectField label="Mode" bind:value={modeFilter} items={modeItems} />
-        <SelectField label="Finalize status" bind:value={statusFilter} items={statusItems} />
-        <TextInputField label="Date from" bind:value={dateFrom} type="date" />
-        <TextInputField label="Date to" bind:value={dateTo} type="date" />
-        <div class="field" style="align-self: end;">
-          <div class="inline-group" style="justify-content: space-between;">
-            <span class="helper-text">{filtered.length} of {conversations.length} conversations</span>
-            <div class="inline-group">
-              <button class="btn-ghost btn-sm" type="button" on:click={clearFilters}>Clear</button>
-              <button
-                class="btn-secondary btn-icon btn-sm"
-                type="button"
-                on:click={loadConversations}
-                aria-label="Refresh conversations"
-                title="Refresh conversations"
-              ><RefreshCw size={14} strokeWidth={1.8} /></button>
+      <FilterToolbar activeCount={[providerFilter, modeFilter, statusFilter, dateFrom, dateTo].filter(Boolean).length} summary={`${filtered.length} of ${conversations.length} conversations`}>
+        <TextInputField label="Search" bind:value={search} placeholder="Search conversations" />
+        {#snippet actions()}
+          <button class="btn-secondary" type="button" disabled={loading} on:click={loadConversations}>
+            <RefreshCw size={14} aria-hidden="true" /> {loading ? 'Refreshing…' : 'Refresh'}
+          </button>
+        {/snippet}
+        {#snippet filters()}
+          <div class="filters three-up">
+            <SelectField label="Provider" bind:value={providerFilter} items={providerItems} />
+            <SelectField label="Mode" bind:value={modeFilter} items={modeItems} />
+            <SelectField label="Finalize status" bind:value={statusFilter} items={statusItems} />
+            <TextInputField label="Date from" bind:value={dateFrom} type="date" />
+            <TextInputField label="Date to" bind:value={dateTo} type="date" />
+            <div class="field" style="align-self: end;">
+              <button class="btn-ghost" type="button" on:click={clearFilters}>Clear filters</button>
             </div>
           </div>
-        </div>
-      </div>
+        {/snippet}
+      </FilterToolbar>
     </section>
 
     {#if error}
@@ -177,19 +178,25 @@
                   <td>{item.provider}</td>
                   <td class="mono">{item.protocol}</td>
                   <td>
-                    <div class="inline-group" style="gap: 4px;">
+                    <div>
                       <StatusBadge
                         tone={finalizeStatusTone(item.finalize_status)}
                         label={item.finalize_status}
                       />
+                    </div>
+                    <div class="conversation-processing">
+                      {#if !['completed', 'skipped'].includes(item.summary_status)}
                       <StatusBadge
                         tone={summaryStatusTone(item.summary_status)}
                         label={`summary ${item.summary_status}`}
                       />
+                      {/if}
+                      {#if !['completed', 'skipped'].includes(item.analysis_status)}
                       <StatusBadge
                         tone={summaryStatusTone(item.analysis_status)}
                         label={`analysis ${item.analysis_status}`}
                       />
+                      {/if}
                     </div>
                   </td>
                   <td class="mono">{item.message_count}</td>
@@ -201,7 +208,7 @@
                 <tr>
                   <td colspan="7">
                     <div class="empty-state" style="border: none; padding: 12px 0;">
-                      {search ? 'No conversations match the current filter.' : 'No conversations recorded on this target yet.'}
+                      {search || providerFilter || modeFilter || statusFilter || dateFrom || dateTo ? 'No conversations match the current filter.' : 'No conversations recorded on this target yet.'}
                     </div>
                   </td>
                 </tr>

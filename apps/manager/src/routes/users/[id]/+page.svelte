@@ -466,7 +466,7 @@
       </section>
     {/if}
 
-    <div class="kpi-grid compact-kpis">
+    <div class="kpi-grid summary-metrics compact-kpis">
       <div class="kpi-card">
         <span class="kpi-label">API Keys</span>
         <strong class="kpi-value">{detail.stats.api_key_count}</strong>
@@ -530,9 +530,8 @@
           />
         </div>
 
-        <div class="inline-group" style="justify-content: flex-end; margin-top: 16px;">
-          <span class="helper-text">Writes are audited.</span>
-          <button class="button" type="button" disabled={saving} on:click={saveSettings}>{saving ? 'Saving...' : 'Save User Settings'}</button>
+        <div class="form-actions" style="margin-top: 16px;">
+          <button class="btn-primary" type="button" disabled={saving} on:click={saveSettings}>{saving ? 'Saving...' : 'Save User Settings'}</button>
         </div>
         </section>
 
@@ -547,7 +546,7 @@
             <div style="flex: 1; min-width: 0;">
               <TextInputField label="New Key Label" bind:value={newKeyName} placeholder="build-bot or local playground" />
             </div>
-            <button class="button" type="button" disabled={creatingKey} on:click={createKey}>{creatingKey ? 'Creating...' : 'Create API Key'}</button>
+            <button class="btn-primary" type="button" disabled={creatingKey} on:click={createKey}>{creatingKey ? 'Creating...' : 'Create API Key'}</button>
           </div>
 
           <div class="toolbar">
@@ -566,7 +565,7 @@
                   <div class="helper-text">Created {new Date(apiKey.created_at).toLocaleString()}</div>
                   {#if !apiKey.revoked_at}
                     <div class="inline-group" style="justify-content: flex-end; margin-top: 12px;">
-                      <button class="button-danger" type="button" on:click={() => (revokeCandidateId = apiKey.id)}>Revoke key</button>
+                      <button class="btn-danger is-quiet" type="button" on:click={() => (revokeCandidateId = apiKey.id)}>Revoke key</button>
                     </div>
                   {/if}
                 </div>
@@ -618,7 +617,7 @@
           <div class="notice-card" style="margin-top: 12px;">Current settings differ from the active memory generation. Trigger a rebuild to replay retained sources with the new configuration.</div>
         {/if}
         <div class="inline-group" style="justify-content: flex-end; margin-top: 12px;">
-          <button class="button" type="button" disabled={rebuilding || rebuildInFlight || (sources?.source_stats.snapshot_count ?? 0) === 0} on:click={() => (rebuildConfirmOpen = true)}>
+          <button class="btn-primary" type="button" disabled={rebuilding || rebuildInFlight || (sources?.source_stats.snapshot_count ?? 0) === 0} on:click={() => (rebuildConfirmOpen = true)}>
             {rebuilding ? 'Creating rebuild...' : rebuildInFlight ? 'Rebuild running...' : 'Rebuild all retained memory'}
           </button>
         </div>
@@ -647,7 +646,7 @@
             <div>
               <h2 class="section-title">Recent Sessions</h2>
             </div>
-            <a class="button-ghost" href={`/memory?user_id=${detail.user.id}`}>Open memory workspace</a>
+            <a class="btn-ghost" href={`/memory?user_id=${detail.user.id}`}>Open memory workspace</a>
           </div>
           {#if detail.conversations.length === 0}
             <div class="empty-state">No recent sessions are available for this user yet.</div>
@@ -675,7 +674,7 @@
             <div>
               <h2 class="section-title">Stable Memory Slots</h2>
             </div>
-            <a class="button-ghost" href={`/memory/keys?user_id=${detail.user.id}`}>Manage key memories</a>
+            <a class="btn-ghost" href={`/memory/keys?user_id=${detail.user.id}`}>Manage key memories</a>
           </div>
           {#if detail.key_memories.length === 0}
             <div class="empty-state">This user does not have any key memories yet.</div>
@@ -745,6 +744,9 @@
 />
 
 <style>
+  .user-detail-columns .card { display: grid; align-content: start; gap: 18px; }
+  .profile-strip > div { min-width: 0; overflow-wrap: anywhere; }
+
   .user-detail-columns {
     grid-template-columns: minmax(0, 1.03fr) minmax(360px, 0.97fr);
   }
@@ -758,7 +760,7 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
     padding: 14px 16px;
-    border: 1px solid var(--border-soft);
+    border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
     background: var(--bg-panel-muted);
   }
@@ -774,7 +776,7 @@
   }
 
   .generation-card {
-    background: rgba(255, 255, 255, 0.94);
+    background: var(--surface);
   }
 
   .session-row {
@@ -783,15 +785,15 @@
     justify-content: space-between;
     gap: 16px;
     padding: 14px 16px;
-    border: 1px solid var(--border-soft);
+    border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--surface);
     transition: 120ms ease;
   }
 
   .session-row:hover {
-    border-color: rgba(15, 94, 168, 0.22);
-    background: rgba(248, 251, 254, 0.98);
+    border-color: var(--border-strong);
+    background: var(--surface-hover);
   }
 
   .session-row-main,
@@ -813,30 +815,18 @@
     gap: 8px;
   }
 
-  .session-provider,
-  .session-tokens {
-    display: inline-flex;
-    align-items: center;
-    min-height: 30px;
-    padding: 0 10px;
-    border: 1px solid var(--border-soft);
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.82);
-    color: var(--text-secondary);
-    font-size: 0.84rem;
-    white-space: nowrap;
-  }
+  .session-provider, .session-tokens { color: var(--text-muted); font-size: var(--font-size-sm); white-space: nowrap; }
 
   .key-memory-card {
-    background: rgba(255, 255, 255, 0.94);
+    background: var(--surface);
   }
 
   .key-memory-value {
     padding: 14px 16px;
-    border: 1px solid var(--border-soft);
+    border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
     background: var(--bg-panel-muted);
-    color: var(--text-primary);
+    color: var(--text);
   }
 
   .key-memory-facts {
@@ -849,10 +839,9 @@
   .key-memory-fact {
     display: grid;
     gap: 4px;
-    padding: 10px 12px;
-    border: 1px solid var(--border-soft);
-    border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.72);
+    padding: 4px 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   @media (max-width: 900px) {

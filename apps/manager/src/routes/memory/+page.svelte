@@ -4,13 +4,13 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
 
+  import FilterToolbar from '$lib/components/FilterToolbar.svelte';
   import FactLineagePanel from '$lib/components/FactLineagePanel.svelte';
   import MemoryWorkspaceNav from '$lib/components/MemoryWorkspaceNav.svelte';
   import MemoryKeywordSignals from '$lib/components/MemoryKeywordSignals.svelte';
   import { memoryDetailHref, memoryRouteKindFromDocumentType } from '$lib/memory/routes';
   import { matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '$lib/memory/keyword-signals';
   import PageHeader from '$lib/components/PageHeader.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
   import { fetchMemoryWorkspace, searchMemories, type MemoryWorkspaceData } from '$lib/memory/workspace';
   import { selectedTarget, targetState } from '$lib/stores/targets';
@@ -28,7 +28,10 @@
   let searchResult: SearchMemoriesResult | null = null;
   let activeUserId: string | undefined;
   let routeKey = '';
-  let userSuffix = '';
+  let mounted = false;
+  let loadRevision = 0;
+  let searchRevision = 0;
+  let searchError = '';
   const timeTierOptions = [
     { value: 'active', label: 'Active' },
     { value: 'short_term', label: 'Short term' },
@@ -38,49 +41,61 @@
 
   $: activeUserId = $page.url.searchParams.get('user_id') ?? undefined;
   $: routeKey = `${$selectedTarget?.id ?? 'none'}:${activeUserId ?? 'admin'}:${$targetState.session.authenticated ? 'auth' : 'anon'}`;
-  $: userSuffix = activeUserId ? `?user_id=${encodeURIComponent(activeUserId)}` : '';
 
-  onMount(async () => {
-    await loadWorkspace();
+  onMount(() => {
+    mounted = true;
+    return () => { loadRevision++; searchRevision++; };
   });
 
-  $: if (routeKey !== lastRouteKey && !$targetState.session.checking) {
+  $: if (mounted && routeKey !== lastRouteKey && !$targetState.session.checking) {
     lastRouteKey = routeKey;
     void loadWorkspace();
   }
 
   async function loadWorkspace(): Promise<void> {
+    const revision = ++loadRevision;
+    const scope = routeKey;
+    searchRevision++;
+    searchResult = null;
+    searchError = '';
+    searchLoading = false;
     if (!$selectedTarget || !$targetState.session.authenticated) {
+      workspace = null;
       loading = false;
       return;
     }
     loading = true;
     error = '';
     try {
-      workspace = await fetchMemoryWorkspace($selectedTarget, activeUserId);
+      const result = await fetchMemoryWorkspace($selectedTarget, activeUserId);
+      if (revision === loadRevision && scope === routeKey) workspace = result;
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Failed to load memory workspace';
+      if (revision === loadRevision && scope === routeKey) error = cause instanceof Error ? cause.message : 'Failed to load memory workspace';
     } finally {
-      loading = false;
+      if (revision === loadRevision && scope === routeKey) loading = false;
     }
   }
 
   async function runSearch(): Promise<void> {
-    if (!$selectedTarget || !$targetState.session.authenticated || !query.trim()) {
+    if (!$selectedTarget || !$targetState.session.authenticated || !query.trim() || searchLoading) {
       return;
     }
+    const revision = ++searchRevision;
+    const scope = routeKey;
     searchLoading = true;
-    error = '';
+    searchError = '';
+    searchResult = null;
     try {
-      searchResult = await searchMemories($selectedTarget, query.trim(), 10, activeUserId, {
+      const result = await searchMemories($selectedTarget, query.trim(), 10, activeUserId, {
         dateFrom: startOfDayISO(dateFrom),
         dateTo: endOfDayISO(dateTo),
         timeTiers: selectedTiers
       });
+      if (revision === searchRevision && scope === routeKey) searchResult = result;
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Search failed';
+      if (revision === searchRevision && scope === routeKey) searchError = cause instanceof Error ? cause.message : 'Search failed';
     } finally {
-      searchLoading = false;
+      if (revision === searchRevision && scope === routeKey) searchLoading = false;
     }
   }
 
@@ -130,69 +145,40 @@
     <div class="notice-card">Loading memory workspace…</div>
   {:else}
     <section class="card page-stack">
-      <div class="page-header">
-        <div class="page-header-meta">
-          <h2 class="section-title">Semantic search</h2>
-        </div>
-        {#if searchResult}
-          <StatusBadge tone="brand" label={`${searchResult.total} matches`} />
-        {/if}
-      </div>
-
-      <div class="filters two-up">
-        <TextInputField
-          label="Query"
-          bind:value={query}
-          placeholder="project roadmap, preferences, recent incident, family details…"
-          fieldClass="field-span-2"
-        />
-        <TextInputField label="Date from" bind:value={dateFrom} type="date" />
-        <TextInputField label="Date to" bind:value={dateTo} type="date" />
-      </div>
-      <div class="inline-group">
-        <span class="field-label">Time tier</span>
-        <div class="segmented-control" style="flex-wrap: wrap;">
-          {#each timeTierOptions as option}
-            <button
-              class="segmented-control-item"
-              type="button"
-              data-state={selectedTiers.includes(option.value) ? 'on' : 'off'}
-              on:click={() => toggleTier(option.value)}
-            >{option.label}</button>
-          {/each}
-        </div>
-        <button
-          class="btn-primary btn-sm"
-          type="button"
-          style="margin-left: auto;"
-          disabled={searchLoading || !query.trim()}
-          on:click={runSearch}
-        >
-          {searchLoading ? 'Searching…' : 'Run search'}
-        </button>
-      </div>
+      <form on:submit|preventDefault={runSearch}>
+        <FilterToolbar activeCount={Number(Boolean(dateFrom)) + Number(Boolean(dateTo)) + selectedTiers.length} summary={searchResult ? `${searchResult.total} matches` : ''}>
+          <TextInputField label="Query" bind:value={query} placeholder="Search memory by topic or question…" />
+          {#snippet actions()}
+            <button class="btn-primary" type="submit" disabled={searchLoading || !query.trim()}>{searchLoading ? 'Searching…' : 'Run search'}</button>
+          {/snippet}
+          {#snippet filters()}
+            <div class="filters two-up">
+              <TextInputField label="Date from" bind:value={dateFrom} type="date" />
+              <TextInputField label="Date to" bind:value={dateTo} type="date" />
+            </div>
+            <div class="field">
+              <span class="field-label">Time tier</span>
+              <div class="segmented-control" style="flex-wrap: wrap;">
+                {#each timeTierOptions as option}
+                  <button class="segmented-control-item" type="button" data-state={selectedTiers.includes(option.value) ? 'on' : 'off'} aria-pressed={selectedTiers.includes(option.value)} on:click={() => toggleTier(option.value)}>{option.label}</button>
+                {/each}
+              </div>
+            </div>
+          {/snippet}
+        </FilterToolbar>
+      </form>
+      {#if searchError}<div class="error-state" role="alert">{searchError}</div>{/if}
+      {#if searchResult && searchResult.memories.length === 0}<div class="empty-state">No memories match this query. Try another query or adjust the filters.</div>{/if}
 
       {#if searchResult}
-        <div class="stack-list">
+        <div class="stack-list data-list">
           {#each searchResult.memories as memory}
             {@const routeKind = memoryRouteKindFromDocumentType(memory.type)}
-            <article class="memory-result-card">
+            <article class="memory-result-card data-list-row">
               <header class="memory-result-head">
-                <div class="memory-result-head-main">
-                  <StatusBadge tone="muted" label={memory.type} />
-                  <StatusBadge tone="brand" label={`effective ${memory.effectiveScore?.toFixed?.(3) ?? memory.effectiveScore}`} />
-                  {#if matchedKeywordsFromMetadata(memory.metadata).length > 0}
-                    <StatusBadge
-                      tone="success"
-                      label={`${matchedKeywordsFromMetadata(memory.metadata).length} keyword hit${matchedKeywordsFromMetadata(memory.metadata).length === 1 ? '' : 's'}`}
-                    />
-                  {/if}
-                  {#if memory.lineage}
-                    <StatusBadge
-                      tone={(memory.lineage.current_head_id ?? memory.id) === memory.id ? 'success' : 'warning'}
-                      label={(memory.lineage.current_head_id ?? memory.id) === memory.id ? 'current head' : 'historical'}
-                    />
-                  {/if}
+                <div class="metadata-row">
+                  <span>{memory.type}</span>
+                  <span>Score <span class="mono">{memory.effectiveScore?.toFixed?.(3) ?? memory.effectiveScore}</span></span>
                 </div>
                 {#if routeKind && routeKind !== 'keys'}
                   <a
@@ -220,46 +206,16 @@
       {/if}
     </section>
 
-    <div class="grid-2">
-      <section class="card page-stack">
-        <div class="page-header">
-          <div class="page-header-meta">
-            <h2 class="section-title">Collections</h2>
-          </div>
-        </div>
-        <div class="list-table">
-          <a class="table-row-link" href={`/memory/summaries${userSuffix}`}>
-            <span>Summaries</span>
-            <span class="mono">{workspace?.memorySummaries.length ?? 0}</span>
-          </a>
-          <a class="table-row-link" href={`/memory/impressions${userSuffix}`}>
-            <span>Impressions</span>
-            <span class="mono">{workspace?.impressions.length ?? 0}</span>
-          </a>
-          <a class="table-row-link" href={`/memory/facts${userSuffix}`}>
-            <span>Facts</span>
-            <span class="mono">{workspace?.facts.length ?? 0}</span>
-          </a>
-          <a class="table-row-link" href={`/memory/items${userSuffix}`}>
-            <span>Agent memory</span>
-            <span class="mono">{workspace?.genericItems.length ?? 0}</span>
-          </a>
-          <a class="table-row-link" href={`/memory/keys${userSuffix}`}>
-            <span>Key memories</span>
-            <span class="mono">{workspace?.keyMemories.length ?? 0}</span>
-          </a>
-        </div>
-      </section>
-
+    {#if !searchResult}
       <section class="card page-stack">
         <div class="page-header">
           <div class="page-header-meta">
             <h2 class="section-title">Recent memory</h2>
           </div>
         </div>
-        <div class="stack-list">
+        <div class="stack-list data-list">
           {#each (workspace?.memorySummaries ?? []).slice(0, 2) as summary}
-            <article class="excerpt-card">
+            <article class="excerpt-card data-list-row">
               <header class="excerpt-head">
                 <strong>{summary.topicLabel ?? 'Summary'}</strong>
                 <a class="btn-link" href={memoryDetailHref('summaries', summary.id, activeUserId)}>Open</a>
@@ -268,7 +224,7 @@
             </article>
           {/each}
           {#each (workspace?.facts ?? []).slice(0, 1) as fact}
-            <article class="excerpt-card">
+            <article class="excerpt-card data-list-row">
               <header class="excerpt-head">
                 <strong>Fact</strong>
                 <a class="btn-link" href={memoryDetailHref('facts', fact.id, activeUserId)}>Open</a>
@@ -278,7 +234,7 @@
           {/each}
           {#each (workspace?.genericItems ?? []).slice(0, 1) as item}
             {@const itemRouteKind = memoryRouteKindFromDocumentType(item.type)}
-            <article class="excerpt-card">
+            <article class="excerpt-card data-list-row">
               <header class="excerpt-head">
                 <strong>{item.type}</strong>
                 {#if itemRouteKind}
@@ -293,7 +249,7 @@
           {/if}
         </div>
       </section>
-    </div>
+    {/if}
   {/if}
 </section>
 
@@ -302,10 +258,6 @@
   .excerpt-card {
     display: grid;
     gap: 8px;
-    padding: 12px 14px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
   }
 
   .memory-result-head,
@@ -316,10 +268,4 @@
     gap: 12px;
   }
 
-  .memory-result-head-main {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
 </style>

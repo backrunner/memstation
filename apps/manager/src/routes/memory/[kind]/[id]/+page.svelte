@@ -29,8 +29,6 @@
   import {
     documentKindFromRoute,
     memoryCollectionHref,
-    memoryDetailHref,
-    memoryRouteKindFromDocumentType,
     normalizeMemoryRouteKind,
     type MemoryRouteKind
   } from '$lib/memory/routes';
@@ -84,7 +82,6 @@
   let itemTitle = 'Memory Item';
   let itemDescription = 'Inspect stored memory detail.';
   let currentCollectionHref = '/memory';
-  let currentItemHref = '/memory';
   let sourcePreview: ConversationRecord['messages'] = [];
   let sourcePartsByID = new Map<string, MessagePart>();
   let sourceArtifactsByID = new Map<string, MessagePartArtifact>();
@@ -120,7 +117,6 @@
   $: itemTitle = titleForKind(routeKind);
   $: itemDescription = descriptionForKind(routeKind);
   $: currentCollectionHref = routeKind ? memoryCollectionHref(routeKind, activeUserId) : '/memory';
-  $: currentItemHref = routeKind ? memoryDetailHref(routeKind, $page.params.id ?? '', activeUserId) : '/memory';
   $: sourcePreview = sourceConversation?.messages?.slice(-4) ?? [];
   $: sourcePartsByID = new Map((sourceConversation?.parts ?? []).map((part) => [part.part_id, part]));
   $: sourceArtifactsByID = new Map((sourceConversation?.artifacts ?? []).map((artifact) => [artifact.artifact_id, artifact]));
@@ -471,20 +467,20 @@
 
     <div class="inline-group" style="justify-content: space-between; flex-wrap: wrap;">
       <div class="inline-group" style="flex-wrap: wrap;">
-        <a class="button-ghost" href={currentCollectionHref}>Back to collection</a>
-        <a class="button-ghost" href="/memory">Memory workspace</a>
+        <a class="btn-ghost" href={currentCollectionHref}>Back to collection</a>
+        <a class="btn-ghost" href="/memory">Memory workspace</a>
         {#if documentItem?.conversation_id}
-          <a class="button-ghost" href={`/conversations/${documentItem.conversation_id}?user_id=${encodeURIComponent(documentItem.user_id)}`}>Open source conversation</a>
+          <a class="btn-ghost" href={`/conversations/${documentItem.conversation_id}?user_id=${encodeURIComponent(documentItem.user_id)}`}>Open source conversation</a>
         {/if}
         {#if documentItem || keyMemoryItem}
-          <a class="button-ghost" href={`/users/${encodeURIComponent((documentItem?.user_id ?? keyMemoryItem?.user_id) ?? 'admin')}`}>Open user</a>
+          <a class="btn-ghost" href={`/users/${encodeURIComponent((documentItem?.user_id ?? keyMemoryItem?.user_id) ?? 'admin')}`}>Open user</a>
         {/if}
       </div>
       <div class="inline-group" style="flex-wrap: wrap;">
         {#if routeKind === 'keys'}
-          <button class="button-danger" type="button" disabled={deleting} on:click={() => (deleteConfirmOpen = true)}>{deleting ? 'Deleting...' : 'Delete key memory'}</button>
+          <button class="btn-danger is-quiet" type="button" disabled={deleting} on:click={() => (deleteConfirmOpen = true)}>{deleting ? 'Deleting...' : 'Delete key memory'}</button>
         {/if}
-        <button class="button" type="button" disabled={saving} on:click={save}>{saving ? 'Saving...' : 'Save changes'}</button>
+        <button class="btn-primary" type="button" disabled={saving} on:click={save}>{saving ? 'Saving...' : 'Save changes'}</button>
       </div>
     </div>
 
@@ -492,13 +488,10 @@
       <section class="card page-stack">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Core Detail</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Editable content and runtime metadata</h2>
+            <h2 class="section-title">{itemTitle}</h2>
           </div>
           <div class="runtime-field-status">
-            <StatusBadge tone="brand" label={itemTitle} />
             {#if documentItem}
-              <StatusBadge tone="muted" label={documentItem.conversation_id ? 'conversation-linked' : 'manual'} />
               {#if documentItem.type === 'fact' && documentItem.lineage}
                 <StatusBadge
                   tone={(documentItem.lineage.current_head_id ?? documentItem.id) === documentItem.id ? 'success' : 'warning'}
@@ -514,7 +507,10 @@
 
         {#if documentItem}
           <div class="toolbar">
-            <div class="grid-2">
+            <TextareaField label="Content" bind:value={draftContent} rows={10} />
+            <details class="record-details">
+              <summary>Record details</summary>
+              <div class="detail-metadata">
               <div class="debug-block">
                 <div class="sidebar-label">User</div>
                 <div>{documentItem.user_id}</div>
@@ -552,25 +548,18 @@
                 <div>{documentItem.effective_score?.toFixed?.(3) ?? 'n/a'}</div>
               </div>
             </div>
-
-            <TextareaField label="Content" bind:value={draftContent} rows={10} />
+            </details>
 
             {#if documentItem.type === 'fact'}
               <FactLineagePanel lineage={documentItem.lineage} currentFactId={documentItem.id} userId={activeUserId ?? documentItem.user_id} />
             {/if}
 
-            <div class="debug-block">
-              <div class="page-header">
-                <div>
-                  <div class="sidebar-label">Metadata</div>
-                  <h3 style="margin: 0;">Stored metadata</h3>
-                </div>
-                <a class="button-ghost" href={currentItemHref}>Permalink</a>
-              </div>
-              <MemoryKeywordSignals
+            <MemoryKeywordSignals
                 matchedKeywords={matchedKeywordsFromMetadata(documentItem.metadata)}
                 sourceKeywords={sourceKeywordsFromMetadata(documentItem.metadata)}
               />
+            <details class="record-details">
+              <summary>Metadata</summary>
               <JsonView value={documentItem.metadata ?? {}} emptyLabel="No metadata recorded." />
               {#if temporalEntries(documentItem.metadata).length > 0}
                 <div class="list-table" style="margin-top: 12px;">
@@ -582,11 +571,14 @@
                   {/each}
                 </div>
               {/if}
-            </div>
+            </details>
           </div>
         {:else if keyMemoryItem}
           <div class="toolbar">
-            <div class="grid-2">
+            <TextareaField label="Value" bind:value={draftValue} rows={8} />
+            <details class="record-details">
+              <summary>Record details</summary>
+              <div class="detail-metadata">
               <div class="debug-block">
                 <div class="sidebar-label">User</div>
                 <div>{keyMemoryItem.user_id}</div>
@@ -620,22 +612,15 @@
                 <div>{(keyMemoryItem.importance ?? 0).toFixed(3)} / {(keyMemoryItem.decay_factor ?? 0).toFixed(3)}</div>
               </div>
             </div>
-
-            <TextareaField label="Value" bind:value={draftValue} rows={8} />
+            </details>
 
             <div class="form-grid two-up">
               <TextInputField label="Category" bind:value={draftCategory} />
               <SelectField label="Review status" items={reviewStatusItems} bind:value={draftReviewStatus} />
             </div>
 
-            <div class="debug-block">
-              <div class="page-header">
-                <div>
-                  <div class="sidebar-label">Metadata</div>
-                  <h3 style="margin: 0;">Stored metadata</h3>
-                </div>
-                <a class="button-ghost" href={currentItemHref}>Permalink</a>
-              </div>
+            <details class="record-details">
+              <summary>Metadata</summary>
               <JsonView value={keyMemoryItem.metadata ?? {}} emptyLabel="No metadata recorded." />
               {#if temporalEntries(keyMemoryItem.metadata).length > 0}
                 <div class="list-table" style="margin-top: 12px;">
@@ -647,16 +632,15 @@
                   {/each}
                 </div>
               {/if}
-            </div>
+            </details>
           </div>
         {/if}
       </section>
 
-      <section class="card page-stack">
+      <section class="card page-stack detail-context">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Context</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Links, graph neighbors, and provenance</h2>
+            <h2 class="section-title">Related records</h2>
           </div>
         </div>
 
@@ -683,35 +667,7 @@
               {#if (documentItem.related?.length ?? 0) === 0}
                 <div class="helper-text">No bounded relation expansion was returned for this document.</div>
               {:else}
-                <div style="margin-bottom: 14px;">
-                  <MemoryRelationGraph centerLabel={documentItem.id} centerType={documentItem.type} items={documentItem.related ?? []} />
-                </div>
-                <div class="list-table">
-                  {#each documentItem.related ?? [] as relation}
-                    {@const relationID = relation.document_id ?? ''}
-                    {@const relationLabel = relation.document_id ?? relation.node_id ?? ''}
-                    {@const relationType = relation.document_type ?? ''}
-                    {@const relationKind = memoryRouteKindFromDocumentType(relationType)}
-                    <div class="table-row-link">
-                      <div>
-                        <div style="font-weight: 600;">{relationLabel}</div>
-                        <div class="subtle-text">{relation.relation_type ?? 'related'} · {relationType}</div>
-                        {#if relation.node_id}
-                          <div class="subtle-text mono">{relation.node_id}</div>
-                        {/if}
-                      </div>
-                      <div class="inline-group" style="flex-wrap: wrap; justify-content: flex-end;">
-                        <StatusBadge tone="muted" label={`weight ${relation.weight.toFixed(2)}`} />
-                        {#if relationKind && relationID}
-                          <a
-                            class="button-ghost"
-                            href={memoryDetailHref(relationKind, relationID, documentItem.user_id)}
-                          >Open</a>
-                        {/if}
-                      </div>
-                    </div>
-                  {/each}
-                </div>
+                <MemoryRelationGraph centerLabel={documentItem.id} centerType={documentItem.type} items={documentItem.related ?? []} userId={documentItem.user_id} />
               {/if}
             </div>
 
@@ -785,7 +741,7 @@
                           <StatusBadge tone="brand" label={`artifact ${artifact.artifact_id}`} />
                         {/if}
                         {#if documentItem.conversation_id}
-                          <a class="button-ghost" href={`/conversations/${documentItem.conversation_id}?user_id=${encodeURIComponent(documentItem.user_id)}`}>Open conversation timeline</a>
+                          <a class="btn-ghost" href={`/conversations/${documentItem.conversation_id}?user_id=${encodeURIComponent(documentItem.user_id)}`}>Open conversation timeline</a>
                         {/if}
                       </div>
                     </div>
@@ -835,7 +791,7 @@
                     </div>
                     <StatusBadge tone={auditTone(event.action)} label={event.created_at ? new Date(event.created_at).toLocaleString() : 'n/a'} />
                   </div>
-                  <JsonView value={event.payload ?? {}} emptyLabel="No payload on this audit event." />
+                  <details class="record-details"><summary>Event payload</summary><JsonView value={event.payload ?? {}} emptyLabel="No payload on this audit event." /></details>
                 </div>
               {/each}
             </div>
@@ -855,3 +811,12 @@
   busy={deleting}
   on:confirm={deleteKeyMemory}
 />
+
+<style>
+  .detail-context > .toolbar { gap: 0; }
+  .detail-context > .toolbar > .debug-block,
+  .detail-context > .debug-block { padding: 16px 0; border: 0; border-bottom: 1px solid var(--border-subtle); border-radius: 0; background: transparent; }
+  .detail-context > .toolbar > .debug-block:first-child { padding-top: 0; }
+  .detail-context > .debug-block:last-child { border-bottom: 0; padding-bottom: 0; }
+  .detail-context .sidebar-label { display: block; margin-bottom: 8px; }
+</style>

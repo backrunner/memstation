@@ -1,95 +1,55 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import { memoryDetailHref, memoryRouteKindFromDocumentType } from '$lib/memory/routes';
   import type { RelatedMemory } from '$lib/types';
 
   export let centerLabel = 'Memory';
   export let centerType = 'memory';
   export let items: RelatedMemory[] = [];
-
-  const size = 360;
-  const center = { x: size / 2, y: size / 2 };
-  const orbit = 112;
-
-  $: visibleItems = items.slice(0, 6);
-  $: nodes = visibleItems.map((item, index) => {
-    const angle = (-Math.PI / 2) + ((Math.PI * 2) / Math.max(visibleItems.length, 1)) * index;
-    return {
-      ...item,
-      displayID: item.document_id ?? item.node_id ?? '',
-      displayType: item.document_type ?? 'memory',
-      x: center.x + Math.cos(angle) * orbit,
-      y: center.y + Math.sin(angle) * orbit
-    };
-  });
-
-  function shortLabel(value: string): string {
-    return value.length > 18 ? `${value.slice(0, 16)}..` : value;
-  }
-
-  function tone(type: string): string {
-    switch (type) {
-      case 'summary':
-        return 'var(--brand-strong)';
-      case 'fact':
-        return 'var(--success)';
-      case 'impression':
-        return 'var(--warning)';
-      case 'key_memory':
-        return 'var(--danger)';
-      case 'event':
-        return '#0f766e';
-      case 'task':
-        return '#2563eb';
-      case 'procedure':
-        return '#7c3aed';
-      case 'artifact':
-        return '#b45309';
-      case 'entity':
-        return '#475569';
-      case 'agent_action':
-        return '#be185d';
-      default:
-        return 'var(--text-secondary)';
-    }
-  }
+  export let userId: string | undefined = undefined;
 </script>
 
-{#if visibleItems.length === 0}
-  <div class="empty-state">No related nodes are available to graph.</div>
+{#if items.length === 0}
+  <p class="helper-text">No related memories.</p>
 {:else}
-  <div class="memory-graph-shell">
-    <svg viewBox={`0 0 ${size} ${size}`} class="memory-graph" role="img" aria-label="memory relation graph">
-      <defs>
-        <radialGradient id="memoryGraphGlow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="rgba(15, 94, 168, 0.22)" />
-          <stop offset="100%" stop-color="rgba(15, 94, 168, 0)" />
-        </radialGradient>
-      </defs>
-
-      <circle cx={center.x} cy={center.y} r="154" fill="url(#memoryGraphGlow)" />
-
-      {#each nodes as node}
-        <line
-          x1={center.x}
-          y1={center.y}
-          x2={node.x}
-          y2={node.y}
-          stroke={tone(node.displayType)}
-          stroke-opacity={Math.max(0.3, Math.min(0.9, node.weight))}
-          stroke-width={2 + Math.max(0, node.weight * 2)}
-        />
+  <div class="relation-map" aria-label="Memory relations">
+    <div class="relation-origin">
+      <span class="helper-text">{centerType}</span>
+      <strong class="mono">{centerLabel}</strong>
+    </div>
+    <ul class="relation-branches">
+      {#each items as relation}
+        {@const kind = memoryRouteKindFromDocumentType(relation.document_type ?? '')}
+        {@const id = relation.document_id ?? relation.node_id ?? ''}
+        <li class="relation-branch">
+          <div class="relation-edge">
+            <span>{relation.relation_type ?? 'related'}</span>
+            <span class="mono">weight {relation.weight.toFixed(2)}</span>
+          </div>
+          <div class="relation-node">
+            <span class="helper-text">{relation.document_type ?? 'Memory node'}</span>
+            {#if kind && relation.document_id}
+              <a class="relation-node-link mono" tabindex="0" href={memoryDetailHref(kind, relation.document_id, userId)}>{id}</a>
+            {:else}
+              <strong class="mono">{id}</strong>
+            {/if}
+          </div>
+        </li>
       {/each}
-
-      <circle cx={center.x} cy={center.y} r="42" fill="rgba(15, 94, 168, 0.12)" stroke="var(--brand-strong)" stroke-width="2.5" />
-      <text x={center.x} y={center.y - 2} text-anchor="middle" class="memory-graph-title">{shortLabel(centerLabel)}</text>
-      <text x={center.x} y={center.y + 18} text-anchor="middle" class="memory-graph-subtitle">{centerType}</text>
-
-      {#each nodes as node}
-        <circle cx={node.x} cy={node.y} r="24" fill="white" stroke={tone(node.displayType)} stroke-width="2.5" />
-        <text x={node.x} y={node.y - 2} text-anchor="middle" class="memory-graph-title">{shortLabel(node.displayID)}</text>
-        <text x={node.x} y={node.y + 16} text-anchor="middle" class="memory-graph-subtitle">{node.relation_type ?? node.displayType}</text>
-      {/each}
-    </svg>
+    </ul>
   </div>
 {/if}
+
+<style>
+  .relation-map { display: grid; gap: 4px; min-width: 0; }
+  .relation-origin { display: grid; gap: 2px; padding: 12px 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); overflow-wrap: anywhere; }
+  .relation-branches { list-style: none; padding: 0 0 0 18px; margin: 0; }
+  .relation-branch { position: relative; padding: 14px 0 0 20px; border-left: 1px solid var(--border-strong); }
+  .relation-branch::before { content: ''; position: absolute; left: 0; top: 27px; width: 12px; border-top: 1px solid var(--border-strong); }
+  .relation-edge { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 8px; color: var(--text-muted); font-size: var(--font-size-xs); }
+  .relation-node { display: grid; gap: 2px; padding: 10px 12px; background: var(--surface-muted); border-radius: var(--radius-sm); overflow-wrap: anywhere; }
+  .relation-node-link { color: var(--brand); font-weight: 500; width: fit-content; max-width: 100%; text-decoration: underline; text-underline-offset: 3px; }
+  .relation-node-link:hover { color: var(--brand-strong); }
+  @media (pointer: coarse) { .relation-node-link { display: flex; align-items: center; min-height: 44px; } }
+</style>

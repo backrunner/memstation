@@ -7,6 +7,7 @@
 	import { activateMemoryRebuild, discardMemoryRebuild, fetchMemoryRebuilds, fetchQueues, fetchTasks, requeueTask } from '$lib/api/client';
   import CodeBlock from '$lib/components/CodeBlock.svelte';
   import ConfirmActionDialog from '$lib/components/ConfirmActionDialog.svelte';
+  import FilterToolbar from '$lib/components/FilterToolbar.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import SelectField from '$lib/components/SelectField.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -28,6 +29,10 @@
   let error = '';
   let success = '';
   let lastQueueFilter = '';
+  let lastRouteQueue: string | undefined;
+  let mounted = false;
+  let requestRevision = 0;
+  let filterTimer: ReturnType<typeof setTimeout> | undefined;
   let queues: QueueInfo[] = [];
   let tasks: QueueTaskRecord[] = [];
   let selectedStates = ['retry', 'archived', 'scheduled', 'active'];
@@ -48,24 +53,31 @@
 
   $: queueItems = [{ value: '', label: 'All queues' }, ...queues.map((queue) => ({ value: queue.name, label: queue.name }))];
 
-  onMount(async () => {
-    await loadTasks();
+  onMount(() => {
+    mounted = true;
+    return () => { clearTimeout(filterTimer); requestRevision++; };
   });
 
   $: routeQueue = $page.url.searchParams.get('queue') ?? '';
-  $: if (routeQueue !== selectedQueue) {
+  $: if (routeQueue !== lastRouteQueue) {
+    lastRouteQueue = routeQueue;
     selectedQueue = routeQueue;
   }
 
   $: queueFilterKey =
     `${$selectedTarget?.id ?? 'none'}:${selectedQueue}:${selectedStates.join(',')}:` +
     `${rebuildUserId.trim()}:${$targetState.session.authenticated ? 'auth' : 'anon'}`;
-  $: if (queueFilterKey !== lastQueueFilter && !$targetState.session.checking) {
+  $: if (mounted && queueFilterKey !== lastQueueFilter && !$targetState.session.checking) {
     lastQueueFilter = queueFilterKey;
-    void loadTasks();
+    requestRevision++;
+    clearTimeout(filterTimer);
+    filterTimer = setTimeout(() => void loadTasks(), 200);
   }
 
   async function loadTasks(): Promise<void> {
+    clearTimeout(filterTimer);
+    const revision = ++requestRevision;
+    const scope = queueFilterKey;
     if (!$selectedTarget || !$targetState.session.authenticated) {
       loading = false;
       return;
@@ -73,18 +85,24 @@
     loading = true;
     error = '';
     try {
-      [queues, tasks, rebuilds] = await Promise.all([
+      const [nextQueues, nextTasks, nextRebuilds] = await Promise.all([
         fetchQueues($selectedTarget),
-        fetchTasks($selectedTarget, { limit: 20, states: selectedStates, queue: selectedQueue }),
+        selectedStates.length
+          ? fetchTasks($selectedTarget, { limit: 20, states: selectedStates, queue: selectedQueue })
+          : Promise.resolve([]),
         rebuildUserId.trim()
           ? fetchMemoryRebuilds($selectedTarget, rebuildUserId.trim(), 12).catch(() => [])
           : Promise.resolve([])
       ]);
-      selectedTask = tasks[0] ?? null;
+      if (revision !== requestRevision || scope !== queueFilterKey) return;
+      queues = nextQueues;
+      tasks = nextTasks;
+      rebuilds = nextRebuilds;
+      selectedTask = tasks.find((task) => task.id === selectedTask?.id && task.queue === selectedTask?.queue) ?? tasks[0] ?? null;
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Failed to load tasks';
+      if (revision === requestRevision && scope === queueFilterKey) error = cause instanceof Error ? cause.message : 'Failed to load tasks';
     } finally {
-      loading = false;
+      if (revision === requestRevision && scope === queueFilterKey) loading = false;
     }
   }
 
@@ -94,7 +112,6 @@
     } else {
       selectedStates = [...selectedStates, state];
     }
-    void loadTasks();
   }
 
   async function runSelectedTask(): Promise<void> {
@@ -219,31 +236,20 @@
     <div class="notice-card">Connect this target to inspect worker tasks.</div>
   {:else}
     <section class="card page-stack">
-      <div class="page-header">
-        <div class="page-header-meta">
-          <h2 class="section-title">Filters</h2>
-          <p class="panel-meta">Narrow by state, queue, and rebuild user scope.</p>
-        </div>
-      </div>
-      <div class="filter-bar">
-        <div class="filter-bar-states">
-          <span class="field-label">State</span>
-          <div class="segmented-control" style="flex-wrap: wrap;">
-            {#each stateFilters as state}
-              <button
-                class="segmented-control-item"
-                type="button"
-                data-state={selectedStates.includes(state) ? 'on' : 'off'}
-                on:click={() => toggleState(state)}
-              >{state}</button>
-            {/each}
+      <FilterToolbar activeCount={Number(selectedStates.length !== 4 || selectedStates.includes('pending')) + Number(rebuildUserId !== 'admin')}>
+        <SelectField label="Queue" items={queueItems} bind:value={selectedQueue} />
+        {#snippet filters()}
+          <div class="field">
+            <span class="field-label">State</span>
+            <div class="segmented-control" style="flex-wrap: wrap;">
+              {#each stateFilters as state}
+                <button class="segmented-control-item" type="button" data-state={selectedStates.includes(state) ? 'on' : 'off'} aria-pressed={selectedStates.includes(state)} on:click={() => toggleState(state)}>{state}</button>
+              {/each}
+            </div>
           </div>
-        </div>
-        <div class="filter-bar-selects">
-          <SelectField label="Queue" items={queueItems} bind:value={selectedQueue} fieldClass="filter-bar-field" />
-          <TextInputField label="Rebuild user filter" bind:value={rebuildUserId} placeholder="user id" fieldClass="filter-bar-field" />
-        </div>
-      </div>
+          <TextInputField label="Rebuild user filter" bind:value={rebuildUserId} placeholder="user id" />
+        {/snippet}
+      </FilterToolbar>
     </section>
 
     {#if error}
@@ -258,7 +264,7 @@
       <div class="page-columns">
         <section class="table-card">
           <div class="table-scroll">
-            <table class="data-table">
+            <table class="data-table task-table">
               <thead>
                 <tr>
                   <th>Task</th>
@@ -276,7 +282,7 @@
                     on:click={() => (selectedTask = task)}
                   >
                     <td>
-                      <strong class="mono">{task.type}</strong>
+                      <button class="table-select-button mono" type="button" aria-pressed={selectedTask?.id === task.id} on:click={() => (selectedTask = task)}>{task.type}</button>
                       <div class="subtle-text mono">{task.id}</div>
                       <a class="btn-link" style="margin-top: 4px;" href={`/operations/tasks/${encodeURIComponent(task.queue)}/${encodeURIComponent(task.id)}`}>
                         Open detail
@@ -292,7 +298,7 @@
                           <button
                             class="btn-link"
                             type="button"
-                            on:click|stopPropagation={() => { selectedQueue = task.queue; void loadTasks(); }}
+                            on:click|stopPropagation={() => { selectedQueue = task.queue; }}
                           >Filter</button>
                         </div>
                       {/if}
@@ -317,8 +323,7 @@
           <section class="card page-stack">
             <div class="page-header">
               <div class="page-header-meta">
-                <h2 class="section-title">Payload &amp; retry context</h2>
-                <p class="panel-meta">Inspect the selected task before requeuing.</p>
+                <h2 class="section-title">Selected task</h2>
               </div>
             </div>
             {#if selectedTask}
@@ -336,6 +341,7 @@
                   <dd class="mono">{selectedTask.retried ?? 0} / {selectedTask.max_retry ?? 0}</dd>
                 </div>
               </dl>
+              {#if selectedTask.last_error}<div class="error-state">{selectedTask.last_error}</div>{/if}
               <div>
                 <div class="field-label" style="margin-bottom: 6px;">Payload</div>
                 <CodeBlock code={JSON.stringify(selectedTask.payload ?? {}, null, 2)} language="json" />
@@ -361,14 +367,10 @@
             {/if}
           </section>
 
-          <section class="card page-stack">
-            <div class="page-header">
-              <div class="page-header-meta">
-                <h2 class="section-title">Generation lifecycle</h2>
-                <p class="panel-meta">Memory rebuild candidates for the filtered user.</p>
-              </div>
-            </div>
-            {#if rebuilds.length === 0}
+          <details class="card secondary-panel" open={rebuilds.length > 0}>
+            <summary>Generation lifecycle</summary>
+            <div class="page-stack">
+{#if rebuilds.length === 0}
               <div class="empty-state">No rebuild generations found for this user filter.</div>
             {:else}
               <div class="stack-list">
@@ -427,16 +429,13 @@
                 {/each}
               </div>
             {/if}
-          </section>
-
-          <section class="card page-stack">
-            <div class="page-header">
-              <div class="page-header-meta">
-                <h2 class="section-title">Publish manual task</h2>
-                <p class="panel-meta">Enqueue a follow-up task by conversation id.</p>
-              </div>
             </div>
-            <div class="form-grid two-up">
+          </details>
+
+          <details class="card secondary-panel">
+            <summary>Publish manual task</summary>
+            <div class="page-stack">
+<div class="form-grid two-up">
               <SelectField label="Task type" bind:value={manualTaskType} items={taskTypeItems} />
               <TextInputField label="User ID" bind:value={manualUserId} />
               <TextInputField label="Conversation ID" bind:value={manualConversationId} placeholder="conv-…" fieldClass="field-span-2" />
@@ -455,7 +454,8 @@
                 )}
               >Publish task</button>
             </div>
-          </section>
+            </div>
+          </details>
         </div>
       </div>
     {/if}
@@ -475,33 +475,15 @@
 />
 
 <style>
-  .filter-bar {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 16px;
-    align-items: end;
-  }
-
-  .filter-bar-states {
-    display: grid;
-    gap: 6px;
-  }
-
-  .filter-bar-selects {
-    display: grid;
-    grid-template-columns: 220px 220px;
-    gap: 12px;
-  }
-
-  :global(.filter-bar-field) { min-width: 0; }
-
   .meta-grid.compact {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
   }
 
   .meta-grid.compact > div {
-    padding: 8px 10px;
+    padding: 0;
+    border: 0;
+    background: transparent;
   }
 
   .meta-grid dt {
@@ -514,6 +496,7 @@
   }
 
   .meta-grid dd {
+    overflow-wrap: anywhere;
     margin: 0;
     color: var(--text);
     font-size: var(--font-size-md);
@@ -527,6 +510,7 @@
   }
 
   .meta-grid > div {
+    min-width: 0;
     display: grid;
     gap: 3px;
     padding: 10px 12px;
@@ -551,10 +535,9 @@
     gap: 8px;
   }
 
-  @media (max-width: 960px) {
-    .filter-bar,
-    .filter-bar-selects {
-      grid-template-columns: 1fr;
-    }
+  .secondary-panel > summary { cursor: pointer; font-weight: 600; }
+  .secondary-panel[open] > summary { margin-bottom: 16px; }
+  @media (max-width: 640px) {
+    .task-table th:nth-child(n + 3), .task-table td:nth-child(n + 3) { display: none; }
   }
 </style>

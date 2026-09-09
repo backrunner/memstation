@@ -1556,7 +1556,7 @@ function createState() {
       keywords: ['gateway', 'memory', 'observability']
     },
     related: [
-      { id: 'fact-1', type: 'fact', weight: 0.86 }
+      { node_id: 'node-fact-1', document_id: 'fact-1', document_type: 'fact', relation_type: 'supports', weight: 0.86 }
     ],
     created_at: createdAt,
     updated_at: createdAt
@@ -1573,7 +1573,7 @@ function createState() {
     decay_factor: 0.92,
     metadata: { confidence: 0.84 },
     related: [
-      { id: 'summary-1', type: 'summary', weight: 0.86 }
+      { node_id: 'node-summary-1', document_id: 'summary-1', document_type: 'summary', relation_type: 'supports', weight: 0.86 }
     ],
     created_at: createdAt,
     updated_at: createdAt

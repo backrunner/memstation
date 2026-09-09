@@ -1,28 +1,52 @@
-<svelte:options runes={false} />
-
 <script lang="ts">
   import { Label } from 'bits-ui';
   import type { HTMLInputAttributes } from 'svelte/elements';
 
-  export let label = '';
-  export let value: string | number = '';
-  export let type: HTMLInputAttributes['type'] = 'text';
-  export let placeholder = '';
-  export let help = '';
-  export let error = '';
-  export let autocomplete: HTMLInputAttributes['autocomplete'] = undefined;
-  export let inputmode: HTMLInputAttributes['inputmode'] = undefined;
-  export let min: HTMLInputAttributes['min'] = undefined;
-  export let max: HTMLInputAttributes['max'] = undefined;
-  export let step: HTMLInputAttributes['step'] = undefined;
-  export let name: HTMLInputAttributes['name'] = undefined;
-  export let disabled = false;
-  export let readonly = false;
-  export let required = false;
-  export let spellcheck = false;
-  export let fieldClass = '';
-  export let inputClass = '';
-  export let inputId = `input-${Math.random().toString(36).slice(2, 9)}`;
+  const id = $props.id();
+
+  interface Props {
+    label?: string;
+    value?: string | number;
+    type?: HTMLInputAttributes['type'];
+    placeholder?: string;
+    help?: string;
+    error?: string;
+    autocomplete?: HTMLInputAttributes['autocomplete'];
+    inputmode?: HTMLInputAttributes['inputmode'];
+    min?: HTMLInputAttributes['min'];
+    max?: HTMLInputAttributes['max'];
+    step?: HTMLInputAttributes['step'];
+    name?: HTMLInputAttributes['name'];
+    disabled?: boolean;
+    readonly?: boolean;
+    required?: boolean;
+    spellcheck?: boolean;
+    fieldClass?: string;
+    inputClass?: string;
+    inputId?: string;
+  }
+
+  let {
+    label = '',
+    value = $bindable(''),
+    type = 'text',
+    placeholder = '',
+    help = '',
+    error = '',
+    autocomplete = undefined,
+    inputmode = undefined,
+    min = undefined,
+    max = undefined,
+    step = undefined,
+    name = undefined,
+    disabled = false,
+    readonly = false,
+    required = false,
+    spellcheck = false,
+    fieldClass = '',
+    inputClass = '',
+    inputId = id
+  }: Props = $props();
 </script>
 
 <div class={`field ${fieldClass}`.trim()}>
@@ -30,6 +54,8 @@
   <input
     id={inputId}
     class={`input ${inputClass} ${error ? 'is-invalid' : ''}`.trim()}
+    aria-invalid={Boolean(error)}
+    aria-describedby={error ? `${id}-error` : help ? `${id}-help` : undefined}
     bind:value
     {type}
     {placeholder}
@@ -45,9 +71,9 @@
     {spellcheck}
   />
   {#if help}
-    <div class="field-help">{help}</div>
+    <div class="field-help" id={`${id}-help`}>{help}</div>
   {/if}
   {#if error}
-    <div class="field-error">{error}</div>
+    <div class="field-error" id={`${id}-error`} role="alert">{error}</div>
   {/if}
 </div>

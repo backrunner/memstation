@@ -5,7 +5,6 @@
 
   import { fetchConfig, saveConfig } from '$lib/api/client';
   import PageHeader from '$lib/components/PageHeader.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
   import SwitchField from '$lib/components/SwitchField.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
   import { isNonNegativeInteger } from '$lib/forms/validation';
@@ -264,7 +263,7 @@
       <div class="notice-card is-success">{success}</div>
     {/if}
 
-    <div class="page-columns">
+    <div class="page-columns models-columns">
       <div class="page-column">
         <section class="card page-stack">
           <div class="page-header">
@@ -279,23 +278,24 @@
             <TextInputField label="Summary model" bind:value={summaryModel} />
             <TextInputField label="Analysis model" bind:value={analysisModel} />
             <TextInputField label="Embedding model" bind:value={embeddingModel} />
-            <SwitchField
-              label="Tool writes"
-              help="Allow model-triggered memory writes for users inheriting the deployment default."
-              bind:checked={toolWriteEnabled}
-            />
             <TextInputField
               label="Max injection tokens"
+              fieldClass="field-span-2"
               bind:value={maxInjectionTokens}
               type="number"
               min="0"
               error={fieldErrors.maxInjectionTokens}
             />
+            <SwitchField
+              label="Tool writes"
+              fieldClass="field-span-2"
+              help="Allow model-triggered memory writes for users inheriting the deployment default."
+              bind:checked={toolWriteEnabled}
+            />
           </div>
 
-          <div class="inline-group" style="justify-content: flex-end;">
-            <span class="helper-text">Writes are audited.</span>
-            <button class="btn-primary" type="button" disabled={saving} on:click={persist}>
+          <div class="form-actions">
+              <button class="btn-primary" type="button" disabled={saving} on:click={persist}>
               {saving ? 'Saving…' : 'Save settings'}
             </button>
           </div>
@@ -312,9 +312,9 @@
             <a class="btn-secondary btn-sm" href="/settings/providers">Open providers</a>
           </div>
 
-          <div class="stack-list">
+          <div class="stack-list data-list">
             {#each providerScopeCards as card}
-              <div class="route-row">
+              <div class="route-row data-list-row">
                 <div class="route-row-header">
                   <strong>{card.title}</strong>
                   <span class="helper-text">{card.providers.length} provider{card.providers.length === 1 ? '' : 's'}</span>
@@ -323,20 +323,8 @@
                 {#if card.defaultProvider}
                   <div class="helper-text">Default route: <span class="mono">{card.defaultProvider}</span></div>
                 {/if}
-                {#if card.providers.length > 0}
-                  <div class="route-provider-list">
-                    {#each card.providers as provider}
-                      <div class="route-provider-item">
-                        <span class="mono">{provider.provider}</span>
-                        <StatusBadge
-                          tone={provider.has_api_key ? 'success' : 'warning'}
-                          label={provider.has_api_key ? 'Ready' : 'Needs key'}
-                        />
-                      </div>
-                    {/each}
-                  </div>
-                {:else}
-                  <div class="helper-text">No providers configured.</div>
+                {#if card.providers.some((provider) => !provider.has_api_key)}
+                  <div class="helper-text" style="color: var(--warning);">Missing keys: {card.providers.filter((provider) => !provider.has_api_key).map((provider) => provider.provider).join(', ')}</div>
                 {/if}
               </div>
             {/each}
@@ -351,10 +339,6 @@
   .route-row {
     display: grid;
     gap: 8px;
-    padding: 12px 14px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
   }
 
   .route-row-header {
@@ -364,19 +348,5 @@
     gap: 12px;
   }
 
-  .route-provider-list {
-    display: grid;
-    gap: 4px;
-  }
-
-  .route-provider-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 6px 10px;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-xs);
-    background: var(--surface-muted);
-  }
+  @media (min-width: 1025px) { .models-columns { grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); } }
 </style>

@@ -96,12 +96,12 @@
   {:else}
     <div class="inline-group" style="justify-content: space-between; flex-wrap: wrap;">
       <div class="inline-group" style="flex-wrap: wrap;">
-        <a class="button-ghost" href="/operations/queues">Back to queues</a>
-        <a class="button-ghost" href={`/operations/tasks?queue=${encodeURIComponent(queue.name)}`}>Open task board</a>
+        <a class="btn-ghost" href="/operations/queues">Back to queues</a>
+        <a class="btn-ghost" href={`/operations/tasks?queue=${encodeURIComponent(queue.name)}`}>Open task board</a>
       </div>
       <div class="inline-group" style="flex-wrap: wrap;">
         <StatusBadge tone={queueTone(queue)} label={queue.paused ? 'paused' : 'active'} />
-        <button class="button-secondary" type="button" on:click={loadQueue}>Refresh queue</button>
+        <button class="btn-secondary" type="button" on:click={loadQueue}>Refresh queue</button>
       </div>
     </div>
 
@@ -137,12 +137,12 @@
             </thead>
             <tbody>
               {#each tasks as item}
-                <tr on:click={() => (selectedTask = item)} style="cursor: pointer;">
+                <tr class="is-selectable" class:is-active={selectedTask?.id === item.id} on:click={() => (selectedTask = item)}>
                   <td>
-                    <strong>{item.type}</strong>
+                    <button class="table-select-button" type="button" aria-pressed={selectedTask?.id === item.id} on:click={() => (selectedTask = item)}>{item.type}</button>
                     <div class="subtle-text">{item.id}</div>
                     <div style="margin-top: 8px;">
-                      <a class="button-ghost" href={`/operations/tasks/${encodeURIComponent(item.queue)}/${encodeURIComponent(item.id)}`}>Open detail</a>
+                      <a class="btn-ghost" href={`/operations/tasks/${encodeURIComponent(item.queue)}/${encodeURIComponent(item.id)}`}>Open detail</a>
                     </div>
                   </td>
                   <td>

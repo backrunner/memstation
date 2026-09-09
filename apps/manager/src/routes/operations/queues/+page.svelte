@@ -83,7 +83,6 @@
                 </td>
                 <td>
                   <StatusBadge
-                    withDot
                     tone={queue.pending > 10 ? 'warning' : 'success'}
                     label={queue.pending > 10 ? 'Backlog' : 'Healthy'}
                   />

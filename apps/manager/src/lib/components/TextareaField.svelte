@@ -1,21 +1,39 @@
-<svelte:options runes={false} />
-
 <script lang="ts">
   import { Label } from 'bits-ui';
 
-  export let label = '';
-  export let value = '';
-  export let placeholder = '';
-  export let help = '';
-  export let error = '';
-  export let disabled = false;
-  export let readonly = false;
-  export let required = false;
-  export let spellcheck = false;
-  export let rows = 5;
-  export let fieldClass = '';
-  export let textareaClass = '';
-  export let textareaId = `textarea-${Math.random().toString(36).slice(2, 9)}`;
+  const id = $props.id();
+
+  interface Props {
+    label?: string;
+    value?: string;
+    placeholder?: string;
+    help?: string;
+    error?: string;
+    disabled?: boolean;
+    readonly?: boolean;
+    required?: boolean;
+    spellcheck?: boolean;
+    rows?: number;
+    fieldClass?: string;
+    textareaClass?: string;
+    textareaId?: string;
+  }
+
+  let {
+    label = '',
+    value = $bindable(''),
+    placeholder = '',
+    help = '',
+    error = '',
+    disabled = false,
+    readonly = false,
+    required = false,
+    spellcheck = false,
+    rows = 5,
+    fieldClass = '',
+    textareaClass = '',
+    textareaId = id
+  }: Props = $props();
 </script>
 
 <div class={`field ${fieldClass}`.trim()}>
@@ -23,6 +41,8 @@
   <textarea
     id={textareaId}
     class={`textarea ${textareaClass} ${error ? 'is-invalid' : ''}`.trim()}
+    aria-invalid={Boolean(error)}
+    aria-describedby={error ? `${id}-error` : help ? `${id}-help` : undefined}
     bind:value
     {placeholder}
     {disabled}
@@ -32,9 +52,9 @@
     {rows}
   ></textarea>
   {#if help}
-    <div class="field-help">{help}</div>
+    <div class="field-help" id={`${id}-help`}>{help}</div>
   {/if}
   {#if error}
-    <div class="field-error">{error}</div>
+    <div class="field-error" id={`${id}-error`} role="alert">{error}</div>
   {/if}
 </div>

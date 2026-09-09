@@ -72,7 +72,7 @@
   );
   $: tokenTrend = buildTrend(recentConversations, range);
   $: tokenTrendOption = {
-    tooltip: { trigger: 'axis', backgroundColor: '#fffefb', borderColor: '#d9ded7', textStyle: { color: '#1b2821' } },
+    tooltip: { trigger: 'axis', backgroundColor: '#ffffff', borderColor: '#d9ded7', textStyle: { color: '#1b2821' } },
     grid: { left: 44, right: 16, top: 16, bottom: 32 },
     xAxis: {
       type: 'category',
@@ -90,40 +90,16 @@
     series: [
       {
         type: 'line',
-        smooth: true,
+        smooth: false,
         showSymbol: false,
         data: tokenTrend.map((item) => item.total),
-        lineStyle: { color: '#0b7059', width: 2 },
-        itemStyle: { color: '#0b7059' }
+        lineStyle: { color: '#28634f', width: 2 },
+        itemStyle: { color: '#28634f' }
       }
     ]
   };
 
   $: userFootprint = [...users].sort((a, b) => b.key_memory_count - a.key_memory_count).slice(0, 6);
-  $: footprintOption = {
-    tooltip: { trigger: 'axis', backgroundColor: '#fffefb', borderColor: '#d9ded7', textStyle: { color: '#1b2821' } },
-    grid: { left: 44, right: 16, top: 16, bottom: 48 },
-    xAxis: {
-      type: 'category',
-      data: userFootprint.map((item) => item.name),
-      axisLine: { lineStyle: { color: '#d9ded7' } },
-      axisTick: { show: false },
-      axisLabel: { color: '#6a776e', fontSize: 11, rotate: 16 }
-    },
-    yAxis: {
-      type: 'value',
-      splitLine: { lineStyle: { color: '#e8ece6' } },
-      axisLabel: { color: '#6a776e', fontSize: 11 }
-    },
-    series: [
-      {
-        type: 'bar',
-        data: userFootprint.map((item) => item.key_memory_count),
-        itemStyle: { color: '#0b7059', borderRadius: [3, 3, 0, 0] },
-        barWidth: '48%'
-      }
-    ]
-  };
 
   function buildTrend(items: ConversationListItem[], days: number): Array<{ label: string; total: number }> {
     const buckets = new Map<string, number>();
@@ -199,18 +175,20 @@
       />
     </div>
 
-    <div class="grid-2">
+    <div class="dashboard-charts">
       <section class="card page-stack">
         <div class="page-header">
           <div class="page-header-meta">
-            <h2 class="section-title">Token load</h2>
+            <h2 class="section-title">Recent conversation tokens</h2>
+            <p class="helper-text">Latest conversations, grouped by last activity</p>
           </div>
-          <div class="segmented-control" role="tablist" aria-label="Range">
+          <div class="segmented-control" role="group" aria-label="Range">
             {#each [7, 30] as item}
               <button
                 class="segmented-control-item"
                 type="button"
                 data-state={range === item ? 'on' : 'off'}
+                aria-pressed={range === item}
                 on:click={() => (range = item)}
               >{item}d</button>
             {/each}
@@ -225,7 +203,22 @@
             <h2 class="section-title">Key memory footprint</h2>
           </div>
         </div>
-        <EChart option={footprintOption} height={260} />
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th>User</th><th>Key memories</th></tr></thead>
+            <tbody>
+              {#each userFootprint as user}
+                <tr>
+                  <td><a href={`/users/${encodeURIComponent(user.user_id)}`}>{user.name || user.user_id}</a></td>
+                  <td class="mono">{user.key_memory_count}</td>
+                </tr>
+              {:else}
+                <tr><td colspan="2" class="text-muted">No key memories recorded.</td></tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+        <a class="link-inline" href="/memory/keys">Browse key memories →</a>
       </section>
     </div>
 

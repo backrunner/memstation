@@ -68,7 +68,6 @@
             <h2 class="section-title">Process-local</h2>
           </div>
           <StatusBadge
-            withDot
             tone={cacheStatus.l1.enabled ? 'success' : 'muted'}
             label={cacheStatus.l1.enabled ? 'Enabled' : 'Disabled'}
           />
@@ -83,7 +82,6 @@
             <h2 class="section-title">Distributed store</h2>
           </div>
           <StatusBadge
-            withDot
             tone={cacheStatus.l2.enabled ? 'success' : 'warning'}
             label={cacheStatus.l2.backend}
           />
@@ -98,7 +96,6 @@
             <h2 class="section-title">Redis fan-out</h2>
           </div>
           <StatusBadge
-            withDot
             tone={cacheStatus.pubsub.enabled ? 'brand' : 'muted'}
             label={cacheStatus.pubsub.enabled ? 'Pub/Sub active' : 'No fan-out'}
           />
@@ -132,7 +129,6 @@
             <p class="panel-meta">Observed dependency state.</p>
           </div>
           <StatusBadge
-            withDot
             tone={cacheStatus.health?.status === 'ok' ? 'success' : 'warning'}
             label={cacheStatus.health?.status ?? 'unknown'}
           />

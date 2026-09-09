@@ -4,6 +4,7 @@
   import { onMount } from 'svelte';
 
   import { fetchUsers } from '$lib/api/client';
+  import FilterToolbar from '$lib/components/FilterToolbar.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import SelectField from '$lib/components/SelectField.svelte';
   import StatusBadge from '$lib/components/StatusBadge.svelte';
@@ -17,30 +18,37 @@
   let sortBy = 'recent';
   let users: UserSummary[] = [];
   let lastLoadKey = '';
+  let mounted = false;
+  let loadRevision = 0;
 
-  onMount(async () => {
-    await loadUsers();
+  onMount(() => {
+    mounted = true;
+    return () => { loadRevision++; };
   });
 
   $: loadKey = `${$selectedTarget?.id ?? 'none'}:${$targetState.session.authenticated ? 'auth' : 'anon'}`;
-  $: if (loadKey !== lastLoadKey && !$targetState.session.checking) {
+  $: if (mounted && loadKey !== lastLoadKey && !$targetState.session.checking) {
     lastLoadKey = loadKey;
     void loadUsers();
   }
 
   async function loadUsers(): Promise<void> {
-    if (!$selectedTarget || !$targetState.session.authenticated) {
+    const revision = ++loadRevision;
+    const scope = loadKey;
+    const target = $selectedTarget;
+    if (!target || !$targetState.session.authenticated) {
       loading = false;
       return;
     }
     loading = true;
     error = '';
     try {
-      users = await fetchUsers($selectedTarget);
+      const nextUsers = await fetchUsers(target);
+      if (revision === loadRevision && scope === loadKey) users = nextUsers;
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Failed to load users';
+      if (revision === loadRevision && scope === loadKey) error = cause instanceof Error ? cause.message : 'Failed to load users';
     } finally {
-      loading = false;
+      if (revision === loadRevision && scope === loadKey) loading = false;
     }
   }
 
@@ -77,22 +85,16 @@
   {#if !$targetState.session.authenticated}
     <div class="notice-card">Connect this target to inspect users.</div>
   {:else}
-    <section class="card">
-      <div class="filters three-up">
-        <TextInputField
-          label="Search"
-          bind:value={search}
-          placeholder="user id or display name"
-          fieldClass="field-span-2"
-        />
-        <SelectField label="Sort" bind:value={sortBy} items={sortItems} />
-        <div class="field field-span-3" style="align-self: end;">
-          <div class="inline-group" style="justify-content: space-between;">
-            <span class="helper-text">{filtered.length} of {users.length} users</span>
-            <button class="btn-secondary btn-sm" type="button" on:click={loadUsers}>Refresh</button>
-          </div>
-        </div>
-      </div>
+    <section class="filter-bar">
+      <FilterToolbar activeCount={sortBy === 'recent' ? 0 : 1} summary={`${filtered.length} of ${users.length} users`}>
+        <TextInputField label="Search" bind:value={search} placeholder="Search users" />
+        {#snippet actions()}
+          <button class="btn-secondary" type="button" disabled={loading} on:click={loadUsers}>Refresh</button>
+        {/snippet}
+        {#snippet filters()}
+          <SelectField label="Sort" bind:value={sortBy} items={sortItems} />
+        {/snippet}
+      </FilterToolbar>
     </section>
 
     {#if error}

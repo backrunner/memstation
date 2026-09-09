@@ -206,17 +206,15 @@
       {#if visibleFacts.length === 0}
         <div class="empty-state">No facts match the current filter.</div>
       {:else}
-        <div class="stack-list">
+        <div class="stack-list data-list">
           {#each visibleFacts as fact}
-            <article class="summary-card">
+            <article class="summary-card data-list-row">
               <header class="summary-head">
                 <div class="summary-head-main">
                   <strong>Fact</strong>
                   <span class="helper-text mono">{fact.id}</span>
                 </div>
                 <div class="inline-group">
-                  <StatusBadge tone="muted" label="Audited" />
-                  <StatusBadge tone="muted" label={fact.conversation_id ? 'conversation-linked' : 'manual'} />
                   {#if fact.lineage}
                     <StatusBadge
                       tone={(fact.lineage.current_head_id ?? fact.id) === fact.id ? 'success' : 'warning'}
@@ -252,10 +250,6 @@
   .summary-card {
     display: grid;
     gap: 8px;
-    padding: 12px 14px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
   }
 
   .summary-head {

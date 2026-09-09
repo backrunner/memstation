@@ -641,6 +641,7 @@
 
 <section class="page-stack">
   <PageHeader
+    sticky
     eyebrow="Administer"
     title="Providers"
     description="Manage upstream provider credentials, base URLs, and default routes. Writes are audited on the target."
@@ -648,7 +649,6 @@
     <div slot="actions">
       {#if $targetState.session.authenticated && !loading}
         <div class="inline-group">
-          <span class="helper-text">Writes are audited.</span>
           <button class="btn-primary" type="button" disabled={saving} on:click={persist}>
             {saving ? 'Saving…' : 'Save provider settings'}
           </button>
@@ -671,7 +671,7 @@
     <div class="providers-grid">
       {#each scopeOrder as typedScope}
         <section class="card page-stack provider-scope-card">
-          <div class="page-header provider-scope-header">
+          <div class="provider-scope-header">
             <div class="page-header-meta">
               <h2 class="section-title">{scopeTitle(typedScope)}</h2>
             </div>
@@ -687,7 +687,7 @@
                       items={providerItemsForScope(typedScope)}
                       onValueChange={(value) => (gatewayDefaultProvider = value)}
                     >
-                      <Select.Trigger class={`select-trigger provider-route-trigger ${fieldErrors.gatewayDefault ? 'is-invalid' : ''}`}>
+                      <Select.Trigger aria-label={`${scopeTitle(typedScope)} default route`} class={`select-trigger provider-route-trigger ${fieldErrors.gatewayDefault ? 'is-invalid' : ''}`}>
                         {providerItemsForScope(typedScope).find((item) => item.value === gatewayDefaultProvider)?.label ?? 'Select route'}
                       </Select.Trigger>
                       <Select.Portal>
@@ -707,7 +707,7 @@
                       items={providerItemsForScope(typedScope)}
                       onValueChange={(value) => (internalDefaultProvider = value)}
                     >
-                      <Select.Trigger class={`select-trigger provider-route-trigger ${fieldErrors.internalDefault ? 'is-invalid' : ''}`}>
+                      <Select.Trigger aria-label={`${scopeTitle(typedScope)} default route`} class={`select-trigger provider-route-trigger ${fieldErrors.internalDefault ? 'is-invalid' : ''}`}>
                         {providerItemsForScope(typedScope).find((item) => item.value === internalDefaultProvider)?.label ?? 'Select route'}
                       </Select.Trigger>
                       <Select.Portal>
@@ -742,12 +742,12 @@
             <div class="field-error">{fieldErrors[typedScope === 'gateway' ? 'gatewayDefault' : 'internalDefault']}</div>
           {/if}
 
-          <div class="provider-list">
+          <div class="provider-list data-list">
             {#each visibleFormsForScope(typedScope) as form}
               {@const diagnostic = diagnosticFor(form.scope, form.provider)}
               {@const isActive = activeProviderForScope(typedScope) === form.provider}
               {@const issue = primaryIssue(form, diagnostic)}
-              <div class="provider-list-item" class:is-active={isActive}>
+              <div class="provider-list-item data-list-row" class:is-active={isActive}>
                 <div class="provider-list-main">
                   <div class="provider-list-heading">
                     <strong>{form.provider}</strong>
@@ -880,14 +880,20 @@
     min-height: 100%;
   }
 
+  .provider-scope-header { display: grid; gap: 16px; }
+
   .provider-scope-actions {
     display: flex;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-subtle);
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
   }
 
   .provider-route-control {
+    flex: 1;
+    min-width: 0;
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -903,8 +909,9 @@
 
   :global(.provider-route-trigger) {
     min-width: 150px;
-    max-width: 220px;
-    height: 28px;
+    max-width: none;
+    flex: 1;
+    height: 36px;
     padding: 0 10px;
   }
 
@@ -926,24 +933,19 @@
 
   .provider-list {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
   }
 
   .provider-list-item {
+    min-width: 0;
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
-    padding: 10px 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
   }
 
-  .provider-list-item.is-active {
-    border-color: var(--brand);
-    background: var(--brand-soft);
-  }
+  .provider-list-item.is-active .provider-list-heading strong { color: var(--brand-strong); }
 
   .provider-list-main {
     flex: 1;
@@ -954,6 +956,7 @@
   }
 
   .provider-list-heading {
+    overflow-wrap: anywhere;
     display: flex;
     align-items: center;
     gap: 6px;

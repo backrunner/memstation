@@ -121,7 +121,7 @@
   {:else if loading}
     <div class="notice-card">Loading target health…</div>
   {:else}
-    <div class="kpi-grid">
+    <div class="kpi-grid summary-metrics">
       <article class="kpi-card">
         <span class="kpi-label">Readiness</span>
         <strong class="kpi-value" style="text-transform: capitalize;">{ready?.status ?? 'unknown'}</strong>
@@ -152,7 +152,6 @@
             <p class="panel-meta">/health/live snapshot</p>
           </div>
           <StatusBadge
-            withDot
             tone={live?.status === 'live' ? 'success' : 'danger'}
             label={live?.status ?? 'unknown'}
           />
@@ -176,7 +175,6 @@
             <p class="panel-meta">/health/ready components</p>
           </div>
           <StatusBadge
-            withDot
             tone={readyTone(ready?.status)}
             label={ready?.status ?? 'unknown'}
           />

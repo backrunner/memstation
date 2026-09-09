@@ -2,8 +2,8 @@
 
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { AlertDialog, ContextMenu, Dialog } from 'bits-ui';
-  import { Trash2 } from 'lucide-svelte';
+  import { AlertDialog, ContextMenu, Dialog, DropdownMenu } from 'bits-ui';
+  import { Ellipsis, Trash2 } from 'lucide-svelte';
 
   import TextInputField from '$lib/components/TextInputField.svelte';
   import { isHTTPURL } from '$lib/forms/validation';
@@ -209,6 +209,7 @@
                     <span class="status-badge warning">draft</span>
                   </button>
                 {:else}
+                  <div class="target-list-entry">
                   <ContextMenu.Root>
                     <ContextMenu.Trigger class="target-context-trigger">
                       <button
@@ -235,6 +236,17 @@
                       </ContextMenu.Content>
                     </ContextMenu.Portal>
                   </ContextMenu.Root>
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger class="btn-ghost btn-icon btn-sm" aria-label={`Actions for ${target.label}`}><Ellipsis size={16} /></DropdownMenu.Trigger>
+                    <DropdownMenu.Portal>
+                      <DropdownMenu.Content class="select-content target-context-menu" sideOffset={6} align="end">
+                        <DropdownMenu.Item class="select-item target-context-menu-danger" onSelect={() => requestRemoveTarget(target)}>
+                          <Trash2 size={13} strokeWidth={1.85} /><span>Delete target</span>
+                        </DropdownMenu.Item>
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu.Root>
+                  </div>
                 {/if}
               {/each}
             </div>
@@ -308,6 +320,7 @@
 </AlertDialog.Root>
 
 <style>
+  .target-list-entry { display: grid; grid-template-columns: minmax(0, 1fr) 30px; align-items: center; }
   .target-dialog-body {
     display: grid;
     grid-template-columns: 220px minmax(0, 1fr);

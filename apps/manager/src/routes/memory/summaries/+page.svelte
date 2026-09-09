@@ -8,7 +8,6 @@
   import MemoryWorkspaceNav from '$lib/components/MemoryWorkspaceNav.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import { memoryDetailHref } from '$lib/memory/routes';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
   import TextareaField from '$lib/components/TextareaField.svelte';
   import {
@@ -206,17 +205,15 @@
       {#if visibleSummaries.length === 0}
         <div class="empty-state">No summaries match the current filter.</div>
       {:else}
-        <div class="stack-list">
+        <div class="stack-list data-list">
           {#each visibleSummaries as summary}
-            <article class="summary-card">
+            <article class="summary-card data-list-row">
               <header class="summary-head">
                 <div class="summary-head-main">
                   <strong>{typeof summary.metadata?.topic_label === 'string' ? summary.metadata.topic_label : 'Summary'}</strong>
                   <span class="helper-text mono">{summary.id}</span>
                 </div>
                 <div class="inline-group">
-                  <StatusBadge tone="muted" label="Audited" />
-                  <StatusBadge tone="muted" label={summary.conversation_id ? 'conversation-linked' : 'manual'} />
                   <a class="btn-ghost btn-sm" href={memoryDetailHref('summaries', summary.id, activeUserId)}>Open</a>
                   {#if editingId === summary.id}
                     <button class="btn-ghost btn-sm" type="button" on:click={cancelEdit}>Cancel</button>
@@ -245,10 +242,6 @@
   .summary-card {
     display: grid;
     gap: 8px;
-    padding: 12px 14px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
   }
 
   .summary-head {

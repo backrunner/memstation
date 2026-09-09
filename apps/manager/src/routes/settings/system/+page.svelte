@@ -5,9 +5,9 @@
 
   import { fetchConfig, fetchHealth, saveConfig } from '$lib/api/client';
   import ConfirmActionDialog from '$lib/components/ConfirmActionDialog.svelte';
+  import SettingsSection from '$lib/components/SettingsSection.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import SelectField from '$lib/components/SelectField.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
   import SwitchField from '$lib/components/SwitchField.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
   import TextareaField from '$lib/components/TextareaField.svelte';
@@ -741,6 +741,7 @@
 
 <section class="page-stack">
   <PageHeader
+    sticky
     eyebrow="Administer"
     title="System"
     description="Runtime configuration — provider defaults, timeouts, thresholds, rerank, relations, CORS, and multimodal policy."
@@ -749,7 +750,6 @@
     <div slot="actions">
       {#if $targetState.session.authenticated && !loading}
         <div class="inline-group">
-          <span class="helper-text">Writes are audited.</span>
           <button
             class="btn-secondary btn-sm"
             type="button"
@@ -781,20 +781,125 @@
       <div class="notice-card is-success">{success}</div>
     {/if}
 
-    <div class="page-stack">
-      <section class="card page-stack">
-        <div class="page-header">
-          <div class="page-header-meta">
-            <h2 class="section-title">Database connection</h2>
-            <p class="panel-meta">{database.status} · {databaseSourceLabel(database.source)}</p>
+    <div class="system-workspace">
+      <nav class="system-section-nav" aria-label="System sections">
+        <a href="#system-traffic">Traffic</a>
+        <a href="#system-recall">Recall</a>
+        <a href="#system-rerank">Rerank</a>
+        <a href="#system-relations">Relations</a>
+        <a href="#system-web">Web</a>
+        <a href="#system-multimodal">Multimodal</a>
+        <a href="#system-database">Database connection</a>
+        <a href="#system-overrides">Overrides &amp; drift</a>
+      </nav>
+      <div class="settings-sheet">
+        <SettingsSection id="system-traffic" title="Traffic" description="Provider defaults and request thresholds.">
+<div class="form-grid two-up mobile-pairs">
+            <SelectField
+              label="Gateway default provider"
+              items={llmProviderItems}
+              bind:value={runtime.default_provider}
+              error={runtimeFieldError('default_provider')}
+            />
+            <SelectField
+              label="Internal default provider"
+              items={llmProviderItems}
+              bind:value={runtime.internal_default_provider}
+              error={runtimeFieldError('internal_default_provider')}
+            />
+            <TextInputField label="Conversation timeout (s)" bind:value={runtime.conversation_timeout_seconds} type="number" fieldClass="compact-field" min="0" error={runtimeFieldError('conversation_timeout_seconds')} />
+            <TextInputField label="Provider timeout (s)" bind:value={runtime.provider_timeout_seconds} type="number" fieldClass="compact-field" min="0" error={runtimeFieldError('provider_timeout_seconds')} />
+            <TextInputField label="Message threshold" bind:value={runtime.message_threshold} type="number" fieldClass="compact-field" min="0" error={runtimeFieldError('message_threshold')} />
+            <TextInputField label="Token threshold" bind:value={runtime.token_threshold} type="number" fieldClass="compact-field" min="0" error={runtimeFieldError('token_threshold')} />
           </div>
-          <StatusBadge
-            tone={database.configured ? 'success' : 'muted'}
-            label={database.configured ? 'Configured' : 'Not set'}
+        </SettingsSection>
+        <SettingsSection id="system-recall" title="Recall" description="Vector store &amp; injection budget.">
+<div class="form-grid two-up mobile-pairs">
+            <SelectField label="Vector store backend" items={vectorStoreItems} bind:value={runtime.vector_store_backend} />
+            <TextInputField label="Max context tokens" bind:value={runtime.max_context_tokens} type="number" fieldClass="compact-field" min="0" error={runtimeFieldError('max_context_tokens')} />
+            <TextInputField label="Max injection tokens" bind:value={runtime.max_injection_tokens} type="number" fieldClass="compact-field" min="0" error={runtimeFieldError('max_injection_tokens')} />
+          </div>
+        </SettingsSection>
+        <SettingsSection id="system-rerank" title="Rerank" description="Candidate shape and blending.">
+<div class="form-grid two-up mobile-pairs">
+            <TextInputField label="Cache TTL (s)" bind:value={runtime.cache_ttl_seconds} type="number" fieldClass="compact-field" min="0" error={runtimeFieldError('cache_ttl_seconds')} />
+            <TextInputField label="Rerank model" bind:value={runtime.rerank_model} placeholder="cohere:rerank-v3.5" />
+            <TextInputField label="Candidate multiplier" bind:value={runtime.rerank_candidate_multiplier} type="number" fieldClass="compact-field" min="1" max="16" error={runtimeFieldError('rerank_candidate_multiplier')} />
+            <TextInputField label="Min rerank candidates" bind:value={runtime.rerank_min_candidates} type="number" fieldClass="compact-field" min="1" error={runtimeFieldError('rerank_min_candidates')} />
+            <TextInputField label="Max rerank candidates" bind:value={runtime.rerank_max_candidates} type="number" fieldClass="compact-field" min="1" error={runtimeFieldError('rerank_max_candidates')} />
+            <TextInputField label="Rerank blend weight" bind:value={runtime.rerank_blend_weight} type="number" fieldClass="compact-field" min="0" max="1" step="0.05" error={runtimeFieldError('rerank_blend_weight')} />
+          </div>
+        </SettingsSection>
+        <SettingsSection id="system-relations" title="Relations" description="Hop graph decay settings.">
+<div class="form-grid two-up mobile-pairs">
+            <TextInputField label="Relation max hops" bind:value={runtime.memory_relation_max_hops} type="number" fieldClass="compact-field" min="1" max="4" error={runtimeFieldError('memory_relation_max_hops')} />
+            <TextInputField label="Hop decay lambda" bind:value={runtime.memory_relation_hop_decay_lambda} type="number" fieldClass="compact-field" min="0" max="2" step="0.05" error={runtimeFieldError('memory_relation_hop_decay_lambda')} />
+            <TextInputField label="Hop decay exponent" bind:value={runtime.memory_relation_hop_decay_exponent} type="number" fieldClass="compact-field" min="0.5" max="3" step="0.05" error={runtimeFieldError('memory_relation_hop_decay_exponent')} />
+          </div>
+        </SettingsSection>
+        <SettingsSection id="system-web" title="Web" description="Rate limits and cross-origin policy.">
+<div class="form-grid two-up mobile-pairs">
+          <TextInputField label="Rate limit RPS" bind:value={runtime.rate_limit_rps} type="number" fieldClass="compact-field" min="0" error={runtimeFieldError('rate_limit_rps')} />
+          <TextInputField label="Rate limit burst" bind:value={runtime.rate_limit_burst} type="number" fieldClass="compact-field" min="0" error={runtimeFieldError('rate_limit_burst')} />
+          <SwitchField
+            label="Cross-site admin cookie"
+            bind:checked={runtime.session_cookie_cross_site}
+          />
+          <TextareaField
+            label="CORS allowed origins"
+            bind:value={corsAllowedOriginsText}
+            rows={4}
+            placeholder="Leave empty to reflect any incoming Origin&#10;https://manager.example.com"
+            error={runtimeFieldError('cors_allowed_origins')}
+            fieldClass="field-span-2"
           />
         </div>
+        </SettingsSection>
+        <SettingsSection id="system-multimodal" title="Multimodal" description="Blob storage, extractors, and content policy.">
+<div class="system-subsection">
+          <span class="sidebar-label">Storage</span>
+          <div class="form-grid two-up mobile-pairs">
+            <SwitchField label="Multimodal ingestion" bind:checked={runtime.multimodal_enabled} />
+            <SelectField
+              label="Blob storage backend"
+              items={storageBackendItems}
+              bind:value={runtime.multimodal_storage_backend}
+              error={runtimeFieldError('multimodal_storage_backend')}
+            />
+            <TextInputField label="Local blob root" bind:value={runtime.multimodal_storage_local_root} error={runtimeFieldError('multimodal_storage_local_root')} />
+            <TextInputField label="Remote bucket" bind:value={runtime.multimodal_storage_bucket} placeholder="memstation-assets" />
+          </div>
+        </div>
 
-        <div class="database-summary">
+        <div class="system-subsection">
+          <span class="sidebar-label">Extractors</span>
+          <div class="form-grid two-up mobile-pairs">
+            <TextInputField label="Image extractor model" bind:value={runtime.multimodal_extract_image_model} placeholder="configured vision model" />
+            <TextInputField label="Audio extractor model" bind:value={runtime.multimodal_extract_audio_model} placeholder="configured ASR model" />
+            <TextInputField label="Video extractor model" bind:value={runtime.multimodal_extract_video_model} placeholder="configured video model" />
+            <TextInputField label="File extractor model" bind:value={runtime.multimodal_extract_file_model} placeholder="configured document model" />
+          </div>
+        </div>
+
+        <div class="system-subsection">
+          <span class="sidebar-label">Policies</span>
+          <div class="form-grid two-up mobile-pairs">
+            <TextInputField label="Max asset bytes" bind:value={runtime.multimodal_max_asset_bytes} type="number" fieldClass="compact-field" min="0" error={runtimeFieldError('multimodal_max_asset_bytes')} />
+            <SwitchField label="Audio transcription" bind:checked={runtime.multimodal_audio_transcription_enabled} />
+            <SwitchField label="Video frame sampling" bind:checked={runtime.multimodal_video_frame_sampling_enabled} />
+            <TextareaField
+              label="Allowed MIME types"
+              bind:value={allowedMimeTypesText}
+              rows={4}
+              placeholder="image/png&#10;application/pdf&#10;audio/mpeg"
+              error={runtimeFieldError('multimodal_allowed_mime_types')}
+              fieldClass="field-span-2"
+            />
+          </div>
+        </div>
+        </SettingsSection>
+        <SettingsSection id="system-database" title="Database connection" description={`${database.status} · ${databaseSourceLabel(database.source)}. Applied separately.`}>
+<div class="database-summary">
           <strong class="mono">{database.display ?? 'No database connection is configured.'}</strong>
           {#if database.updated_at}
             <span class="helper-text">Updated {new Date(database.updated_at).toLocaleString()}</span>
@@ -829,166 +934,9 @@
             {databaseSaving ? 'Applying…' : 'Apply database'}
           </button>
         </div>
-      </section>
-
-      <div class="grid-2 system-compact-grid">
-        <section class="card page-stack">
-          <div class="page-header">
-            <div class="page-header-meta">
-              <h2 class="section-title">Traffic</h2>
-              <p class="panel-meta">Provider defaults and request thresholds.</p>
-            </div>
-          </div>
-          <div class="form-grid two-up">
-            <SelectField
-              label="Gateway default provider"
-              items={llmProviderItems}
-              bind:value={runtime.default_provider}
-              error={runtimeFieldError('default_provider')}
-            />
-            <SelectField
-              label="Internal default provider"
-              items={llmProviderItems}
-              bind:value={runtime.internal_default_provider}
-              error={runtimeFieldError('internal_default_provider')}
-            />
-            <TextInputField label="Conversation timeout (s)" bind:value={runtime.conversation_timeout_seconds} type="number" min="0" error={runtimeFieldError('conversation_timeout_seconds')} />
-            <TextInputField label="Provider timeout (s)" bind:value={runtime.provider_timeout_seconds} type="number" min="0" error={runtimeFieldError('provider_timeout_seconds')} />
-            <TextInputField label="Message threshold" bind:value={runtime.message_threshold} type="number" min="0" error={runtimeFieldError('message_threshold')} />
-            <TextInputField label="Token threshold" bind:value={runtime.token_threshold} type="number" min="0" error={runtimeFieldError('token_threshold')} />
-          </div>
-        </section>
-
-        <section class="card page-stack">
-          <div class="page-header">
-            <div class="page-header-meta">
-              <h2 class="section-title">Recall</h2>
-              <p class="panel-meta">Vector store &amp; injection budget.</p>
-            </div>
-          </div>
-          <div class="form-grid two-up">
-            <SelectField label="Vector store backend" items={vectorStoreItems} bind:value={runtime.vector_store_backend} />
-            <TextInputField label="Max context tokens" bind:value={runtime.max_context_tokens} type="number" min="0" error={runtimeFieldError('max_context_tokens')} />
-            <TextInputField label="Max injection tokens" bind:value={runtime.max_injection_tokens} type="number" min="0" error={runtimeFieldError('max_injection_tokens')} />
-          </div>
-        </section>
-
-        <section class="card page-stack">
-          <div class="page-header">
-            <div class="page-header-meta">
-              <h2 class="section-title">Rerank</h2>
-              <p class="panel-meta">Candidate shape and blending.</p>
-            </div>
-          </div>
-          <div class="form-grid two-up">
-            <TextInputField label="Cache TTL (s)" bind:value={runtime.cache_ttl_seconds} type="number" min="0" error={runtimeFieldError('cache_ttl_seconds')} />
-            <TextInputField label="Rerank model" bind:value={runtime.rerank_model} placeholder="cohere:rerank-v3.5" />
-            <TextInputField label="Candidate multiplier" bind:value={runtime.rerank_candidate_multiplier} type="number" min="1" max="16" error={runtimeFieldError('rerank_candidate_multiplier')} />
-            <TextInputField label="Min rerank candidates" bind:value={runtime.rerank_min_candidates} type="number" min="1" error={runtimeFieldError('rerank_min_candidates')} />
-            <TextInputField label="Max rerank candidates" bind:value={runtime.rerank_max_candidates} type="number" min="1" error={runtimeFieldError('rerank_max_candidates')} />
-            <TextInputField label="Rerank blend weight" bind:value={runtime.rerank_blend_weight} type="number" min="0" max="1" step="0.05" error={runtimeFieldError('rerank_blend_weight')} />
-          </div>
-        </section>
-
-        <section class="card page-stack">
-          <div class="page-header">
-            <div class="page-header-meta">
-              <h2 class="section-title">Relations</h2>
-              <p class="panel-meta">Hop graph decay settings.</p>
-            </div>
-          </div>
-          <div class="form-grid two-up">
-            <TextInputField label="Relation max hops" bind:value={runtime.memory_relation_max_hops} type="number" min="1" max="4" error={runtimeFieldError('memory_relation_max_hops')} />
-            <TextInputField label="Hop decay lambda" bind:value={runtime.memory_relation_hop_decay_lambda} type="number" min="0" max="2" step="0.05" error={runtimeFieldError('memory_relation_hop_decay_lambda')} />
-            <TextInputField label="Hop decay exponent" bind:value={runtime.memory_relation_hop_decay_exponent} type="number" min="0.5" max="3" step="0.05" error={runtimeFieldError('memory_relation_hop_decay_exponent')} />
-          </div>
-        </section>
-      </div>
-
-      <section class="card page-stack">
-        <div class="page-header">
-          <div class="page-header-meta">
-            <h2 class="section-title">Web</h2>
-            <p class="panel-meta">Rate limits and cross-origin policy.</p>
-          </div>
-        </div>
-        <div class="form-grid two-up">
-          <TextInputField label="Rate limit RPS" bind:value={runtime.rate_limit_rps} type="number" min="0" error={runtimeFieldError('rate_limit_rps')} />
-          <TextInputField label="Rate limit burst" bind:value={runtime.rate_limit_burst} type="number" min="0" error={runtimeFieldError('rate_limit_burst')} />
-          <SwitchField
-            label="Cross-site admin cookie"
-            bind:checked={runtime.session_cookie_cross_site}
-          />
-          <TextareaField
-            label="CORS allowed origins"
-            bind:value={corsAllowedOriginsText}
-            rows={4}
-            placeholder="Leave empty to reflect any incoming Origin&#10;https://manager.example.com"
-            error={runtimeFieldError('cors_allowed_origins')}
-            fieldClass="field-span-2"
-          />
-        </div>
-      </section>
-
-      <section class="card page-stack">
-        <div class="page-header">
-          <div class="page-header-meta">
-            <h2 class="section-title">Multimodal</h2>
-            <p class="panel-meta">Blob storage, extractors, and content policy.</p>
-          </div>
-        </div>
-
-        <div class="system-subsection">
-          <span class="sidebar-label">Storage</span>
-          <div class="form-grid two-up">
-            <SwitchField label="Multimodal ingestion" bind:checked={runtime.multimodal_enabled} />
-            <SelectField
-              label="Blob storage backend"
-              items={storageBackendItems}
-              bind:value={runtime.multimodal_storage_backend}
-              error={runtimeFieldError('multimodal_storage_backend')}
-            />
-            <TextInputField label="Local blob root" bind:value={runtime.multimodal_storage_local_root} error={runtimeFieldError('multimodal_storage_local_root')} />
-            <TextInputField label="Remote bucket" bind:value={runtime.multimodal_storage_bucket} placeholder="memstation-assets" />
-          </div>
-        </div>
-
-        <div class="system-subsection">
-          <span class="sidebar-label">Extractors</span>
-          <div class="form-grid two-up">
-            <TextInputField label="Image extractor model" bind:value={runtime.multimodal_extract_image_model} placeholder="configured vision model" />
-            <TextInputField label="Audio extractor model" bind:value={runtime.multimodal_extract_audio_model} placeholder="configured ASR model" />
-            <TextInputField label="Video extractor model" bind:value={runtime.multimodal_extract_video_model} placeholder="configured video model" />
-            <TextInputField label="File extractor model" bind:value={runtime.multimodal_extract_file_model} placeholder="configured document model" />
-          </div>
-        </div>
-
-        <div class="system-subsection">
-          <span class="sidebar-label">Policies</span>
-          <div class="form-grid two-up">
-            <TextInputField label="Max asset bytes" bind:value={runtime.multimodal_max_asset_bytes} type="number" min="0" error={runtimeFieldError('multimodal_max_asset_bytes')} />
-            <SwitchField label="Audio transcription" bind:checked={runtime.multimodal_audio_transcription_enabled} />
-            <SwitchField label="Video frame sampling" bind:checked={runtime.multimodal_video_frame_sampling_enabled} />
-            <TextareaField
-              label="Allowed MIME types"
-              bind:value={allowedMimeTypesText}
-              rows={4}
-              placeholder="image/png&#10;application/pdf&#10;audio/mpeg"
-              error={runtimeFieldError('multimodal_allowed_mime_types')}
-              fieldClass="field-span-2"
-            />
-          </div>
-        </div>
-      </section>
-
-      <section class="card page-stack">
-        <div class="page-header">
-          <div class="page-header-meta">
-            <h2 class="section-title">Overrides &amp; drift</h2>
-            <p class="panel-meta">Fields deviating from deployment defaults or the live runtime.</p>
-          </div>
-        </div>
-        {#if trackedRuntimeKeys().length === 0}
+        </SettingsSection>
+        <SettingsSection id="system-overrides" title="Overrides &amp; drift" description="Fields deviating from deployment defaults or the live runtime.">
+{#if trackedRuntimeKeys().length === 0}
           <div class="empty-state">No overrides — system is using deployment defaults.</div>
         {:else}
           <div class="runtime-field-list">
@@ -1021,7 +969,8 @@
             {/each}
           </div>
         {/if}
-      </section>
+        </SettingsSection>
+      </div>
     </div>
   {/if}
 </section>
@@ -1038,9 +987,11 @@
 />
 
 <style>
-  .system-compact-grid {
-    align-items: start;
-  }
+  .system-workspace { display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 24px; align-items: start; }
+  .system-section-nav { display: grid; gap: 2px; position: sticky; top: 148px; }
+  .system-section-nav a { display: flex; align-items: center; min-height: 36px; padding: 6px 10px; border-radius: var(--radius-sm); color: var(--text-secondary); font-size: var(--font-size-md); }
+  .system-section-nav a:hover { color: var(--text); background: var(--surface-muted); }
+  .settings-sheet { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
 
   .system-subsection {
     display: grid;
@@ -1055,6 +1006,8 @@
   }
 
   .database-summary {
+    min-width: 0;
+    overflow-wrap: anywhere;
     display: grid;
     gap: 3px;
     padding: 10px 12px;
@@ -1064,8 +1017,8 @@
   }
 
   @media (max-width: 900px) {
-    .system-compact-grid {
-      grid-template-columns: 1fr;
-    }
+    .system-workspace { grid-template-columns: 1fr; gap: 16px; }
+    .system-section-nav { display: flex; position: static; overflow-x: auto; min-width: 0; border-bottom: 1px solid var(--border); }
+    .system-section-nav a { flex-shrink: 0; min-height: 44px; }
   }
 </style>

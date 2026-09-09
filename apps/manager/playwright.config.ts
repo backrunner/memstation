@@ -30,6 +30,13 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome']
       }
+    },
+    {
+      name: 'mobile-webkit',
+      grep: /mobile navigation|mobile filters|short mobile dialogs|mobile settings|memory search keeps|task queue changes|primary admin routes|system section navigation|memory detail prioritizes/,
+      use: {
+        ...devices['iPhone 13']
+      }
     }
   ],
   webServer: [

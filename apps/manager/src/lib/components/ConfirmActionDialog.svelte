@@ -21,14 +21,15 @@
   }
 
   function confirm(): void {
+    if (busy) return;
     dispatch('confirm');
   }
 </script>
 
-<AlertDialog.Root bind:open>
+<AlertDialog.Root {open} onOpenChange={(nextOpen) => { if (!nextOpen) cancel(); }}>
   <AlertDialog.Portal>
     <AlertDialog.Overlay class="dialog-overlay" />
-    <AlertDialog.Content class="dialog-card confirm-action-dialog">
+    <AlertDialog.Content class="dialog-card confirm-action-dialog" escapeKeydownBehavior={busy ? 'ignore' : 'close'} aria-busy={busy}>
       <div class="confirm-action-copy">
         <AlertDialog.Title class="section-title" level={3}>{title}</AlertDialog.Title>
         <AlertDialog.Description class="panel-meta">{description}</AlertDialog.Description>
@@ -55,6 +56,8 @@
 
 <style>
   :global(.confirm-action-dialog) {
+    display: grid;
+    gap: 20px;
     width: min(440px, calc(100vw - 32px));
   }
 
@@ -75,11 +78,12 @@
   }
 
   .confirm-action-audit {
-    border-color: var(--warning-soft);
-    background: var(--warning-soft);
-    color: var(--warning);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
     font-family: var(--font-sans);
-    font-weight: 600;
+    font-weight: 400;
   }
 
   .confirm-action-actions {
