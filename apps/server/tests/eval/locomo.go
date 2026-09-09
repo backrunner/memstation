@@ -87,12 +87,36 @@ func buildLOCOMODataset(samples []locomoSample, options LOCOMOOptions) (Dataset,
 }
 
 func collectLOCOMODocuments(sample locomoSample) []locomoDoc {
-	docs := make([]locomoDoc, 0)
-	docs = append(docs, flattenLOCOMOSection(sample.SampleID, conversationRefPrefix(sample.Conversation), "conversation", sample.Conversation, domain.MemoryTypeFact)...)
-	docs = append(docs, flattenLOCOMOSection(sample.SampleID, "event", "event_summary", sample.EventSummary, domain.MemoryTypeSummary)...)
-	docs = append(docs, flattenLOCOMOSection(sample.SampleID, "observation", "observation", sample.Observation, domain.MemoryTypeFact)...)
-	docs = append(docs, flattenLOCOMOSection(sample.SampleID, "session", "session_summary", sample.SessionSummary, domain.MemoryTypeSummary)...)
-	return docs
+	// This track indexes raw dialogue only. event_summary is annotated gold;
+	// mixing it or upstream-generated memories into the corpus leaks evaluation
+	// material and changes the meaning of evidence-turn retrieval scores.
+	if sessions, ok := sample.Conversation.(map[string]any); ok {
+		var docs []locomoDoc
+		for key, value := range sessions {
+			if !strings.HasPrefix(key, "session_") {
+				continue
+			}
+			index, err := strconv.Atoi(strings.TrimPrefix(key, "session_"))
+			if err != nil {
+				continue
+			}
+			turns, ok := value.([]any)
+			if !ok {
+				continue
+			}
+			items := flattenLOCOMOSection(sample.SampleID, fmt.Sprintf("D%d", index), "conversation", turns, domain.MemoryTypeFact)
+			date := firstNonEmptyString(sessions, key+"_date_time")
+			for i := range items {
+				items[i].Document.Metadata["session_date"] = date
+				if date != "" {
+					items[i].Document.Content = date + "\n" + items[i].Document.Content
+				}
+			}
+			docs = append(docs, items...)
+		}
+		return docs
+	}
+	return flattenLOCOMOSection(sample.SampleID, conversationRefPrefix(sample.Conversation), "conversation", sample.Conversation, domain.MemoryTypeFact)
 }
 
 func buildLOCOMOQueries(sample locomoSample, docByRef map[string]DatasetDocument, options LOCOMOOptions) ([]QueryCase, error) {
@@ -125,7 +149,7 @@ func buildLOCOMOQueries(sample locomoSample, docByRef map[string]DatasetDocument
 			continue
 		}
 		if userID == "" {
-			userID = locomoUserID(sample.SampleID, firstNonEmptyString(item, "speaker", "role", "name"))
+			userID = locomoUserID(sample.SampleID, "")
 		}
 		queries = append(queries, QueryCase{
 			CaseID:          fmt.Sprintf("locomo.%s.%02d", sample.SampleID, idx+1),
@@ -189,12 +213,19 @@ func buildLOCOMODoc(sampleID, ref, section, speaker, content string, kind domain
 	if content == "" {
 		return locomoDoc{}
 	}
+	if speaker != "" {
+		content = speaker + ": " + content
+	}
 	normalizedRef := strings.TrimSpace(ref)
 	if normalizedRef == "" {
 		normalizedRef = section
 	}
 	idPrefix := strings.NewReplacer(":", "-", "/", "-", " ", "-").Replace(normalizedRef)
-	userID := locomoUserID(sampleID, speaker)
+	// A LOCOMO sample is one user's dialogue history. Speaker is evidence
+	// metadata, not a tenancy boundary. Splitting documents by speaker made
+	// half of the conversation invisible to retrieval and produced a biased
+	// benchmark with artificial wrong-user misses.
+	userID := locomoUserID(sampleID, "")
 	now := time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC)
 	return locomoDoc{
 		Ref: sampleID + "::" + normalizedRef,

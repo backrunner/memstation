@@ -70,26 +70,26 @@ func writeJSON(path string, value any) error {
 func markdownReport(report BenchmarkReport) string {
 	var builder strings.Builder
 	builder.WriteString("# MemStation Memory Benchmark\n\n")
-	builder.WriteString(fmt.Sprintf("- Dataset: `%s`\n", report.Dataset))
-	builder.WriteString(fmt.Sprintf("- Generated at: `%s`\n", report.GeneratedAt.Format("2006-01-02 15:04:05 MST")))
-	builder.WriteString(fmt.Sprintf("- Embedding mode: `%s`\n", report.Embedding.Mode))
+	fmt.Fprintf(&builder, "- Dataset: `%s`\n", report.Dataset)
+	fmt.Fprintf(&builder, "- Generated at: `%s`\n", report.GeneratedAt.Format("2006-01-02 15:04:05 MST"))
+	fmt.Fprintf(&builder, "- Embedding mode: `%s`\n", report.Embedding.Mode)
 	if report.Embedding.Provider != "" {
-		builder.WriteString(fmt.Sprintf("- Embedding provider: `%s`\n", report.Embedding.Provider))
+		fmt.Fprintf(&builder, "- Embedding provider: `%s`\n", report.Embedding.Provider)
 	}
 	if report.Embedding.Model != "" {
-		builder.WriteString(fmt.Sprintf("- Embedding model: `%s`\n", report.Embedding.Model))
+		fmt.Fprintf(&builder, "- Embedding model: `%s`\n", report.Embedding.Model)
 	}
 	if report.Embedding.BaseURL != "" {
-		builder.WriteString(fmt.Sprintf("- Embedding endpoint: `%s`\n", report.Embedding.BaseURL))
+		fmt.Fprintf(&builder, "- Embedding endpoint: `%s`\n", report.Embedding.BaseURL)
 	}
 	if report.Description != "" {
-		builder.WriteString(fmt.Sprintf("- Description: %s\n", report.Description))
+		fmt.Fprintf(&builder, "- Description: %s\n", report.Description)
 	}
 	builder.WriteString("\n## Aggregate Metrics\n\n")
 	builder.WriteString("| Variant | Recall@3 | MRR | nDCG@5 | Negative leakage | Wrong-user leakage | Stale top3 | Relation hit |\n")
 	builder.WriteString("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n")
 	for _, item := range report.Variants {
-		builder.WriteString(fmt.Sprintf("| `%s` | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f |\n",
+		fmt.Fprintf(&builder, "| `%s` | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f | %.3f |\n",
 			item.Variant,
 			item.Aggregate.RecallAt3,
 			item.Aggregate.MRR,
@@ -97,41 +97,39 @@ func markdownReport(report BenchmarkReport) string {
 			item.Aggregate.NegativeLeakage,
 			item.Aggregate.WrongUserLeakage,
 			item.Aggregate.StaleFactTop3Rate,
-			item.Aggregate.RelationPositiveHitRate,
-		))
+			item.Aggregate.RelationPositiveHitRate)
 	}
 	if len(report.Comparisons) > 0 {
 		builder.WriteString("\n## Variant Comparisons\n\n")
 		builder.WriteString("| Baseline | Candidate | Recall@3 delta | MRR delta | nDCG@5 delta | Relation gain | Negative leak delta |\n")
 		builder.WriteString("| --- | --- | ---: | ---: | ---: | ---: | ---: |\n")
 		for _, item := range report.Comparisons {
-			builder.WriteString(fmt.Sprintf("| `%s` | `%s` | %.3f | %.3f | %.3f | %.3f | %.3f |\n",
+			fmt.Fprintf(&builder, "| `%s` | `%s` | %.3f | %.3f | %.3f | %.3f | %.3f |\n",
 				item.BaselineVariant,
 				item.CandidateVariant,
 				item.RecallAt3Delta,
 				item.MRRDelta,
 				item.NDCGAt5Delta,
 				item.RelationPositiveGain,
-				item.NegativeLeakageDelta,
-			))
+				item.NegativeLeakageDelta)
 		}
 	}
 	if report.Performance != nil {
 		builder.WriteString("\n## Performance Smoke\n\n")
-		builder.WriteString(fmt.Sprintf("- Variant: `%s`\n", report.Performance.Variant))
-		builder.WriteString(fmt.Sprintf("- Embedding mode: `%s`\n", report.Performance.Embedding.Mode))
+		fmt.Fprintf(&builder, "- Variant: `%s`\n", report.Performance.Variant)
+		fmt.Fprintf(&builder, "- Embedding mode: `%s`\n", report.Performance.Embedding.Mode)
 		if report.Performance.Embedding.Model != "" {
-			builder.WriteString(fmt.Sprintf("- Embedding model: `%s`\n", report.Performance.Embedding.Model))
+			fmt.Fprintf(&builder, "- Embedding model: `%s`\n", report.Performance.Embedding.Model)
 		}
-		builder.WriteString(fmt.Sprintf("- Samples: `%d`\n", report.Performance.Samples))
-		builder.WriteString(fmt.Sprintf("- P50: `%.3fms`\n", report.Performance.P50Millis))
-		builder.WriteString(fmt.Sprintf("- P95: `%.3fms`\n", report.Performance.P95Millis))
-		builder.WriteString(fmt.Sprintf("- Mean: `%.3fms`\n", report.Performance.MeanMillis))
+		fmt.Fprintf(&builder, "- Samples: `%d`\n", report.Performance.Samples)
+		fmt.Fprintf(&builder, "- P50: `%.3fms`\n", report.Performance.P50Millis)
+		fmt.Fprintf(&builder, "- P95: `%.3fms`\n", report.Performance.P95Millis)
+		fmt.Fprintf(&builder, "- Mean: `%.3fms`\n", report.Performance.MeanMillis)
 	}
 	if len(report.Failures) > 0 {
 		builder.WriteString("\n## Failure Samples\n\n")
 		for _, item := range report.Failures {
-			builder.WriteString(fmt.Sprintf("- `%s` / `%s`: %s\n", item.Variant, item.CaseID, strings.Join(item.Reasons, ", ")))
+			fmt.Fprintf(&builder, "- `%s` / `%s`: %s\n", item.Variant, item.CaseID, strings.Join(item.Reasons, ", "))
 		}
 	}
 	return builder.String()

@@ -503,7 +503,7 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 		if meta, ok := supersessionLineage[doc.NodeID]; ok {
 			doc = mergeLineageSearchMetadata(doc, meta)
 		}
-		if candidate.SupersessionBoost > 0 {
+		if candidate.SupersessionBoost > 0 || supersessionLineage[doc.NodeID].CurrentHeadID != "" {
 			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
 				"supersession_canonicalized": true,
 			})
@@ -853,6 +853,12 @@ func expandRelationScores(base map[string]float64, relations []domain.MemoryRela
 
 	cfg = cfg.normalized()
 	scoreMap := cloneScoreMap(base)
+	maxSeedScore := 0.0
+	for _, score := range base {
+		if score > maxSeedScore {
+			maxSeedScore = score
+		}
+	}
 	relatedMap := map[string][]domain.RelatedMemory{}
 	graph := map[string][]edge{}
 
@@ -885,7 +891,19 @@ func expandRelationScores(base map[string]float64, relations []domain.MemoryRela
 		hopPenalty := cfg.hopPenalty(hop)
 		for nodeID, score := range frontier {
 			for _, edge := range graph[nodeID] {
-				candidateScore := score * (1 + relationBoostFactor(edge.relationType)*clamp(edge.weight, 0.2, 1.0)) * hopPenalty
+				// Graph propagation is a bounded contribution. A graph-only
+				// candidate must not outrank a direct semantic hit solely because
+				// its path contains several edges.
+				candidateScore := score * relationBoostFactor(edge.relationType) * clamp(edge.weight, 0, 1) * hopPenalty
+				if candidateScore <= 0 {
+					continue
+				}
+				// A graph-only candidate may be promoted, but it must not outrank
+				// the strongest direct semantic seed merely because a path has
+				// several edges. Keep it just below the direct candidate ceiling.
+				if _, direct := base[edge.nodeID]; !direct && maxSeedScore > 0 {
+					candidateScore = minFloat(candidateScore, maxSeedScore*0.95)
+				}
 				if candidateScore <= scoreMap[edge.nodeID] {
 					continue
 				}
@@ -965,7 +983,10 @@ func (cfg RelationRecallConfig) hopPenalty(hop int) float64 {
 	}
 	// A stretched exponential keeps near associations usable while making
 	// farther hops decay faster than a simple linear penalty.
-	distance := float64(hop + 1)
+	distance := float64(hop)
+	if distance <= 0 {
+		return 1
+	}
 	return clamp(math.Exp(-cfg.HopDecayLambda*math.Pow(distance, cfg.HopDecayExponent)), 0, 1)
 }
 
@@ -1187,16 +1208,14 @@ type relationTraversalEdge struct {
 }
 
 func relationTraversalEdges(relation domain.MemoryRelation) []relationTraversalEdge {
-	switch strings.TrimSpace(strings.ToLower(relation.RelationType)) {
-	case domain.MemoryRelationDerivedFrom, "summarized_into", "promoted_to_key_memory", domain.MemoryRelationProducedArtifact, domain.MemoryRelationResultedIn:
-		return []relationTraversalEdge{{fromNodeID: relation.SrcNodeID, toNodeID: relation.DstNodeID}}
-	case domain.MemoryRelationSupports:
-		return []relationTraversalEdge{{fromNodeID: relation.DstNodeID, toNodeID: relation.SrcNodeID}}
-	default:
-		return []relationTraversalEdge{
-			{fromNodeID: relation.SrcNodeID, toNodeID: relation.DstNodeID},
-			{fromNodeID: relation.DstNodeID, toNodeID: relation.SrcNodeID},
-		}
+	// Retrieval asks for a bounded neighbourhood of a seed, not for a causal
+	// traversal. Every semantic edge contributes both directions, while the
+	// relation type remains available for scoring and display. This also lets
+	// summaries reach their supporting segments and key memories reach their
+	// source facts.
+	return []relationTraversalEdge{
+		{fromNodeID: relation.SrcNodeID, toNodeID: relation.DstNodeID},
+		{fromNodeID: relation.DstNodeID, toNodeID: relation.SrcNodeID},
 	}
 }
 
@@ -1210,8 +1229,10 @@ func relationBoostFactor(relationType string) float64 {
 		return 0.2
 	case domain.MemoryRelationUsedTool, domain.MemoryRelationDependsOn:
 		return 0.16
-	case domain.MemoryRelationContradicts, domain.MemoryRelationReplaces:
-		return 0.08
+	case domain.MemoryRelationContradicts, domain.MemoryRelationReplaces, domain.MemoryRelationSupersedes:
+		// Contradictory and superseded history is retained for auditability but
+		// must never be promoted by neighbourhood expansion.
+		return 0
 	default:
 		return 0.18
 	}
@@ -1270,6 +1291,13 @@ func max(left, right int) int {
 
 func maxFloat(left, right float64) float64 {
 	if left > right {
+		return left
+	}
+	return right
+}
+
+func minFloat(left, right float64) float64 {
+	if left < right {
 		return left
 	}
 	return right

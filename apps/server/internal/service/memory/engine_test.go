@@ -6,6 +6,13 @@ import (
 	"memstation/apps/server/internal/domain"
 )
 
+func TestExpandRelationScoresDoesNotPromoteZeroWeightEdges(t *testing.T) {
+	scores, _ := expandRelationScores(map[string]float64{"seed": 1}, []domain.MemoryRelation{{SrcNodeID: "seed", DstNodeID: "disabled", RelationType: "related_to", Weight: 0}}, RelationRecallConfig{MaxHops: 2})
+	if _, ok := scores["disabled"]; ok {
+		t.Fatal("zero-weight edge promoted a neighbour")
+	}
+}
+
 func TestExpandRelationScoresAppliesHopPenalty(t *testing.T) {
 	t.Parallel()
 
@@ -48,13 +55,24 @@ func TestRelationRecallConfigHopPenaltyGrowsWithDistance(t *testing.T) {
 	if penalty1 <= 0 || penalty2 <= 0 || penalty3 <= 0 {
 		t.Fatalf("expected positive hop penalties, got hop1=%f hop2=%f hop3=%f", penalty1, penalty2, penalty3)
 	}
-	if penalty1 >= 1 {
-		t.Fatalf("expected first-hop relation penalty to remain below direct semantic recall, got %f", penalty1)
+	if penalty1 != 1 {
+		t.Fatalf("expected first-hop relation retention to preserve the seed score, got %f", penalty1)
 	}
 	if penalty1 <= penalty2 {
 		t.Fatalf("expected first-hop relation retention to stay above second-hop retention, got hop1=%f hop2=%f", penalty1, penalty2)
 	}
 	if penalty2 <= penalty3 {
 		t.Fatalf("expected second-hop relation retention to stay above third-hop retention, got hop2=%f hop3=%f", penalty2, penalty3)
+	}
+}
+
+func TestExpandRelationScoresTraversesSemanticEdgesInBothDirections(t *testing.T) {
+	t.Parallel()
+
+	scores, _ := expandRelationScores(map[string]float64{"summary": 1}, []domain.MemoryRelation{
+		{SrcNodeID: "segment", DstNodeID: "summary", RelationType: "summarized_into", Weight: 1},
+	}, RelationRecallConfig{MaxHops: 1, HopDecayLambda: 0.35, HopDecayExponent: 1.25})
+	if scores["segment"] <= 0 {
+		t.Fatalf("expected summary seed to reach its supporting segment, got %+v", scores)
 	}
 }

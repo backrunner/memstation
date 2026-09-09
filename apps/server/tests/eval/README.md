@@ -43,10 +43,19 @@ Embedding modes
 - `deterministic`: local deterministic vectors, only for smoke/regression and offline manual runs. This is not a real embedding-quality benchmark.
 - `provider`: OpenAI-compatible `/embeddings` evaluation using the configured model/endpoint/key. Use this for accuracy-sensitive local, manual, or dedicated benchmark runs.
 
+Evaluation contract
+- Accuracy claims must use provider embeddings and an explicit temporal/user split. Deterministic embeddings are only a code-path smoke test.
+- Retrieval is reported with Recall/Precision/Hit at k, MRR, graded nDCG, stale-fact exposure, negative leakage, wrong-user leakage, and relation-ablation deltas. Duplicate IDs earn no extra relevance but still occupy their original ranks. nDCG uses linear relevance gain and an ideal ranking of all positive judgments up to k, even when fewer results are returned.
+- LOCOMO indexes raw dialogue only: annotated `event_summary`, upstream `observation`, and `session_summary` are excluded. All turns in one sample share one benchmark principal; speakers and session dates remain available as context. This is evidence-turn retrieval, not the official end-task QA score.
+- LongMemEval uses the cleaned V1 session/turn evidence track for retrieval diagnostics and official-style QA prompts (including abstention) for end-task accuracy. Gold `has_answer` and question-type annotations stay outside indexed memory. QA rejects duplicate reference/hypothesis IDs before calling the judge; reports include coverage and missing IDs so partial submissions cannot look like full evaluations.
+- Graph retrieval uses bounded, bidirectional semantic neighbourhood expansion. The first hop has no additional distance penalty; edge weights and relation factors still apply. Deeper hops decay, zero-weight edges do not propagate, and contradiction/replacement/supersession edges do not promote stale history. The full vs `full_no_relations` comparison is diagnostic and should be read together with leakage and stale-fact rates.
+- Official-source review, benchmark versions, and remaining external validation scope: [2026-09-09 review](REVIEW-2026-09-09.md).
+
 CI policy
 - GitHub CI and nightly workflows do not run retrieval/ranking benchmark jobs and do not use Recall, nDCG, or benchmark latency as redlines.
 - Benchmark scripts still write artifacts for local, manual, or dedicated eval environments.
 - Hard benchmark enforcement is explicit opt-in via `MEMSTATION_ENFORCE_BENCHMARKS=true`; benchmark latency thresholds also require `MEMSTATION_PERF_P95_MS`.
+- Full repo-native and performance benchmark tests are skipped by default in `go test`; opt into diagnostic execution with `MEMSTATION_RUN_BENCHMARKS=true`. Parser, metric, isolation, and runner contract tests remain blocking correctness tests.
 
 Next step
 - See `reliability_benchmark_plan.md` for the proposed source-replay, rebuild-equivalence, activation-safety, and injection-reliability benchmark layers.

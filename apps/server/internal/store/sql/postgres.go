@@ -2752,7 +2752,20 @@ func (r *PostgresMemoryRepository) LinkDocuments(ctx context.Context, relation d
 	} else if stale {
 		return nil
 	}
-	_, err := r.db.ExecContext(ctx, `
+	var srcGeneration, dstGeneration string
+	if err := r.db.QueryRowContext(ctx, `
+		SELECT src.generation_id, dst.generation_id
+		FROM memory_nodes src JOIN memory_nodes dst ON dst.user_id = src.user_id
+		WHERE src.user_id = $1 AND src.id = $2 AND dst.id = $3
+	`, relation.UserID, relation.SrcNodeID, relation.DstNodeID).Scan(&srcGeneration, &dstGeneration); err != nil {
+		return fmt.Errorf("resolve relation endpoints: %w", err)
+	}
+	generationID, err := resolveRelationGeneration(relation.GenerationID, srcGeneration, dstGeneration)
+	if err != nil {
+		return err
+	}
+	relation.GenerationID = generationID
+	_, err = r.db.ExecContext(ctx, `
         INSERT INTO memory_relations (id, generation_id, user_id, src_node_id, dst_node_id, relation_type, weight, source, metadata, created_at, updated_at)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10)
         ON CONFLICT (user_id, src_node_id, dst_node_id, relation_type) DO UPDATE SET
@@ -3580,7 +3593,20 @@ func relationQuery(userID, generationID string, nodeIDs []string) (string, []any
 		args = append(args, nodeID)
 	}
 	generationArgIndex := len(args) + 1
-	generationClause := generationFilterClause("generation_id", generationArgIndex, userID, generationID, true)
+	// Relations are generation-scoped graph state. Including empty-generation
+	// rows here allows stale edges from a rebuild (or legacy data) to cross the
+	// active generation boundary. Key-memory edges are written with their
+	// resolved generation as well, so strict matching is safe.
+	generationClause := generationFilterClause("generation_id", generationArgIndex, userID, generationID, false)
+	if strings.TrimSpace(generationID) != "" {
+		// Legacy conflicting edges remain available for unscoped inspection,
+		// but must not carry retrieval across either endpoint's generation.
+		generationClause += `
+          AND EXISTS (SELECT 1 FROM memory_nodes src WHERE src.user_id = memory_relations.user_id
+              AND src.id = memory_relations.src_node_id AND (src.generation_id = '' OR src.generation_id = memory_relations.generation_id))
+          AND EXISTS (SELECT 1 FROM memory_nodes dst WHERE dst.user_id = memory_relations.user_id
+              AND dst.id = memory_relations.dst_node_id AND (dst.generation_id = '' OR dst.generation_id = memory_relations.generation_id))`
+	}
 	args = appendGenerationArg(args, userID, generationID)
 	inClause := strings.Join(placeholders, ",")
 	query := fmt.Sprintf(`

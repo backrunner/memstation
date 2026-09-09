@@ -36,24 +36,24 @@ func writeRecoveryJSON(path string, value any) error {
 func recoveryMarkdownReport(report worker.RecoveryReport) string {
 	var builder strings.Builder
 	builder.WriteString("# MemStation Worker Recovery Drill\n\n")
-	builder.WriteString(fmt.Sprintf("- Conversations: `%d`\n", report.Conversations))
-	builder.WriteString(fmt.Sprintf("- Worker concurrency: `%d`\n", report.WorkerConcurrency))
-	builder.WriteString(fmt.Sprintf("- Messages per turn: `%d`\n", report.MessagesPerTurn))
-	builder.WriteString(fmt.Sprintf("- Peak backlog: `%d`\n", report.PeakBacklog))
-	builder.WriteString(fmt.Sprintf("- Duration: `%.3fms`\n", report.DurationMillis))
-	builder.WriteString(fmt.Sprintf("- Throughput: `%.3f tasks/s`\n", report.ThroughputTasksPerSecond))
-	builder.WriteString(fmt.Sprintf("- Pending outbox: `%d`\n", report.PendingOutbox))
+	fmt.Fprintf(&builder, "- Conversations: `%d`\n", report.Conversations)
+	fmt.Fprintf(&builder, "- Worker concurrency: `%d`\n", report.WorkerConcurrency)
+	fmt.Fprintf(&builder, "- Messages per turn: `%d`\n", report.MessagesPerTurn)
+	fmt.Fprintf(&builder, "- Peak backlog: `%d`\n", report.PeakBacklog)
+	fmt.Fprintf(&builder, "- Duration: `%.3fms`\n", report.DurationMillis)
+	fmt.Fprintf(&builder, "- Throughput: `%.3f tasks/s`\n", report.ThroughputTasksPerSecond)
+	fmt.Fprintf(&builder, "- Pending outbox: `%d`\n", report.PendingOutbox)
 	builder.WriteString("\n## Completion\n\n")
 	builder.WriteString("| Signal | Count |\n")
 	builder.WriteString("| --- | ---: |\n")
-	builder.WriteString(fmt.Sprintf("| Finalized conversations | %d |\n", report.CompletedConversations))
-	builder.WriteString(fmt.Sprintf("| Completed summaries | %d |\n", report.SummaryCompleted))
-	builder.WriteString(fmt.Sprintf("| Completed analyses | %d |\n", report.AnalysisCompleted))
-	builder.WriteString(fmt.Sprintf("| Summary documents | %d |\n", report.SummaryDocuments))
-	builder.WriteString(fmt.Sprintf("| Fact documents | %d |\n", report.FactDocuments))
-	builder.WriteString(fmt.Sprintf("| Impression documents | %d |\n", report.ImpressionDocuments))
-	builder.WriteString(fmt.Sprintf("| Generic memory documents | %d |\n", report.GenericDocuments))
-	builder.WriteString(fmt.Sprintf("| Key memories | %d |\n", report.KeyMemories))
+	fmt.Fprintf(&builder, "| Finalized conversations | %d |\n", report.CompletedConversations)
+	fmt.Fprintf(&builder, "| Completed summaries | %d |\n", report.SummaryCompleted)
+	fmt.Fprintf(&builder, "| Completed analyses | %d |\n", report.AnalysisCompleted)
+	fmt.Fprintf(&builder, "| Summary documents | %d |\n", report.SummaryDocuments)
+	fmt.Fprintf(&builder, "| Fact documents | %d |\n", report.FactDocuments)
+	fmt.Fprintf(&builder, "| Impression documents | %d |\n", report.ImpressionDocuments)
+	fmt.Fprintf(&builder, "| Generic memory documents | %d |\n", report.GenericDocuments)
+	fmt.Fprintf(&builder, "| Key memories | %d |\n", report.KeyMemories)
 	builder.WriteString("\n## Task Timings\n\n")
 	builder.WriteString("| Task | Count | P50 | P95 | Mean | Max |\n")
 	builder.WriteString("| --- | ---: | ---: | ---: | ---: | ---: |\n")
@@ -64,14 +64,13 @@ func recoveryMarkdownReport(report worker.RecoveryReport) string {
 	sort.Strings(taskTypes)
 	for _, taskType := range taskTypes {
 		timing := report.TaskTimings[taskType]
-		builder.WriteString(fmt.Sprintf("| `%s` | %d | %.3fms | %.3fms | %.3fms | %.3fms |\n",
+		fmt.Fprintf(&builder, "| `%s` | %d | %.3fms | %.3fms | %.3fms | %.3fms |\n",
 			taskType,
 			timing.Count,
 			timing.P50Millis,
 			timing.P95Millis,
 			timing.MeanMillis,
-			timing.MaxMillis,
-		))
+			timing.MaxMillis)
 	}
 	return builder.String()
 }

@@ -11,6 +11,9 @@ import (
 
 func TestRepoNativeSmokeBenchmark(t *testing.T) {
 	t.Parallel()
+	if os.Getenv("MEMSTATION_RUN_BENCHMARKS") != "true" && os.Getenv("MEMSTATION_ENFORCE_BENCHMARKS") != "true" {
+		t.Skip("benchmark is opt-in; use scripts/eval/run-memory-smoke.sh")
+	}
 
 	dataset, err := LoadDataset(filepath.Join("testdata", "repo_native_golden.json"), DatasetFormatRepoNative)
 	if err != nil {
@@ -31,8 +34,10 @@ func TestRepoNativeSmokeBenchmark(t *testing.T) {
 	if report.Embedding.Mode != EmbeddingModeDeterministic {
 		t.Fatalf("expected smoke benchmark to default to deterministic embeddings, got %s", report.Embedding.Mode)
 	}
-	if err := ValidateSmokeExpectations(report); err != nil {
-		t.Fatalf("validate smoke expectations: %v", err)
+	if os.Getenv("MEMSTATION_ENFORCE_BENCHMARKS") == "true" {
+		if err := ValidateSmokeExpectations(report); err != nil {
+			t.Fatalf("validate smoke expectations: %v", err)
+		}
 	}
 	outDir := t.TempDir()
 	if err := WriteArtifacts(report, outDir); err != nil {

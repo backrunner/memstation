@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -56,6 +57,9 @@ type LongMemEvalQAMetric struct {
 }
 
 type LongMemEvalQASummary struct {
+	ReferenceCount       int                            `json:"reference_count"`
+	Coverage             float64                        `json:"coverage"`
+	MissingQuestionIDs   []string                       `json:"missing_question_ids,omitempty"`
 	EvaluatedCount       int                            `json:"evaluated_count"`
 	SkippedQuestionIDs   []string                       `json:"skipped_question_ids,omitempty"`
 	OverallAccuracy      float64                        `json:"overall_accuracy"`
@@ -131,13 +135,30 @@ func evaluateLongMemEvalQAWithHypotheses(ctx context.Context, references []longM
 	}
 	referenceByID := make(map[string]longMemEvalSample, len(references))
 	for _, item := range references {
-		if id := strings.TrimSpace(item.QuestionID); id != "" {
-			referenceByID[id] = item
+		id := strings.TrimSpace(item.QuestionID)
+		if id == "" {
+			return LongMemEvalQAEvaluation{}, fmt.Errorf("LongMemEval reference is missing question_id")
 		}
+		if _, duplicate := referenceByID[id]; duplicate {
+			return LongMemEvalQAEvaluation{}, fmt.Errorf("LongMemEval reference repeats question_id %q", id)
+		}
+		referenceByID[id] = item
 	}
 
 	results := make([]LongMemEvalQAResult, 0, len(hypotheses))
 	skipped := make([]string, 0)
+	seenHypotheses := make(map[string]struct{}, len(hypotheses))
+	for _, hypothesis := range hypotheses {
+		questionID := strings.TrimSpace(hypothesis.QuestionID)
+		if questionID == "" {
+			return LongMemEvalQAEvaluation{}, fmt.Errorf("LongMemEval hypothesis is missing question_id")
+		}
+		if _, duplicate := seenHypotheses[questionID]; duplicate {
+			return LongMemEvalQAEvaluation{}, fmt.Errorf("LongMemEval hypothesis repeats question_id %q", questionID)
+		}
+		seenHypotheses[questionID] = struct{}{}
+	}
+	// Validate the entire input before the first paid judge request.
 	for _, hypothesis := range hypotheses {
 		questionID := strings.TrimSpace(hypothesis.QuestionID)
 		reference, ok := referenceByID[questionID]
@@ -170,10 +191,21 @@ func evaluateLongMemEvalQAWithHypotheses(ctx context.Context, references []longM
 		})
 	}
 
+	summary := summarizeLongMemEvalQAResults(results, skipped)
+	summary.ReferenceCount = len(referenceByID)
+	if summary.ReferenceCount > 0 {
+		summary.Coverage = float64(len(results)) / float64(summary.ReferenceCount)
+	}
+	for id := range referenceByID {
+		if _, supplied := seenHypotheses[id]; !supplied {
+			summary.MissingQuestionIDs = append(summary.MissingQuestionIDs, id)
+		}
+	}
+	sort.Strings(summary.MissingQuestionIDs)
 	return LongMemEvalQAEvaluation{
 		GeneratedAt: time.Now().UTC(),
 		Judge:       judgeOptions.runInfo(),
-		Summary:     summarizeLongMemEvalQAResults(results, skipped),
+		Summary:     summary,
 		Results:     results,
 	}, nil
 }
@@ -373,20 +405,24 @@ func writeLongMemEvalQAResultsJSONL(path string, results []LongMemEvalQAResult) 
 func markdownLongMemEvalQAReport(evaluation LongMemEvalQAEvaluation) string {
 	var builder strings.Builder
 	builder.WriteString("# LongMemEval QA Auto-Eval\n\n")
-	builder.WriteString(fmt.Sprintf("- Generated at: `%s`\n", evaluation.GeneratedAt.Format("2006-01-02 15:04:05 MST")))
-	builder.WriteString(fmt.Sprintf("- Judge provider: `%s`\n", evaluation.Judge.Provider))
-	builder.WriteString(fmt.Sprintf("- Judge model: `%s`\n", evaluation.Judge.Model))
+	fmt.Fprintf(&builder, "- Generated at: `%s`\n", evaluation.GeneratedAt.Format("2006-01-02 15:04:05 MST"))
+	fmt.Fprintf(&builder, "- Judge provider: `%s`\n", evaluation.Judge.Provider)
+	fmt.Fprintf(&builder, "- Judge model: `%s`\n", evaluation.Judge.Model)
 	if evaluation.Judge.BaseURL != "" {
-		builder.WriteString(fmt.Sprintf("- Judge endpoint: `%s`\n", evaluation.Judge.BaseURL))
+		fmt.Fprintf(&builder, "- Judge endpoint: `%s`\n", evaluation.Judge.BaseURL)
 	}
-	builder.WriteString(fmt.Sprintf("- Evaluated questions: `%d`\n", evaluation.Summary.EvaluatedCount))
+	fmt.Fprintf(&builder, "- Evaluated questions: `%d`\n", evaluation.Summary.EvaluatedCount)
+	fmt.Fprintf(&builder, "- Reference questions: `%d`; coverage: `%.4f`\n", evaluation.Summary.ReferenceCount, evaluation.Summary.Coverage)
+	if len(evaluation.Summary.MissingQuestionIDs) > 0 {
+		fmt.Fprintf(&builder, "- Missing hypotheses: `%s`\n", strings.Join(evaluation.Summary.MissingQuestionIDs, ", "))
+	}
 	if len(evaluation.Summary.SkippedQuestionIDs) > 0 {
-		builder.WriteString(fmt.Sprintf("- Skipped hypotheses: `%d`\n", len(evaluation.Summary.SkippedQuestionIDs)))
+		fmt.Fprintf(&builder, "- Skipped hypotheses: `%d`\n", len(evaluation.Summary.SkippedQuestionIDs))
 	}
 	builder.WriteString("\n## Summary\n\n")
-	builder.WriteString(fmt.Sprintf("- Overall accuracy: `%.4f`\n", evaluation.Summary.OverallAccuracy))
-	builder.WriteString(fmt.Sprintf("- Task-averaged accuracy: `%.4f`\n", evaluation.Summary.TaskAveragedAccuracy))
-	builder.WriteString(fmt.Sprintf("- Abstention accuracy: `%.4f` (`%d`)\n", evaluation.Summary.AbstentionAccuracy, evaluation.Summary.AbstentionCount))
+	fmt.Fprintf(&builder, "- Overall accuracy: `%.4f`\n", evaluation.Summary.OverallAccuracy)
+	fmt.Fprintf(&builder, "- Task-averaged accuracy: `%.4f`\n", evaluation.Summary.TaskAveragedAccuracy)
+	fmt.Fprintf(&builder, "- Abstention accuracy: `%.4f` (`%d`)\n", evaluation.Summary.AbstentionAccuracy, evaluation.Summary.AbstentionCount)
 	builder.WriteString("\n## By Question Type\n\n")
 	builder.WriteString("| Question Type | Accuracy | Count |\n")
 	builder.WriteString("| --- | ---: | ---: |\n")
@@ -399,7 +435,7 @@ func markdownLongMemEvalQAReport(evaluation LongMemEvalQAEvaluation) string {
 		"knowledge-update",
 	} {
 		metric := evaluation.Summary.ByType[questionType]
-		builder.WriteString(fmt.Sprintf("| `%s` | %.4f | %d |\n", questionType, metric.Accuracy, metric.Count))
+		fmt.Fprintf(&builder, "| `%s` | %.4f | %d |\n", questionType, metric.Accuracy, metric.Count)
 	}
 	return builder.String()
 }

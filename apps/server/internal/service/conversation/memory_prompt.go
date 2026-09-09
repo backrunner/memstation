@@ -102,7 +102,7 @@ func buildMemoryMessageReference(message domain.UnifiedMessage, options memoryPr
 	}
 
 	parts := make([]string, 0, 3)
-	if !(message.Role == domain.RoleTool && len(message.ToolResults) > 0) {
+	if message.Role != domain.RoleTool || len(message.ToolResults) == 0 {
 		if text := compactMessageText(message, options); text != "" {
 			parts = append(parts, text)
 		}

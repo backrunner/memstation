@@ -3,6 +3,7 @@ package eval
 import (
 	"math"
 	"sort"
+	"strings"
 )
 
 type AggregateMetrics struct {
@@ -191,15 +192,21 @@ func hitAt(results []RankedResult, positives map[string]struct{}, limit int) boo
 }
 
 func countMatches(results []RankedResult, wanted map[string]struct{}, limit int) int {
-	if len(wanted) == 0 {
+	if len(wanted) == 0 || limit <= 0 {
 		return 0
 	}
 	if limit > len(results) {
 		limit = len(results)
 	}
 	hits := 0
+	seen := make(map[string]struct{}, limit)
 	for idx := 0; idx < limit; idx++ {
-		if _, ok := wanted[results[idx].Document.ID]; ok {
+		id := results[idx].Document.ID
+		if _, duplicate := seen[id]; duplicate {
+			continue
+		}
+		seen[id] = struct{}{}
+		if _, ok := wanted[id]; ok {
 			hits++
 		}
 	}
@@ -219,12 +226,15 @@ func ndcgAt(results []RankedResult, graded map[string]float64, positives map[str
 	if len(positives) == 0 || limit <= 0 {
 		return 0
 	}
-	if limit > len(results) {
-		limit = len(results)
-	}
 	dcg := 0.0
-	for idx := 0; idx < limit; idx++ {
-		rel := relevanceFor(results[idx].Document.ID, graded, positives)
+	seen := make(map[string]struct{})
+	for idx := 0; idx < limit && idx < len(results); idx++ {
+		id := results[idx].Document.ID
+		if _, duplicate := seen[id]; duplicate {
+			continue
+		}
+		seen[id] = struct{}{}
+		rel := relevanceFor(id, graded, positives)
 		if rel == 0 {
 			continue
 		}
@@ -261,7 +271,9 @@ func relevanceFor(id string, graded map[string]float64, positives map[string]str
 
 func wrongUserLeak(results []RankedResult, userID string) bool {
 	for _, item := range results {
-		if item.Document.UserID != "" && item.Document.UserID != userID {
+		// A result without an owner is unsafe too: it cannot be proven to belong
+		// to the query principal and would be rejected by the production store.
+		if strings.TrimSpace(item.Document.UserID) == "" || item.Document.UserID != userID {
 			return true
 		}
 	}
@@ -291,12 +303,7 @@ func relationHitRate(results []RankedResult, relationPositives map[string]struct
 	if len(relationPositives) == 0 {
 		return 0
 	}
-	found := 0
-	for _, item := range results {
-		if _, ok := relationPositives[item.Document.ID]; ok {
-			found++
-		}
-	}
+	found := countMatches(results, relationPositives, len(results))
 	return float64(found) / float64(len(relationPositives))
 }
 

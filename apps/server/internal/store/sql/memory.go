@@ -923,6 +923,26 @@ func (r *InMemoryMemoryRepository) LinkDocuments(_ context.Context, relation dom
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	var srcGeneration, dstGeneration string
+	for _, doc := range r.documents {
+		if doc.UserID != relation.UserID {
+			if doc.NodeID == relation.SrcNodeID || doc.NodeID == relation.DstNodeID {
+				return errors.New("memory relation crosses user boundary")
+			}
+			continue
+		}
+		if doc.NodeID == relation.SrcNodeID {
+			srcGeneration = doc.GenerationID
+		}
+		if doc.NodeID == relation.DstNodeID {
+			dstGeneration = doc.GenerationID
+		}
+	}
+	generationID, err := resolveRelationGeneration(relation.GenerationID, srcGeneration, dstGeneration)
+	if err != nil {
+		return err
+	}
+	relation.GenerationID = generationID
 	if relation.ID == "" {
 		relation.ID = uuid.NewString()
 	}
@@ -946,6 +966,22 @@ func (r *InMemoryMemoryRepository) LinkDocuments(_ context.Context, relation dom
 	return nil
 }
 
+// Generationless nodes (notably Key Memory) may join a scoped graph. Two
+// scoped endpoints must agree; inferring from an arbitrary endpoint is unsafe.
+func resolveRelationGeneration(requested, src, dst string) (string, error) {
+	resolved := strings.TrimSpace(requested)
+	for _, generation := range []string{strings.TrimSpace(src), strings.TrimSpace(dst)} {
+		if generation == "" {
+			continue
+		}
+		if resolved != "" && resolved != generation {
+			return "", errors.New("memory relation crosses generation boundary")
+		}
+		resolved = generation
+	}
+	return resolved, nil
+}
+
 func (r *InMemoryMemoryRepository) DeleteRelationsByTarget(_ context.Context, userID, targetNodeID, relationType string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -966,6 +1002,14 @@ func (r *InMemoryMemoryRepository) ListRelations(_ context.Context, userID, gene
 	if len(nodeIDs) == 0 {
 		return nil, nil
 	}
+	nodeGenerations := make(map[string]string)
+	if strings.TrimSpace(generationID) != "" {
+		for _, doc := range r.documents {
+			if doc.UserID == userID {
+				nodeGenerations[doc.NodeID] = doc.GenerationID
+			}
+		}
+	}
 	allowed := map[string]struct{}{}
 	for _, nodeID := range nodeIDs {
 		allowed[nodeID] = struct{}{}
@@ -984,7 +1028,10 @@ func (r *InMemoryMemoryRepository) ListRelations(_ context.Context, userID, gene
 			if relation.UserID != userID {
 				continue
 			}
-			if !matchesGenerationValue(userID, generationID, relation.GenerationID, true) {
+			if !matchesGenerationValue(userID, generationID, relation.GenerationID, false) {
+				continue
+			}
+			if _, err := resolveRelationGeneration(relation.GenerationID, nodeGenerations[relation.SrcNodeID], nodeGenerations[relation.DstNodeID]); err != nil {
 				continue
 			}
 			_, srcMatch := frontier[relation.SrcNodeID]

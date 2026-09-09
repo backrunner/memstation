@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -26,6 +27,37 @@ func TestBuildLongMemEvalQAPromptKnowledgeUpdate(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "updated answer") {
 		t.Fatalf("expected knowledge-update guidance in prompt, got: %s", prompt)
+	}
+}
+
+func TestLongMemEvalQARejectsDuplicateIDsBeforeJudgingAndReportsCoverage(t *testing.T) {
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]string{"content": "yes"}}}})
+	}))
+	defer server.Close()
+	options := LongMemEvalQAJudgeOptions{Model: "fixture-judge", BaseURL: server.URL, APIKey: "fixture"}
+	refs := []longMemEvalSample{
+		{QuestionID: "a", QuestionType: "single-session-user", Question: "Where?", Answer: "Paris"},
+		{QuestionID: "b", QuestionType: "single-session-user", Question: "Who?", Answer: "Sam"},
+	}
+	hyp := LongMemEvalQAHypothesis{QuestionID: "a", Hypothesis: "Paris"}
+	if _, err := evaluateLongMemEvalQAWithHypotheses(context.Background(), refs, []LongMemEvalQAHypothesis{hyp, hyp}, options); err == nil {
+		t.Fatal("duplicate hypotheses accepted")
+	}
+	if _, err := evaluateLongMemEvalQAWithHypotheses(context.Background(), []longMemEvalSample{refs[0], refs[0]}, []LongMemEvalQAHypothesis{hyp}, options); err == nil {
+		t.Fatal("duplicate references accepted")
+	}
+	if requests.Load() != 0 {
+		t.Fatal("invalid input reached paid judge")
+	}
+	evaluation, err := evaluateLongMemEvalQAWithHypotheses(context.Background(), refs, []LongMemEvalQAHypothesis{hyp}, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if evaluation.Summary.Coverage != 0.5 || evaluation.Summary.ReferenceCount != 2 || len(evaluation.Summary.MissingQuestionIDs) != 1 || evaluation.Summary.MissingQuestionIDs[0] != "b" {
+		t.Fatalf("incomplete coverage is not visible: %+v", evaluation.Summary)
 	}
 }
 

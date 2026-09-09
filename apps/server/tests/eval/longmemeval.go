@@ -184,7 +184,6 @@ func buildLongMemEvalSessionDocuments(sample longMemEvalSample, userID string) (
 			DecayFactor: 1,
 			Metadata: map[string]any{
 				"question_id":   sample.QuestionID,
-				"question_type": sample.QuestionType,
 				"session_id":    sessionID,
 				"session_index": idx + 1,
 				"granularity":   string(LongMemEvalGranularitySession),
@@ -234,11 +233,9 @@ func buildLongMemEvalTurnDocuments(sample longMemEvalSample, userID string) ([]D
 				DecayFactor: 1,
 				Metadata: map[string]any{
 					"question_id":   sample.QuestionID,
-					"question_type": sample.QuestionType,
 					"session_id":    sessionID,
 					"session_index": sessionIdx + 1,
 					"turn_index":    turnIdx + 1,
-					"has_answer":    turn.HasAnswer,
 					"granularity":   string(LongMemEvalGranularityTurn),
 				},
 				CreatedAt: sessionTime,

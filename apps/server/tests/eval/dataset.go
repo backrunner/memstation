@@ -3,6 +3,7 @@ package eval
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"sort"
 	"strings"
@@ -60,6 +61,7 @@ type DatasetDocument struct {
 
 type DatasetRelation struct {
 	ID           string         `json:"id,omitempty"`
+	GenerationID string         `json:"generation_id,omitempty"`
 	UserID       string         `json:"user_id"`
 	SrcNodeID    string         `json:"src_node_id"`
 	DstNodeID    string         `json:"dst_node_id"`
@@ -140,6 +142,8 @@ func (d Dataset) Validate() error {
 
 	docIDs := map[string]struct{}{}
 	nodeIDs := map[string]struct{}{}
+	docUsers := map[string]string{}
+	nodeUsers := map[string]string{}
 	for _, doc := range d.Documents {
 		if strings.TrimSpace(doc.ID) == "" {
 			return fmt.Errorf("dataset %q contains document without id", d.Name)
@@ -157,15 +161,28 @@ func (d Dataset) Validate() error {
 			return fmt.Errorf("dataset %q document id %q is duplicated", d.Name, doc.ID)
 		}
 		docIDs[doc.ID] = struct{}{}
+		docUsers[doc.ID] = doc.UserID
+		if _, exists := nodeIDs[doc.NodeID]; exists {
+			return fmt.Errorf("dataset %q node_id %q is duplicated", d.Name, doc.NodeID)
+		}
 		nodeIDs[doc.NodeID] = struct{}{}
+		nodeUsers[doc.NodeID] = doc.UserID
 	}
 
 	for _, relation := range d.Relations {
+		if strings.TrimSpace(relation.UserID) == "" {
+			return fmt.Errorf("dataset %q relation is missing user_id", d.Name)
+		}
 		if _, ok := nodeIDs[relation.SrcNodeID]; !ok {
 			return fmt.Errorf("dataset %q relation source node %q does not exist", d.Name, relation.SrcNodeID)
 		}
 		if _, ok := nodeIDs[relation.DstNodeID]; !ok {
 			return fmt.Errorf("dataset %q relation destination node %q does not exist", d.Name, relation.DstNodeID)
+		}
+		// Relations are tenant scoped. Refusing cross-user edges here prevents
+		// a graph benchmark from masking a production isolation defect.
+		if relation.UserID != nodeUsers[relation.SrcNodeID] || relation.UserID != nodeUsers[relation.DstNodeID] {
+			return fmt.Errorf("dataset %q relation %q crosses user boundary", d.Name, relation.ID)
 		}
 	}
 
@@ -186,6 +203,34 @@ func (d Dataset) Validate() error {
 		}
 		if len(query.Positives) == 0 {
 			return fmt.Errorf("dataset %q query %q must define positives", d.Name, query.CaseID)
+		}
+		if query.GradedRelevance != nil {
+			for id, relevance := range query.GradedRelevance {
+				if _, ok := docIDs[id]; !ok || relevance < 0 || math.IsNaN(relevance) || math.IsInf(relevance, 0) {
+					return fmt.Errorf("dataset %q query %q has invalid graded relevance for %q", d.Name, query.CaseID, id)
+				}
+			}
+		}
+		seenPositive := map[string]struct{}{}
+		for _, id := range query.Positives {
+			if _, duplicate := seenPositive[id]; duplicate {
+				return fmt.Errorf("dataset %q query %q repeats positive %q", d.Name, query.CaseID, id)
+			}
+			seenPositive[id] = struct{}{}
+			if docUsers[id] != query.UserID {
+				return fmt.Errorf("dataset %q query %q positive %q belongs to another user", d.Name, query.CaseID, id)
+			}
+		}
+		for id, relevance := range query.GradedRelevance {
+			_, positive := seenPositive[id]
+			if (relevance > 0) != positive {
+				return fmt.Errorf("dataset %q query %q has inconsistent positive and graded relevance for %q", d.Name, query.CaseID, id)
+			}
+		}
+		for _, id := range query.Negatives {
+			if _, positive := seenPositive[id]; positive {
+				return fmt.Errorf("dataset %q query %q marks %q as both positive and negative", d.Name, query.CaseID, id)
+			}
 		}
 		for _, id := range append(append([]string{}, query.Positives...), append(query.Negatives, query.StaleDocumentIDs...)...) {
 			if _, ok := docIDs[id]; !ok {
@@ -230,6 +275,7 @@ func (doc DatasetDocument) ToDomain() domain.MemoryDocument {
 func (relation DatasetRelation) ToDomain() domain.MemoryRelation {
 	return domain.MemoryRelation{
 		ID:           relation.ID,
+		GenerationID: relation.GenerationID,
 		UserID:       relation.UserID,
 		SrcNodeID:    relation.SrcNodeID,
 		DstNodeID:    relation.DstNodeID,

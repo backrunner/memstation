@@ -2,6 +2,7 @@ package eval
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -10,6 +11,9 @@ import (
 
 func TestPerformanceSmoke(t *testing.T) {
 	t.Parallel()
+	if os.Getenv("MEMSTATION_RUN_BENCHMARKS") != "true" {
+		t.Skip("performance benchmark is opt-in; use scripts/eval/run-performance-smoke.sh")
+	}
 
 	dataset, err := LoadDataset(filepath.Join("testdata", "repo_native_golden.json"), DatasetFormatRepoNative)
 	if err != nil {
