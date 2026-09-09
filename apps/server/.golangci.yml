@@ -1,19 +1,33 @@
+version: "2"
 run:
   timeout: 5m
   tests: true
-
-issues:
-  exclude-dirs:
-    - ent
-    - graph/generated
-    - graph/model
-
 linters:
-  disable-all: true
+  default: none
   enable:
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
     - unused
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - ent
+      - graph/generated
+      - graph/model
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
