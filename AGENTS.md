@@ -577,7 +577,7 @@ nightly 回归不是可选项，v1.0 必须预留并最终落地，但 nightly C
 
 LOCOMO full benchmark、ranking ablation、模型与记忆排序变更前后的 benchmark 对比，保留在本地 / 手动 / 专用评测环境运行，不作为 GitHub CI / nightly 的红绿判定。
 
-Nightly 的 worker recovery drill 与 backup/restore drill 必须保持阻塞；诊断 artifact 上传可以 best-effort，并使用短保留时间，避免 GitHub artifact storage quota 已满时把已经通过的 nightly drill 判定为失败。定时 nightly 应先检查同分支上一条已完成 nightly 的 `head_sha`，如当前提交已经被覆盖则直接成功跳过重型 drill；手动 `workflow_dispatch` 必须保留强制运行能力。
+Nightly 的 worker recovery drill 与 backup/restore drill 必须保持阻塞；诊断 artifact 上传可以 best-effort，并使用短保留时间，避免 GitHub artifact storage quota 已满时把已经通过的 nightly drill 判定为失败。当前 GitHub nightly workflow 已移除，可靠性 drill 通过 `scripts/ops/` 下的脚本按需手动运行；若重新落地定时 nightly，应先检查同分支上一条已完成 nightly 的 `head_sha` 和 `conclusion`，只有同提交且上次成功才跳过重型 drill，失败不能算作已覆盖；手动 `workflow_dispatch` 必须保留强制运行能力。
 
 ### 12.6 代码质量规则
 
@@ -630,6 +630,10 @@ v1.x 后续路线：
 
 ### 14.1 已完成
 
+- 2026-09-09 Logo 再设计：通过 Replicate CLI / `openai/gpt-image-2.5-flare` 生成 3 组 low 草案与 medium 精修，采用“记忆终端”纯图形：拱形站点入口、脑状记忆回路与汇入底座；保留 1024px 透明 PNG 原图、完整提示词与 prediction ID，同步 96/512px PNG、16/32px favicon、180px Apple touch icon、共享 BrandMark 和中英文 README，替换旧叠层 SVG；README 提供深色背景变体，导出可本地重生成，无需调用模型；Manager lint/check 与 production build 通过，更新 fixture 截图并验证 320/390px 品牌布局和资源读取
+- 2026-09-09 品牌与开源准备：深绿色“记忆终端”图标统一用于 Manager 登录、桌面与移动导航、favicon、Apple touch icon 和中英文 README；提供 512px PNG、统一 BrandMark 组件与可重生成脚本。README 增加真实 fixture 截图、能力表、架构图、接入示例与文档入口，详细能力说明迁至 `docs/architecture.md`；新增 Apache-2.0 LICENSE / NOTICE、贡献与安全指南、第三方字体及外部数据集许可说明，三个 package manifest 和两种运行镜像同步许可证信息
+- 2026-09-09 CI 故障复核：远端 CI 34354409173 / 34124859700 与 nightly 34196160611 都在 pnpm 12 不接受的 `--frozen-lockfile=false` 处失败，nightly 34321303206 的成功来自跳过。已修正 CI/nightly/Manager Docker/本地脚本安装参数、Go monorepo cache 路径与 nightly 成功条件；CI 新增手动入口，并迁移隔离数据库后启用真实 PostgreSQL 集成测试。干净 Docker 验证进一步复现旧 Corepack 查找不存在 `pnpm.cjs`，Docker/devcontainer/本地 fallback 改为 npm 安装固定 pnpm 12.3.4；新增 `.dockerignore` 排除凭据、本地数据和构建产物。详见 `docs/ci.md`
+- 2026-09-09 可靠性回归：修复 recovery drill 在 256 对话任务扇出时因有界 channel 导致的自阻塞，演练队列随任务增长、完成计数并等待取消后的 Worker 退出；增加 nightly 规模、初始容量 1、任务数量与取消回归，竞态检测通过，256 对话 / 3,840 任务本地约 1.3 秒恢复。修复 backup fixture 缺失 Impression / Fact / Key Memory 节点导致的外键错误，真实 PostgreSQL 插入校验通过。Go 1.26.1 全量测试、format、lint、generated diff、Atlas lint/dry-run、PostgreSQL 专项、coverage（server 68.7%、Manager 39.76%）通过；Manager lint/check、15 项单测、production build、隔离端口的 Chromium 33 + WebKit 9 项完整 E2E 通过，320/390px 品牌布局及资源读取通过
 - 2026-09-09 graph / eval 复核：关系 generation 改为双端一致性校验，拒绝跨代与跨用户写入并隔离旧冲突边；待应用的 generation backfill migration 改为只补齐可确定的关系、保留历史边，真实 PostgreSQL 16.14 空库迁移重放、关系隔离与迁移幂等/保留回归通过；未操作已有用户数据库
 - 2026-09-09 评测正确性修复：LOCOMO 原始对话轨道不再索引人工标注事件摘要及上游生成记忆，统一 sample principal 并保留 speaker/date；LongMemEval 索引去除 `has_answer`/question type 标签；修复 nDCG 截断分母、重复结果加分、relation hit 去重、QA 重复 ID 与覆盖率报告；repo-native/perf benchmark tests 改为显式运行，默认 Go 正确性测试不执行 benchmark 阈值门禁
 - 2026-09-09 已核对 LOCOMO / LongMemEval / LongMemEval-V2 / MemoryAgentBench 官方仓库并记录固定 revision；当前代码支持 LOCOMO raw-dialogue retrieval 与 cleaned LongMemEval V1 retrieval / QA，未把 V1 分数称为 V2 成绩。方法、验证和范围见 `apps/server/tests/eval/REVIEW-2026-09-09.md`；本地 20 条 native 与 1,532 条 LOCOMO 离线评测已导出 artifact，确定性向量结果仅验证执行链路
@@ -683,6 +687,8 @@ v1.x 后续路线：
 
 ### 14.2 未完成
 
+- GitHub nightly workflow 已移除，worker recovery 与 backup/restore 可靠性 drill 保留为 `scripts/ops/` 手动入口；如恢复定时回归需按 12.5 节重新落地 workflow
+- Manager 干净容器构建已验证新 pnpm 安装入口和 lockfile 校验，但本机系统盘不足导致后续文件写入失败；完整容器构建与原生 Docker backup/restore 尚需在具备空间的 Docker 环境复验，本地已通过 backup dry-run 和真实 PostgreSQL fixture 校验
 - pgvector ANN 与 relation 双向索引已落地并通过真实 PostgreSQL planner 验证；生产量级数据下的 `EXPLAIN (ANALYZE, BUFFERS)`、并发检索和 memory retrieval P95 仍需在专用压测环境持续验证
 - 原始 LOCOMO 数据仍然不会提交进仓库；手动 benchmark 可从上游公开地址拉取，运行仍受外部网络与许可证约束
 - backup/restore 实际演练仍要求运行环境具备 Docker Compose 与镜像拉取能力；在无 Docker 环境下只能执行 dry-run 形态校验

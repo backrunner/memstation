@@ -52,7 +52,7 @@ Evaluation contract
 - Official-source review, benchmark versions, and remaining external validation scope: [2026-09-09 review](REVIEW-2026-09-09.md).
 
 CI policy
-- GitHub CI and nightly workflows do not run retrieval/ranking benchmark jobs and do not use Recall, nDCG, or benchmark latency as redlines.
+- GitHub CI does not run retrieval/ranking benchmark jobs and does not use Recall, nDCG, or benchmark latency as redlines.
 - Benchmark scripts still write artifacts for local, manual, or dedicated eval environments.
 - Hard benchmark enforcement is explicit opt-in via `MEMSTATION_ENFORCE_BENCHMARKS=true`; benchmark latency thresholds also require `MEMSTATION_PERF_P95_MS`.
 - Full repo-native and performance benchmark tests are skipped by default in `go test`; opt into diagnostic execution with `MEMSTATION_RUN_BENCHMARKS=true`. Parser, metric, isolation, and runner contract tests remain blocking correctness tests.

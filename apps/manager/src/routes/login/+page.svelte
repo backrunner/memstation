@@ -5,7 +5,7 @@
   import { env } from '$env/dynamic/public';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
-  import { Network } from 'lucide-svelte';
+  import BrandMark from '$lib/components/BrandMark.svelte';
 
   import { fetchHealth, loginAdmin } from '$lib/api/client';
   import TextInputField from '$lib/components/TextInputField.svelte';
@@ -98,7 +98,7 @@
 <section class="auth-shell connect-shell">
   <div class="auth-card connect-card">
     <div class="auth-brand">
-      <span class="auth-brand-mark" aria-hidden="true"><Network size={18} strokeWidth={1.9} /></span>
+      <BrandMark size={36} />
       <span class="auth-brand-name">MemStation</span>
     </div>
 

@@ -1,433 +1,134 @@
-# MemStation
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="apps/manager/static/brand/memstation-dark.png" />
+    <img src="apps/manager/static/brand/memstation.png" width="88" height="88" alt="MemStation logo" />
+  </picture>
+  <h1>MemStation</h1>
+  <p><strong>One gateway. Lasting memory. Your infrastructure.</strong></p>
+  <p>A self-hosted AI gateway, persistent memory system and operations dashboard.</p>
+  <p>
+    <a href="https://github.com/backrunner/memstation/actions/workflows/ci.yml"><img src="https://github.com/backrunner/memstation/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-28634f" alt="License: Apache 2.0" /></a>
+    <a href="apps/server/go.mod"><img src="https://img.shields.io/badge/Go-1.26.1-00ADD8" alt="Go 1.26.1" /></a>
+    <a href="apps/manager/package.json"><img src="https://img.shields.io/badge/Svelte-5-FF3E00" alt="Svelte 5" /></a>
+  </p>
+  <p>English · <a href="README.zh-CN.md">简体中文</a></p>
+  <p><a href="#quick-start">Quick start</a> · <a href="docs/architecture.md">Architecture</a> · <a href="CONTRIBUTING.md">Contributing</a> · <a href="docs/ci.md">CI & testing</a></p>
+</div>
 
-MemStation 是一个面向个人自托管优先的 `AI Gateway + Memory System + Admin Plane`。
+---
 
-当前仓库已经落地完整的 server-first 基线：
+MemStation gives your AI clients a shared gateway and a memory layer that survives
+individual conversations. Route requests to multiple providers, retrieve relevant
+context for the next turn, and inspect conversations, memories, usage and background
+jobs from one Manager.
 
-- Go 单体服务负责 Gateway、Memory、Admin、Worker、Scheduler、Migration、Seed
-- SvelteKit Manager 作为独立管理面板，可直连任意指定的 MemStation 后端
-- 对外兼容 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages
-- 同时提供独立 gRPC transport，直接复用 Gateway / Memory / Admin service
-- 对上游支持 OpenAI、Anthropic、Gemini
-- 记忆链路支持 Summary、Keyword、Embedding、Impression、Fact、Key Memory、图关系、时间衰减、时间分层
-- Benchmark、契约测试、E2E、恢复演练、备份恢复脚本和单机部署基线均已落地
+It is designed for **personal self-hosting and a single instance first**. The v1 code
+baseline is implemented; production-scale latency validation and operational tuning
+are ongoing. Organizations, billing and cluster deployment remain future work.
 
-## 仓库结构
+<img src="docs/assets/manager-preview.png" alt="MemStation Manager showing conversation activity, memory totals and operational metrics" width="1200" />
+<p align="center"><sub>Manager dashboard · repository fixture data</sub></p>
 
-```text
-memstation/
-├── apps/
-│   ├── server/   # Go 核心服务
-│   └── manager/  # SvelteKit 管理面板
-├── deploy/       # Compose / K8s / OTel / Nginx 基线
-├── scripts/      # 开发、测试、benchmark、恢复脚本
-├── .github/      # CI 工作流
-├── .devcontainer/
-├── .plan/
-└── AGENTS.md     # 当前权威规范
+## What you can do
+
+| | Capabilities |
+| --- | --- |
+| **Connect your clients** | OpenAI Chat Completions, OpenAI Responses and Anthropic Messages; streaming and non-streaming; OpenAI, Anthropic and Gemini upstreams. |
+| **Keep useful context** | Summaries, facts, impressions, Key Memory, events, tasks, procedures, artifacts and entities, with source evidence and version history. |
+| **Recall across conversations** | Vector search, bounded graph expansion and ranking by semantic relevance × importance × time decay; configurable context and tool injection. |
+| **Inspect and correct** | Browse conversations, edit memories, manage users and provider settings, inspect usage and costs, retry jobs and review audit events. |
+| **Operate your own stack** | Transactional outbox, retryable workers, encrypted upstream credentials, hashed API keys, OTel/OTLP, health checks and backup/restore drills. |
+
+## How it fits together
+
+```mermaid
+flowchart LR
+  Client[AI clients & agents] --> Gateway[MemStation Gateway]
+  Gateway --> Providers[OpenAI / Anthropic / Gemini]
+  Gateway <--> Memory[Memory retrieval & injection]
+  Gateway --> Outbox[Conversations & outbox]
+  Outbox --> Workers[Scheduler & workers]
+  Workers --> Memory
+  Memory <--> Storage[(PostgreSQL + pgvector / Redis)]
+  Manager[Manager] --> Admin[REST / GraphQL / gRPC]
+  Admin --> Memory
+  Admin --> Outbox
 ```
 
-`AGENTS.md` 是当前最高优先级的执行规范，优先于 `.plan/` 中的历史文档。
+The Go server is the business core, delivered as one binary with `serve`, `worker`,
+`scheduler`, `migrate` and `seed` roles. Manager is an independently deployed SvelteKit
+app. See the [capability reference](docs/architecture.md) for memory lifecycle,
+generation isolation, fact lineage and management interfaces.
 
-## 已实现能力
+## Quick start
 
-### Gateway
-
-- `POST /v1/chat/completions`
-- `POST /v1/responses`
-- `POST /v1/messages`
-- `GET /v1/models`
-- gRPC `GatewayService.ListModels`
-- gRPC `GatewayService.Complete`
-- SSE 流式透传与非流式代理
-- API Key 鉴权、速率限制、Usage 统计、Provider 路由
-
-### Memory
-
-- 异步记忆写入：`conversation.finalize -> summary.generate -> embedding.generate -> analysis.extract -> keymemory.reconcile`
-- 业务记忆实体：Summary、Keyword、Impression、Fact、Key Memory，以及承载 `event/task/procedure/artifact/entity/agent_action` 的通用 `memory_items`
-- 图结构：`MemoryNode + MemoryRelation + MemoryEmbedding`
-- Generation 生命周期：rebuild 在 inactive generation 隔离执行，支持显式 activate/discard；激活后保留当前代与上一代并回收更旧 graph/vector 数据，conversation source snapshot 默认保留最近 3 份未引用版本
-- 写入一致性：人工编辑与 Key Memory 写入通过 transactional outbox 驱动 embedding、graph sync 和 vector delete；`embedding_revision` CAS 防止旧任务覆盖新向量，在线检索只读取 ready node
-- 图存储约束：PostgreSQL 以复合外键和 check constraint 保证同用户 node 引用、relation endpoint/type/weight 完整性，并为 relation 双向遍历和常用 embedding 维度提供索引与 HNSW ANN 路径
-- Entity 归并：generic entity 以 `entity_kind + normalized title` 形成 generation-scoped canonical identity，同一 generation 内跨 conversation 合并 aliases、mentions 和 evidence
-- 会话切片：对用户/助手对话做 segment 化写入，并建立 `follows_segment`、`summarized_into` 等图关系
-- 时间能力：`importance * time_decay` 排序、`activity_at`、`time_tier`、temporal graph
-- 记忆检索：向量候选 + SQL hydrate + 1-2 hop relation expansion + 混合 key memory 注入
-- 记忆注入：结构化 User Profile / Active Tasks / Relevant Procedures / Relevant Facts / Relevant Events / Relevant Agent Actions / Relevant Artifacts / Relevant Entities / Relevant Memories / Relevant Impressions，上下文装包按 Key Memory、Task、Procedure、Fact、Event、Agent Action、Artifact、Entity、Summary/Segment、Impression 分区优先级执行
-- Fact 写入：fallback extraction 使用规范化 category taxonomy 和轻量多事实输出，按 `fact_key` / `lineage_group_id` / `revision_seq` 聚合版本；supersession 写入必须带明确 lineage 锚点和可解析目标，并在新 fact supersede 旧 fact 时同步 current head、`superseded_by_id` 与专用 `supersedes` 图边
-- Fact 检索与管理：默认折叠到 current head，搜索 / GraphQL / gRPC / Manager 均返回 lineage metadata，包括 `lineage_path`、`superseded_alias_node_ids` 与 `revision_depth`
-- Summary 写入：长上下文按 `summary_chunk_max_tokens=6000`、`summary_chunk_overlap=600` 进行 chunking，并保留 chunk metadata
-- Memory REST：
-  - `POST /api/v1/memory/search`
-  - `GET /api/v1/memory/keys`
-  - `PUT /api/v1/memory/keys/:key`
-  - `DELETE /api/v1/memory/keys/:key`
-- Memory gRPC：
-  - `MemoryService.Search`
-  - `MemoryService.ListKeyMemories`
-  - `MemoryService.UpsertKeyMemory`
-  - `MemoryService.DeleteKeyMemory`
-
-### Admin Plane
-
-- GraphQL Query/Mutation
-- Admin REST：overview、users、conversations、memory、config、providers、queues、tasks、cache、audit
-- Admin / Health gRPC：`HealthService.GetStatus`、`AdminService.Overview`、`AdminService.ListConversations`、`AdminService.GetConversation`、`AdminService.GetConversationMemory`
-- 服务端 session 登录，浏览器不存储 admin token
-- Manager 默认浅色、中性配色与紧凑布局；常规状态和元数据以文字呈现，异常状态保留明确提示，减少装饰性指示器与重复徽章
-- 管理面板已覆盖：
-  - Dashboard：活跃对话、记忆、Key Memory、队列积压、失败任务、审计与趋势
-  - Conversations：多用户聚合列表、组合筛选、timeline、usage、metadata、关联记忆与 requeue/rebuild
-  - Memory：Workspace、Summary、Impression、Fact、Agent Memory、Key Memory 集合与详情；人工修正与 Key Memory CRUD
-  - Users / API Keys / Settings / memory generation rebuild
-  - Token statistics：时间范围、用户、provider 与高消耗对话
-  - Provider / Model / System settings：草稿、校验、drift、diagnostics 与审计提示
-  - Health / Cache / Queues / Tasks / Audit：危险操作统一二次确认
-  - Playground Chat / Memory Recall / Protocol Playground
-
-### Eval / Ops
-
-- Repo-native retrieval/ranking benchmark 脚本（本地 / 手动评测）
-- LOCOMO adapter 与外部 benchmark 脚本
-- Contract tests、Go E2E、Manager Playwright E2E
-- Worker backlog recovery smoke/nightly
-- Backup / export / restore drill
-- CI / nightly diagnostic artifacts use short-retention, best-effort uploads
-- Docker Compose 单机交付基线
-- K8s baseline manifests
-- OTel / OTLP / structured logging / health endpoints
-
-## 技术栈
-
-- Backend: Go `1.26.1`, Chi, Cobra, Ent, gqlgen, Asynq, PostgreSQL 16 + pgvector, Redis 7, OpenTelemetry
-- Frontend: SvelteKit, Svelte 5, Bits UI, shadcn-svelte, Tailwind 4, ECharts, Playwright, Vitest
-- Monorepo: pnpm `12.3.4`, Turbo
-
-## 快速开始
-
-### 方式一：推荐，devcontainer 一键启动前后端联调
-
-前置条件：
-
-- Docker
-- pnpm `12.3.4`
-- 可选：本机已安装 `devcontainer` CLI；如果未安装，脚本会自动通过 `pnpm dlx @devcontainers/cli@0.85.0` 拉起
-
-执行：
+For local development, install Docker with Compose, Node.js and **pnpm 12.3.4**.
+CI uses Node.js **24.11.1** and Go **1.26.1**; the devcontainer supplies the Go toolchain.
 
 ```bash
+git clone https://github.com/backrunner/memstation.git
+cd memstation
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-这个命令会：
+This starts PostgreSQL and Redis, applies migrations and runs the server and Manager
+with reload support inside a devcontainer. The devcontainer CLI is fetched at a pinned
+version if it is not already installed.
 
-- 启动 `workspace` devcontainer，并只带起 `postgres` 与 `redis`
-- 自动注入 devcontainer 开发默认配置，包括 `DATABASE_URL`、`REDIS_URL`、`MEMSTATION_ADMIN_TOKEN`、`MEMSTATION_MASTER_KEY`
-- 在 devcontainer 内执行 `memstation migrate`
-- 启动后端 watch 脚本，源码变更后自动重启 `serve`
-- 同时启动 manager 的 Vite 调试服务
+1. Open Manager at **http://127.0.0.1:5173**.
+2. Connect to **http://127.0.0.1:8080** using the local development admin token
+   `memstation-local-admin-token`, or your `MEMSTATION_ADMIN_TOKEN` override.
+3. Configure provider credentials and chat, summary, analysis and embedding models in
+   Settings. Model names are configuration, not hardcoded defaults.
+4. Seed or create a user/API key. Run the `worker` and `scheduler` roles when testing
+   automatic memory generation; the hot-reload command starts `serve` and Manager.
 
-这条链路的目标就是 0 配置开发：
+The gRPC endpoint is **127.0.0.1:9090**. For a full Compose stack including workers,
+use the [development stack guide](deploy/compose/DEVELOPMENT.md). Its reset command
+removes the selected project's database and Redis volumes; use it only for disposable
+development data. Apple Container and HTTPS Portless flows are documented in the
+[local debugging guide](docs/local-debugging.md).
 
-- 不需要手动准备数据库连接串
-- 不需要手动准备 Redis 连接串
-- 不需要手动准备本地 admin token / master key
-- 启动后只需要去 Manager 里补 Provider 密钥和模型配置
+## Connect an AI client
 
-如果希望整套开发仍然运行在 devcontainer 内，但 Manager 通过稳定 HTTPS 本地域名暴露出来：
-
-```bash
-pnpm dev:container:portless
-```
-
-这个入口会启动同一套 `workspace + postgres + redis` devcontainer，并把容器内 Manager 调试服务通过 Portless alias 暴露为 `https://memstation-manager.localhost`。浏览器请求 `/api`、`/health`、`/graphql`、`/v1` 时仍由容器内 Vite proxy 转发到容器内 MemStation server。
-
-默认地址：
-
-- Gateway / Admin API: `http://127.0.0.1:8080`
-- gRPC: `127.0.0.1:9090`
-- Manager Debug: `http://127.0.0.1:5173`
-- PostgreSQL: `127.0.0.1:5432`
-- Redis: `127.0.0.1:6379`
-
-更多说明见：
-
-- `docs/local-debugging.md`
-- `deploy/compose/DEVELOPMENT.md`
-- `deploy/compose/BACKUP_RESTORE.md`
-
-### 方式二：重置 Compose 栈并启动整套服务
-
-前置条件：
-
-- Docker / Docker Compose
-
-执行：
+Point an OpenAI-compatible client at `http://127.0.0.1:8080/v1` and use a **MemStation
+API key**. Provider credentials stay in MemStation. Use a model configured on your instance:
 
 ```bash
-pnpm dev:reset
+export MEMSTATION_API_KEY='your-memstation-api-key'
+export MEMSTATION_MODEL='your-configured-model'
+
+curl http://127.0.0.1:8080/v1/chat/completions \
+  -H "Authorization: Bearer $MEMSTATION_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d "{\"model\":\"$MEMSTATION_MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"Remember that I prefer concise answers.\"}]}"
 ```
 
-这个命令会：
-
-- 清空本地 Postgres / Redis 开发卷
-- 重新应用 migration
-- 重新执行 seed
-- 启动 server、worker、scheduler、manager
-
-默认地址：
-
-- Gateway / Admin API: `http://127.0.0.1:8080`
-- gRPC: `127.0.0.1:9090`
-- Manager: `http://127.0.0.1:4173`
-- PostgreSQL: `127.0.0.1:5432`
-- Redis: `127.0.0.1:6379`
-
-### 方式三：手动运行
-
-前置条件：
-
-- Go `1.26.1`
-- Node.js `24.11+`
-- pnpm `12.3.4`
-- PostgreSQL 16+
-- Redis 7
-
-初始化依赖：
-
-```bash
-pnpm install
-```
-
-参考环境变量：
-
-```bash
-cp apps/server/.env.example apps/server/.env
-```
-
-启动服务：
-
-```bash
-cd apps/server
-go run ./cmd/memstation migrate
-go run ./cmd/memstation seed
-go run ./cmd/memstation serve
-```
-
-另开终端运行异步角色：
-
-```bash
-cd apps/server
-go run ./cmd/memstation worker
-go run ./cmd/memstation scheduler
-```
-
-启动管理面板：
-
-```bash
-cd apps/manager
-pnpm dev
-```
-
-如需用稳定的本地 HTTPS 域名调试 Manager，可使用 Portless 入口：
-
-```bash
-pnpm dev:portless
-```
-
-这个入口会启动 PostgreSQL / Redis 开发依赖、执行 migration、启动支持热重载的 MemStation server，并通过 Portless 启动 Manager。默认地址为 `https://memstation-manager.localhost`，Vite dev proxy 会将 `/api`、`/health`、`/graphql`、`/v1` 转发到 `http://127.0.0.1:8080`。首次使用 Portless 可能需要执行本地 CA 信任流程。
-
-如果只想启动 Manager 的 Portless 代理，并复用已经运行的后端：
-
-```bash
-pnpm dev:manager:portless
-```
-
-`pnpm dev:manager:portless` 只启动 Manager，要求 `MEMSTATION_MANAGER_DEV_PROXY_TARGET` 指向一个可用的 MemStation server，默认 `http://127.0.0.1:8080`。
-
-### 方式四：Apple Container 本机开发
-
-在已安装 Apple Container `1.0.0+` 的 Apple Silicon Mac 上，可以使用原生 container runtime 启动开发环境：
-
-```bash
-pnpm dev:apple
-```
-
-该入口会创建独立 network 和持久化 volume，启动 pgvector PostgreSQL、Redis、workspace container，并在 workspace 内运行 full-stack debug。只准备容器但不启动调试进程可执行 `pnpm dev:apple:container`。
-
-```bash
-pnpm dev:apple:stop   # 停止容器，保留数据卷
-pnpm dev:apple:reset  # 停止并清理开发数据卷与 network
-```
-
-## 常用命令
-
-### 根目录
-
-```bash
-pnpm dev
-pnpm dev:container
-pnpm dev:container:portless
-pnpm dev:workspace
-pnpm dev:server
-pnpm dev:portless
-pnpm dev:manager:portless
-pnpm dev:reset
-pnpm build
-pnpm lint
-pnpm test
-pnpm test:contract
-pnpm test:e2e:manager
-pnpm test:eval
-pnpm test:eval:locomo
-pnpm test:eval:nightly
-pnpm test:perf
-pnpm test:recovery
-pnpm test:backup:dry-run
-pnpm test:coverage
-pnpm test:all
-pnpm generate
-```
-
-### Server CLI
-
-```bash
-cd apps/server
-pnpm dev
-go run ./cmd/memstation worker
-go run ./cmd/memstation scheduler
-go run ./cmd/memstation migrate
-go run ./cmd/memstation seed
-```
-
-## 核心接口
-
-### 健康检查
-
-- `GET /health/live`
-- `GET /health/ready`
-
-### Gateway
-
-- `POST /v1/chat/completions`
-- `POST /v1/responses`
-- `POST /v1/messages`
-- `GET /v1/models`
-
-### gRPC
-
-- 监听端口：`MEMSTATION_GRPC_PORT`，默认 `9090`
-- proto 定义：`apps/server/proto/memstation/v1/api.proto`
-- proxy 类 RPC 使用 `authorization: Bearer <memstation-api-key>` metadata
-- admin 类 RPC 使用 `x-admin-token: <MEMSTATION_ADMIN_TOKEN>` metadata
-- 当前已提供：
-  - `HealthService.GetStatus`
-  - `GatewayService.ListModels`
-  - `GatewayService.Complete`
-  - `MemoryService.Search`
-  - `MemoryService.ListKeyMemories`
-  - `MemoryService.UpsertKeyMemory`
-  - `MemoryService.DeleteKeyMemory`
-  - `AdminService.Overview`
-  - `AdminService.ListConversations`
-  - `AdminService.GetConversation`
-  - `AdminService.GetConversationMemory`
-
-### Memory / Admin
-
-- `POST /api/v1/memory/search`
-- `GET /api/v1/memory/keys`
-- `PUT /api/v1/memory/keys/:key`
-- `DELETE /api/v1/memory/keys/:key`
-- `POST /graphql`
-- `POST /api/admin/login`
-- `POST /api/admin/logout`
-- `GET /api/admin/overview`
-
-更多 HTTP 接口可直接查看 `apps/server/internal/transport/http/router.go`。
-
-## 配置说明
-
-关键环境变量见 `apps/server/.env.example`，核心项包括：
-
-- 运行与安全：`MEMSTATION_PORT`, `MEMSTATION_GRPC_PORT`, `MEMSTATION_PUBLIC_BASE_URL`, `MEMSTATION_ADMIN_TOKEN`, `MEMSTATION_MASTER_KEY`, `MEMSTATION_DEV_API_KEY`
-- 基础设施：`DATABASE_URL`, `REDIS_URL`, `VECTOR_STORE_BACKEND`
-- 模型：`CHAT_MODEL`, `SUMMARY_MODEL`, `ANALYSIS_MODEL`, `EMBEDDING_MODEL`
-- Provider 凭据：`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`
-- Provider 端点：`OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL`, `GEMINI_BASE_URL`
-- 运行阈值：`CONVERSATION_TIMEOUT_MINUTES`, `MAX_CONTEXT_TOKENS`, `MAX_INJECTION_TOKENS`, `MESSAGE_THRESHOLD`, `TOKEN_THRESHOLD`
-- CORS：`MEMSTATION_CORS_ALLOWED_ORIGINS` 为空时会对 manager/admin API 和普通 API 反射当前请求的 `Origin`；配置逗号分隔 origin 后会作为白名单限制浏览器调用
-- OTel：`OTEL_EXPORTER_OTLP_ENDPOINT`
-
-Embedding 已接入真实 provider 调用，采用 OpenAI-compatible embedding 接口；模型与端点通过配置注入，不在代码中写死。
-
-## Manager 设计边界
-
-- Manager 是独立前端，不承载业务核心
-- 所有实际管理能力都由 MemStation server 暴露
-- Manager 可以保存多个 target，并在不同 MemStation 实例之间切换
-- Manager 支持直接粘贴 `memstation://host:port?key=...` / `memstations://...` 形式的连接 URI；`key=` 必须是服务端生成的 Argon2id admin token hash，不应放入原始明文 admin token
-- 一套 MemStation 服务视为一个运行环境，Manager target 只暴露 label、endpoint 和 admin token 连接信息
-- Manager 默认采用专业、明亮、高密度的 ToB 运维视觉，桌面与移动端均可操作；Cache 等运维模块保留明确主导航入口
-- 组件使用统一按钮、表单、列表间距及自托管 IBM Plex Sans 字体；System 提供分区表单与栏目跳转，Providers 保持固定操作排列。记忆详情优先编辑，关联记录支持直接跳转，原始字段和 JSON 按需展开
-- 共享表单支持稳定的标签关联、键盘选择与错误提示；移动导航支持焦点约束及 Escape 关闭，target 操作提供触屏可用菜单
-- Key Memory 通过弹窗创建，列表优先展示实际内容并折叠原始记录；长配置页提供固定保存操作，审计筛选保留输入焦点并防止旧请求覆盖新结果
-- 各端将次要筛选按需展开，优先显示搜索与结果；Memory workspace 不再重复展示集合导航或拉取整组集合计数。搜索失败保留输入，可直接重试
-- 手机主要控件提供 44px 触控高度与 16px 文本输入，System / Providers 的保存操作固定在底部；短屏弹窗随可视区域调整，平板表单保持双列。任务队列选择、筛选请求竞态与 WebKit 导航焦点均有回归覆盖
-- 本地 full-stack 调试可通过 `pnpm dev:portless` 启动热重载 MemStation server 与 Portless Manager；如后端已单独运行，也可通过 `pnpm dev:manager:portless` 只启动 Manager 代理
-
-## 测试与评测
-
-Manager E2E 包含 Chromium 全量回归与 WebKit（iPhone 13 模拟）移动交互用例。首次运行使用 `pnpm --dir apps/manager test:e2e:install` 安装 Chromium 与 WebKit；CI 同样安装两种浏览器。模拟测试覆盖窄屏、横屏、触控、筛选、导航和弹窗，不替代真实 iOS 设备验收。 2026-09-09 本地 production preview 验证：Chrome `33/33`、WebKit `9/9`，26 个路由 × 6 种视口共 156 次布局检查通过；Manager lint、15 项单元测试和生产构建通过。截图与机器可读验证摘要位于 `.artifacts/ui-quality/`。
-
-2026-09-09 的 [graph / 评测复核](apps/server/tests/eval/REVIEW-2026-09-09.md) 记录了官方 benchmark 版本、数据泄漏修复、指标口径和验证范围。LOCOMO 原始对话检索、LongMemEval V1 证据检索与 QA 分开报告；本地确定性向量 smoke 不代表外部准确率。Go lint 入口已固定为 v2.13.2，并通过官方配置迁移保留既有检查范围，以兼容当前 Go 工具链。
-
-当前仓库已覆盖：
-
-- Go 单元测试
-- 集成测试
-- 协议契约测试
-- Server E2E
-- Manager Vitest + Playwright E2E
-- Retrieval / ranking benchmark smoke（本地 / 手动评测，不作为 CI 红线）
-- LOCOMO external benchmark runner（不作为 CI 红线）
-- Gateway / Memory / Worker hot-path `Benchmark*`
-- Performance smoke（本地 / 手动评测）
-- Worker backlog recovery drill
-- Backup / restore drill
-- CI / nightly diagnostic artifact upload（短保留、best-effort，不覆盖正确性门禁结论）
-
-评测入口：
-
-- `apps/server/tests/eval`
-- `scripts/eval/run-memory-smoke.sh`
-- `scripts/eval/run-memory-locomo.sh`
-- `scripts/eval/run-memory-nightly.sh`
-
-CI / nightly 不执行 retrieval/ranking benchmark，也不基于 Recall、nDCG 或 benchmark P95 设置红线。评测脚本保留给本地、手动或专用评测环境；如确需临时执行硬门禁，必须显式设置 `MEMSTATION_ENFORCE_BENCHMARKS=true`，性能阈值需额外显式设置 `MEMSTATION_PERF_P95_MS`。
-
-Nightly 的 worker recovery drill 与 backup/restore drill 仍是阻塞门禁；artifact upload 只用于诊断报告收集，采用 3 天保留与 best-effort 上传，GitHub artifact storage quota 满时不应把已通过的 nightly drill 判红。定时 nightly 会先检查同分支上一条已完成 nightly 的 `head_sha`，如果当前提交已经被覆盖，则直接成功跳过重型 drill；手动 `workflow_dispatch` 始终强制运行。
-
-## 部署
-
-基线部署资源位于：
-
-- Compose: `deploy/compose`
-- Kubernetes: `deploy/k8s`
-- OTel Collector: `deploy/otel`
-- Nginx: `deploy/nginx`
-
-## 当前状态
-
-按当前仓库实现，R1-R6 与 R5.5 的代码范围均已落地，适合作为 v1.0 的开发和迭代基线继续推进。
-
-2026-04-25 本地复核曾发现既有 format / lint 问题；该问题已在后续复核中收敛，当前以 `AGENTS.md` 第 14 节的最新门禁状态为准。
-
-2026-05-15 更新：CI / nightly 已移除 retrieval/ranking benchmark 与 benchmark 性能红线；相关脚本仅作为本地、手动或专用评测入口保留。
-
-2026-06-27 更新：最近 nightly 失败点定位为 `actions/upload-artifact` 触发 GitHub artifact storage quota，而 worker recovery 与 backup/restore drill 均已通过；workflow 已将诊断 artifact 上传改为短保留、非阻塞，并为定时 nightly 增加“同提交已覆盖则跳过”的前置检查以减少 Actions 额度消耗。
-
-2026-07-07 更新：通用 Agent Memory 融合已落地，新增 `memory_items`、六类通用长期记忆、受控 analysis classifier、source evidence 克隆、embedding/rebuild/recovery 支持、GraphQL/gRPC/REST DTO 扩展、Manager Agent Memory 集合页，以及 repo-native/eval reliability case 更新；`scripts/go/format.sh --check`、`scripts/go/lint.sh`、`go test ./...`、manager lint 与 Vitest 已通过。
-
-2026-07-11 更新：Manager 已按 `AGENTS.md` 与 `.agents/plan/frontend-panel.md` 完成全量需求核对和专业化 UI 收口，补齐 Dashboard 必需信号、Conversations 组合筛选、Users 排序、Audit 日期筛选、Cache 导航与关键写操作确认；Svelte check 为 `0 errors / 0 warnings`，Vitest `15/15`、Playwright fixture E2E `19/19`，桌面与移动端已完成视觉复核。
+| Interface | Entry points |
+| --- | --- |
+| Gateway | `/v1/chat/completions`, `/v1/responses`, `/v1/messages`, `/v1/models` |
+| Memory REST | `/api/v1/memory/search`, `/api/v1/memory/keys` |
+| Management | Admin REST, GraphQL Query/Mutation, server-side session authentication |
+| gRPC | Gateway, Memory, Admin and Health services; [protobuf definitions](apps/server/proto/memstation/v1/api.proto) |
+| Health | `/health/live`, `/health/ready` |
+
+## Develop, evaluate, deploy
+
+- **Development:** [local workflows](docs/local-debugging.md), [engineering specification](AGENTS.md), [contributing](CONTRIBUTING.md).
+- **Testing:** [CI checks and troubleshooting](docs/ci.md), Go unit/integration/contract tests, Manager Vitest and Chromium/WebKit E2E.
+- **Memory evaluation:** [runner and dataset guide](apps/server/tests/eval/README.md). Native golden data and external LOCOMO/LongMemEval adapters produce query details, score breakdowns and regression artifacts. Retrieval benchmarks are explicit local/manual runs, outside default CI/nightly gates.
+- **Deployment:** [Compose](deploy/compose), [Kubernetes baseline](deploy/k8s), [Nginx](deploy/nginx), [OpenTelemetry](deploy/otel), [backup and restore](deploy/compose/BACKUP_RESTORE.md).
+
+Compose ships local development defaults. Before exposing an instance, configure your
+own secrets, TLS, secure session cookies and CORS policy; see [SECURITY.md](SECURITY.md).
+
+## License
+
+MemStation is licensed under the [Apache License 2.0](LICENSE). Contributions are
+welcome under the same license. See [NOTICE](NOTICE) and
+[third-party notices](THIRD_PARTY_NOTICES.md) for bundled assets and dependencies.
+
+The bundled IBM Plex Sans font retains its SIL OFL license. External LOCOMO data is
+**CC BY-NC 4.0**, is downloaded separately and is not relicensed under Apache-2.0.

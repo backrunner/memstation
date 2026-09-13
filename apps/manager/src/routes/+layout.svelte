@@ -22,7 +22,6 @@
     LogOut,
     Menu,
     MessageSquareText,
-    Network,
     PlugZap,
     RefreshCw,
     Search,
@@ -37,6 +36,7 @@
 
   import TargetManagerDialog from '$lib/components/TargetManagerDialog.svelte';
   import { fetchAdminSession, fetchHealth, loginAdmin, logoutAdmin } from '$lib/api/client';
+  import BrandMark from '$lib/components/BrandMark.svelte';
   import { forgetTargetCredential, rememberTargetCredential } from '$lib/targets/credentials';
   import {
     clearAllTargets,
@@ -348,7 +348,7 @@
 
 {#snippet sidebarNavigation(mobile = false)}
       <div class="sidebar-brand">
-        <span class="sidebar-brand-mark" aria-hidden="true"><Network size={17} strokeWidth={1.9} /></span>
+        <BrandMark />
         <span class="sidebar-brand-name">MemStation</span>
         {#if mobile}
           <Dialog.Close class="btn-ghost btn-icon sidebar-close" aria-label="Close navigation"><X size={16} /></Dialog.Close>
@@ -401,6 +401,7 @@
           <Dialog.Trigger bind:ref={mobileNavTrigger} class="btn-ghost btn-icon mobile-nav-trigger" aria-label="Open navigation">
             <Menu size={17} strokeWidth={1.8} />
           </Dialog.Trigger>
+          <BrandMark size={28} />
         </div>
 
         <nav class="topbar-breadcrumb" aria-label="Breadcrumb">

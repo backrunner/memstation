@@ -1,0 +1,71 @@
+{
+  "generated_at": "2026-09-09",
+  "tool": "replicate CLI 0.1.1",
+  "selected": "04-terminal-refined",
+  "source": "memstation-source.png",
+  "runs": [
+    {
+      "name": "01-memory-terminal",
+      "model": "openai/gpt-image-2.5-flare",
+      "version": "hidden",
+      "prediction_id": "99049v09anrmy0d0gtvrg2nqqc",
+      "input": {
+        "prompt": "Use case: logo-brand.\nAsset type: original application icon for MemStation, a personal AI gateway and long-term memory hub. The brand name is context only and MUST NOT appear in the image.\nCreate ONE carefully designed standalone symbol. Combine MEMORY and STATION in one coherent visual metaphor, with an immediately recognizable silhouette and a clever internal structure. More character and design depth than generic stacked layers, but controlled enough for a 32px navigation icon.\nStyle: polished flat graphic brand design, confident rounded geometric shapes, generous negative space, professional and friendly, precise vector-like edges. Palette: forest green #28634f, a restrained sage green accent #b8ddc4 if helpful, pure white background. Center the icon, occupying roughly 80 percent of a square canvas.\nNo text, no letters, no monogram, no numbers, no watermark, no mockup, no grid of variants. No gradients, shadows, glow, 3D rendering, purple, sparkles or tiny decorative circuit traces. Do not imitate existing logos.\nConcept: A memory terminal: a compact arched station / docking gateway whose roof and interior together suggest a softly folded brain. Inside the arch, use two or three bold interlocking memory pathways terminating in round nodes; below, the paths converge onto a sturdy station platform with a central entry slot. Design the brain and architectural structure as ONE integrated emblem, not a brain pasted on a building. The curved station canopy, recall pathways, and docking platform should each remain visually distinct. Invent a balanced memorable mark with subtle asymmetry in its interior.",
+        "quality": "low",
+        "aspect_ratio": "1024x1024",
+        "background": "opaque",
+        "output_format": "png",
+        "number_of_images": 1
+      }
+    },
+    {
+      "name": "02-memory-relay",
+      "model": "openai/gpt-image-2.5-flare",
+      "version": "hidden",
+      "prediction_id": "c6rb74gc9xrmw0d0gtvv9789ww",
+      "input": {
+        "prompt": "Use case: logo-brand.\nAsset type: original application icon for MemStation, a personal AI gateway and long-term memory hub. The brand name is context only and MUST NOT appear in the image.\nCreate ONE carefully designed standalone symbol. Combine MEMORY and STATION in one coherent visual metaphor, with an immediately recognizable silhouette and a clever internal structure. More character and design depth than generic stacked layers, but controlled enough for a 32px navigation icon.\nStyle: polished flat graphic brand design, confident rounded geometric shapes, generous negative space, professional and friendly, precise vector-like edges. Palette: forest green #28634f, a restrained sage green accent #b8ddc4 if helpful, pure white background. Center the icon, occupying roughly 80 percent of a square canvas.\nNo text, no letters, no monogram, no numbers, no watermark, no mockup, no grid of variants. No gradients, shadows, glow, 3D rendering, purple, sparkles or tiny decorative circuit traces. Do not imitate existing logos.\nConcept: A memory relay station: an elegant compact satellite receiving dish that cradles a distinctive rounded memory core, with a short solid support and a docking base. The memory core has two bold interlocking folded pathways to suggest recall and stored knowledge. Integrate the receiver and memory naturally into one strong silhouette. Communicate a place that receives, holds and reconnects memories. Avoid a literal realistic satellite or detailed brain anatomy; create a unique visual icon with a strong relationship between the bowl, memory core and base.",
+        "quality": "low",
+        "aspect_ratio": "1024x1024",
+        "background": "opaque",
+        "output_format": "png",
+        "number_of_images": 1
+      }
+    },
+    {
+      "name": "03-recall-junction",
+      "model": "openai/gpt-image-2.5-flare",
+      "version": "hidden",
+      "prediction_id": "7qx9jc0g2drmt0d0gtvtm7nmfr",
+      "input": {
+        "prompt": "Use case: logo-brand.\nAsset type: original application icon for MemStation, a personal AI gateway and long-term memory hub. The brand name is context only and MUST NOT appear in the image.\nCreate ONE carefully designed standalone symbol. Combine MEMORY and STATION in one coherent visual metaphor, with an immediately recognizable silhouette and a clever internal structure. More character and design depth than generic stacked layers, but controlled enough for a 32px navigation icon.\nStyle: polished flat graphic brand design, confident rounded geometric shapes, generous negative space, professional and friendly, precise vector-like edges. Palette: forest green #28634f, a restrained sage green accent #b8ddc4 if helpful, pure white background. Center the icon, occupying roughly 80 percent of a square canvas.\nNo text, no letters, no monogram, no numbers, no watermark, no mockup, no grid of variants. No gradients, shadows, glow, 3D rendering, purple, sparkles or tiny decorative circuit traces. Do not imitate existing logos.\nConcept: A neural interchange station: two substantial rounded transit routes loop around a central circular memory vault, entering and leaving a grounded docking platform below. The routes have just a few purposeful round station nodes, evoking both a compact brain circuit and a transit hub. Use a clever cohesive silhouette, interlocking negative spaces and an intentional terminal entrance. The logo should feel like a memorable physical home for memories rather than a generic network diagram. Avoid loose dots surrounding a central dot, chain links and letter-like geometry.",
+        "quality": "low",
+        "aspect_ratio": "1024x1024",
+        "background": "opaque",
+        "output_format": "png",
+        "number_of_images": 1
+      }
+    },
+    {
+      "name": "04-terminal-refined",
+      "model": "openai/gpt-image-2.5-flare",
+      "version": "hidden",
+      "prediction_id": "nx4txhn8qdrmw0d0gtw9syrwb8",
+      "input": {
+        "prompt": "Use case: logo-brand.\nInput image 1 is the reference concept to refine into a finished application icon for MemStation: an AI gateway and long-term memory station. Preserve its core identity: the arched station entrance, a two-tone brain-like memory canopy, three flowing recall paths with circular endpoints converging at a docking platform.\nMake one polished final mark, keeping the same overall composition and recognizable silhouette. Refine the geometry and negative spaces so it reads as an intelligent memory terminal at 32px: an even, bold arch; confident organic folded-memory lobes; three clearly separated smooth paths; a flatter, more architectural docking platform with a purposeful central entrance. The reference base is too bowl-like: make it a low, stable station landing platform. Keep its compact rounded corners. Preserve the small asymmetry inside the canopy so it has character. Balance the symbol optically, with consistent visual stroke weight and sufficient white gaps. No additional objects.\nPalette: exact solid forest green #28634f and a single medium sage accent #83b296. Keep the left lobe, arch, paths and platform forest green, with sage only on the upper-right memory lobe. No gradients, textures, shading, glow, shadows, small circuit details, outlines around nodes or mockups.\nOne centered standalone symbol on a transparent background, occupying 84 percent of a square canvas. Crisp flat vector-like graphic finish. No text, letters, numbers, monograms, labels or watermark. The name is context only; do not render it.",
+        "input_images": [
+          "https://replicate.delivery/xezq/u3GFrUfaWbWPHSAfE7frB0gzYWlDNPjUVWZbvqxSohXkElXuA/tmpx3gb67r8.png"
+        ],
+        "quality": "medium",
+        "aspect_ratio": "1024x1024",
+        "background": "transparent",
+        "output_format": "png",
+        "number_of_images": 1
+      },
+      "local_input_images": [
+        "memstation-concept.png"
+      ]
+    }
+  ],
+  "source_sha256": "7278da184b0adf7c2c10f79cf91bf8f0bcfc835b19f381d7ada633f68e1a70a5"
+}

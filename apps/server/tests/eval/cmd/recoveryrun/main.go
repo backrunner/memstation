@@ -27,7 +27,7 @@ func main() {
 	flag.IntVar(&conversations, "conversations", 64, "Synthetic conversations to enqueue.")
 	flag.IntVar(&workerConcurrency, "worker-concurrency", 8, "Concurrent workers used for the drill.")
 	flag.IntVar(&messagesPerTurn, "messages-per-turn", 3, "User/assistant turns seeded per conversation.")
-	flag.IntVar(&queueBuffer, "queue-buffer", 0, "Optional in-memory queue buffer override.")
+	flag.IntVar(&queueBuffer, "queue-buffer", 0, "Optional initial in-memory queue capacity; grows with task fan-out.")
 	flag.DurationVar(&timeout, "timeout", 30*time.Second, "Maximum wall clock duration for the recovery drill.")
 	flag.DurationVar(&maxDrain, "max-drain", 0, "Optional maximum allowed drain duration.")
 	flag.Parse()

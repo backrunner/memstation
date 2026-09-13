@@ -16,5 +16,4 @@ RUN arch="$(dpkg --print-architecture)" \
   && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${node_arch}.tar.xz" -o /tmp/node.tar.xz \
   && tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 --no-same-owner \
   && rm -f /tmp/node.tar.xz \
-  && corepack enable \
-  && corepack prepare "pnpm@${PNPM_VERSION}" --activate
+  && npm install --global "pnpm@${PNPM_VERSION}"

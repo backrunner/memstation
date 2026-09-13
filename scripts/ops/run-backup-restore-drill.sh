@@ -302,7 +302,11 @@ VALUES ('audit-$DRILL_SUFFIX', 'system', '$DRILL_USER_ID', 'backup_restore_seed'
 INSERT INTO outbox_events (id, user_id, event_type, aggregate_type, aggregate_id, payload, status, available_at)
 VALUES ('outbox-$DRILL_SUFFIX', '$DRILL_USER_ID', 'conversation.finalize', 'conversation', '$DRILL_CONVERSATION_ID', '{"marker":"$MARKER_VALUE"}'::jsonb, 'processed', NOW());
 INSERT INTO memory_nodes (id, user_id, node_type, entity_id, importance, decay_factor, embedding_status)
-VALUES ('$DRILL_NODE_ID', '$DRILL_USER_ID', 'summary', 'summary-$DRILL_SUFFIX', 1.1, 0.95, 'completed');
+VALUES
+  ('$DRILL_NODE_ID', '$DRILL_USER_ID', 'summary', 'summary-$DRILL_SUFFIX', 1.1, 0.95, 'ready'),
+  ('impression-node-$DRILL_SUFFIX', '$DRILL_USER_ID', 'impression', 'impression-$DRILL_SUFFIX', 1.0, 1.0, 'pending'),
+  ('fact-node-$DRILL_SUFFIX', '$DRILL_USER_ID', 'fact', 'fact-$DRILL_SUFFIX', 1.0, 1.0, 'pending'),
+  ('key-node-$DRILL_SUFFIX', '$DRILL_USER_ID', 'key_memory', 'key-$DRILL_SUFFIX', 1.0, 1.0, 'pending');
 INSERT INTO memory_summaries (id, user_id, conversation_id, node_id, summary, topic_label, summary_version)
 VALUES ('summary-$DRILL_SUFFIX', '$DRILL_USER_ID', '$DRILL_CONVERSATION_ID', '$DRILL_NODE_ID', 'Deployment window captured for backup restore drill.', 'deployment', 1);
 INSERT INTO memory_keywords (id, user_id, summary_id, keyword, weight)

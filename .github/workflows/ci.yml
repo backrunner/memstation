@@ -3,6 +3,14 @@ name: ci
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -23,12 +31,14 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable
+      MEMSTATION_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable
       MEMSTATION_SERVER_COVERAGE_THRESHOLD: "55"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: 1.26.1
+          cache-dependency-path: apps/server/go.sum
       - uses: pnpm/action-setup@v4
         with:
           version: 12.3.4
@@ -41,7 +51,11 @@ jobs:
           # Atlas v0.38+ requires Pro for migrate lint; keep CI on the last CE lint-capable release.
           version: v0.37.0
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile=false
+        run: pnpm install --frozen-lockfile
+      - name: Atlas migration lint and dry-run
+        run: bash ./scripts/ops/check-atlas-migrations.sh
+      - name: Migrate disposable integration database
+        run: atlas migrate apply --dir file://apps/server/ent/migrate/migrations --url "$MEMSTATION_TEST_DATABASE_URL"
       - name: Go test
         run: cd apps/server && go test ./...
       - name: Go format check
@@ -50,8 +64,6 @@ jobs:
         run: bash ./scripts/go/lint.sh
       - name: Go generate check
         run: cd apps/server && go generate ./... && git diff --exit-code
-      - name: Atlas migration lint and dry-run
-        run: bash ./scripts/ops/check-atlas-migrations.sh
       - name: Contract tests
         run: bash ./scripts/test/run-contract-tests.sh
       - name: Worker recovery smoke

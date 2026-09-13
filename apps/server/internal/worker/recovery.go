@@ -60,8 +60,10 @@ type TaskTimingSummary struct {
 
 type recoveryQueue struct {
 	mu              sync.Mutex
-	channel         chan domain.TaskMessage
-	wait            sync.WaitGroup
+	tasks           []domain.TaskMessage
+	notify          chan struct{}
+	done            chan struct{}
+	inflight        int
 	currentDepth    int
 	peakDepth       int
 	enqueuedByType  map[string]int
@@ -130,11 +132,14 @@ func RunRecoveryDrill(ctx context.Context, options RecoveryOptions) (RecoveryRep
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
-			for task := range queue.channel {
-				queue.markDequeued()
+			for {
+				task, available := queue.next(ctx)
+				if !available {
+					return
+				}
 				handler, ok := handlers[task.Type]
 				if !ok {
-					queue.wait.Done()
+					queue.complete()
 					errMu.Lock()
 					if firstErr == nil {
 						firstErr = fmt.Errorf("no handler registered for task %s", task.Type)
@@ -144,7 +149,7 @@ func RunRecoveryDrill(ctx context.Context, options RecoveryOptions) (RecoveryRep
 				}
 				asynqTask, err := recoveryTask(task)
 				if err != nil {
-					queue.wait.Done()
+					queue.complete()
 					errMu.Lock()
 					if firstErr == nil {
 						firstErr = err
@@ -161,22 +166,19 @@ func RunRecoveryDrill(ctx context.Context, options RecoveryOptions) (RecoveryRep
 					errMu.Unlock()
 				}
 				queue.recordCompletion(task.Type, time.Since(taskStart))
-				queue.wait.Done()
+				queue.complete()
 			}
 		}()
 	}
 
-	waitDone := make(chan struct{})
-	go func() {
-		queue.wait.Wait()
-		close(queue.channel)
-		close(waitDone)
-	}()
+	// Release the initial producer after the outbox has been fully published.
+	queue.complete()
 
 	select {
 	case <-ctx.Done():
+		workers.Wait()
 		return RecoveryReport{}, fmt.Errorf("worker recovery drill timed out after %s", options.Timeout)
-	case <-waitDone:
+	case <-queue.done:
 	}
 	workers.Wait()
 	duration := time.Since(start)
@@ -327,7 +329,10 @@ func recoveryTask(task domain.TaskMessage) (*asynq.Task, error) {
 
 func newRecoveryQueue(size int) *recoveryQueue {
 	return &recoveryQueue{
-		channel:         make(chan domain.TaskMessage, size),
+		tasks:           make([]domain.TaskMessage, 0, size),
+		notify:          make(chan struct{}, 1),
+		done:            make(chan struct{}),
+		inflight:        1,
 		enqueuedByType:  map[string]int{},
 		processedByType: map[string]int{},
 		timingsByType:   map[string][]float64{},
@@ -335,8 +340,14 @@ func newRecoveryQueue(size int) *recoveryQueue {
 }
 
 func (q *recoveryQueue) Publish(ctx context.Context, task domain.TaskMessage) error {
-	q.wait.Add(1)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	q.mu.Lock()
+	// Handlers publish follow-up work while consuming the same queue. A bounded
+	// channel can leave every worker blocked on publishing when fan-out grows.
+	q.tasks = append(q.tasks, task)
+	q.inflight++
 	q.currentDepth++
 	if q.currentDepth > q.peakDepth {
 		q.peakDepth = q.currentDepth
@@ -344,23 +355,42 @@ func (q *recoveryQueue) Publish(ctx context.Context, task domain.TaskMessage) er
 	q.enqueuedByType[task.Type]++
 	q.mu.Unlock()
 	select {
-	case q.channel <- task:
-		return nil
-	case <-ctx.Done():
-		q.wait.Done()
-		q.mu.Lock()
-		q.currentDepth--
-		q.mu.Unlock()
-		return ctx.Err()
+	case q.notify <- struct{}{}:
+	default:
 	}
+	return nil
 }
 
-func (q *recoveryQueue) markDequeued() {
-	q.mu.Lock()
-	if q.currentDepth > 0 {
-		q.currentDepth--
+func (q *recoveryQueue) next(ctx context.Context) (domain.TaskMessage, bool) {
+	for ctx.Err() == nil {
+		q.mu.Lock()
+		if len(q.tasks) > 0 {
+			task := q.tasks[0]
+			q.tasks[0] = domain.TaskMessage{}
+			q.tasks = q.tasks[1:]
+			q.currentDepth--
+			q.mu.Unlock()
+			return task, true
+		}
+		q.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return domain.TaskMessage{}, false
+		case <-q.done:
+			return domain.TaskMessage{}, false
+		case <-q.notify:
+		}
 	}
-	q.mu.Unlock()
+	return domain.TaskMessage{}, false
+}
+
+func (q *recoveryQueue) complete() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.inflight--
+	if q.inflight == 0 {
+		close(q.done)
+	}
 }
 
 func (q *recoveryQueue) recordCompletion(taskType string, duration time.Duration) {

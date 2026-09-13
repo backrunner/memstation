@@ -47,6 +47,50 @@ func TestRunRecoveryDrillCompletesBacklog(t *testing.T) {
 	}
 }
 
+func TestRunRecoveryDrillDrainsGrowingFanout(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		conversations int
+		queueBuffer   int
+	}{
+		{name: "nightly", conversations: 256},
+		{name: "small initial queue", conversations: 16, queueBuffer: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			report, err := RunRecoveryDrill(context.Background(), RecoveryOptions{
+				Conversations:     tc.conversations,
+				WorkerConcurrency: 12,
+				MessagesPerTurn:   4,
+				QueueBuffer:       tc.queueBuffer,
+				Timeout:           45 * time.Second,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := ValidateRecoveryReport(report, 0); err != nil {
+				t.Fatal(err)
+			}
+			for taskType, enqueued := range report.EnqueuedByType {
+				if processed := report.ProcessedByType[taskType]; processed != enqueued {
+					t.Fatalf("%s lost tasks: enqueued %d, processed %d", taskType, enqueued, processed)
+				}
+			}
+		})
+	}
+}
+
+func TestRecoveryQueueHonorsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	queue := newRecoveryQueue(1)
+	cancel()
+	if err := queue.Publish(ctx, domain.TaskMessage{Type: TypeSummaryGenerate}); err == nil {
+		t.Fatal("accepted work after cancellation")
+	}
+	if _, available := queue.next(ctx); available {
+		t.Fatal("returned work after cancellation")
+	}
+}
+
 func TestRelayFlushProcessesMultiplePendingBatches(t *testing.T) {
 	t.Parallel()
 

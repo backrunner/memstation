@@ -34,19 +34,18 @@ require_command go
 require_command node
 
 if ! command -v pnpm >/dev/null 2>&1; then
-  if ! command -v corepack >/dev/null 2>&1; then
-    echo "pnpm is not available and corepack could not be found" >&2
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "pnpm is not available; install pnpm 12.3.4 or provide npm" >&2
     exit 1
   fi
-  corepack enable >/dev/null 2>&1
-  corepack prepare pnpm@12.3.4 --activate >/dev/null 2>&1
+  npm install --global pnpm@12.3.4
 fi
 
 if [[ "$SKIP_INSTALL" != "1" ]]; then
   echo "Ensuring workspace dependencies are installed..."
   (
     cd "$ROOT_DIR"
-    pnpm install --frozen-lockfile=false
+    pnpm install --no-frozen-lockfile
   )
 fi
 

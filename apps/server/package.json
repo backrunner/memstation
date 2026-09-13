@@ -12,5 +12,6 @@
     "generate": "go generate ./...",
     "format": "bash ../../scripts/go/format.sh",
     "format:check": "bash ../../scripts/go/format.sh --check"
-  }
+  },
+  "license": "Apache-2.0"
 }

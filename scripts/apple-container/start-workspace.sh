@@ -6,6 +6,7 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 source "$SCRIPT_DIR/common.sh"
 
 POSTGRES_IMAGE=${MEMSTATION_APPLE_POSTGRES_IMAGE:-pgvector/pgvector:pg16}
+POSTGRES_DATA_DIR=${MEMSTATION_APPLE_POSTGRES_DATA_DIR:-/var/lib/postgresql/data/pgdata}
 REDIS_IMAGE=${MEMSTATION_APPLE_REDIS_IMAGE:-redis:7}
 SKIP_BUILD=${MEMSTATION_APPLE_SKIP_BUILD:-0}
 HOST_HTTP_PORT=${MEMSTATION_APPLE_HTTP_PORT:-8080}
@@ -38,6 +39,7 @@ if ! memstation_apple_container_exists "$MEMSTATION_APPLE_POSTGRES"; then
     --env POSTGRES_USER=memstation \
     --env POSTGRES_PASSWORD=memstation_dev \
     --env POSTGRES_DB=memstation \
+    --env PGDATA="$POSTGRES_DATA_DIR" \
     --volume "${MEMSTATION_APPLE_POSTGRES_VOLUME}:/var/lib/postgresql/data" \
     "$POSTGRES_IMAGE" >/dev/null
 else
