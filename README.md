@@ -116,6 +116,7 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 
 ## Develop, evaluate, deploy
 
+- **Planned expansion:** [workspaces and multiple agents](docs/plans/workspace-agents/README.md), including Manager design, integration contracts, migration and acceptance criteria. These additions are not implemented yet.
 - **Development:** [local workflows](docs/local-debugging.md), [engineering specification](AGENTS.md), [contributing](CONTRIBUTING.md).
 - **Testing:** [CI checks and troubleshooting](docs/ci.md), Go unit/integration/contract tests, Manager Vitest and Chromium/WebKit E2E.
 - **Memory evaluation:** [runner and dataset guide](apps/server/tests/eval/README.md). Native golden data and external LOCOMO/LongMemEval adapters produce query details, score breakdowns and regression artifacts. Retrieval benchmarks are explicit local/manual runs, outside default CI/nightly gates.

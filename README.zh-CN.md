@@ -97,6 +97,7 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 
 ## 开发、评测与部署
 
+- **扩展计划：**[工作区与多 Agent](docs/plans/workspace-agents/README.md)，包含 Manager 设计、接入契约、迁移与验收标准；新增能力尚未实现。
 - **开发：**[本地调试](docs/local-debugging.md)、[工程规范](AGENTS.md)、[贡献指南](CONTRIBUTING.md)。
 - **测试：**[CI 门禁与故障说明](docs/ci.md)，Go 单元 / 集成 / 契约测试，Manager Vitest 和 Chromium / WebKit E2E。
 - **记忆评测：**[评测与数据集说明](apps/server/tests/eval/README.md)，原生 golden dataset 和外部 LOCOMO / LongMemEval adapter 输出检索明细、分数组成与回归样例。Benchmark 为本地 / 手动入口，不进入默认 CI / nightly 红线。

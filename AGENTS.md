@@ -696,7 +696,7 @@ v1.x 后续路线：
 - backup/restore 实际演练仍要求运行环境具备 Docker Compose 与镜像拉取能力；在无 Docker 环境下只能执行 dry-run 形态校验
 - 压测与覆盖率门禁已具备基线实现，但后续仍应随着功能扩展逐步提高阈值，而不是长期停留在当前数值
 - 2026-06-27 复核 GitHub nightly 最近失败点为 `actions/upload-artifact` 存储配额已满；worker recovery nightly drill 与 backup/restore nightly drill 本身均通过。workflow 已将诊断 artifact 上传改为 3 天保留与非阻塞，并在定时 nightly 中加入同提交覆盖检查，后续仍需定期清理远端 Actions artifact 存储。
-- 当前主要剩余工作是生产量级检索性能验证、外部 benchmark 与运维阈值持续收紧；不扩写新的 v1 产品范围
+- 既有实现的剩余工作包括生产量级检索性能验证、外部 benchmark 与运维阈值持续收紧；2026-10-23 用户明确追加的 Workspace／多 Agent／Manager 扩展按 14.5 节计划推进，当前尚未实现
 
 ### 14.3 重启检查点
 
@@ -724,6 +724,16 @@ v1.x 后续路线：
    继续用现有 Compose / K8s / multi-target manager 基线承接后续集群化和多节点恢复需求，不另起一套平行架构
 5. 文档与状态同步：
    后续只要出现里程碑、门禁、运行方式或当前进度变化，必须同步更新 `AGENTS.md` 与根 `README.md`
+
+---
+
+### 14.5 工作区与多 Agent 扩展计划（2026-10-23）
+
+- 用户要求同时覆盖群聊机器人、代码／个人 Agent 工作区、多个 Agent 共用服务，以及完整 Manager UI 改良。
+- 完整计划入口为 [工作区与多 Agent 扩展计划](docs/plans/workspace-agents/README.md)，包含架构、接入契约、Manager 信息架构与交互、迁移、实施顺序和验收矩阵；当前为计划与设计稿，不能视为功能已完成。
+- 保留 User 所有权边界，新增 Workspace、Actor、Agent、Run 与显式授权；主体归属、共享／私有记忆、事件去重、并发版本冲突和单空间重建必须贯穿所有 transport、存储与工具路径。
+- Manager 区分 Target／Workspace／账号与 Agent，遵守 11.2 节 server load／API routes 原则；旧 `.agents/plan/frontend-panel.md` 中“所有业务直连、禁止薄服务端转发”的冲突表述不再用于此次扩展。
+- 本次不引入 Organization、Billing、集群部署或外部 Agent 调度平台；现有 CI、benchmark 边界和完整 v1 交付要求保持有效。
 
 ---
 

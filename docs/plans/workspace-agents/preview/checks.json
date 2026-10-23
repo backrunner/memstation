@@ -1,0 +1,117 @@
+{
+  "generated_at": "2026-10-23T09:01:25.876Z",
+  "scope": "synthetic prototype only",
+  "checks": [
+    {
+      "browser": "chromium",
+      "check": "layout",
+      "width": 320,
+      "views": 8,
+      "passed": true
+    },
+    {
+      "browser": "chromium",
+      "check": "layout",
+      "width": 390,
+      "views": 8,
+      "passed": true
+    },
+    {
+      "browser": "chromium",
+      "check": "layout",
+      "width": 768,
+      "views": 8,
+      "passed": true
+    },
+    {
+      "browser": "chromium",
+      "check": "layout",
+      "width": 1280,
+      "views": 8,
+      "passed": true
+    },
+    {
+      "browser": "chromium",
+      "check": "layout",
+      "width": 1440,
+      "views": 8,
+      "passed": true
+    },
+    {
+      "browser": "chromium",
+      "check": "search-edit-evidence",
+      "passed": true
+    },
+    {
+      "browser": "chromium",
+      "check": "workspace-switch-subject-profile",
+      "passed": true
+    },
+    {
+      "browser": "chromium",
+      "check": "agent-grant-edit",
+      "passed": true
+    },
+    {
+      "browser": "chromium",
+      "check": "short-dialog-mobile-navigation-focus",
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "check": "layout",
+      "width": 320,
+      "views": 8,
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "check": "layout",
+      "width": 390,
+      "views": 8,
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "check": "layout",
+      "width": 768,
+      "views": 8,
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "check": "layout",
+      "width": 1280,
+      "views": 8,
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "check": "layout",
+      "width": 1440,
+      "views": 8,
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "check": "search-edit-evidence",
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "check": "workspace-switch-subject-profile",
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "check": "agent-grant-edit",
+      "passed": true
+    },
+    {
+      "browser": "webkit",
+      "check": "short-dialog-mobile-navigation-focus",
+      "passed": true
+    }
+  ],
+  "browser_errors": []
+}

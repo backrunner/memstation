@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>MemStation 工作区设计稿</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <aside class="ms-sidebar">
+    <a class="ms-brand" href="#workspace=project&view=memory"><img src="brand.png" alt="" width="30" height="30">MemStation</a>
+    <label class="ms-field">工作区<select id="workspace-picker" aria-label="切换工作区"></select></label>
+    <nav id="desktop-nav" aria-label="主导航"></nav>
+    <div class="ms-connection">服务连接<br><strong>Local</strong> <span>示例实例</span></div>
+  </aside>
+  <div class="ms-main">
+    <header class="ms-topbar">
+      <button id="open-nav" class="ms-mobile-only" aria-label="打开导航">菜单</button>
+      <div id="breadcrumb"></div>
+      <span class="ms-prototype-label">交互设计稿 · 虚构数据</span>
+    </header>
+    <main id="content"></main>
+    <p class="ms-status" id="status" role="status" aria-live="polite"></p>
+  </div>
+  <dialog id="nav-dialog" aria-labelledby="nav-title">
+    <div class="ms-dialog-head"><h2 id="nav-title">导航</h2><button data-close="nav-dialog">关闭</button></div>
+    <label class="ms-field">工作区<select id="mobile-workspace-picker" aria-label="移动端切换工作区"></select></label>
+    <nav id="mobile-nav" aria-label="移动导航"></nav>
+  </dialog>
+  <dialog id="edit-dialog" aria-labelledby="edit-title">
+    <form id="edit-form">
+      <div class="ms-dialog-head"><h2 id="edit-title">编辑记忆</h2><button type="button" data-close="edit-dialog">取消</button></div>
+      <p id="edit-scope" class="ms-muted"></p>
+      <label class="ms-field">正文<textarea name="content" rows="5" required></textarea></label>
+      <label class="ms-field">修改理由<input name="reason" required placeholder="说明本次修正的依据"></label>
+      <p class="ms-help">修改保留主体和可见范围。此次保存只更新设计稿中的示例。</p>
+      <div class="ms-dialog-actions"><button type="submit" class="ms-primary">保存修改</button></div>
+    </form>
+  </dialog>
+  <dialog id="grant-dialog" aria-labelledby="grant-title">
+    <form id="grant-form">
+      <div class="ms-dialog-head"><h2 id="grant-title">编辑访问范围</h2><button type="button" data-close="grant-dialog">取消</button></div>
+      <p id="grant-scope"></p>
+      <div id="grant-fields"></div>
+      <p class="ms-help">能力仅作用于当前工作区。私有笔记仍只对所属 Agent 可见。此次保存不修改真实授权。</p>
+      <div class="ms-dialog-actions"><button type="submit" class="ms-primary">保存访问范围</button></div>
+    </form>
+  </dialog>
+</body>
+</html>
