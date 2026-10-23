@@ -1,13 +1,14 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
   import { onMount } from 'svelte';
 
-  import { fetchQueues } from '$lib/api/client';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { QueueInfo } from '$lib/types';
+  import { fetchQueues } from '#lib/api/client.ts';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
+  import type { QueueInfo } from '#lib/types.ts';
 
   let loading = true;
   let error = '';
@@ -48,7 +49,7 @@
     description="Watch pending, active, scheduled, and retry counts by queue to spot buildup before it impacts summary, analysis, or embedding latency."
   >
     <div slot="actions">
-      <button class="btn-secondary btn-sm" type="button" on:click={loadQueues}>Refresh</button>
+      <Button class="btn-secondary btn-sm" type="button" onclick={loadQueues}>Refresh</Button>
     </div>
   </PageHeader>
 

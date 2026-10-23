@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { buildMemoryTurnDiff } from './memory-diff';
 
-import type { ConversationMemoryPayload, MemoryPreviewPayload } from '$lib/types';
+import type { ConversationMemoryPayload, MemoryPreviewPayload } from '#lib/types.ts';
 
 function makeConversationMemory(overrides?: Partial<ConversationMemoryPayload>): ConversationMemoryPayload {
   return {

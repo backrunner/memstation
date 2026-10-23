@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { forgetTargetCredential, readTargetCredential, rememberTargetCredential } from '$lib/targets/credentials';
+import { forgetTargetCredential, readTargetCredential, rememberTargetCredential } from '#lib/targets/credentials.ts';
 
 describe('target credentials', () => {
   it('keeps admin credentials in tab memory by target id', () => {

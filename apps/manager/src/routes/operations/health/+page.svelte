@@ -1,13 +1,14 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
   import { onMount } from 'svelte';
 
-  import { fetchConfig, fetchHealth, fetchProviderDiagnostics, fetchQueues } from '$lib/api/client';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { AdminConfigPayload, HealthPayload, ProviderDiagnostic, QueueInfo } from '$lib/types';
+  import { fetchConfig, fetchHealth, fetchProviderDiagnostics, fetchQueues } from '#lib/api/client.ts';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
+  import type { AdminConfigPayload, HealthPayload, ProviderDiagnostic, QueueInfo } from '#lib/types.ts';
 
   type RuntimeDriftEntry = {
     key: string;
@@ -110,7 +111,7 @@
     description="Dependency posture, drift, and queue/provider signals for the selected target."
   >
     <div slot="actions">
-      <button class="btn-secondary btn-sm" type="button" on:click={loadHealth}>Refresh</button>
+      <Button class="btn-secondary btn-sm" type="button" onclick={loadHealth}>Refresh</Button>
     </div>
   </PageHeader>
 

@@ -1,13 +1,14 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
   import { onMount } from 'svelte';
 
-  import { fetchConfig, saveConfig } from '$lib/api/client';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import SwitchField from '$lib/components/SwitchField.svelte';
-  import TextInputField from '$lib/components/TextInputField.svelte';
-  import { isNonNegativeInteger } from '$lib/forms/validation';
+  import { fetchConfig, saveConfig } from '#lib/api/client.ts';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import SwitchField from '#lib/components/SwitchField.svelte';
+  import TextInputField from '#lib/components/TextInputField.svelte';
+  import { isNonNegativeInteger } from '#lib/forms/validation.ts';
   import {
     buildSessionDraftKey,
     clearSessionDraft,
@@ -16,9 +17,9 @@
     useSessionDraftPersistence,
     useSessionDraftUnloadWarning,
     writeSessionDraft
-  } from '$lib/stores/session-drafts';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { ProviderSetPayload, ProviderSummary } from '$lib/types';
+  } from '#lib/stores/session-drafts.ts';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
+  import type { ProviderSetPayload, ProviderSummary } from '#lib/types.ts';
 
   type ProviderScope = 'gateway' | 'internal' | 'embedding' | 'rerank';
   type ModelSettingsDraft = {
@@ -295,9 +296,9 @@
           </div>
 
           <div class="form-actions">
-              <button class="btn-primary" type="button" disabled={saving} on:click={persist}>
+              <Button class="btn-primary" type="button" disabled={saving} onclick={persist}>
               {saving ? 'Saving…' : 'Save settings'}
-            </button>
+            </Button>
           </div>
         </section>
       </div>

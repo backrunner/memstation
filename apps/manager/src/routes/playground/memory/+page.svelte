@@ -1,24 +1,25 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import { Collapsible } from 'bits-ui';
+  import Button from '#lib/components/Button.svelte';
+  import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
 
-  import { fetchConversation, fetchConversationMemory, searchAdminMemories } from '$lib/api/client';
-  import JsonView from '$lib/components/JsonView.svelte';
-  import MemoryKeywordSignals from '$lib/components/MemoryKeywordSignals.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import TextInputField from '$lib/components/TextInputField.svelte';
-  import { matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '$lib/memory/keyword-signals';
+  import { fetchConversation, fetchConversationMemory, searchAdminMemories } from '#lib/api/client.ts';
+  import JsonView from '#lib/components/JsonView.svelte';
+  import MemoryKeywordSignals from '#lib/components/MemoryKeywordSignals.svelte';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import TextInputField from '#lib/components/TextInputField.svelte';
+  import { matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '#lib/memory/keyword-signals.ts';
   import {
     buildSessionDraftKey,
     readSessionDraft,
     useSessionDraftPersistence,
     useSessionDraftUnloadWarning,
     writeSessionDraft
-  } from '$lib/stores/session-drafts';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { ConversationMemoryPayload, ConversationRecord, SearchMemoriesResult } from '$lib/types';
+  } from '#lib/stores/session-drafts.ts';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
+  import type { ConversationMemoryPayload, ConversationRecord, SearchMemoriesResult } from '#lib/types.ts';
 
   type MemoryPlaygroundDraft = {
     conversationId: string;
@@ -160,9 +161,9 @@
             <h2 class="section-title">Inspect conversation</h2>
             <p class="panel-meta">Load metadata, messages, and persisted memory by id.</p>
           </div>
-          <button class="btn-secondary btn-sm" type="button" disabled={loading || !conversationId.trim()} on:click={inspectConversation}>
+          <Button class="btn-secondary btn-sm" type="button" disabled={loading || !conversationId.trim()} onclick={inspectConversation}>
             {loading ? 'Loading…' : 'Inspect'}
-          </button>
+          </Button>
         </div>
         <TextInputField label="Conversation ID" bind:value={conversationId} placeholder="conv-…" inputClass="input-mono" />
       </section>
@@ -173,9 +174,9 @@
             <h2 class="section-title">Recall search</h2>
             <p class="panel-meta">Run a semantic query against persisted memory.</p>
           </div>
-          <button class="btn-primary btn-sm" type="button" disabled={searchLoading || !searchQuery.trim()} on:click={runSearch}>
+          <Button class="btn-primary btn-sm" type="button" disabled={searchLoading || !searchQuery.trim()} onclick={runSearch}>
             {searchLoading ? 'Searching…' : 'Search'}
-          </button>
+          </Button>
         </div>
         <TextInputField
           label="Query"
@@ -206,14 +207,11 @@
           <div class="empty-state">Inspect a conversation to load memory.</div>
         {:else}
           <div class="stack-list">
-            <Collapsible.Root>
-              <Collapsible.Trigger class="collapsible-trigger">Conversation metadata</Collapsible.Trigger>
-              <Collapsible.Content>
+            <CollapsibleSection title="Conversation metadata">
                 <div style="margin-top: 8px;">
                   <JsonView value={detail.metadata ?? {}} />
                 </div>
-              </Collapsible.Content>
-            </Collapsible.Root>
+              </CollapsibleSection>
             {#if (memory?.documents.length ?? 0) === 0}
               <div class="empty-state">No persisted memory documents are linked to this conversation yet.</div>
             {:else}

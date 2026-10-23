@@ -78,7 +78,7 @@ async function ensureProviderRowVisible(page: Page, sectionLabel: RegExp, provid
   const addDialog = page.locator('.provider-add-dialog');
   await expect(addDialog).toBeVisible();
   await addDialog.locator('.select-trigger').click();
-  await page.locator('.select-item').filter({ hasText: new RegExp(`^${providerName}$`, 'i') }).click();
+  await page.getByRole('option', { name: new RegExp(`^${providerName}$`, 'i') }).click();
   await addDialog.getByRole('button', { name: 'Add Provider' }).click();
   await expect(page.locator('.provider-dialog-card')).toBeVisible();
   return { section, row, openedDialog: true };
@@ -98,14 +98,14 @@ test('target manager accepts URI tokens without storing them with targets', asyn
   await expect(page.locator('.target-preview')).toHaveCount(0);
 
   await page.getByLabel('Connection URI or base URL').fill(
-    `memstation://127.0.0.1:18080?key=${encodeURIComponent(adminTokenHash)}&label=URI%20Target`
+    `memstation://${new URL(fixtureBaseUrl).host}?key=${encodeURIComponent(adminTokenHash)}&label=URI%20Target`
   );
   await expect(page.getByLabel('Admin token')).toHaveCount(0);
   await page.getByRole('button', { name: 'Connect target' }).click();
 
-  await expect(page.getByRole('button', { name: 'Switch target' })).toContainText('127.0.0.1:18080');
-  await page.getByRole('button', { name: 'Switch target' }).click();
-  await expect(page.locator('.target-selector-item').filter({ hasText: '127.0.0.1:18080' })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Switch target' })).toContainText(new URL(fixtureBaseUrl).host);
+  await page.getByRole('combobox', { name: 'Switch target' }).click();
+  await expect(page.locator('.target-selector-item').filter({ hasText: new URL(fixtureBaseUrl).host })).toBeVisible();
   await expect(page.locator('.target-selector-item').filter({ hasText: 'fixture' })).toBeVisible();
   await page.keyboard.press('Escape');
 
@@ -243,7 +243,7 @@ test('summary, impression, and fact corrections persist with audit history', asy
 
   await expect(page.getByText('Summary updated and reloaded from the target.')).toBeVisible();
   await expect(page.getByText('memory_document_update')).toBeVisible();
-  await correctionAudit.locator('summary').filter({ hasText: /^Event payload$/ }).click();
+  await correctionAudit.getByRole('button', { name: 'Event payload', exact: true }).click();
   await expect(page.getByText(updatedContent)).toBeVisible();
 
   await page.reload();
@@ -254,7 +254,7 @@ test('summary, impression, and fact corrections persist with audit history', asy
   await page.locator('textarea').first().fill(updatedImpression);
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByText('Impression updated and reloaded from the target.')).toBeVisible();
-  await correctionAudit.locator('summary').filter({ hasText: /^Event payload$/ }).click();
+  await correctionAudit.getByRole('button', { name: 'Event payload', exact: true }).click();
   await expect(page.getByText(updatedImpression)).toBeVisible();
   await page.reload();
   await expect(contentField).toHaveValue(updatedImpression);
@@ -264,7 +264,7 @@ test('summary, impression, and fact corrections persist with audit history', asy
   await page.locator('textarea').first().fill(updatedFact);
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByText('Fact updated and reloaded from the target.')).toBeVisible();
-  await correctionAudit.locator('summary').filter({ hasText: /^Event payload$/ }).click();
+  await correctionAudit.getByRole('button', { name: 'Event payload', exact: true }).click();
   await expect(page.getByText(updatedFact)).toBeVisible();
   await page.reload();
   await expect(contentField).toHaveValue(updatedFact);
@@ -617,7 +617,7 @@ test('model and provider settings persist through direct writes to the selected 
   await providerDialog.getByLabel('Rotate API Key').fill('sk-playwright-anthropic');
   await providerDialog.getByRole('button', { name: 'Apply Changes' }).click();
   await gatewayProviderSection.locator('.provider-route-control .select-trigger').click();
-  await page.locator('[role="option"]:visible').filter({ hasText: /^anthropic$/ }).click();
+  await page.getByRole('option', { name: 'anthropic', exact: true }).click();
   await expect(gatewayProviderSection.locator('.provider-route-control .select-trigger')).toContainText('anthropic');
   await page.getByRole('button', { name: /Save Provider Settings/i }).click();
 
@@ -1029,9 +1029,9 @@ test('memory detail prioritizes editing and relation links preserve user scope o
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/memory/summaries/summary-1?user_id=admin');
   await expect(page.getByLabel('Content', { exact: true })).toBeInViewport();
-  const details = page.locator('details').filter({ has: page.locator('summary').filter({ hasText: /^Record details$/ }) }).first();
-  await expect(details).not.toHaveAttribute('open');
-  await details.locator('summary').click();
+  const details = page.locator('.disclosure').filter({ has: page.getByRole('button', { name: 'Record details', exact: true }) }).first();
+  await expect(details.getByRole('button', { name: 'Record details', exact: true })).toHaveAttribute('aria-expanded', 'false');
+  await details.getByRole('button', { name: 'Record details', exact: true }).click();
   await expect(details.getByText('Node', { exact: true })).toBeVisible();
   const related = page.locator('.relation-node-link').first();
   await expect(related).toHaveAttribute('href', /user_id=admin/);
@@ -1043,9 +1043,9 @@ test('memory detail prioritizes editing and relation links preserve user scope o
 
 test('manual task form is available on demand and retains its confirmation flow', async ({ page }) => {
   await page.goto('/operations/tasks');
-  const panel = page.locator('details').filter({ has: page.locator('summary').filter({ hasText: /^Publish manual task$/ }) });
+  const panel = page.locator('.disclosure').filter({ has: page.getByRole('button', { name: 'Publish manual task', exact: true }) });
   await expect(panel.getByLabel('Conversation ID', { exact: true })).toBeHidden();
-  await panel.locator('summary').click();
+  await panel.getByRole('button', { name: 'Publish manual task', exact: true }).click();
   await panel.getByLabel('Conversation ID', { exact: true }).fill('conv-seed-1');
   await panel.getByRole('button', { name: 'Publish task', exact: true }).click();
   const confirmation = page.getByRole('alertdialog', { name: 'Publish manual task?', exact: true });
@@ -1090,4 +1090,60 @@ test('entity alias candidates require confirmation and can be revoked after relo
   await page.getByRole('alertdialog').getByRole('button', {name:'Revoke',exact:true}).click();
   await expect(page.getByText('work · revoked', {exact:true})).toBeVisible();
   await expect(page.locator('.error-state')).toHaveCount(0);
+});
+
+
+test('shared controls preserve drafts, keyboard focus, and compact mobile layout', async ({ page }, testInfo) => {
+  await page.goto('/operations/tasks');
+  const generation = page.getByRole('button', { name: 'Generation lifecycle', exact: true });
+  await expect(generation).toHaveAttribute('aria-expanded', 'true');
+  await generation.click();
+  await expect(generation).toHaveAttribute('aria-expanded', 'false');
+  const trigger = page.getByRole('button', { name: 'Publish manual task', exact: true });
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  const input = page.getByLabel('Conversation ID', { exact: true });
+  await input.fill('conv-control-draft');
+  const select = page.getByRole('combobox', { name: 'Task type', exact: true });
+  await select.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  const selected = await select.textContent();
+  await expect(page.getByRole('listbox')).toBeHidden();
+  await expect(select).toBeFocused();
+  await select.click();
+  await page.keyboard.press('Escape');
+  await expect(select).toBeFocused();
+  await trigger.focus();
+  await page.keyboard.press('Space');
+  await expect(input).toBeHidden();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await page.keyboard.press('Enter');
+  await expect(input).toHaveValue('conv-control-draft');
+  await expect(select).toHaveText(selected!);
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    await input.scrollIntoViewIfNeeded();
+    const inputBox = await input.boundingBox();
+    const selectBox = await select.boundingBox();
+    expect(Math.abs(inputBox!.height - selectBox!.height)).toBeLessThan(1);
+    if (width < 1024) {
+      expect(inputBox!.height).toBeGreaterThanOrEqual(44);
+      expect(await input.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+    await page.screenshot({ path: testInfo.outputPath(`shared-controls-${width}.png`), fullPage: true, animations: 'disabled' });
+  }
+  await page.getByRole('combobox', { name: 'Switch target', exact: true }).click();
+  const targetOption = page.getByRole('option').first();
+  await expect(targetOption).toBeVisible();
+  expect((await targetOption.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await page.keyboard.press('Escape');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await trigger.click();
+  await expect(input).toBeHidden();
 });

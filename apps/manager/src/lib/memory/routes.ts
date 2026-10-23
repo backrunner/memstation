@@ -1,4 +1,4 @@
-import type { GenericMemoryDocumentKind, MemoryDocumentKind } from '$lib/types';
+import type { GenericMemoryDocumentKind, MemoryDocumentKind } from '#lib/types.ts';
 
 export type MemoryRouteKind =
   | 'summaries'

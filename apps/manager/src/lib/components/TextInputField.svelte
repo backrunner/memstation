@@ -4,8 +4,9 @@
 
   const id = $props.id();
 
-  interface Props {
-    label?: string;
+  interface Props extends Omit<HTMLInputAttributes, 'value' | 'class' | 'id'> {
+    label: string;
+    hideLabel?: boolean;
     value?: string | number;
     type?: HTMLInputAttributes['type'];
     placeholder?: string;
@@ -27,7 +28,8 @@
   }
 
   let {
-    label = '',
+    label,
+    hideLabel = false,
     value = $bindable(''),
     type = 'text',
     placeholder = '',
@@ -45,17 +47,19 @@
     spellcheck = false,
     fieldClass = '',
     inputClass = '',
-    inputId = id
+    inputId = id,
+    ...restProps
   }: Props = $props();
 </script>
 
 <div class={`field ${fieldClass}`.trim()}>
-  <Label.Root class="field-label" for={inputId}>{label}</Label.Root>
+  <Label.Root class={hideLabel ? 'sr-only' : 'field-label'} for={inputId}>{label}</Label.Root>
   <input
+    {...restProps}
     id={inputId}
     class={`input ${inputClass} ${error ? 'is-invalid' : ''}`.trim()}
     aria-invalid={Boolean(error)}
-    aria-describedby={error ? `${id}-error` : help ? `${id}-help` : undefined}
+    aria-describedby={[help && `${id}-help`, error && `${id}-error`].filter(Boolean).join(' ') || undefined}
     bind:value
     {type}
     {placeholder}

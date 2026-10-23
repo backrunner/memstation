@@ -1,36 +1,40 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
+  import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
   import { onMount } from 'svelte';
   import { Dialog } from 'bits-ui';
-  import { Plus, X } from 'lucide-svelte';
-  import { page } from '$app/stores';
+  import { Plus, X } from '@lucide/svelte';
+  import { createPageStore } from '#lib/stores/page.ts';
+
+  const page = createPageStore();
 
   import {
     createAdminKeyMemory,
     deleteAdminKeyMemory,
     fetchAdminKeyMemories,
     updateAdminKeyMemory
-  } from '$lib/api/client';
-  import ConfirmActionDialog from '$lib/components/ConfirmActionDialog.svelte';
-  import JsonView from '$lib/components/JsonView.svelte';
-  import MemoryWorkspaceNav from '$lib/components/MemoryWorkspaceNav.svelte';
-  import FilterToolbar from '$lib/components/FilterToolbar.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import { memoryDetailHref } from '$lib/memory/routes';
-  import SelectField from '$lib/components/SelectField.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import TextInputField from '$lib/components/TextInputField.svelte';
-  import TextareaField from '$lib/components/TextareaField.svelte';
+  } from '#lib/api/client.ts';
+  import ConfirmActionDialog from '#lib/components/ConfirmActionDialog.svelte';
+  import JsonView from '#lib/components/JsonView.svelte';
+  import MemoryWorkspaceNav from '#lib/components/MemoryWorkspaceNav.svelte';
+  import FilterToolbar from '#lib/components/FilterToolbar.svelte';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import { memoryDetailHref } from '#lib/memory/routes.ts';
+  import SelectField from '#lib/components/SelectField.svelte';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import TextInputField from '#lib/components/TextInputField.svelte';
+  import TextareaField from '#lib/components/TextareaField.svelte';
   import {
     buildSessionDraftKey,
     readSessionDraft,
     useSessionDraftPersistence,
     useSessionDraftUnloadWarning,
     writeSessionDraft
-  } from '$lib/stores/session-drafts';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { KeyMemoryRecord } from '$lib/types';
+  } from '#lib/stores/session-drafts.ts';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
+  import type { KeyMemoryRecord } from '#lib/types.ts';
 
   type KeyMemoriesDraft = {
     filter: string;
@@ -364,7 +368,7 @@
       <FilterToolbar activeCount={Number(Boolean(dateFrom)) + Number(Boolean(dateTo)) + selectedTiers.length} summary={`${visibleKeyMemories.length} key memories`}>
         <TextInputField label="Filter" bind:value={filter} placeholder="Search keys and values…" />
         {#snippet actions()}
-          <button class="btn-secondary" type="submit" disabled={loading}>{loading ? 'Loading…' : 'Apply filters'}</button>
+          <Button class="btn-secondary" type="submit" disabled={loading}>{loading ? 'Loading…' : 'Apply filters'}</Button>
         {/snippet}
         {#snippet filters()}
           <div class="filters two-up">
@@ -375,7 +379,7 @@
             <span class="field-label">Time tier</span>
             <div class="segmented-control" style="flex-wrap: wrap;">
               {#each timeTierOptions as option}
-                <button class="segmented-control-item" type="button" data-state={selectedTiers.includes(option.value) ? 'on' : 'off'} aria-pressed={selectedTiers.includes(option.value)} on:click={() => toggleTier(option.value)}>{option.label}</button>
+                <Button class="segmented-control-item" type="button" data-state={selectedTiers.includes(option.value) ? 'on' : 'off'} aria-pressed={selectedTiers.includes(option.value)} onclick={() => toggleTier(option.value)}>{option.label}</Button>
               {/each}
             </div>
           </div>
@@ -411,16 +415,16 @@
               <div class="keymem-actions">
                 <a class="btn-ghost btn-sm" href={memoryDetailHref('keys', keyMemory.id, activeUserId)}>Open</a>
                 {#if editingId === keyMemory.id}
-                  <button class="btn-ghost btn-sm" type="button" on:click={cancelEdit}>Cancel</button>
-                  <button class="btn-primary btn-sm" type="button" disabled={saving} on:click={() => saveEdit(keyMemory)}>
+                  <Button class="btn-ghost btn-sm" type="button" onclick={cancelEdit}>Cancel</Button>
+                  <Button class="btn-primary btn-sm" type="button" disabled={saving} onclick={() => saveEdit(keyMemory)}>
                     {saving ? 'Saving…' : 'Save'}
-                  </button>
+                  </Button>
                 {:else}
-                  <button class="btn-secondary btn-sm" type="button" on:click={() => startEdit(keyMemory)}>Edit</button>
+                  <Button class="btn-secondary btn-sm" type="button" onclick={() => startEdit(keyMemory)}>Edit</Button>
                 {/if}
-                <button class="btn-danger is-quiet btn-sm" type="button" disabled={deletingId === keyMemory.id} on:click={() => (deleteCandidate = keyMemory)}>
+                <Button class="btn-danger is-quiet btn-sm" type="button" disabled={deletingId === keyMemory.id} onclick={() => (deleteCandidate = keyMemory)}>
                   {deletingId === keyMemory.id ? 'Deleting…' : 'Delete'}
-                </button>
+                </Button>
               </div>
 
               {#if editingId === keyMemory.id}
@@ -430,10 +434,9 @@
                   <SelectField label="Review status" items={reviewStatusItems} bind:value={draftReviewStatus} />
                 </div>
               {:else}
-                <details class="record-details">
-                  <summary>Record details</summary>
+                <CollapsibleSection title="Record details">
                   <JsonView value={keyMemory} />
-                </details>
+                </CollapsibleSection>
               {/if}
             </article>
           {/each}
@@ -463,9 +466,9 @@
       </div>
       <div class="inline-group" style="justify-content: flex-end;">
         <Dialog.Close class="btn-secondary" disabled={creating}>Cancel</Dialog.Close>
-        <button class="btn-primary" type="submit" disabled={creating || !createKey.trim() || !createValue.trim()}>
+        <Button class="btn-primary" type="submit" disabled={creating || !createKey.trim() || !createValue.trim()}>
           {creating ? 'Creating…' : 'Create key memory'}
-        </button>
+        </Button>
       </div>
       </form>
     </Dialog.Content>
@@ -491,8 +494,6 @@
 <style>
   .keymem-dialog-header { align-items: flex-start; flex-wrap: nowrap; }
   .keymem-value { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; }
-  .record-details { min-width: 0; }
-  .record-details summary { cursor: pointer; color: var(--text-muted); font-size: 12px; padding-block: 6px; }
 
   .keymem-card {
     display: grid;

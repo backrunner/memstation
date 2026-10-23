@@ -1,15 +1,15 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import SelectField from '#lib/components/SelectField.svelte';
   import { onMount } from 'svelte';
-  import { Select } from 'bits-ui';
 
-  import { fetchConversations, fetchUsers } from '$lib/api/client';
-  import EChart from '$lib/components/EChart.svelte';
-  import KpiCard from '$lib/components/KpiCard.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { ConversationListItem, UserSummary } from '$lib/types';
+  import { fetchConversations, fetchUsers } from '#lib/api/client.ts';
+  import EChart from '#lib/components/EChart.svelte';
+  import KpiCard from '#lib/components/KpiCard.svelte';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
+  import type { ConversationListItem, UserSummary } from '#lib/types.ts';
 
   const rangeItems = [
     { value: '7', label: 'Last 7 days' },
@@ -195,51 +195,9 @@
   {:else}
     <section class="filter-bar">
       <div class="filters three-up">
-        <label class="field">
-          <span class="field-label">Time range</span>
-          <Select.Root type="single" bind:value={range} items={rangeItems}>
-            <Select.Trigger class="select-trigger">{rangeItems.find((item) => item.value === range)?.label ?? 'Select range'}</Select.Trigger>
-            <Select.Portal>
-              <Select.Content class="select-content" sideOffset={6}>
-                <Select.Viewport>
-                  {#each rangeItems as item}
-                    <Select.Item class="select-item" value={item.value} label={item.label}>{item.label}</Select.Item>
-                  {/each}
-                </Select.Viewport>
-              </Select.Content>
-            </Select.Portal>
-          </Select.Root>
-        </label>
-        <label class="field">
-          <span class="field-label">User filter</span>
-          <Select.Root type="single" bind:value={selectedUserId} items={userItems}>
-            <Select.Trigger class="select-trigger">{userItems.find((item) => item.value === selectedUserId)?.label ?? 'All users'}</Select.Trigger>
-            <Select.Portal>
-              <Select.Content class="select-content" sideOffset={6}>
-                <Select.Viewport>
-                  {#each userItems as item}
-                    <Select.Item class="select-item" value={item.value} label={item.label}>{item.label}</Select.Item>
-                  {/each}
-                </Select.Viewport>
-              </Select.Content>
-            </Select.Portal>
-          </Select.Root>
-        </label>
-        <label class="field">
-          <span class="field-label">Provider filter</span>
-          <Select.Root type="single" bind:value={selectedProvider} items={providerItems}>
-            <Select.Trigger class="select-trigger">{providerItems.find((item) => item.value === selectedProvider)?.label ?? 'All providers'}</Select.Trigger>
-            <Select.Portal>
-              <Select.Content class="select-content" sideOffset={6}>
-                <Select.Viewport>
-                  {#each providerItems as item}
-                    <Select.Item class="select-item" value={item.value} label={item.label}>{item.label}</Select.Item>
-                  {/each}
-                </Select.Viewport>
-              </Select.Content>
-            </Select.Portal>
-          </Select.Root>
-        </label>
+        <SelectField label="Time range" bind:value={range} items={rangeItems} />
+        <SelectField label="User filter" bind:value={selectedUserId} items={userItems} />
+        <SelectField label="Provider filter" bind:value={selectedProvider} items={providerItems} />
       </div>
     </section>
 

@@ -1,7 +1,7 @@
-FROM golang:1.26.1
+FROM golang:1.27.3
 
-ARG NODE_VERSION=24.11.1
-ARG PNPM_VERSION=12.3.4
+ARG NODE_VERSION=26.12.1
+ARG PNPM_VERSION=12.15.0
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl git procps xz-utils \

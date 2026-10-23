@@ -1,26 +1,29 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
+  import TextareaField from '#lib/components/TextareaField.svelte';
+  import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
   import { onMount, tick } from 'svelte';
-  import { Collapsible, ScrollArea, Tabs } from 'bits-ui';
+  import { ScrollArea, Tabs } from 'bits-ui';
 
   import {
     fetchConversation,
     fetchConversationMemory,
     fetchMemoryPreview,
     requestGatewayExchange
-  } from '$lib/api/client';
-  import ChatMessageCard from '$lib/components/ChatMessageCard.svelte';
-  import JsonView from '$lib/components/JsonView.svelte';
-  import MemoryKeywordSignals from '$lib/components/MemoryKeywordSignals.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import SegmentedField from '$lib/components/SegmentedField.svelte';
-  import SelectField from '$lib/components/SelectField.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import SwitchField from '$lib/components/SwitchField.svelte';
-  import TextInputField from '$lib/components/TextInputField.svelte';
-  import { matchedKeywordsFromMetadata, recordList, sourceKeywordsFromMetadata, stringList } from '$lib/memory/keyword-signals';
-  import { buildMemoryTurnDiff, type MemoryTurnChange, type MemoryTurnDiffResult, type MemoryTurnKind } from '$lib/playground/memory-diff';
+  } from '#lib/api/client.ts';
+  import ChatMessageCard from '#lib/components/ChatMessageCard.svelte';
+  import JsonView from '#lib/components/JsonView.svelte';
+  import MemoryKeywordSignals from '#lib/components/MemoryKeywordSignals.svelte';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import SegmentedField from '#lib/components/SegmentedField.svelte';
+  import SelectField from '#lib/components/SelectField.svelte';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import SwitchField from '#lib/components/SwitchField.svelte';
+  import TextInputField from '#lib/components/TextInputField.svelte';
+  import { matchedKeywordsFromMetadata, recordList, sourceKeywordsFromMetadata, stringList } from '#lib/memory/keyword-signals.ts';
+  import { buildMemoryTurnDiff, type MemoryTurnChange, type MemoryTurnDiffResult, type MemoryTurnKind } from '#lib/playground/memory-diff.ts';
   import {
     buildSessionDraftKey,
     draftsEqual,
@@ -28,8 +31,8 @@
     useSessionDraftPersistence,
     useSessionDraftUnloadWarning,
     writeSessionDraft
-  } from '$lib/stores/session-drafts';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
+  } from '#lib/stores/session-drafts.ts';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
   import type {
     ChatThreadMessage,
     ConversationMemoryPayload,
@@ -38,7 +41,7 @@
     GatewayProtocol,
     MemoryPreviewPayload,
     UsageRecord
-  } from '$lib/types';
+  } from '#lib/types.ts';
 
   const protocolItems = [
     { value: 'chat_completions', label: 'OpenAI Chat Completions' },
@@ -1038,19 +1041,19 @@
             <h2 class="section-title">History</h2>
             <div class="panel-meta">{pluralize(threads.length, 'thread')}</div>
           </div>
-          <button class="btn-secondary btn-sm" type="button" aria-label="New thread" on:click={createNewThread}>New</button>
+          <Button class="btn-secondary btn-sm" type="button" aria-label="New thread" onclick={createNewThread}>New</Button>
         </div>
 
         <div class="chat-history-list" role="tablist" aria-label="Playground conversations">
           {#each threads as thread}
-            <button
-              class:active-thread-pill={thread.threadId === activeThreadId}
-              class="thread-pill"
+            <Button
+
+              class="thread-pill {thread.threadId === activeThreadId ? 'active-thread-pill' : ''}"
               type="button"
               role="tab"
               aria-selected={thread.threadId === activeThreadId}
               title={thread.sessionId}
-              on:click={() => activateThread(thread.threadId)}
+              onclick={() => activateThread(thread.threadId)}
             >
               <span class="thread-pill-title">{threadTitle(thread)}</span>
               <span class="thread-pill-meta">{threadSubtitle(thread)}</span>
@@ -1062,7 +1065,7 @@
                   <span class="thread-pill-status thread-pill-status-danger">Failed</span>
                 {/if}
               </span>
-            </button>
+            </Button>
           {/each}
         </div>
       </aside>
@@ -1073,7 +1076,7 @@
             <h2 class="section-title">Conversation</h2>
             <div class="panel-meta">{threadMetaLine()}</div>
           </div>
-          <button class="btn-secondary btn-sm" type="button" disabled={threadStatus === 'generating'} on:click={resetThread}>Reset</button>
+          <Button class="btn-secondary btn-sm" type="button" disabled={threadStatus === 'generating'} onclick={resetThread}>Reset</Button>
         </div>
 
         <div class="chat-thread-surface">
@@ -1100,12 +1103,13 @@
         </div>
 
         <form class="chat-composer-card" on:submit|preventDefault={() => submit(false)}>
-          <textarea
-            class="chat-composer-input"
+          <TextareaField
+            label="Message" hideLabel
+            textareaClass="chat-composer-input"
             bind:value={input}
             placeholder="Message the target, test memory recall, or inspect persistence."
-            on:keydown={handleComposerKeydown}
-          ></textarea>
+            onkeydown={handleComposerKeydown}
+          />
           {#if error}
             <div class="field-error">{error}</div>
           {/if}
@@ -1115,12 +1119,12 @@
               <span>Ctrl/Cmd + Enter to send</span>
             </div>
             <div class="inline-group">
-              <button class="btn-ghost btn-sm" type="button" disabled={threadStatus === 'generating'} on:click={() => submit(true)}>
+              <Button class="btn-ghost btn-sm" type="button" disabled={threadStatus === 'generating'} onclick={() => submit(true)}>
                 Send &amp; end
-              </button>
-              <button class="btn-primary" type="submit" disabled={threadStatus === 'generating' || !input.trim()}>
+              </Button>
+              <Button class="btn-primary" type="submit" disabled={threadStatus === 'generating' || !input.trim()}>
                 {threadStatus === 'generating' ? 'Generating…' : 'Send'}
-              </button>
+              </Button>
             </div>
           </div>
         </form>
@@ -1222,14 +1226,11 @@
                       </div>
                     {/each}
                   </div>
-                  <Collapsible.Root>
-                    <Collapsible.Trigger class="collapsible-trigger">Payload</Collapsible.Trigger>
-                    <Collapsible.Content>
+                  <CollapsibleSection title="Payload">
                       <div style="margin-top: 8px;">
                         <JsonView value={injectedMemory} />
                       </div>
-                    </Collapsible.Content>
-                  </Collapsible.Root>
+                    </CollapsibleSection>
                 {:else}
                   <JsonView value={injectedMemory} />
                 {/if}
@@ -1249,7 +1250,7 @@
                     <StatusBadge tone={conversationDetail?.summary_status === 'completed' ? 'success' : conversationDetail?.summary_status === 'failed' ? 'danger' : conversationDetail?.summary_status === 'skipped' ? 'muted' : 'warning'} label={`summary ${conversationDetail?.summary_status ?? 'n/a'}`} />
                     <StatusBadge tone={conversationDetail?.analysis_status === 'completed' ? 'success' : conversationDetail?.analysis_status === 'failed' ? 'danger' : conversationDetail?.analysis_status === 'skipped' ? 'muted' : 'warning'} label={`analysis ${conversationDetail?.analysis_status ?? 'n/a'}`} />
                   </div>
-                  <button class="btn-secondary btn-sm" type="button" on:click={() => refreshDebugPanels()}>Refresh</button>
+                  <Button class="btn-secondary btn-sm" type="button" onclick={() => refreshDebugPanels()}>Refresh</Button>
                 </div>
                 {#if (conversationMemory?.documents.length ?? 0) > 0 || (conversationMemory?.key_memories.length ?? 0) > 0}
                   <div class="stack-list">
@@ -1396,22 +1397,16 @@
                 <div class="field-label">Response headers</div>
                 <JsonView value={gatewayHeaders} />
               </div>
-              <Collapsible.Root>
-                <Collapsible.Trigger class="collapsible-trigger">Request</Collapsible.Trigger>
-                <Collapsible.Content>
+              <CollapsibleSection title="Request">
                   <div style="margin-top: 8px;">
                     <JsonView value={{ headers: debug.requestHeaders, body: debug.requestBody }} />
                   </div>
-                </Collapsible.Content>
-              </Collapsible.Root>
-              <Collapsible.Root>
-                <Collapsible.Trigger class="collapsible-trigger">Raw events ({debug.rawEvents.length})</Collapsible.Trigger>
-                <Collapsible.Content>
+                </CollapsibleSection>
+              <CollapsibleSection title="Raw events ({debug.rawEvents.length})">
                   <div style="margin-top: 8px;">
                     <JsonView value={debug.rawEvents} emptyLabel="No raw protocol events captured." />
                   </div>
-                </Collapsible.Content>
-              </Collapsible.Root>
+                </CollapsibleSection>
             </div>
           </Tabs.Content>
         </Tabs.Root>

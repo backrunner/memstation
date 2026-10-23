@@ -1,4 +1,4 @@
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 import { beforeNavigate } from '$app/navigation';
 import { onMount } from 'svelte';
 

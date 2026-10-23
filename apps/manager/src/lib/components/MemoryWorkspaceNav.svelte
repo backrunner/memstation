@@ -2,7 +2,9 @@
 
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { createPageStore } from '#lib/stores/page.ts';
+
+  const page = createPageStore();
 
   export let current = '/memory';
 

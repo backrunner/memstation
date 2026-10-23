@@ -1,19 +1,23 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
+  import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { createPageStore } from '#lib/stores/page.ts';
 
-	import { activateMemoryRebuild, discardMemoryRebuild, fetchMemoryRebuilds, fetchQueues, fetchTasks, requeueTask } from '$lib/api/client';
-  import CodeBlock from '$lib/components/CodeBlock.svelte';
-  import ConfirmActionDialog from '$lib/components/ConfirmActionDialog.svelte';
-  import FilterToolbar from '$lib/components/FilterToolbar.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import SelectField from '$lib/components/SelectField.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import TextInputField from '$lib/components/TextInputField.svelte';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { MemoryGeneration, QueueInfo, QueueTaskRecord } from '$lib/types';
+  const page = createPageStore();
+
+	import { activateMemoryRebuild, discardMemoryRebuild, fetchMemoryRebuilds, fetchQueues, fetchTasks, requeueTask } from '#lib/api/client.ts';
+  import CodeBlock from '#lib/components/CodeBlock.svelte';
+  import ConfirmActionDialog from '#lib/components/ConfirmActionDialog.svelte';
+  import FilterToolbar from '#lib/components/FilterToolbar.svelte';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import SelectField from '#lib/components/SelectField.svelte';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import TextInputField from '#lib/components/TextInputField.svelte';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
+  import type { MemoryGeneration, QueueInfo, QueueTaskRecord } from '#lib/types.ts';
 
   const taskTypeItems = [
     { value: 'analysis.extract', label: 'analysis.extract' },
@@ -228,7 +232,7 @@
     description="Review archived, retry, scheduled, and active work items, then re-run by queue identity or publish a manual follow-up task."
   >
     <div slot="actions">
-      <button class="btn-secondary btn-sm" type="button" on:click={loadTasks}>Refresh</button>
+      <Button class="btn-secondary btn-sm" type="button" onclick={loadTasks}>Refresh</Button>
     </div>
   </PageHeader>
 
@@ -243,7 +247,7 @@
             <span class="field-label">State</span>
             <div class="segmented-control" style="flex-wrap: wrap;">
               {#each stateFilters as state}
-                <button class="segmented-control-item" type="button" data-state={selectedStates.includes(state) ? 'on' : 'off'} aria-pressed={selectedStates.includes(state)} on:click={() => toggleState(state)}>{state}</button>
+                <Button class="segmented-control-item" type="button" data-state={selectedStates.includes(state) ? 'on' : 'off'} aria-pressed={selectedStates.includes(state)} onclick={() => toggleState(state)}>{state}</Button>
               {/each}
             </div>
           </div>
@@ -282,7 +286,7 @@
                     on:click={() => (selectedTask = task)}
                   >
                     <td>
-                      <button class="table-select-button mono" type="button" aria-pressed={selectedTask?.id === task.id} on:click={() => (selectedTask = task)}>{task.type}</button>
+                      <Button class="table-select-button mono" type="button" aria-pressed={selectedTask?.id === task.id} onclick={() => (selectedTask = task)}>{task.type}</Button>
                       <div class="subtle-text mono">{task.id}</div>
                       <a class="btn-link" style="margin-top: 4px;" href={`/operations/tasks/${encodeURIComponent(task.queue)}/${encodeURIComponent(task.id)}`}>
                         Open detail
@@ -295,11 +299,11 @@
                       {task.queue}
                       {#if selectedQueue !== task.queue}
                         <div style="margin-top: 4px;">
-                          <button
+                          <Button
                             class="btn-link"
                             type="button"
-                            on:click|stopPropagation={() => { selectedQueue = task.queue; }}
-                          >Filter</button>
+                            onclick={(event) => { event.stopPropagation(); (() => { selectedQueue = task.queue; })(); }}
+                          >Filter</Button>
                         </div>
                       {/if}
                     </td>
@@ -347,11 +351,11 @@
                 <CodeBlock code={JSON.stringify(selectedTask.payload ?? {}, null, 2)} language="json" />
               </div>
               <div class="inline-group" style="justify-content: flex-end;">
-                <button
+                <Button
                   class="btn-primary btn-sm"
                   type="button"
                   disabled={actionLoading}
-                  on:click={() => selectedTask && requestConfirmation(
+                  onclick={() => selectedTask && requestConfirmation(
                     'Run this task again?',
                     'The selected payload will be republished to its worker queue immediately.',
                     `${selectedTask.queue} · ${selectedTask.id}`,
@@ -360,15 +364,14 @@
                   )}
                 >
                   {actionLoading ? 'Requeueing…' : 'Run task now'}
-                </button>
+                </Button>
               </div>
             {:else}
               <div class="empty-state">Select a task row to inspect its payload.</div>
             {/if}
           </section>
 
-          <details class="card secondary-panel" open={rebuilds.length > 0}>
-            <summary>Generation lifecycle</summary>
+          <CollapsibleSection title="Generation lifecycle" variant="panel" open={rebuilds.length > 0}>
             <div class="page-stack">
 {#if rebuilds.length === 0}
               <div class="empty-state">No rebuild generations found for this user filter.</div>
@@ -396,11 +399,11 @@
 					{#if !rebuild.is_active && rebuild.status !== 'discarded'}
 						<div class="inline-group" style="justify-content: flex-end;">
 							{#if rebuild.scope !== 'conversation' && rebuild.status === 'completed'}
-							<button
+							<Button
                           class="btn-secondary btn-sm"
                           type="button"
                           disabled={actionLoading}
-                          on:click={() => requestConfirmation(
+                          onclick={() => requestConfirmation(
                             'Activate memory generation?',
                             'Active reads will switch to this completed generation for the selected user.',
                             rebuild.generation_id,
@@ -409,20 +412,20 @@
                           )}
 							>
 								{actionLoading ? 'Activating…' : 'Activate generation'}
-							</button>
+							</Button>
 							{/if}
-							<button
+							<Button
 								class="btn-danger btn-sm"
 								type="button"
 								disabled={actionLoading}
-								on:click={() => requestConfirmation(
+								onclick={() => requestConfirmation(
 									'Discard memory generation?',
 									'Inactive graph, vector, and source references for this generation will be removed.',
 									rebuild.generation_id,
 									'Discard generation',
 									() => discardGeneration(rebuild.generation_id)
 								)}
-							>Discard</button>
+							>Discard</Button>
 						</div>
 					{/if}
                   </div>
@@ -430,10 +433,9 @@
               </div>
             {/if}
             </div>
-          </details>
+          </CollapsibleSection>
 
-          <details class="card secondary-panel">
-            <summary>Publish manual task</summary>
+          <CollapsibleSection title="Publish manual task" variant="panel">
             <div class="page-stack">
 <div class="form-grid two-up">
               <SelectField label="Task type" bind:value={manualTaskType} items={taskTypeItems} />
@@ -441,21 +443,21 @@
               <TextInputField label="Conversation ID" bind:value={manualConversationId} placeholder="conv-…" fieldClass="field-span-2" />
             </div>
             <div class="inline-group" style="justify-content: flex-end;">
-              <button
+              <Button
                 class="btn-secondary btn-sm"
                 type="button"
                 disabled={actionLoading || !manualConversationId.trim()}
-                on:click={() => requestConfirmation(
+                onclick={() => requestConfirmation(
                   'Publish manual task?',
                   'A new worker task will be queued for this conversation.',
                   `${manualTaskType} · ${manualConversationId.trim()}`,
                   'Publish task',
                   runManualRequeue
                 )}
-              >Publish task</button>
+              >Publish task</Button>
             </div>
             </div>
-          </details>
+          </CollapsibleSection>
         </div>
       </div>
     {/if}
@@ -535,8 +537,6 @@
     gap: 8px;
   }
 
-  .secondary-panel > summary { cursor: pointer; font-weight: 600; }
-  .secondary-panel[open] > summary { margin-bottom: 16px; }
   @media (max-width: 640px) {
     .task-table th:nth-child(n + 3), .task-table td:nth-child(n + 3) { display: none; }
   }

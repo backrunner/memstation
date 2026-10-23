@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR=$(cd "$(dirname "$0")/../.." && pwd)
 APP_DIR="$ROOT_DIR/apps/server"
-GOLANGCI_LINT_VERSION=${GOLANGCI_LINT_VERSION:-v2.13.2}
+GOLANGCI_LINT_VERSION=${GOLANGCI_LINT_VERSION:-v2.15.0}
 
 cd "$APP_DIR"
 

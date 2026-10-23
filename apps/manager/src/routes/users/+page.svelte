@@ -1,16 +1,17 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
   import { onMount } from 'svelte';
 
-  import { fetchUsers } from '$lib/api/client';
-  import FilterToolbar from '$lib/components/FilterToolbar.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import SelectField from '$lib/components/SelectField.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import TextInputField from '$lib/components/TextInputField.svelte';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { UserSummary } from '$lib/types';
+  import { fetchUsers } from '#lib/api/client.ts';
+  import FilterToolbar from '#lib/components/FilterToolbar.svelte';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import SelectField from '#lib/components/SelectField.svelte';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import TextInputField from '#lib/components/TextInputField.svelte';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
+  import type { UserSummary } from '#lib/types.ts';
 
   let loading = true;
   let error = '';
@@ -89,7 +90,7 @@
       <FilterToolbar activeCount={sortBy === 'recent' ? 0 : 1} summary={`${filtered.length} of ${users.length} users`}>
         <TextInputField label="Search" bind:value={search} placeholder="Search users" />
         {#snippet actions()}
-          <button class="btn-secondary" type="button" disabled={loading} on:click={loadUsers}>Refresh</button>
+          <Button class="btn-secondary" type="button" disabled={loading} onclick={loadUsers}>Refresh</Button>
         {/snippet}
         {#snippet filters()}
           <SelectField label="Sort" bind:value={sortBy} items={sortItems} />

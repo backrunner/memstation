@@ -75,7 +75,6 @@ func NewRouter(deps Dependencies) http.Handler {
 		logger = slog.Default()
 	}
 	router.Use(chimiddleware.RequestID)
-	router.Use(chimiddleware.RealIP)
 	router.Use(corsMiddleware(deps.Config, deps.SystemConfig))
 	router.Use(observability.HTTPMiddleware())
 	router.Use(chimiddleware.Recoverer)

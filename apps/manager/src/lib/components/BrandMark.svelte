@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { assets } from '$app/paths';
+  import { asset } from '$app/paths';
 
   let { size = 32 }: { size?: number } = $props();
 </script>
 
-<img src={`${assets}/brand/memstation-96.png`} width={size} height={size} alt="" aria-hidden="true" class="brand-mark" />
+<img src={asset('brand/memstation-96.png')} width={size} height={size} alt="" aria-hidden="true" class="brand-mark" />
 
 <style>
   .brand-mark {

@@ -8,7 +8,7 @@ best-effort with three-day retention. No provider credentials are required.
 
 ## Reproduce the checks
 
-Use pnpm 12.3.4, Go 1.26.1 and Node.js 24.11.1, matching the workflow. Start with:
+Use pnpm 12.15.0, Go 1.27.3 and Node.js 26.12.1, matching the workflow. Start with:
 
 ```bash
 pnpm install --frozen-lockfile

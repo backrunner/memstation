@@ -1,7 +1,7 @@
 import {
   fetchAdminMemoryDocuments,
   searchAdminMemories
-} from '$lib/api/client';
+} from '#lib/api/client.ts';
 import type {
   FactRecord,
   GenericMemoryDocumentKind,
@@ -9,7 +9,7 @@ import type {
   MemoryDocument,
   MemorySummaryRecord,
   SearchMemoriesResult
-} from '$lib/types';
+} from '#lib/types.ts';
 
 export interface MemoryWorkspaceData {
   memorySummaries: MemorySummaryRecord[];

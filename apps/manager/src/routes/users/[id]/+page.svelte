@@ -1,8 +1,11 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
   import { onDestroy, onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { createPageStore } from '#lib/stores/page.ts';
+
+  const page = createPageStore();
 
   import {
     createMemoryRebuild,
@@ -12,14 +15,14 @@
     fetchUserSources,
     revokeUserAPIKey,
     updateUserSettings
-  } from '$lib/api/client';
-  import CodeBlock from '$lib/components/CodeBlock.svelte';
-  import ConfirmActionDialog from '$lib/components/ConfirmActionDialog.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import SwitchField from '$lib/components/SwitchField.svelte';
-  import TextInputField from '$lib/components/TextInputField.svelte';
-  import { isNonNegativeInteger } from '$lib/forms/validation';
+  } from '#lib/api/client.ts';
+  import CodeBlock from '#lib/components/CodeBlock.svelte';
+  import ConfirmActionDialog from '#lib/components/ConfirmActionDialog.svelte';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import SwitchField from '#lib/components/SwitchField.svelte';
+  import TextInputField from '#lib/components/TextInputField.svelte';
+  import { isNonNegativeInteger } from '#lib/forms/validation.ts';
   import {
     buildSessionDraftKey,
     clearSessionDraft,
@@ -28,9 +31,9 @@
     useSessionDraftPersistence,
     useSessionDraftUnloadWarning,
     writeSessionDraft
-  } from '$lib/stores/session-drafts';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { KeyMemoryRecord, MemoryGeneration, MemoryRebuildDetailPayload, UserDetailPayload, UserSourcesPayload } from '$lib/types';
+  } from '#lib/stores/session-drafts.ts';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
+  import type { KeyMemoryRecord, MemoryGeneration, MemoryRebuildDetailPayload, UserDetailPayload, UserSourcesPayload } from '#lib/types.ts';
 
   type UserDetailDraft = {
     newKeyName: string;
@@ -531,7 +534,7 @@
         </div>
 
         <div class="form-actions" style="margin-top: 16px;">
-          <button class="btn-primary" type="button" disabled={saving} on:click={saveSettings}>{saving ? 'Saving...' : 'Save User Settings'}</button>
+          <Button class="btn-primary" type="button" disabled={saving} onclick={saveSettings}>{saving ? 'Saving...' : 'Save User Settings'}</Button>
         </div>
         </section>
 
@@ -546,7 +549,7 @@
             <div style="flex: 1; min-width: 0;">
               <TextInputField label="New Key Label" bind:value={newKeyName} placeholder="build-bot or local playground" />
             </div>
-            <button class="btn-primary" type="button" disabled={creatingKey} on:click={createKey}>{creatingKey ? 'Creating...' : 'Create API Key'}</button>
+            <Button class="btn-primary" type="button" disabled={creatingKey} onclick={createKey}>{creatingKey ? 'Creating...' : 'Create API Key'}</Button>
           </div>
 
           <div class="toolbar">
@@ -565,7 +568,7 @@
                   <div class="helper-text">Created {new Date(apiKey.created_at).toLocaleString()}</div>
                   {#if !apiKey.revoked_at}
                     <div class="inline-group" style="justify-content: flex-end; margin-top: 12px;">
-                      <button class="btn-danger is-quiet" type="button" on:click={() => (revokeCandidateId = apiKey.id)}>Revoke key</button>
+                      <Button class="btn-danger is-quiet" type="button" onclick={() => (revokeCandidateId = apiKey.id)}>Revoke key</Button>
                     </div>
                   {/if}
                 </div>
@@ -617,9 +620,9 @@
           <div class="notice-card" style="margin-top: 12px;">Current settings differ from the active memory generation. Trigger a rebuild to replay retained sources with the new configuration.</div>
         {/if}
         <div class="inline-group" style="justify-content: flex-end; margin-top: 12px;">
-          <button class="btn-primary" type="button" disabled={rebuilding || rebuildInFlight || (sources?.source_stats.snapshot_count ?? 0) === 0} on:click={() => (rebuildConfirmOpen = true)}>
+          <Button class="btn-primary" type="button" disabled={rebuilding || rebuildInFlight || (sources?.source_stats.snapshot_count ?? 0) === 0} onclick={() => (rebuildConfirmOpen = true)}>
             {rebuilding ? 'Creating rebuild...' : rebuildInFlight ? 'Rebuild running...' : 'Rebuild all retained memory'}
-          </button>
+          </Button>
         </div>
         <div class="generation-list" style="margin-top: 12px;">
           {#if (sources?.generations.length ?? 0) === 0}

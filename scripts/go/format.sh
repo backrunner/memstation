@@ -3,8 +3,8 @@ set -euo pipefail
 
 ROOT_DIR=$(cd "$(dirname "$0")/../.." && pwd)
 APP_DIR="$ROOT_DIR/apps/server"
-GOFUMPT_VERSION=${GOFUMPT_VERSION:-v0.9.2}
-GOIMPORTS_VERSION=${GOIMPORTS_VERSION:-v0.43.0}
+GOFUMPT_VERSION=${GOFUMPT_VERSION:-v0.12.0}
+GOIMPORTS_VERSION=${GOIMPORTS_VERSION:-v0.52.0}
 MODE=${1:-write}
 
 collect_go_files() {

@@ -1,27 +1,28 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
   import { onMount } from 'svelte';
   import { Tabs } from 'bits-ui';
 
-  import { requestGatewayRaw } from '$lib/api/client';
-  import JsonView from '$lib/components/JsonView.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import SegmentedField from '$lib/components/SegmentedField.svelte';
-  import SelectField from '$lib/components/SelectField.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import SwitchField from '$lib/components/SwitchField.svelte';
-  import TextInputField from '$lib/components/TextInputField.svelte';
-  import TextareaField from '$lib/components/TextareaField.svelte';
+  import { requestGatewayRaw } from '#lib/api/client.ts';
+  import JsonView from '#lib/components/JsonView.svelte';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import SegmentedField from '#lib/components/SegmentedField.svelte';
+  import SelectField from '#lib/components/SelectField.svelte';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import SwitchField from '#lib/components/SwitchField.svelte';
+  import TextInputField from '#lib/components/TextInputField.svelte';
+  import TextareaField from '#lib/components/TextareaField.svelte';
   import {
     buildSessionDraftKey,
     readSessionDraft,
     useSessionDraftPersistence,
     useSessionDraftUnloadWarning,
     writeSessionDraft
-  } from '$lib/stores/session-drafts';
-  import { selectedTarget } from '$lib/stores/targets';
-  import type { GatewayProtocol } from '$lib/types';
+  } from '#lib/stores/session-drafts.ts';
+  import { selectedTarget } from '#lib/stores/targets.ts';
+  import type { GatewayProtocol } from '#lib/types.ts';
 
   const protocolItems = [
     { value: 'chat_completions', label: 'OpenAI Chat Completions' },
@@ -382,10 +383,10 @@
             <h2 class="section-title">Request</h2>
           </div>
           <div class="inline-group">
-            <button class="btn-secondary btn-sm" type="button" on:click={() => applyTemplate(protocol)}>Reset template</button>
-            <button class="btn-primary btn-sm" type="button" disabled={sending} on:click={sendRequest}>
+            <Button class="btn-secondary btn-sm" type="button" onclick={() => applyTemplate(protocol)}>Reset template</Button>
+            <Button class="btn-primary btn-sm" type="button" disabled={sending} onclick={sendRequest}>
               {sending ? 'Sending…' : 'Send request'}
-            </button>
+            </Button>
           </div>
         </div>
 

@@ -2,18 +2,20 @@
 
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { createPageStore } from '#lib/stores/page.ts';
 
-  import { fetchAdminMemoryDocuments } from '$lib/api/client';
-  import MemoryWorkspaceNav from '$lib/components/MemoryWorkspaceNav.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import SelectField from '$lib/components/SelectField.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import TextInputField from '$lib/components/TextInputField.svelte';
-  import { genericMemoryKinds } from '$lib/memory/workspace';
-  import { memoryDetailHref, memoryRouteKindFromDocumentType } from '$lib/memory/routes';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { GenericMemoryDocumentKind, MemoryDocument } from '$lib/types';
+  const page = createPageStore();
+
+  import { fetchAdminMemoryDocuments } from '#lib/api/client.ts';
+  import MemoryWorkspaceNav from '#lib/components/MemoryWorkspaceNav.svelte';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import SelectField from '#lib/components/SelectField.svelte';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import TextInputField from '#lib/components/TextInputField.svelte';
+  import { genericMemoryKinds } from '#lib/memory/workspace.ts';
+  import { memoryDetailHref, memoryRouteKindFromDocumentType } from '#lib/memory/routes.ts';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
+  import type { GenericMemoryDocumentKind, MemoryDocument } from '#lib/types.ts';
 
   let loading = true;
   let error = '';

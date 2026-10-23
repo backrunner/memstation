@@ -1,17 +1,18 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
   import { onMount } from 'svelte';
-  import { RefreshCw } from 'lucide-svelte';
+  import { RefreshCw } from '@lucide/svelte';
 
-  import { fetchConversations, fetchUsers } from '$lib/api/client';
-  import FilterToolbar from '$lib/components/FilterToolbar.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import SelectField from '$lib/components/SelectField.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import TextInputField from '$lib/components/TextInputField.svelte';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { ConversationListItem } from '$lib/types';
+  import { fetchConversations, fetchUsers } from '#lib/api/client.ts';
+  import FilterToolbar from '#lib/components/FilterToolbar.svelte';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import SelectField from '#lib/components/SelectField.svelte';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import TextInputField from '#lib/components/TextInputField.svelte';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
+  import type { ConversationListItem } from '#lib/types.ts';
 
   let loading = true;
   let error = '';
@@ -128,9 +129,9 @@
       <FilterToolbar activeCount={[providerFilter, modeFilter, statusFilter, dateFrom, dateTo].filter(Boolean).length} summary={`${filtered.length} of ${conversations.length} conversations`}>
         <TextInputField label="Search" bind:value={search} placeholder="Search conversations" />
         {#snippet actions()}
-          <button class="btn-secondary" type="button" disabled={loading} on:click={loadConversations}>
+          <Button class="btn-secondary" type="button" disabled={loading} onclick={loadConversations}>
             <RefreshCw size={14} aria-hidden="true" /> {loading ? 'Refreshing…' : 'Refresh'}
-          </button>
+          </Button>
         {/snippet}
         {#snippet filters()}
           <div class="filters three-up">
@@ -140,7 +141,7 @@
             <TextInputField label="Date from" bind:value={dateFrom} type="date" />
             <TextInputField label="Date to" bind:value={dateTo} type="date" />
             <div class="field" style="align-self: end;">
-              <button class="btn-ghost" type="button" on:click={clearFilters}>Clear filters</button>
+              <Button class="btn-ghost" type="button" onclick={clearFilters}>Clear filters</Button>
             </div>
           </div>
         {/snippet}

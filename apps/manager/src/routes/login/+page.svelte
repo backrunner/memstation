@@ -1,18 +1,19 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import { browser } from '$app/environment';
-  import { env } from '$env/dynamic/public';
+  import Button from '#lib/components/Button.svelte';
+  import { browser } from '$app/env';
+  import { PUBLIC_MEMSTATION_DEFAULT_TARGET } from '$app/env/public';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
-  import BrandMark from '$lib/components/BrandMark.svelte';
+  import BrandMark from '#lib/components/BrandMark.svelte';
 
-  import { fetchHealth, loginAdmin } from '$lib/api/client';
-  import TextInputField from '$lib/components/TextInputField.svelte';
-  import { rememberTargetCredential } from '$lib/targets/credentials';
-  import { parseTargetLocator } from '$lib/targets/uri';
-  import type { ParsedTargetLocator } from '$lib/targets/uri';
-  import { markTargetSessionConnected, updateSession, upsertTarget } from '$lib/stores/targets';
+  import { fetchHealth, loginAdmin } from '#lib/api/client.ts';
+  import TextInputField from '#lib/components/TextInputField.svelte';
+  import { rememberTargetCredential } from '#lib/targets/credentials.ts';
+  import { parseTargetLocator } from '#lib/targets/uri.ts';
+  import type { ParsedTargetLocator } from '#lib/targets/uri.ts';
+  import { markTargetSessionConnected, updateSession, upsertTarget } from '#lib/stores/targets.ts';
 
   let connectionInput = defaultConnectionInput();
   let adminToken = '';
@@ -32,7 +33,7 @@
   });
 
   function defaultConnectionInput(): string {
-    const configuredTarget = env.PUBLIC_MEMSTATION_DEFAULT_TARGET?.trim();
+    const configuredTarget = PUBLIC_MEMSTATION_DEFAULT_TARGET?.trim();
     if (configuredTarget) {
       try {
         return parseTargetLocator(configuredTarget).target.baseUrl ?? configuredTarget;
@@ -130,9 +131,9 @@
         <div class="error-state">{error}</div>
       {/if}
 
-      <button class="btn-primary" type="submit" disabled={!hydrated || submitting}>
+      <Button class="btn-primary" type="submit" disabled={!hydrated || submitting}>
         {submitting ? 'Connecting…' : 'Connect target'}
-      </button>
+      </Button>
     </form>
   </div>
 </section>

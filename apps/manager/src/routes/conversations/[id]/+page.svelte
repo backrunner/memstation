@@ -1,19 +1,22 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { createPageStore } from '#lib/stores/page.ts';
 
-  import { createMemoryRebuild, fetchConversation, fetchConversationMemory, fetchConversationSources, requeueTask } from '$lib/api/client';
-  import ChatMessageCard from '$lib/components/ChatMessageCard.svelte';
-  import ConfirmActionDialog from '$lib/components/ConfirmActionDialog.svelte';
-  import JsonView from '$lib/components/JsonView.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import { memoryCollectionHref, memoryDetailHref, memoryRouteKindFromDocumentType } from '$lib/memory/routes';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { ConversationMemoryPayload, ConversationRecord, ConversationSourcesPayload } from '$lib/types';
+  const page = createPageStore();
+
+  import { createMemoryRebuild, fetchConversation, fetchConversationMemory, fetchConversationSources, requeueTask } from '#lib/api/client.ts';
+  import ChatMessageCard from '#lib/components/ChatMessageCard.svelte';
+  import ConfirmActionDialog from '#lib/components/ConfirmActionDialog.svelte';
+  import JsonView from '#lib/components/JsonView.svelte';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import { memoryCollectionHref, memoryDetailHref, memoryRouteKindFromDocumentType } from '#lib/memory/routes.ts';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
+  import type { ConversationMemoryPayload, ConversationRecord, ConversationSourcesPayload } from '#lib/types.ts';
 
   let loading = true;
   let error = '';
@@ -100,10 +103,10 @@
       });
       const generationId = rebuild.item.generation_id;
       if (generationId) {
-        const nextUrl = new URL($page.url);
+        const nextUrl = new URL($page.url.href);
         nextUrl.searchParams.set('user_id', detail.user_id);
         nextUrl.searchParams.set('generation_id', generationId);
-        await goto(nextUrl, { keepFocus: true, noScroll: true });
+        await goto(nextUrl, { reset: false });
       } else {
         await loadConversation();
       }
@@ -123,12 +126,12 @@
     description="Inspect the message timeline, worker lifecycle metadata, and memory artifacts linked to this conversation."
   >
     <div slot="actions">
-      <button class="btn-secondary btn-sm" type="button" disabled={requeueing} on:click={() => (requeueConfirmOpen = true)}>
+      <Button class="btn-secondary btn-sm" type="button" disabled={requeueing} onclick={() => (requeueConfirmOpen = true)}>
         {requeueing ? 'Requeueing…' : 'Requeue analysis'}
-      </button>
-      <button class="btn-secondary btn-sm" type="button" disabled={rebuilding || !sources?.has_snapshot} on:click={rebuildConversation}>
+      </Button>
+      <Button class="btn-secondary btn-sm" type="button" disabled={rebuilding || !sources?.has_snapshot} onclick={rebuildConversation}>
         {rebuilding ? 'Creating…' : 'Rebuild'}
-      </button>
+      </Button>
     </div>
   </PageHeader>
 

@@ -1,14 +1,15 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
   import { onMount } from 'svelte';
 
-  import { fetchAudit, fetchConversations, fetchOverview, fetchQueues, fetchTasks, fetchUsers } from '$lib/api/client';
-  import EChart from '$lib/components/EChart.svelte';
-  import KpiCard from '$lib/components/KpiCard.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
+  import { fetchAudit, fetchConversations, fetchOverview, fetchQueues, fetchTasks, fetchUsers } from '#lib/api/client.ts';
+  import EChart from '#lib/components/EChart.svelte';
+  import KpiCard from '#lib/components/KpiCard.svelte';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
   import type {
     AuditEventRecord,
     ConversationListItem,
@@ -16,7 +17,7 @@
     QueueInfo,
     QueueTaskRecord,
     UserSummary
-  } from '$lib/types';
+  } from '#lib/types.ts';
 
   let loading = true;
   let error = '';
@@ -184,13 +185,13 @@
           </div>
           <div class="segmented-control" role="group" aria-label="Range">
             {#each [7, 30] as item}
-              <button
+              <Button
                 class="segmented-control-item"
                 type="button"
                 data-state={range === item ? 'on' : 'off'}
                 aria-pressed={range === item}
-                on:click={() => (range = item)}
-              >{item}d</button>
+                onclick={() => (range = item)}
+              >{item}d</Button>
             {/each}
           </div>
         </div>

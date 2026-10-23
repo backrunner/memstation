@@ -9,7 +9,7 @@
   <p>
     <a href="https://github.com/backrunner/memstation/actions/workflows/ci.yml"><img src="https://github.com/backrunner/memstation/actions/workflows/ci.yml/badge.svg" alt="CI 状态" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-28634f" alt="Apache 2.0 许可证" /></a>
-    <a href="apps/server/go.mod"><img src="https://img.shields.io/badge/Go-1.26.1-00ADD8" alt="Go 1.26.1" /></a>
+    <a href="apps/server/go.mod"><img src="https://img.shields.io/badge/Go-1.27.3-00ADD8" alt="Go 1.27.3" /></a>
     <a href="apps/manager/package.json"><img src="https://img.shields.io/badge/Svelte-5-FF3E00" alt="Svelte 5" /></a>
   </p>
   <p><a href="README.md">English</a> · 简体中文</p>
@@ -55,7 +55,7 @@ Go 服务是唯一业务核心，单二进制提供 `serve`、`worker`、`schedu
 
 ## 快速开始
 
-本地准备 Docker / Compose、Node.js 和 **pnpm 12.3.4**。CI 使用 Node.js **24.11.1**、Go **1.26.1**；devcontainer 会提供 Go 工具链。
+本地准备 Docker / Compose、Node.js 和 **pnpm 12.15.0**。CI 使用 Node.js **26.12.1**、Go **1.27.3**；devcontainer 会提供 Go 工具链。
 
 ```bash
 git clone https://github.com/backrunner/memstation.git

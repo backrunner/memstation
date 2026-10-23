@@ -1,14 +1,15 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
   import { onMount } from 'svelte';
 
-  import { fetchCacheStatus } from '$lib/api/client';
-  import JsonView from '$lib/components/JsonView.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { CacheStatusPayload } from '$lib/types';
+  import { fetchCacheStatus } from '#lib/api/client.ts';
+  import JsonView from '#lib/components/JsonView.svelte';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
+  import type { CacheStatusPayload } from '#lib/types.ts';
 
   let loading = true;
   let error = '';
@@ -49,7 +50,7 @@
     description="Review process-local and Redis-backed cache behavior, TTL boundaries, and best-effort invalidation fan-out."
   >
     <div slot="actions">
-      <button class="btn-secondary btn-sm" type="button" on:click={loadCache}>Refresh</button>
+      <Button class="btn-secondary btn-sm" type="button" onclick={loadCache}>Refresh</Button>
     </div>
   </PageHeader>
 

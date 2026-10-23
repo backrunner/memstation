@@ -1,15 +1,16 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
   import { createEventDispatcher } from 'svelte';
   import { AlertDialog, ContextMenu, Dialog, DropdownMenu } from 'bits-ui';
-  import { Ellipsis, Trash2 } from 'lucide-svelte';
+  import { Ellipsis, Trash2 } from '@lucide/svelte';
 
-  import TextInputField from '$lib/components/TextInputField.svelte';
-  import { isHTTPURL } from '$lib/forms/validation';
-  import type { MemStationTarget } from '$lib/types';
-  import { readTargetCredential } from '$lib/targets/credentials';
-  import { parseTargetLocator } from '$lib/targets/uri';
+  import TextInputField from '#lib/components/TextInputField.svelte';
+  import { isHTTPURL } from '#lib/forms/validation.ts';
+  import type { MemStationTarget } from '#lib/types.ts';
+  import { readTargetCredential } from '#lib/targets/credentials.ts';
+  import { parseTargetLocator } from '#lib/targets/uri.ts';
 
   export let open = false;
   export let targets: MemStationTarget[] = [];
@@ -193,7 +194,7 @@
         <section class="target-dialog-list">
           <div class="target-dialog-list-header">
             <span class="sidebar-label">Saved targets</span>
-            <button class="btn-secondary btn-sm" type="button" on:click={resetForm}>New target</button>
+            <Button class="btn-secondary btn-sm" type="button" onclick={resetForm}>New target</Button>
           </div>
           {#if targetRows.length === 0}
             <div class="empty-state">No saved targets yet. Add one to connect.</div>
@@ -201,28 +202,28 @@
             <div class="target-list">
               {#each targetRows as target}
                 {#if isDraftTarget(target)}
-                  <button class="target-row is-active is-draft" type="button">
+                  <Button class="target-row is-active is-draft" type="button">
                     <div class="target-row-primary">
                       <strong>{target.label}</strong>
                       <span class="helper-text">{target.baseUrl}</span>
                     </div>
                     <span class="status-badge warning">draft</span>
-                  </button>
+                  </Button>
                 {:else}
                   <div class="target-list-entry">
                   <ContextMenu.Root>
                     <ContextMenu.Trigger class="target-context-trigger">
-                      <button
-                        class="target-row"
-                        class:is-active={target.id === editingId}
+                      <Button
+                        class="target-row {target.id === editingId ? 'is-active' : ''}"
+
                         type="button"
-                        on:click={() => loadTarget(target)}
+                        onclick={() => loadTarget(target)}
                       >
                         <div class="target-row-primary">
                           <strong>{target.label}</strong>
                           <span class="helper-text">{target.baseUrl}</span>
                         </div>
-                      </button>
+                      </Button>
                     </ContextMenu.Trigger>
                     <ContextMenu.Portal>
                       <ContextMenu.Content class="select-content target-context-menu" sideOffset={6}>
@@ -288,7 +289,7 @@
               Target metadata is saved locally; admin tokens are only exchanged for HttpOnly sessions.
             </p>
             <div class="inline-group">
-              <button class="btn-primary" type="button" on:click={saveTarget}>Save target</button>
+              <Button class="btn-primary" type="button" onclick={saveTarget}>Save target</Button>
             </div>
           </div>
         </section>
@@ -312,8 +313,8 @@
         <span class="helper-text mono">{removeTargetCandidate?.baseUrl ?? ''}</span>
       </div>
       <div class="target-remove-actions">
-        <button class="btn-secondary" type="button" on:click={cancelRemoveTarget}>Cancel</button>
-        <button class="btn-danger" type="button" on:click={confirmRemoveTarget}>Delete target</button>
+        <Button class="btn-secondary" type="button" onclick={cancelRemoveTarget}>Cancel</Button>
+        <Button class="btn-danger" type="button" onclick={confirmRemoveTarget}>Delete target</Button>
       </div>
     </AlertDialog.Content>
   </AlertDialog.Portal>
@@ -368,7 +369,7 @@
     min-width: 0;
   }
 
-  .target-row {
+  :global(.target-row) {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -385,16 +386,16 @@
     transition: border-color 120ms ease, background-color 120ms ease;
   }
 
-  .target-row:hover {
+  :global(.target-row:hover) {
     background: var(--surface-hover);
   }
 
-  .target-row.is-active {
+  :global(.target-row.is-active) {
     background: var(--brand-softer);
     box-shadow: inset 3px 0 0 var(--brand);
   }
 
-  .target-row.is-draft {
+  :global(.target-row.is-draft) {
     background: var(--warning-soft);
   }
 
@@ -428,7 +429,7 @@
     white-space: nowrap;
   }
 
-  .target-row.is-active .target-row-primary strong {
+  :global(.target-row.is-active) .target-row-primary strong {
     color: var(--text);
   }
 

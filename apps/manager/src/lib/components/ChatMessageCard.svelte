@@ -1,12 +1,12 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import { Collapsible } from 'bits-ui';
+  import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
 
-  import JsonView from '$lib/components/JsonView.svelte';
-  import MarkdownContent from '$lib/components/MarkdownContent.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import type { ChatThreadMessage, ContentBlock, JSONValue } from '$lib/types';
+  import JsonView from '#lib/components/JsonView.svelte';
+  import MarkdownContent from '#lib/components/MarkdownContent.svelte';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import type { ChatThreadMessage, ContentBlock, JSONValue } from '#lib/types.ts';
 
   export let message: ChatThreadMessage;
 
@@ -247,14 +247,11 @@
   {/if}
 
   {#if message.thinking}
-    <Collapsible.Root>
-      <Collapsible.Trigger class="collapsible-trigger">Thinking trace</Collapsible.Trigger>
-      <Collapsible.Content>
+    <CollapsibleSection title="Thinking trace">
         <div class="debug-block" style="margin-top: 10px;">
           <MarkdownContent value={message.thinking} />
         </div>
-      </Collapsible.Content>
-    </Collapsible.Root>
+      </CollapsibleSection>
   {/if}
 
   <MarkdownContent value={message.text} />
@@ -311,9 +308,7 @@
   {/if}
 
   {#if message.toolCalls?.length}
-    <Collapsible.Root>
-      <Collapsible.Trigger class="collapsible-trigger">Tool calls ({message.toolCalls.length})</Collapsible.Trigger>
-      <Collapsible.Content>
+    <CollapsibleSection title="Tool calls ({message.toolCalls.length})">
         <div class="toolbar" style="margin-top: 10px;">
           {#each message.toolCalls as toolCall}
             <div class="debug-block">
@@ -355,14 +350,11 @@
             </div>
           {/each}
         </div>
-      </Collapsible.Content>
-    </Collapsible.Root>
+      </CollapsibleSection>
   {/if}
 
   {#if message.toolResults?.length}
-    <Collapsible.Root>
-      <Collapsible.Trigger class="collapsible-trigger">Tool results ({message.toolResults.length})</Collapsible.Trigger>
-      <Collapsible.Content>
+    <CollapsibleSection title="Tool results ({message.toolResults.length})">
         <div class="toolbar" style="margin-top: 10px;">
           {#each message.toolResults as toolResult}
             <div class="debug-block">
@@ -404,8 +396,7 @@
             </div>
           {/each}
         </div>
-      </Collapsible.Content>
-    </Collapsible.Root>
+      </CollapsibleSection>
   {/if}
 
   {#if message.metadata && Object.keys(message.metadata).length}

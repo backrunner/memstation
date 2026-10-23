@@ -1,16 +1,19 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { createPageStore } from '#lib/stores/page.ts';
 
-  import { fetchAudit, fetchTaskDetail, requeueTask } from '$lib/api/client';
-  import ConfirmActionDialog from '$lib/components/ConfirmActionDialog.svelte';
-  import JsonView from '$lib/components/JsonView.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { AuditEventRecord, QueueTaskDetailPayload } from '$lib/types';
+  const page = createPageStore();
+
+  import { fetchAudit, fetchTaskDetail, requeueTask } from '#lib/api/client.ts';
+  import ConfirmActionDialog from '#lib/components/ConfirmActionDialog.svelte';
+  import JsonView from '#lib/components/JsonView.svelte';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
+  import type { AuditEventRecord, QueueTaskDetailPayload } from '#lib/types.ts';
 
   let loading = true;
   let actionLoading = false;
@@ -138,7 +141,7 @@
         <div class="inline-group" style="justify-content: flex-end;">
           <a class="btn-ghost" href={`/operations/queues/${encodeURIComponent(detail.item.queue)}`}>Open queue</a>
           <a class="btn-ghost" href={`/operations/tasks?queue=${encodeURIComponent(detail.item.queue)}`}>Back to filtered tasks</a>
-          <button class="btn-primary" type="button" disabled={actionLoading} on:click={() => (rerunConfirmOpen = true)}>{actionLoading ? 'Requeueing...' : 'Run task now'}</button>
+          <Button class="btn-primary" type="button" disabled={actionLoading} onclick={() => (rerunConfirmOpen = true)}>{actionLoading ? 'Requeueing...' : 'Run task now'}</Button>
         </div>
       </section>
 

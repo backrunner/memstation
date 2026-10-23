@@ -2039,6 +2039,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/admin/memory/rebuilds') {
+    const userId = url.searchParams.get('user_id') || 'admin';
+    const generations = state.users.some((user) => user.user_id === userId) ? buildUserSources(userId).generations : [];
+    json(req, res, { items: generations });
+    return;
+  }
+
   if (url.pathname === '/api/admin/memory/entity-aliases') {
     const userId = url.searchParams.get('user_id') || 'admin';
     if (req.method === 'GET') { json(req, res, state.entity_aliases.filter((item) => item.user_id === userId)); return; }

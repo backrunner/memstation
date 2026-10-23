@@ -1,16 +1,19 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
   import { onDestroy, onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { createPageStore } from '#lib/stores/page.ts';
 
-  import { fetchAudit } from '$lib/api/client';
-  import FilterToolbar from '$lib/components/FilterToolbar.svelte';
-  import JsonView from '$lib/components/JsonView.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import TextInputField from '$lib/components/TextInputField.svelte';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { AuditEventRecord } from '$lib/types';
+  const page = createPageStore();
+
+  import { fetchAudit } from '#lib/api/client.ts';
+  import FilterToolbar from '#lib/components/FilterToolbar.svelte';
+  import JsonView from '#lib/components/JsonView.svelte';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import TextInputField from '#lib/components/TextInputField.svelte';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
+  import type { AuditEventRecord } from '#lib/types.ts';
 
   let loading = true;
   let error = '';
@@ -104,7 +107,7 @@
     description="Track API key changes, memory edits, configuration updates, and tool-driven writes with their associated payloads."
   >
     <div slot="actions">
-      <button class="btn-secondary btn-sm" type="button" on:click={loadAudit}>Refresh</button>
+      <Button class="btn-secondary btn-sm" type="button" onclick={loadAudit}>Refresh</Button>
     </div>
   </PageHeader>
 
@@ -149,7 +152,7 @@
                   on:click={() => (selected = event)}
                 >
                   <td>
-                    <button class="table-select-button mono" type="button" aria-pressed={selected?.id === event.id} on:click={() => (selected = event)}>{event.action}</button>
+                    <Button class="table-select-button mono" type="button" aria-pressed={selected?.id === event.id} onclick={() => (selected = event)}>{event.action}</Button>
                     <div class="subtle-text">{event.actor_type ?? 'system'} · {event.actor_id ?? 'unknown'}</div>
                   </td>
                   <td>

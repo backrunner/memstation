@@ -1,26 +1,29 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { createPageStore } from '#lib/stores/page.ts';
 
-  import { fetchAdminMemoryDocuments, updateAdminMemoryDocument } from '$lib/api/client';
-  import FactLineagePanel from '$lib/components/FactLineagePanel.svelte';
-  import MemoryWorkspaceNav from '$lib/components/MemoryWorkspaceNav.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import { memoryDetailHref } from '$lib/memory/routes';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import TextInputField from '$lib/components/TextInputField.svelte';
-  import TextareaField from '$lib/components/TextareaField.svelte';
+  const page = createPageStore();
+
+  import { fetchAdminMemoryDocuments, updateAdminMemoryDocument } from '#lib/api/client.ts';
+  import FactLineagePanel from '#lib/components/FactLineagePanel.svelte';
+  import MemoryWorkspaceNav from '#lib/components/MemoryWorkspaceNav.svelte';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import { memoryDetailHref } from '#lib/memory/routes.ts';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import TextInputField from '#lib/components/TextInputField.svelte';
+  import TextareaField from '#lib/components/TextareaField.svelte';
   import {
     buildSessionDraftKey,
     readSessionDraft,
     useSessionDraftPersistence,
     useSessionDraftUnloadWarning,
     writeSessionDraft
-  } from '$lib/stores/session-drafts';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { MemoryDocument } from '$lib/types';
+  } from '#lib/stores/session-drafts.ts';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
+  import type { MemoryDocument } from '#lib/types.ts';
 
   type FactsListDraft = {
     filter: string;
@@ -223,12 +226,12 @@
                   {/if}
                   <a class="btn-ghost btn-sm" href={memoryDetailHref('facts', fact.id, activeUserId)}>Open</a>
                   {#if editingId === fact.id}
-                    <button class="btn-ghost btn-sm" type="button" on:click={cancelEdit}>Cancel</button>
-                    <button class="btn-primary btn-sm" type="button" disabled={saving} on:click={() => saveEdit(fact)}>
+                    <Button class="btn-ghost btn-sm" type="button" onclick={cancelEdit}>Cancel</Button>
+                    <Button class="btn-primary btn-sm" type="button" disabled={saving} onclick={() => saveEdit(fact)}>
                       {saving ? 'Saving…' : 'Save'}
-                    </button>
+                    </Button>
                   {:else}
-                    <button class="btn-secondary btn-sm" type="button" on:click={() => startEdit(fact)}>Edit</button>
+                    <Button class="btn-secondary btn-sm" type="button" onclick={() => startEdit(fact)}>Edit</Button>
                   {/if}
                 </div>
               </header>

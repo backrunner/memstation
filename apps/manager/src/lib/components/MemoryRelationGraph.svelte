@@ -1,8 +1,8 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import { memoryDetailHref, memoryRouteKindFromDocumentType } from '$lib/memory/routes';
-  import type { RelatedMemory } from '$lib/types';
+  import { memoryDetailHref, memoryRouteKindFromDocumentType } from '#lib/memory/routes.ts';
+  import type { RelatedMemory } from '#lib/types.ts';
 
   export let centerLabel = 'Memory';
   export let centerType = 'memory';

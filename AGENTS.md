@@ -428,7 +428,11 @@ v1.0 默认目标：
 | Charting | `echarts` | `6.0.0` |
 | Lint | `eslint` | `10.0.3` |
 
-### 10.3 版本策略
+### 10.3 当前依赖基线（2026-10-23）
+
+以上初始化表保留为历史背景，当前以 manifest / lockfile 与 [升级说明](docs/ui-dependencies-2026-10-23.md) 为准：Go `1.27.3`、Node `26.12.1`、pnpm `12.15.0`、SvelteKit `3.1.0`、Svelte `5.57.2`、Bits UI `2.20.2`、adapter-node `6.0.0`、Vite `8.3.5`、Vitest `5.0.5`、TypeScript `6.0.3`。TypeScript 保持 `6.x`；其他依赖升级跟进官方 breaking changes，Atlas CE lint 工具等兼容性例外需在升级说明记录。
+
+### 10.4 版本策略
 
 - `go.mod`, `package.json`, Docker image 都必须写明确版本
 - 禁止 `latest`
@@ -469,6 +473,7 @@ v1.0 默认目标：
 - 避免装饰性状态灯、渐变、发光、悬浮位移动效及重复胶囊标签；常规状态和元数据用文字呈现，填色提示用于失败、重试、历史事实等需要注意的状态
 - 各端优先展示搜索、结果和主要操作，次要筛选按需展开并保留所选条件；不重复展示导航已有入口、无操作意义的正常状态或原始记录
 - 同类按钮、输入框、表单和记录列表使用共享尺寸与间距；普通记录用分隔线组织，避免卡片层层嵌套。高频编辑内容优先，运行元数据和原始 JSON 按需展开；关系视图必须有可读标识与真实跳转入口
+- 折叠区域统一使用基于 Bits UI 的 `CollapsibleSection`；选择器统一使用 `SelectField`，输入使用 `TextInputField` / `TextareaField`，普通操作按钮使用基于 Bits UI Button 的 `Button`。有对应 Bits UI primitive 时优先复用，禁止各页面重复实现折叠、Select 或原始表单控件；保持紧凑布局、键盘可用、草稿保留及 reduced-motion 支持。
 - 移动端主要控件保持至少 44px 触控高度，文本输入避免 iOS 聚焦缩放；短屏弹窗可滚动，保存操作不得遮住最后一组字段，横向栏目切换应露出当前项
 
 ---
@@ -624,11 +629,13 @@ v1.x 后续路线：
 
 ---
 
-## 14. 当前实现状态（as of 2026-09-17）
+## 14. 当前实现状态（as of 2026-10-23）
 
 本节用于重启时快速恢复上下文；如后续实现进度发生变化，必须同步更新本节，而不能只改代码不改状态。
 
 ### 14.1 已完成
+
+- 2026-10-23 共享控件与依赖升级：所有折叠区域统一为 Bits UI `CollapsibleSection`；所有 Select（含 target、provider route 与统计筛选）统一为 `SelectField`，普通按钮统一 `Button`，输入与聊天编辑器使用共享 Input / Textarea。统一表单桌面 36px、移动端至少 44px 触控、焦点、草稿保留与 reduced-motion；SvelteKit 3 / adapter-node 6、Bits UI 2.20.2、Vitest 5、Node 26.12.1、Go 1.27.3 等完成迁移，TypeScript 固定 6.0.3。Manager lint/check、15 项单测、production build、Chromium 36 + WebKit 12 项 E2E、Go 全量及隔离 PostgreSQL 集成、format/lint、重复生成一致性、Atlas lint/dry-run、恢复 smoke 与备份 dry-run通过；版本、兼容性例外及验证边界见 `docs/ui-dependencies-2026-10-23.md`。
 
 - 2026-09-17 图记忆增强：新增数据库取边预算、关系方向/可信度与路径解释；精确引用和上下文推断分开记录，同源证据去重；新增事实有效时间与系统记录时间查询、迟到事实插入和人工修改历史快照；实体别名支持作用域、候选/确认/撤销、循环及跨用户/跨代校验、事务审计，Manager 提供操作入口。迁移、接口与边界见 `docs/graph-memory.md`；历史快照从迁移开始，历史查询当前限定 Fact，生产量级性能与真实模型召回增益仍需独立评测。
 
@@ -743,7 +750,7 @@ v1.x 后续路线：
 
 1. 队列技术以 `asynq` 为准，不再保留 `BullMQ` 表述。
 2. API 设计必须纳入 `POST /v1/responses`，不能只支持 Chat Completions。
-3. Go 版本基线统一提升到 `1.26.1`，不再混用 `1.22+ / 1.23+`。
+3. Go 版本基线统一提升到 `1.27.3`，不再混用 `1.22+ / 1.23+`。
 4. Ent schema 不允许通过运行时配置切换 embedding 字段。
 5. `MemoryKeyword` 与 `User` 的关系定义必须闭合。
 6. Ent Privacy Policy 的规则顺序必须可执行，不能先 `AlwaysDeny` 再期望放行。

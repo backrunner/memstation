@@ -12,8 +12,8 @@
 适合改 Go 服务和 Manager 页面，要求：
 
 - Docker
-- Node.js `24.11+`
-- pnpm `12.3.4`
+- Node.js `26.12.1+`
+- pnpm `12.15.0`
 
 先安装依赖：
 

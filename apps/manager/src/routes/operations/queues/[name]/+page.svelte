@@ -1,16 +1,19 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { createPageStore } from '#lib/stores/page.ts';
 
-  import { fetchQueues, fetchTasks } from '$lib/api/client';
-  import JsonView from '$lib/components/JsonView.svelte';
-  import KpiCard from '$lib/components/KpiCard.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { QueueInfo, QueueTaskRecord } from '$lib/types';
+  const page = createPageStore();
+
+  import { fetchQueues, fetchTasks } from '#lib/api/client.ts';
+  import JsonView from '#lib/components/JsonView.svelte';
+  import KpiCard from '#lib/components/KpiCard.svelte';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
+  import type { QueueInfo, QueueTaskRecord } from '#lib/types.ts';
 
   let loading = true;
   let error = '';
@@ -101,7 +104,7 @@
       </div>
       <div class="inline-group" style="flex-wrap: wrap;">
         <StatusBadge tone={queueTone(queue)} label={queue.paused ? 'paused' : 'active'} />
-        <button class="btn-secondary" type="button" on:click={loadQueue}>Refresh queue</button>
+        <Button class="btn-secondary" type="button" onclick={loadQueue}>Refresh queue</Button>
       </div>
     </div>
 
@@ -116,7 +119,7 @@
       <div class="inline-group" style="justify-content: space-between; flex-wrap: wrap;">
         <div class="inline-group" style="flex-wrap: wrap;">
           {#each ['retry', 'archived', 'scheduled', 'active', 'pending'] as state}
-            <button class={selectedStates.includes(state) ? 'button-secondary' : 'button-ghost'} type="button" on:click={() => toggleState(state)}>{state}</button>
+            <Button class={selectedStates.includes(state) ? 'button-secondary' : 'button-ghost'} type="button" onclick={() => toggleState(state)}>{state}</Button>
           {/each}
         </div>
         <div class="helper-text">Showing {tasks.length} tasks from queue `{queue.name}`.</div>
@@ -139,7 +142,7 @@
               {#each tasks as item}
                 <tr class="is-selectable" class:is-active={selectedTask?.id === item.id} on:click={() => (selectedTask = item)}>
                   <td>
-                    <button class="table-select-button" type="button" aria-pressed={selectedTask?.id === item.id} on:click={() => (selectedTask = item)}>{item.type}</button>
+                    <Button class="table-select-button" type="button" aria-pressed={selectedTask?.id === item.id} onclick={() => (selectedTask = item)}>{item.type}</Button>
                     <div class="subtle-text">{item.id}</div>
                     <div style="margin-top: 8px;">
                       <a class="btn-ghost" href={`/operations/tasks/${encodeURIComponent(item.queue)}/${encodeURIComponent(item.id)}`}>Open detail</a>

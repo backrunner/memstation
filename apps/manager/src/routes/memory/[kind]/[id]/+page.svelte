@@ -1,8 +1,12 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
+  import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
   import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
+  import { createPageStore } from '#lib/stores/page.ts';
+
+  const page = createPageStore();
   import { onMount } from 'svelte';
 
   import {
@@ -13,26 +17,26 @@
     fetchAudit,
     updateAdminKeyMemory,
     updateAdminMemoryDocument
-  } from '$lib/api/client';
-  import ChatMessageCard from '$lib/components/ChatMessageCard.svelte';
-  import ConfirmActionDialog from '$lib/components/ConfirmActionDialog.svelte';
-  import FactLineagePanel from '$lib/components/FactLineagePanel.svelte';
-  import JsonView from '$lib/components/JsonView.svelte';
-  import MemoryKeywordSignals from '$lib/components/MemoryKeywordSignals.svelte';
-  import EntityAliasPanel from '$lib/components/EntityAliasPanel.svelte';
-  import MemoryRelationGraph from '$lib/components/MemoryRelationGraph.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import SelectField from '$lib/components/SelectField.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import TextInputField from '$lib/components/TextInputField.svelte';
-  import TextareaField from '$lib/components/TextareaField.svelte';
-  import { matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '$lib/memory/keyword-signals';
+  } from '#lib/api/client.ts';
+  import ChatMessageCard from '#lib/components/ChatMessageCard.svelte';
+  import ConfirmActionDialog from '#lib/components/ConfirmActionDialog.svelte';
+  import FactLineagePanel from '#lib/components/FactLineagePanel.svelte';
+  import JsonView from '#lib/components/JsonView.svelte';
+  import MemoryKeywordSignals from '#lib/components/MemoryKeywordSignals.svelte';
+  import EntityAliasPanel from '#lib/components/EntityAliasPanel.svelte';
+  import MemoryRelationGraph from '#lib/components/MemoryRelationGraph.svelte';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import SelectField from '#lib/components/SelectField.svelte';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import TextInputField from '#lib/components/TextInputField.svelte';
+  import TextareaField from '#lib/components/TextareaField.svelte';
+  import { matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '#lib/memory/keyword-signals.ts';
   import {
     documentKindFromRoute,
     memoryCollectionHref,
     normalizeMemoryRouteKind,
     type MemoryRouteKind
-  } from '$lib/memory/routes';
+  } from '#lib/memory/routes.ts';
   import {
     buildSessionDraftKey,
     clearSessionDraft,
@@ -41,8 +45,8 @@
     useSessionDraftPersistence,
     useSessionDraftUnloadWarning,
     writeSessionDraft
-  } from '$lib/stores/session-drafts';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
+  } from '#lib/stores/session-drafts.ts';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
   import type {
     AuditEventRecord,
     ConversationRecord,
@@ -51,7 +55,7 @@
     MemoryEvidence,
     MessagePart,
     MessagePartArtifact
-  } from '$lib/types';
+  } from '#lib/types.ts';
 
   type MemoryDetailDraft = {
     draftContent: string;
@@ -479,9 +483,9 @@
       </div>
       <div class="inline-group" style="flex-wrap: wrap;">
         {#if routeKind === 'keys'}
-          <button class="btn-danger is-quiet" type="button" disabled={deleting} on:click={() => (deleteConfirmOpen = true)}>{deleting ? 'Deleting...' : 'Delete key memory'}</button>
+          <Button class="btn-danger is-quiet" type="button" disabled={deleting} onclick={() => (deleteConfirmOpen = true)}>{deleting ? 'Deleting...' : 'Delete key memory'}</Button>
         {/if}
-        <button class="btn-primary" type="button" disabled={saving} on:click={save}>{saving ? 'Saving...' : 'Save changes'}</button>
+        <Button class="btn-primary" type="button" disabled={saving} onclick={save}>{saving ? 'Saving...' : 'Save changes'}</Button>
       </div>
     </div>
 
@@ -510,8 +514,7 @@
           {#if documentItem.type === 'entity' && $selectedTarget}<EntityAliasPanel target={$selectedTarget} document={documentItem} />{/if}
           <div class="toolbar">
             <TextareaField label="Content" bind:value={draftContent} rows={10} />
-            <details class="record-details">
-              <summary>Record details</summary>
+            <CollapsibleSection title="Record details">
               <div class="detail-metadata">
               <div class="debug-block">
                 <div class="sidebar-label">User</div>
@@ -550,7 +553,7 @@
                 <div>{documentItem.effective_score?.toFixed?.(3) ?? 'n/a'}</div>
               </div>
             </div>
-            </details>
+            </CollapsibleSection>
 
             {#if documentItem.type === 'fact'}
               <FactLineagePanel lineage={documentItem.lineage} currentFactId={documentItem.id} userId={activeUserId ?? documentItem.user_id} />
@@ -560,8 +563,7 @@
                 matchedKeywords={matchedKeywordsFromMetadata(documentItem.metadata)}
                 sourceKeywords={sourceKeywordsFromMetadata(documentItem.metadata)}
               />
-            <details class="record-details">
-              <summary>Metadata</summary>
+            <CollapsibleSection title="Metadata">
               <JsonView value={documentItem.metadata ?? {}} emptyLabel="No metadata recorded." />
               {#if temporalEntries(documentItem.metadata).length > 0}
                 <div class="list-table" style="margin-top: 12px;">
@@ -573,13 +575,12 @@
                   {/each}
                 </div>
               {/if}
-            </details>
+            </CollapsibleSection>
           </div>
         {:else if keyMemoryItem}
           <div class="toolbar">
             <TextareaField label="Value" bind:value={draftValue} rows={8} />
-            <details class="record-details">
-              <summary>Record details</summary>
+            <CollapsibleSection title="Record details">
               <div class="detail-metadata">
               <div class="debug-block">
                 <div class="sidebar-label">User</div>
@@ -614,15 +615,14 @@
                 <div>{(keyMemoryItem.importance ?? 0).toFixed(3)} / {(keyMemoryItem.decay_factor ?? 0).toFixed(3)}</div>
               </div>
             </div>
-            </details>
+            </CollapsibleSection>
 
             <div class="form-grid two-up">
               <TextInputField label="Category" bind:value={draftCategory} />
               <SelectField label="Review status" items={reviewStatusItems} bind:value={draftReviewStatus} />
             </div>
 
-            <details class="record-details">
-              <summary>Metadata</summary>
+            <CollapsibleSection title="Metadata">
               <JsonView value={keyMemoryItem.metadata ?? {}} emptyLabel="No metadata recorded." />
               {#if temporalEntries(keyMemoryItem.metadata).length > 0}
                 <div class="list-table" style="margin-top: 12px;">
@@ -634,7 +634,7 @@
                   {/each}
                 </div>
               {/if}
-            </details>
+            </CollapsibleSection>
           </div>
         {/if}
       </section>
@@ -794,7 +794,7 @@
                     </div>
                     <StatusBadge tone={auditTone(event.action)} label={event.created_at ? new Date(event.created_at).toLocaleString() : 'n/a'} />
                   </div>
-                  <details class="record-details"><summary>Event payload</summary><JsonView value={event.payload ?? {}} emptyLabel="No payload on this audit event." /></details>
+                  <CollapsibleSection title="Event payload"><JsonView value={event.payload ?? {}} emptyLabel="No payload on this audit event." /></CollapsibleSection>
                 </div>
               {/each}
             </div>

@@ -7,7 +7,7 @@ before changing the architecture. Use [SECURITY.md](SECURITY.md) for vulnerabili
 ## Development
 
 Start with the [README](README.md) and [local debugging guide](docs/local-debugging.md).
-The repository uses Go 1.26.1 and pnpm 12.3.4; CI uses Node.js 24.11.1.
+The repository uses Go 1.27.3 and pnpm 12.15.0; CI uses Node.js 26.12.1.
 Install the locked workspace dependencies with `pnpm install --frozen-lockfile`.
 
 [AGENTS.md](AGENTS.md) defines the current engineering boundaries and takes precedence

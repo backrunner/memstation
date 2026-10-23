@@ -1,6 +1,7 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
   import { createEventDispatcher } from 'svelte';
   import { AlertDialog } from 'bits-ui';
 
@@ -42,13 +43,13 @@
       <div class="confirm-action-audit">This action is recorded in Audit.</div>
 
       <div class="confirm-action-actions">
-        <button class="btn-secondary" type="button" disabled={busy} on:click={cancel}>Cancel</button>
-        <button
+        <Button class="btn-secondary" type="button" disabled={busy} onclick={cancel}>Cancel</Button>
+        <Button
           class={tone === 'danger' ? 'btn-danger' : 'btn-primary'}
           type="button"
           disabled={busy}
-          on:click={confirm}
-        >{busy ? 'Working…' : confirmLabel}</button>
+          onclick={confirm}
+        >{busy ? 'Working…' : confirmLabel}</Button>
       </div>
     </AlertDialog.Content>
   </AlertDialog.Portal>

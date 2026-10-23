@@ -1,17 +1,18 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
   import { onMount } from 'svelte';
 
-  import { fetchConfig, fetchHealth, saveConfig } from '$lib/api/client';
-  import ConfirmActionDialog from '$lib/components/ConfirmActionDialog.svelte';
-  import SettingsSection from '$lib/components/SettingsSection.svelte';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import SelectField from '$lib/components/SelectField.svelte';
-  import SwitchField from '$lib/components/SwitchField.svelte';
-  import TextInputField from '$lib/components/TextInputField.svelte';
-  import TextareaField from '$lib/components/TextareaField.svelte';
-  import { isMimeType, isNonNegativeInteger, isNumberInRange, isOriginValue, isPositiveInteger, isPostgresURL, parseLineList } from '$lib/forms/validation';
+  import { fetchConfig, fetchHealth, saveConfig } from '#lib/api/client.ts';
+  import ConfirmActionDialog from '#lib/components/ConfirmActionDialog.svelte';
+  import SettingsSection from '#lib/components/SettingsSection.svelte';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import SelectField from '#lib/components/SelectField.svelte';
+  import SwitchField from '#lib/components/SwitchField.svelte';
+  import TextInputField from '#lib/components/TextInputField.svelte';
+  import TextareaField from '#lib/components/TextareaField.svelte';
+  import { isMimeType, isNonNegativeInteger, isNumberInRange, isOriginValue, isPositiveInteger, isPostgresURL, parseLineList } from '#lib/forms/validation.ts';
   import {
     buildSessionDraftKey,
     clearSessionDraft,
@@ -20,15 +21,15 @@
     useSessionDraftPersistence,
     useSessionDraftUnloadWarning,
     writeSessionDraft
-  } from '$lib/stores/session-drafts';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
+  } from '#lib/stores/session-drafts.ts';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
   import type {
     AdminConfigPayload,
     DatabaseConfigSnapshot,
     HealthPayload,
     RuntimeFieldMeta,
     SystemRuntimeConfig
-  } from '$lib/types';
+  } from '#lib/types.ts';
 
   type RuntimeKey = keyof SystemRuntimeConfig;
   type SystemSettingsDraft = {
@@ -750,21 +751,21 @@
     <div slot="actions">
       {#if $targetState.session.authenticated && !loading}
         <div class="inline-group">
-          <button
+          <Button
             class="btn-secondary btn-sm"
             type="button"
             disabled={saving}
-            on:click={() => requestConfirmation(
+            onclick={() => requestConfirmation(
               'Reset all runtime overrides?',
               'Every stored runtime override will be cleared back to its deployment default.',
               `${countDirty(runtime, runtimeSaved)} draft · ${countOverrides(runtimeSaved, runtimeDefaults)} active overrides`,
               'Reset all overrides',
               resetAll
             )}
-          >Reset all overrides</button>
-          <button class="btn-primary" type="button" disabled={saving} on:click={persist}>
+          >Reset all overrides</Button>
+          <Button class="btn-primary" type="button" disabled={saving} onclick={persist}>
             {saving ? 'Saving…' : 'Save system settings'}
-          </button>
+          </Button>
         </div>
       {/if}
     </div>
@@ -916,11 +917,11 @@
           error={databaseFieldError('url')}
         />
         <div class="inline-group" style="justify-content: flex-end;">
-          <button
+          <Button
             class="btn-secondary btn-sm"
             type="button"
             disabled={databaseSaving || database.source !== 'override'}
-            on:click={() => requestConfirmation(
+            onclick={() => requestConfirmation(
               'Clear database override?',
               'The target will return to its deployment-level database connection after this change.',
               database.display ?? 'database override',
@@ -929,10 +930,10 @@
             )}
           >
             Clear override
-          </button>
-          <button class="btn-primary btn-sm" type="button" disabled={databaseSaving || !databaseInput.trim()} on:click={persistDatabase}>
+          </Button>
+          <Button class="btn-primary btn-sm" type="button" disabled={databaseSaving || !databaseInput.trim()} onclick={persistDatabase}>
             {databaseSaving ? 'Applying…' : 'Apply database'}
-          </button>
+          </Button>
         </div>
         </SettingsSection>
         <SettingsSection id="system-overrides" title="Overrides &amp; drift" description="Fields deviating from deployment defaults or the live runtime.">
@@ -948,21 +949,21 @@
                 </div>
                 <div class="runtime-field-status">
                   {#if draftDiffers(key)}
-                    <button class="btn-ghost btn-sm" type="button" disabled={saving} on:click={() => revertDraft(key)}>Revert</button>
+                    <Button class="btn-ghost btn-sm" type="button" disabled={saving} onclick={() => revertDraft(key)}>Revert</Button>
                   {/if}
                   {#if isCustomized(key)}
-                    <button
+                    <Button
                       class="btn-ghost btn-sm"
                       type="button"
                       disabled={saving}
-                      on:click={() => requestConfirmation(
+                      onclick={() => requestConfirmation(
                         'Clear runtime override?',
                         'This field will return to its deployment default.',
                         key,
                         'Clear override',
                         () => resetField(key)
                       )}
-                    >Clear</button>
+                    >Clear</Button>
                   {/if}
                 </div>
               </div>

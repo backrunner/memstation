@@ -13,7 +13,6 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	otellogglobal "go.opentelemetry.io/otel/log/global"
 	lognoop "go.opentelemetry.io/otel/log/noop"
 	"go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/propagation"
@@ -28,7 +27,7 @@ func SetupTelemetry(ctx context.Context, cfg Config) (func(context.Context) erro
 	if strings.TrimSpace(cfg.OTLPHTTPEndpoint) == "" {
 		otel.SetTracerProvider(nooptrace.NewTracerProvider())
 		otel.SetMeterProvider(noop.NewMeterProvider())
-		otellogglobal.SetLoggerProvider(lognoop.NewLoggerProvider())
+		otel.SetLoggerProvider(lognoop.NewLoggerProvider())
 		otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 		return func(context.Context) error { return nil }, nil
 	}
@@ -77,7 +76,7 @@ func SetupTelemetry(ctx context.Context, cfg Config) (func(context.Context) erro
 
 	otel.SetTracerProvider(traceProvider)
 	otel.SetMeterProvider(meterProvider)
-	otellogglobal.SetLoggerProvider(loggerProvider)
+	otel.SetLoggerProvider(loggerProvider)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 
 	return func(ctx context.Context) error {

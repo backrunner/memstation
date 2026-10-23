@@ -1,21 +1,25 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
+  import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
+  import { createPageStore } from '#lib/stores/page.ts';
 
-  import FilterToolbar from '$lib/components/FilterToolbar.svelte';
-  import FactLineagePanel from '$lib/components/FactLineagePanel.svelte';
-  import MemoryWorkspaceNav from '$lib/components/MemoryWorkspaceNav.svelte';
-  import MemoryKeywordSignals from '$lib/components/MemoryKeywordSignals.svelte';
-  import { memoryDetailHref, memoryRouteKindFromDocumentType } from '$lib/memory/routes';
-  import { matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '$lib/memory/keyword-signals';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import SelectField from '$lib/components/SelectField.svelte';
-  import TextInputField from '$lib/components/TextInputField.svelte';
-  import { fetchMemoryWorkspace, searchMemories, type MemoryWorkspaceData } from '$lib/memory/workspace';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { SearchMemoriesResult } from '$lib/types';
+  const page = createPageStore();
+
+  import FilterToolbar from '#lib/components/FilterToolbar.svelte';
+  import FactLineagePanel from '#lib/components/FactLineagePanel.svelte';
+  import MemoryWorkspaceNav from '#lib/components/MemoryWorkspaceNav.svelte';
+  import MemoryKeywordSignals from '#lib/components/MemoryKeywordSignals.svelte';
+  import { memoryDetailHref, memoryRouteKindFromDocumentType } from '#lib/memory/routes.ts';
+  import { matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '#lib/memory/keyword-signals.ts';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import SelectField from '#lib/components/SelectField.svelte';
+  import TextInputField from '#lib/components/TextInputField.svelte';
+  import { fetchMemoryWorkspace, searchMemories, type MemoryWorkspaceData } from '#lib/memory/workspace.ts';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
+  import type { SearchMemoriesResult } from '#lib/types.ts';
 
   let loading = true;
   let searchLoading = false;
@@ -157,7 +161,7 @@
         <FilterToolbar activeCount={Number(Boolean(asOf)) + Number(Boolean(knownAt)) + Number(Boolean(entityScope)) + Number(relationMode !== 'neighborhood') + Number(Boolean(dateFrom)) + Number(Boolean(dateTo)) + selectedTiers.length} summary={searchResult ? `${searchResult.total} matches` : ''}>
           <TextInputField label="Query" bind:value={query} placeholder="Search memory by topic or question…" />
           {#snippet actions()}
-            <button class="btn-primary" type="submit" disabled={searchLoading || !query.trim()}>{searchLoading ? 'Searching…' : 'Run search'}</button>
+            <Button class="btn-primary" type="submit" disabled={searchLoading || !query.trim()}>{searchLoading ? 'Searching…' : 'Run search'}</Button>
           {/snippet}
           {#snippet filters()}
             <div class="filters two-up">
@@ -172,7 +176,7 @@
               <span class="field-label">Time tier</span>
               <div class="segmented-control" style="flex-wrap: wrap;">
                 {#each timeTierOptions as option}
-                  <button class="segmented-control-item" type="button" data-state={selectedTiers.includes(option.value) ? 'on' : 'off'} aria-pressed={selectedTiers.includes(option.value)} on:click={() => toggleTier(option.value)}>{option.label}</button>
+                  <Button class="segmented-control-item" type="button" data-state={selectedTiers.includes(option.value) ? 'on' : 'off'} aria-pressed={selectedTiers.includes(option.value)} onclick={() => toggleTier(option.value)}>{option.label}</Button>
                 {/each}
               </div>
             </div>
@@ -201,7 +205,7 @@
               </header>
               <div class="message-body">{memory.content}</div>
               {#if memory.metadata?.historical_snapshot}<p class="helper-text">Historical fact snapshot. Open shows the current record.</p>{/if}
-              {#if memory.metadata?.recall_path}<details class="compact-details"><summary>Why this memory was recalled</summary><pre>{JSON.stringify(memory.metadata.recall_path, null, 2)}</pre></details>{/if}
+              {#if memory.metadata?.recall_path}<CollapsibleSection title="Why this memory was recalled"><pre>{JSON.stringify(memory.metadata.recall_path, null, 2)}</pre></CollapsibleSection>{/if}
               <MemoryKeywordSignals
                 matchedKeywords={matchedKeywordsFromMetadata(memory.metadata)}
                 sourceKeywords={sourceKeywordsFromMetadata(memory.metadata)}

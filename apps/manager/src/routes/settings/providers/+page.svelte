@@ -1,16 +1,17 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
   import { onMount } from 'svelte';
-  import { Dialog, Select } from 'bits-ui';
-  import { PencilLine, Plus, TriangleAlert } from 'lucide-svelte';
+  import { Dialog } from 'bits-ui';
+  import { PencilLine, Plus, TriangleAlert } from '@lucide/svelte';
 
-  import { fetchConfig, fetchProviderDiagnostics, saveConfig } from '$lib/api/client';
-  import PageHeader from '$lib/components/PageHeader.svelte';
-  import SelectField from '$lib/components/SelectField.svelte';
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import TextInputField from '$lib/components/TextInputField.svelte';
-  import { isHTTPURL } from '$lib/forms/validation';
+  import { fetchConfig, fetchProviderDiagnostics, saveConfig } from '#lib/api/client.ts';
+  import PageHeader from '#lib/components/PageHeader.svelte';
+  import SelectField from '#lib/components/SelectField.svelte';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import TextInputField from '#lib/components/TextInputField.svelte';
+  import { isHTTPURL } from '#lib/forms/validation.ts';
   import {
     buildSessionDraftKey,
     clearSessionDraft,
@@ -19,9 +20,9 @@
     useSessionDraftPersistence,
     useSessionDraftUnloadWarning,
     writeSessionDraft
-  } from '$lib/stores/session-drafts';
-  import { selectedTarget, targetState } from '$lib/stores/targets';
-  import type { AdminConfigPayload, ProviderDiagnostic, ProviderSetPayload, ProviderSummary, SystemRuntimeConfig } from '$lib/types';
+  } from '#lib/stores/session-drafts.ts';
+  import { selectedTarget, targetState } from '#lib/stores/targets.ts';
+  import type { AdminConfigPayload, ProviderDiagnostic, ProviderSetPayload, ProviderSummary, SystemRuntimeConfig } from '#lib/types.ts';
 
   type ProviderScope = 'gateway' | 'internal' | 'embedding' | 'rerank';
 
@@ -649,9 +650,9 @@
     <div slot="actions">
       {#if $targetState.session.authenticated && !loading}
         <div class="inline-group">
-          <button class="btn-primary" type="button" disabled={saving} on:click={persist}>
+          <Button class="btn-primary" type="button" disabled={saving} onclick={persist}>
             {saving ? 'Saving…' : 'Save provider settings'}
-          </button>
+          </Button>
         </div>
       {/if}
     </div>
@@ -681,60 +682,28 @@
                 <span class="provider-route-tag">Route</span>
                 {#if scopeSupportsDefaultRoute(typedScope)}
                   {#if typedScope === 'gateway'}
-                    <Select.Root
-                      type="single"
-                      value={gatewayDefaultProvider}
-                      items={providerItemsForScope(typedScope)}
-                      onValueChange={(value) => (gatewayDefaultProvider = value)}
-                    >
-                      <Select.Trigger aria-label={`${scopeTitle(typedScope)} default route`} class={`select-trigger provider-route-trigger ${fieldErrors.gatewayDefault ? 'is-invalid' : ''}`}>
-                        {providerItemsForScope(typedScope).find((item) => item.value === gatewayDefaultProvider)?.label ?? 'Select route'}
-                      </Select.Trigger>
-                      <Select.Portal>
-                        <Select.Content class="select-content" sideOffset={6}>
-                          <Select.Viewport>
-                            {#each providerItemsForScope(typedScope) as item}
-                              <Select.Item class="select-item" value={item.value} label={item.label}>{item.label}</Select.Item>
-                            {/each}
-                          </Select.Viewport>
-                        </Select.Content>
-                      </Select.Portal>
-                    </Select.Root>
+                    <SelectField label={`${scopeTitle(typedScope)} default route`} hideLabel
+                      bind:value={gatewayDefaultProvider} items={providerItemsForScope(typedScope)}
+                      error={fieldErrors.gatewayDefault} placeholder="Select route" triggerClass="provider-route-trigger" />
                   {:else}
-                    <Select.Root
-                      type="single"
-                      value={internalDefaultProvider}
-                      items={providerItemsForScope(typedScope)}
-                      onValueChange={(value) => (internalDefaultProvider = value)}
-                    >
-                      <Select.Trigger aria-label={`${scopeTitle(typedScope)} default route`} class={`select-trigger provider-route-trigger ${fieldErrors.internalDefault ? 'is-invalid' : ''}`}>
-                        {providerItemsForScope(typedScope).find((item) => item.value === internalDefaultProvider)?.label ?? 'Select route'}
-                      </Select.Trigger>
-                      <Select.Portal>
-                        <Select.Content class="select-content" sideOffset={6}>
-                          <Select.Viewport>
-                            {#each providerItemsForScope(typedScope) as item}
-                              <Select.Item class="select-item" value={item.value} label={item.label}>{item.label}</Select.Item>
-                            {/each}
-                          </Select.Viewport>
-                        </Select.Content>
-                      </Select.Portal>
-                    </Select.Root>
+                    <SelectField label={`${scopeTitle(typedScope)} default route`} hideLabel
+                      bind:value={internalDefaultProvider} items={providerItemsForScope(typedScope)}
+                      error={fieldErrors.internalDefault} placeholder="Select route" triggerClass="provider-route-trigger" />
                   {/if}
                 {:else}
                   <span class="provider-route-readout mono">{routeDisplayValue(typedScope)}</span>
                 {/if}
               </div>
 
-              <button
+              <Button
                 class="btn-secondary btn-sm"
                 type="button"
                 disabled={availableProviderItems(typedScope).length === 0}
-                on:click={() => openAddProviderDialog(typedScope)}
+                onclick={() => openAddProviderDialog(typedScope)}
               >
                 <Plus size={13} strokeWidth={2} />
                 Add
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -771,9 +740,9 @@
                   {/if}
                 </div>
                 <div class="provider-list-side">
-                  <button class="btn-ghost btn-icon btn-sm" type="button" aria-label={`Edit ${form.provider}`} on:click={() => openProviderDialog(form)}>
+                  <Button class="btn-ghost btn-icon btn-sm" type="button" aria-label={`Edit ${form.provider}`} onclick={() => openProviderDialog(form)}>
                     <PencilLine size={14} strokeWidth={1.75} />
-                  </button>
+                  </Button>
                 </div>
               </div>
             {/each}
@@ -831,7 +800,7 @@
 
           <div class="target-dialog-footer">
             <p class="helper-text">Changes stage into the form first, then save to the target.</p>
-            <button class="btn-primary" type="button" on:click={applyDialogChanges}>Apply changes</button>
+            <Button class="btn-primary" type="button" onclick={applyDialogChanges}>Apply changes</Button>
           </div>
         {/if}
       </Dialog.Content>
@@ -857,9 +826,9 @@
           />
 
           <div class="inline-group" style="justify-content: flex-end;">
-            <button class="btn-primary btn-sm" type="button" disabled={!addProviderValue} on:click={addVisibleProvider}>
+            <Button class="btn-primary btn-sm" type="button" disabled={!addProviderValue} onclick={addVisibleProvider}>
               Add provider
-            </button>
+            </Button>
           </div>
         {/if}
       </Dialog.Content>
@@ -911,8 +880,8 @@
     min-width: 150px;
     max-width: none;
     flex: 1;
-    height: 36px;
-    padding: 0 10px;
+    height: var(--control-height);
+    padding: 0 var(--control-padding-x);
   }
 
   .provider-route-readout {

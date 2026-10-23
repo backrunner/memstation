@@ -35,7 +35,7 @@ export default defineConfig({
     },
     {
       name: 'mobile-webkit',
-      grep: /mobile navigation|mobile filters|short mobile dialogs|mobile settings|memory search keeps|task queue changes|primary admin routes|system section navigation|memory detail prioritizes|memory historical filters|entity alias candidates/,
+      grep: /mobile navigation|mobile filters|short mobile dialogs|mobile settings|memory search keeps|task queue changes|primary admin routes|system section navigation|memory detail prioritizes|memory historical filters|entity alias candidates|shared controls/,
       use: {
         ...devices['iPhone 13']
       }

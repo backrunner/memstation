@@ -1,10 +1,12 @@
 <script lang="ts">
   import { Label } from 'bits-ui';
+  import type { HTMLTextareaAttributes } from 'svelte/elements';
 
   const id = $props.id();
 
-  interface Props {
-    label?: string;
+  interface Props extends Omit<HTMLTextareaAttributes, 'value' | 'class' | 'id'> {
+    label: string;
+    hideLabel?: boolean;
     value?: string;
     placeholder?: string;
     help?: string;
@@ -20,7 +22,8 @@
   }
 
   let {
-    label = '',
+    label,
+    hideLabel = false,
     value = $bindable(''),
     placeholder = '',
     help = '',
@@ -32,17 +35,19 @@
     rows = 5,
     fieldClass = '',
     textareaClass = '',
-    textareaId = id
+    textareaId = id,
+    ...restProps
   }: Props = $props();
 </script>
 
 <div class={`field ${fieldClass}`.trim()}>
-  <Label.Root class="field-label" for={textareaId}>{label}</Label.Root>
+  <Label.Root class={hideLabel ? 'sr-only' : 'field-label'} for={textareaId}>{label}</Label.Root>
   <textarea
+    {...restProps}
     id={textareaId}
     class={`textarea ${textareaClass} ${error ? 'is-invalid' : ''}`.trim()}
     aria-invalid={Boolean(error)}
-    aria-describedby={error ? `${id}-error` : help ? `${id}-help` : undefined}
+    aria-describedby={[help && `${id}-help`, error && `${id}-error`].filter(Boolean).join(' ') || undefined}
     bind:value
     {placeholder}
     {disabled}

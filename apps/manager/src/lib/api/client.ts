@@ -42,7 +42,7 @@ import type {
   UserSummary,
   UpdateUserSettingsResponse,
   UsageRecord
-} from '$lib/types';
+} from '#lib/types.ts';
 
 export interface GatewayRequestOptions {
   target: MemStationTarget;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseTargetLocator } from '$lib/targets/uri';
+import { parseTargetLocator } from '#lib/targets/uri.ts';
 
 describe('parseTargetLocator', () => {
   it('parses memstation URIs into http targets and one-time admin credentials', () => {

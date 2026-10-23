@@ -1,8 +1,9 @@
 <svelte:options runes={false} />
 <script lang="ts">
+  import Button from '#lib/components/Button.svelte';
   import { onMount } from 'svelte';
-  import { fetchAdminMemoryDocuments, fetchEntityAliases, putEntityAlias, type EntityAlias } from '$lib/api/client';
-  import type { MemStationTarget, MemoryDocument } from '$lib/types';
+  import { fetchAdminMemoryDocuments, fetchEntityAliases, putEntityAlias, type EntityAlias } from '#lib/api/client.ts';
+  import type { MemStationTarget, MemoryDocument } from '#lib/types.ts';
   import TextInputField from './TextInputField.svelte';
   import SelectField from './SelectField.svelte';
   import ConfirmActionDialog from './ConfirmActionDialog.svelte';
@@ -62,7 +63,7 @@
       <SelectField label="Source entity" bind:value={sourceNode} items={choices} help="Optionally connect another entity's memories after review." />
       <TextInputField label="Mapping reason" bind:value={reason} />
     </div>
-    <div><button class="btn-secondary" type="submit" disabled={busy || !alias.trim() || !reason.trim()}>Save candidate</button></div>
+    <div><Button class="btn-secondary" type="submit" disabled={busy || !alias.trim() || !reason.trim()}>Save candidate</Button></div>
   </form>
   <div class="data-list">
     {#each visible as item (item.id)}
@@ -70,8 +71,8 @@
         <strong>{item.alias}</strong> <span class="helper-text">{item.scope || 'Default scope'} · {item.status}</span>
         <p>{item.reason}</p>
         <div class="toolbar">
-          {#if item.status !== 'confirmed'}<button class="btn-secondary btn-sm" disabled={busy} on:click={() => review(item, 'confirmed')}>Confirm mapping</button>{/if}
-          {#if item.status !== 'revoked'}<button class="btn-ghost btn-sm" disabled={busy} on:click={() => review(item, 'revoked')}>Revoke mapping</button>{/if}
+          {#if item.status !== 'confirmed'}<Button class="btn-secondary btn-sm" disabled={busy} onclick={() => review(item, 'confirmed')}>Confirm mapping</Button>{/if}
+          {#if item.status !== 'revoked'}<Button class="btn-ghost btn-sm" disabled={busy} onclick={() => review(item, 'revoked')}>Revoke mapping</Button>{/if}
         </div>
       </div>
     {/each}

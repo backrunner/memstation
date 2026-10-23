@@ -1,4 +1,4 @@
-import type { ConversationMemoryPayload, KeyMemoryRecord, MemoryDocument, MemoryPreviewPayload } from '$lib/types';
+import type { ConversationMemoryPayload, KeyMemoryRecord, MemoryDocument, MemoryPreviewPayload } from '#lib/types.ts';
 
 export type MemoryTurnChange = 'added' | 'updated' | 'removed';
 export type MemoryTurnKind = 'injected' | 'document' | 'key_memory' | 'preview' | 'keyword';

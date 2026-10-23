@@ -1,20 +1,19 @@
-<svelte:options runes={false} />
-
 <script lang="ts">
-  import '$lib/styles/app.css';
+  import Button from '#lib/components/Button.svelte';
+  import SelectField from '#lib/components/SelectField.svelte';
+  import '#lib/styles/app.css';
 
   import { onMount } from 'svelte';
   import type { Snippet } from 'svelte';
   import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
-  import { Dialog, Select } from 'bits-ui';
+  import { page } from '$app/state';
+  import { Dialog } from 'bits-ui';
   import {
     Activity,
     BarChart3,
     Blocks,
     Boxes,
     Brain,
-    ChevronDown,
     ChevronRight,
     ClipboardList,
     Database,
@@ -32,12 +31,12 @@
     Users,
     Workflow,
     X
-  } from 'lucide-svelte';
+  } from '@lucide/svelte';
 
-  import TargetManagerDialog from '$lib/components/TargetManagerDialog.svelte';
-  import { fetchAdminSession, fetchHealth, loginAdmin, logoutAdmin } from '$lib/api/client';
-  import BrandMark from '$lib/components/BrandMark.svelte';
-  import { forgetTargetCredential, rememberTargetCredential } from '$lib/targets/credentials';
+  import TargetManagerDialog from '#lib/components/TargetManagerDialog.svelte';
+  import { fetchAdminSession, fetchHealth, loginAdmin, logoutAdmin } from '#lib/api/client.ts';
+  import BrandMark from '#lib/components/BrandMark.svelte';
+  import { forgetTargetCredential, rememberTargetCredential } from '#lib/targets/credentials.ts';
   import {
     clearAllTargets,
     initializeTargets,
@@ -48,7 +47,7 @@
     targetState,
     updateSession,
     upsertTarget
-  } from '$lib/stores/targets';
+  } from '#lib/stores/targets.ts';
 
   type NavItem = {
     href: string;
@@ -56,7 +55,11 @@
     icon: typeof LayoutDashboard;
   };
 
-  export let children: Snippet | undefined = undefined;
+  interface Props {
+    children?: Snippet | undefined;
+  }
+
+  let { children = undefined }: Props = $props();
 
   type NavSection = {
     label: string;
@@ -130,25 +133,14 @@
     login: 'Connect'
   };
 
-  let targetDialogOpen = false;
-  let mobileSidebarOpen = false;
-  let mobileNavTrigger: HTMLButtonElement | null = null;
-  let mobileViewport = false;
-  let lastTargetId = '';
-  let mounted = false;
-  let targetVersions: Record<string, string> = {};
+  let targetDialogOpen = $state(false);
+  let mobileSidebarOpen = $state(false);
+  let mobileNavTrigger: HTMLButtonElement | null = $state(null);
+  let mobileViewport = $state(false);
+  let lastTargetId = $state('');
+  let mounted = $state(false);
+  let targetVersions: Record<string, string> = $state({});
 
-  $: targetItems = $targetState.targets.map((target) => ({
-    value: target.id,
-    label: target.label,
-    endpoint: formatTargetEndpoint(target.baseUrl),
-    serverVersion: formatTargetVersion(targetVersions[target.id]),
-    hasServerVersion: Boolean(targetVersions[target.id]?.trim())
-  }));
-  $: activeTargetItem = targetItems.find((item) => item.value === $targetState.selectedId);
-  $: isAuthRoute = $page.url.pathname === '/login';
-  $: needsInitialConnect = mounted && $targetState.targets.length === 0;
-  $: breadcrumbs = buildBreadcrumbs($page.url.pathname);
 
   onMount(() => {
     const viewport = window.visualViewport;
@@ -178,14 +170,7 @@
     };
   });
 
-  $: if (mounted && $selectedTarget?.id && $selectedTarget.id !== lastTargetId) {
-    lastTargetId = $selectedTarget.id;
-    void refreshSelectedTarget();
-  }
 
-  $: if (needsInitialConnect && !isAuthRoute) {
-    void goto('/login');
-  }
 
   async function refreshSelectedTarget(target = $selectedTarget): Promise<void> {
     if (!target?.id || !target.baseUrl) {
@@ -339,6 +324,27 @@
     return 'Session required';
   }
 
+  let targetItems = $derived($targetState.targets.map((target) => ({
+    value: target.id,
+    label: target.label,
+    endpoint: formatTargetEndpoint(target.baseUrl),
+    serverVersion: formatTargetVersion(targetVersions[target.id]),
+    hasServerVersion: Boolean(targetVersions[target.id]?.trim())
+  })));
+  let isAuthRoute = $derived(page.url.pathname === '/login');
+  let needsInitialConnect = $derived(mounted && $targetState.targets.length === 0);
+  let breadcrumbs = $derived(buildBreadcrumbs(page.url.pathname));
+  $effect(() => {
+    if (mounted && $selectedTarget?.id && $selectedTarget.id !== lastTargetId) {
+      lastTargetId = $selectedTarget.id;
+      void refreshSelectedTarget();
+    }
+  });
+  $effect(() => {
+    if (needsInitialConnect && !isAuthRoute) {
+      void goto('/login');
+    }
+  });
 </script>
 
 <svelte:head>
@@ -364,13 +370,13 @@
                 <a
                   class="sidebar-nav-link"
                   tabindex="0"
-                  class:is-active={isActive($page.url.pathname, item.href)}
-                  aria-current={isActive($page.url.pathname, item.href) ? 'page' : undefined}
+                  class:is-active={isActive(page.url.pathname, item.href)}
+                  aria-current={isActive(page.url.pathname, item.href) ? 'page' : undefined}
                   href={item.href}
-                  on:click={closeMobileSidebar}
+                  onclick={closeMobileSidebar}
                 >
                   <span class="sidebar-nav-icon">
-                    <svelte:component this={item.icon} size={15} strokeWidth={1.75} />
+                    <item.icon size={15} strokeWidth={1.75} />
                   </span>
                   <span class="sidebar-nav-text">{item.label}</span>
                 </a>
@@ -423,70 +429,46 @@
 
         <div class="topbar-actions">
           <div class="target-selector">
-            <Select.Root
-              type="single"
-              value={$targetState.selectedId}
-              items={targetItems}
-              onValueChange={(value) => selectTarget(value)}
-            >
-              <Select.Trigger class="target-selector-trigger" aria-label="Switch target" title={sessionStatusLabel()}>
-                {#if activeTargetItem}
-                  <span class="target-selector-label">{activeTargetItem.endpoint}</span>
-                {:else}
-                  <span class="target-selector-label">Select target</span>
-                {/if}
-                <span class="target-selector-caret">
-                  <ChevronDown size={14} strokeWidth={2} />
-                </span>
-              </Select.Trigger>
-              <Select.Portal>
-                <Select.Content class="select-content target-selector-content" sideOffset={6} align="end">
-                  <Select.Viewport>
-                    {#each targetItems as item}
-                      <Select.Item
-                        class="select-item target-selector-item"
-                        value={item.value}
-                        label={item.label}
-                      >
-                        <span class="target-item-endpoint">{item.endpoint}</span>
-                        <span class="target-item-version" class:is-muted={!item.hasServerVersion}>{item.serverVersion}</span>
-                      </Select.Item>
-                    {/each}
-                  </Select.Viewport>
-                </Select.Content>
-              </Select.Portal>
-            </Select.Root>
+            <SelectField label="Switch target" hideLabel value={$targetState.selectedId} items={targetItems}
+              onValueChange={(value) => selectTarget(value)} title={sessionStatusLabel()}
+              triggerClass="target-selector-trigger" contentClass="target-selector-content" itemClass="target-selector-item" align="end">
+              {#snippet selection(item)}<span class="target-selector-label">{item?.endpoint ?? 'Select target'}</span>{/snippet}
+              {#snippet option(item)}
+                <span class="target-item-endpoint">{item.endpoint}</span>
+                <span class="target-item-version" class:is-muted={!item.hasServerVersion}>{item.serverVersion}</span>
+              {/snippet}
+            </SelectField>
           </div>
 
-          <button
+          <Button
             class="btn-ghost btn-icon topbar-refresh"
             type="button"
-            on:click={refreshSelectedSession}
+            onclick={refreshSelectedSession}
             title="Refresh target connection"
             aria-label="Refresh"
           >
             <RefreshCw size={15} strokeWidth={1.75} />
-          </button>
+          </Button>
 
-          <button
+          <Button
             class="btn-ghost btn-icon topbar-targets"
             type="button"
-            on:click={() => (targetDialogOpen = true)}
+            onclick={() => (targetDialogOpen = true)}
             title="Manage targets"
             aria-label="Manage targets"
           >
             <Blocks size={16} strokeWidth={1.75} />
-          </button>
+          </Button>
 
-          <button
+          <Button
             class="btn-ghost btn-icon"
             type="button"
-            on:click={resetConnections}
+            onclick={resetConnections}
             title="Disconnect targets"
             aria-label="Disconnect targets"
           >
             <LogOut size={16} strokeWidth={1.75} />
-          </button>
+          </Button>
         </div>
       </header>
       {#if $targetState.session.checking || $targetState.session.error || !$targetState.session.authenticated}

@@ -1,18 +1,24 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import { browser } from '$app/environment';
+  import { onMount } from 'svelte';
 
-  import { escapeHTML, highlightCodeToHtml } from '$lib/highlight/shiki';
+  import { highlightCodeToHtml } from '#lib/highlight/shiki.ts';
 
   export let code = '';
   export let language = 'text';
 
+  let mounted = false;
   let highlightedHtml = '';
+
+  onMount(() => {
+    mounted = true;
+    return () => { requestToken += 1; };
+  });
   let requestToken = 0;
 
   async function refreshHighlight(): Promise<void> {
-    if (!browser) {
+    if (!mounted) {
       return;
     }
 
@@ -32,14 +38,17 @@
   }
 
   $: highlightKey = `${language}\u0000${code}`;
-  $: if (browser && highlightKey) {
+  $: if (mounted && highlightKey) {
     void refreshHighlight();
   }
 
-  $: fallbackHtml = `<pre class="code-block-surface code-block-fallback" data-language="${escapeHTML(language)}"><code>${escapeHTML(code)}</code></pre>`;
 </script>
 
 <div class="code-block-host">
-  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-  {@html highlightedHtml || fallbackHtml}
+  {#if highlightedHtml}
+    <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+    {@html highlightedHtml}
+  {:else}
+    <pre class="code-block-surface code-block-fallback" data-language={language}><code>{code}</code></pre>
+  {/if}
 </div>

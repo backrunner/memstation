@@ -35,10 +35,10 @@ require_command node
 
 if ! command -v pnpm >/dev/null 2>&1; then
   if ! command -v npm >/dev/null 2>&1; then
-    echo "pnpm is not available; install pnpm 12.3.4 or provide npm" >&2
+    echo "pnpm is not available; install pnpm 12.15.0 or provide npm" >&2
     exit 1
   fi
-  npm install --global pnpm@12.3.4
+  npm install --global pnpm@12.15.0
 fi
 
 if [[ "$SKIP_INSTALL" != "1" ]]; then

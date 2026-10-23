@@ -1,11 +1,11 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import { browser } from '$app/environment';
+  import { browser } from '$app/env';
   import { tick } from 'svelte';
 
-  import { enhanceCodeBlocks } from '$lib/highlight/shiki';
-  import { renderMarkdown } from '$lib/utils/markdown';
+  import { enhanceCodeBlocks } from '#lib/highlight/shiki.ts';
+  import { renderMarkdown } from '#lib/utils/markdown.ts';
 
   export let value = '';
   export let className = 'message-body';

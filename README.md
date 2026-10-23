@@ -9,7 +9,7 @@
   <p>
     <a href="https://github.com/backrunner/memstation/actions/workflows/ci.yml"><img src="https://github.com/backrunner/memstation/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-28634f" alt="License: Apache 2.0" /></a>
-    <a href="apps/server/go.mod"><img src="https://img.shields.io/badge/Go-1.26.1-00ADD8" alt="Go 1.26.1" /></a>
+    <a href="apps/server/go.mod"><img src="https://img.shields.io/badge/Go-1.27.3-00ADD8" alt="Go 1.27.3" /></a>
     <a href="apps/manager/package.json"><img src="https://img.shields.io/badge/Svelte-5-FF3E00" alt="Svelte 5" /></a>
   </p>
   <p>English · <a href="README.zh-CN.md">简体中文</a></p>
@@ -63,8 +63,8 @@ generation isolation, fact lineage and management interfaces.
 
 ## Quick start
 
-For local development, install Docker with Compose, Node.js and **pnpm 12.3.4**.
-CI uses Node.js **24.11.1** and Go **1.26.1**; the devcontainer supplies the Go toolchain.
+For local development, install Docker with Compose, Node.js and **pnpm 12.15.0**.
+CI uses Node.js **26.12.1** and Go **1.27.3**; the devcontainer supplies the Go toolchain.
 
 ```bash
 git clone https://github.com/backrunner/memstation.git

@@ -1,9 +1,9 @@
-import { browser } from '$app/environment';
-import { env } from '$env/dynamic/public';
+import { browser } from '$app/env';
+import { PUBLIC_MEMSTATION_DEFAULT_TARGET } from '$app/env/public';
 import { derived, get, writable } from 'svelte/store';
 
-import { parseTargetLocator } from '$lib/targets/uri';
-import type { AdminSessionState, MemStationTarget } from '$lib/types';
+import { parseTargetLocator } from '#lib/targets/uri.ts';
+import type { AdminSessionState, MemStationTarget } from '#lib/types.ts';
 
 const TARGETS_STORAGE_KEY = 'memstation.manager.targets';
 const SELECTED_STORAGE_KEY = 'memstation.manager.selected-target';
@@ -51,7 +51,7 @@ function sessionForTarget(targetId?: string): AdminSessionState {
 }
 
 function defaultTarget(): MemStationTarget {
-  const staged = stageInitialTarget(env.PUBLIC_MEMSTATION_DEFAULT_TARGET);
+  const staged = stageInitialTarget(PUBLIC_MEMSTATION_DEFAULT_TARGET);
   if (!staged) {
     return emptyTarget();
   }

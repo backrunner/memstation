@@ -1,9 +1,9 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import StatusBadge from '$lib/components/StatusBadge.svelte';
-  import { memoryDetailHref } from '$lib/memory/routes';
-  import type { MemoryLineage } from '$lib/types';
+  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import { memoryDetailHref } from '#lib/memory/routes.ts';
+  import type { MemoryLineage } from '#lib/types.ts';
 
   export let lineage: MemoryLineage | undefined;
   export let currentFactId = '';

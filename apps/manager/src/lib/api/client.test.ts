@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { deleteAdminKeyMemory, requestGatewayExchange, revokeUserAPIKey } from '$lib/api/client';
-import type { ChatThreadMessage, GatewayProtocol, JSONValue, MemStationTarget } from '$lib/types';
+import { deleteAdminKeyMemory, requestGatewayExchange, revokeUserAPIKey } from '#lib/api/client.ts';
+import type { ChatThreadMessage, GatewayProtocol, JSONValue, MemStationTarget } from '#lib/types.ts';
 
 const target: MemStationTarget = {
   id: 'fixture',

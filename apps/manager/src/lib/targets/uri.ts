@@ -1,4 +1,4 @@
-import type { MemStationTarget } from '$lib/types';
+import type { MemStationTarget } from '#lib/types.ts';
 
 export interface ParsedTargetLocator {
   target: Partial<MemStationTarget>;
