@@ -135,12 +135,26 @@ func (r *ToolRuntime) recallMemory(ctx context.Context, req domain.UnifiedReques
 		return nil, fmt.Errorf("query is required")
 	}
 
+	for _, key := range []string{"as_of", "known_at"} {
+		if value, exists := arguments[key]; exists && value != nil {
+			raw, ok := value.(string)
+			if !ok {
+				return nil, fmt.Errorf("%s must be an RFC3339 timestamp", key)
+			}
+			if strings.TrimSpace(raw) != "" {
+				if _, err := time.Parse(time.RFC3339Nano, raw); err != nil {
+					return nil, fmt.Errorf("%s must be an RFC3339 timestamp", key)
+				}
+			}
+		}
+	}
 	topN := clampInt(intArg(arguments, "top_n", 5), 1, 10)
 	types := memoryTypesArg(arguments["types"])
 	dateFrom := timeArg(arguments, "date_from")
 	dateTo := timeArg(arguments, "date_to")
 	timeTiers := timeTiersArg(arguments["time_tiers"])
 	result, err := r.memory.Search(ctx, domain.SearchInput{
+		AsOf: timeArg(arguments, "as_of"), KnownAt: timeArg(arguments, "known_at"), RelationMode: stringArg(arguments, "relation_mode"), EntityScope: stringArg(arguments, "entity_scope"),
 		UserID:      req.UserID,
 		Query:       query,
 		TopN:        topN,
@@ -162,6 +176,7 @@ func (r *ToolRuntime) recallMemory(ctx context.Context, req domain.UnifiedReques
 			"content":         item.Content,
 			"score":           item.Score,
 			"effective_score": item.EffectiveScore,
+			"metadata":        item.Metadata,
 			"importance":      item.Importance,
 			"decay_factor":    item.DecayFactor,
 			"activity_at":     item.ActivityAt,

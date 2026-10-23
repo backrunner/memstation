@@ -107,6 +107,7 @@ func (s *Service) AnalyzeConversation(ctx context.Context, input Input) (Result,
 		if supersededIDs := conflictingFactIDs(fact, input.ExistingFacts); len(supersededIDs) > 0 {
 			fact.Metadata["supersedes_fact_ids"] = supersededIDs
 		}
+		fact = GroundDocument(fact, input.Conversation)
 		facts = append(facts, fact)
 	}
 	if len(facts) == 0 {
@@ -123,7 +124,11 @@ func (s *Service) AnalyzeConversation(ctx context.Context, input Input) (Result,
 		DecayFactor:    0.95,
 		Metadata:       cloneMap(extracted.ImpressionMetadata),
 	}
+	impression = GroundDocument(impression, input.Conversation)
 	genericItems := s.ClassifyGenericMemoryItems(input, summary)
+	for i := range genericItems {
+		genericItems[i] = GroundDocument(genericItems[i], input.Conversation)
+	}
 
 	relations := make([]domain.MemoryRelation, 0, len(facts)*2+1+len(genericItems)*2)
 	if input.Summary.NodeID != "" {
@@ -268,6 +273,7 @@ func (s *Service) ClassifyGenericMemoryItems(input Input, summary string) []doma
 		documentID := GenericMemoryDocumentID(userID, kind, conversationID, seed)
 		nodeID := GenericMemoryNodeID(userID, kind, conversationID, seed)
 		if kind == domain.MemoryTypeEntity {
+			metadata["entity_scope"] = metadataString(input.Conversation.Metadata, "entity_scope")
 			canonicalKey := canonicalEntityKey(content, metadata)
 			metadata["canonical_key"] = canonicalKey
 			metadata["aliases"] = []string{firstNonEmpty(metadataString(metadata, "title"), content)}
@@ -892,6 +898,10 @@ func canonicalEntityKey(content string, metadata map[string]any) string {
 	name := firstNonEmpty(metadataString(metadata, "title"), strings.TrimPrefix(content, "Entity: "), strings.TrimPrefix(content, "Tool entity: "))
 	name = strings.ToLower(normalizeWhitespace(name))
 	name = strings.Trim(name, " \t\r\n.,:;!?()[]{}\"'")
+	scope := domain.NormalizeEntityAlias(metadataString(metadata, "entity_scope"))
+	if scope != "" {
+		return kind + ":" + scope + ":" + name
+	}
 	return kind + ":" + name
 }
 

@@ -88,3 +88,7 @@ MemStation 的业务核心位于 `apps/server`。Manager 独立部署，通过�
 - 手机主要控件提供 44px 触控高度与 16px 文本输入，System / Providers 的保存操作固定在底部；短屏弹窗随可视区域调整，平板表单保持双列。任务队列选择、筛选请求竞态与 WebKit 导航焦点均有回归覆盖
 - 本地 full-stack 调试可通过 `pnpm dev:portless` 启动热重载 MemStation server 与 Portless Manager；如后端已单独运行，也可通过 `pnpm dev:manager:portless` 只启动 Manager 代理
 
+
+## Graph retrieval and history
+
+See [Graph memory](graph-memory.md) for bounded relation traversal, precise evidence, bitemporal fact snapshots and scoped, reversible entity aliases.

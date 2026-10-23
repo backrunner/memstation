@@ -191,7 +191,7 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 			return 0, err
 		}
 		if len(summaryEvidences) > 0 {
-			factEvidences := cloneNodeEvidences(snapshot.UserID, generation.GenerationID, factDocs[idx].NodeID, summaryEvidences)
+			factEvidences := groundedNodeEvidences(factDocs[idx], summaryEvidences)
 			if err := services.Memories.ReplaceEvidences(ctx, snapshot.UserID, factDocs[idx].NodeID, factEvidences); err != nil {
 				return 0, err
 			}
@@ -210,7 +210,7 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 		return 0, err
 	}
 	if len(summaryEvidences) > 0 {
-		impressionEvidences := cloneNodeEvidences(snapshot.UserID, generation.GenerationID, result.Impression.NodeID, summaryEvidences)
+		impressionEvidences := groundedNodeEvidences(result.Impression, summaryEvidences)
 		if err := services.Memories.ReplaceEvidences(ctx, snapshot.UserID, result.Impression.NodeID, impressionEvidences); err != nil {
 			return 0, err
 		}
@@ -228,7 +228,7 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 			return 0, err
 		}
 		if len(summaryEvidences) > 0 {
-			itemEvidences := cloneNodeEvidences(snapshot.UserID, generation.GenerationID, genericDocs[idx].NodeID, summaryEvidences)
+			itemEvidences := groundedNodeEvidences(genericDocs[idx], summaryEvidences)
 			var evidenceErr error
 			if genericDocs[idx].Type == domain.MemoryTypeEntity {
 				evidenceErr = services.Memories.MergeEvidences(ctx, snapshot.UserID, genericDocs[idx].NodeID, itemEvidences)
@@ -242,6 +242,11 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 	}
 	result.GenericItems = genericDocs
 	for _, relation := range result.Relations {
+		enriched, evidenceErr := relationWithEvidence(ctx, services, relation)
+		if evidenceErr != nil {
+			return 0, evidenceErr
+		}
+		relation = enriched
 		if err := services.Memories.LinkDocuments(ctx, relation); err != nil {
 			return 0, err
 		}

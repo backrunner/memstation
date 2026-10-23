@@ -153,6 +153,14 @@ func newHarness(ctx context.Context, dataset Dataset, embeddingOptions Embedding
 			return nil, err
 		}
 	}
+	for _, alias := range dataset.Aliases {
+		if alias.GenerationID == "" {
+			alias.GenerationID = memorygenCurrentGenerationID(alias.UserID)
+		}
+		if _, err := repo.PutEntityAlias(ctx, alias); err != nil {
+			return nil, err
+		}
+	}
 	engine := memoryservice.NewEngine(repo, vectors)
 	engine.SetClock(func() time.Time {
 		return referenceTime
@@ -196,6 +204,7 @@ func runVariant(ctx context.Context, bench *harness, dataset Dataset, variant me
 			limit = 10
 		}
 		debug, err := bench.engine.SearchWithVariant(ctx, domain.SearchInput{
+			AsOf: query.AsOf, RelationMode: query.RelationMode, EntityScope: query.EntityScope,
 			UserID:              query.UserID,
 			GenerationID:        query.GenerationID,
 			Query:               query.Query,

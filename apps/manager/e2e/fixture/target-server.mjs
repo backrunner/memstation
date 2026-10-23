@@ -1642,7 +1642,9 @@ function createState() {
       ]
     },
     conversations,
+    entity_aliases: [],
     memory_documents: {
+      entity: [{id:'entity-station',node_id:'node-entity-station',user_id:'admin',generation_id:'generation-admin-active',type:'entity',content:'MemStation project',metadata:{title:'MemStation',entity_scope:'work'},created_at:now,updated_at:now}],
       summary: [memorySummary],
       fact: [fact],
       impression: [impression]
@@ -2037,6 +2039,19 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (url.pathname === '/api/admin/memory/entity-aliases') {
+    const userId = url.searchParams.get('user_id') || 'admin';
+    if (req.method === 'GET') { json(req, res, state.entity_aliases.filter((item) => item.user_id === userId)); return; }
+    if (req.method === 'PUT') {
+      const body = await readJSON(req);
+      const existing = state.entity_aliases.find((item) => item.user_id === userId && item.alias === body.alias && item.target_node_id === body.target_node_id);
+      const item = { ...body, user_id:userId, id:existing?.id || `alias-${state.entity_aliases.length + 1}` };
+      if (existing) Object.assign(existing, item); else state.entity_aliases.push(item);
+      addAudit('memory.entity_alias.update', 'entity_alias', item.id, {status:item.status});
+      json(req, res, item); return;
+    }
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/admin/memory/documents') {
     const kind = url.searchParams.get('kind') || 'summary';
     const userId = url.searchParams.get('user_id');
@@ -2046,7 +2061,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  const memoryDocMatch = url.pathname.match(/^\/api\/admin\/memory\/documents\/(summary|fact|impression)\/([^/]+)$/);
+  const memoryDocMatch = url.pathname.match(/^\/api\/admin\/memory\/documents\/(summary|fact|impression|entity)\/([^/]+)$/);
   if (memoryDocMatch) {
     const kind = memoryDocMatch[1];
     const id = decodeURIComponent(memoryDocMatch[2]);

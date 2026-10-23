@@ -109,7 +109,7 @@ type ComplexityRoot struct {
 		KeyMemories     func(childComplexity int) int
 		Me              func(childComplexity int) int
 		MemorySummaries func(childComplexity int) int
-		SearchMemories  func(childComplexity int, query string, topN *int) int
+		SearchMemories  func(childComplexity int, query string, topN *int, asOf *string, knownAt *string, relationMode *string, entityScope *string) int
 		SystemOverview  func(childComplexity int) int
 		TokenUsageStats func(childComplexity int) int
 		Users           func(childComplexity int) int
@@ -188,7 +188,7 @@ type QueryResolver interface {
 	Facts(ctx context.Context) ([]*Fact, error)
 	KeyMemories(ctx context.Context) ([]*KeyMemory, error)
 	AuditEvents(ctx context.Context) ([]*AuditEvent, error)
-	SearchMemories(ctx context.Context, query string, topN *int) (*SearchMemoriesResult, error)
+	SearchMemories(ctx context.Context, query string, topN *int, asOf *string, knownAt *string, relationMode *string, entityScope *string) (*SearchMemoriesResult, error)
 	TokenUsageStats(ctx context.Context) (*TokenUsageStats, error)
 	SystemOverview(ctx context.Context) (*SystemOverview, error)
 }
@@ -559,7 +559,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.SearchMemories(childComplexity, args["query"].(string), args["topN"].(*int)), true
+		return e.ComplexityRoot.Query.SearchMemories(childComplexity, args["query"].(string), args["topN"].(*int), args["asOf"].(*string), args["knownAt"].(*string), args["relationMode"].(*string), args["entityScope"].(*string)), true
 	case "Query.systemOverview":
 		if e.ComplexityRoot.Query.SystemOverview == nil {
 			break
@@ -862,7 +862,7 @@ type Query {
   facts: [Fact!]!
   keyMemories: [KeyMemory!]!
   auditEvents: [AuditEvent!]!
-  searchMemories(query: String!, topN: Int = 10): SearchMemoriesResult!
+  searchMemories(query: String!, topN: Int = 10, asOf: String, knownAt: String, relationMode: String, entityScope: String): SearchMemoriesResult!
   tokenUsageStats: TokenUsageStats!
   systemOverview: SystemOverview!
 }
@@ -1116,6 +1116,26 @@ func (ec *executionContext) field_Query_searchMemories_args(ctx context.Context,
 		return nil, err
 	}
 	args["topN"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "asOf", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["asOf"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "knownAt", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["knownAt"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "relationMode", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["relationMode"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "entityScope", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["entityScope"] = arg5
 	return args, nil
 }
 
@@ -2835,7 +2855,7 @@ func (ec *executionContext) _Query_searchMemories(ctx context.Context, field gra
 		ec.fieldContext_Query_searchMemories,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().SearchMemories(ctx, fc.Args["query"].(string), fc.Args["topN"].(*int))
+			return ec.Resolvers.Query().SearchMemories(ctx, fc.Args["query"].(string), fc.Args["topN"].(*int), fc.Args["asOf"].(*string), fc.Args["knownAt"].(*string), fc.Args["relationMode"].(*string), fc.Args["entityScope"].(*string))
 		},
 		nil,
 		ec.marshalNSearchMemoriesResult2ᚖmemstationᚋappsᚋserverᚋgraphᚋgeneratedᚐSearchMemoriesResult,

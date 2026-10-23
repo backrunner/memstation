@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -30,6 +31,11 @@ type Engine struct {
 }
 
 type RelationRecallConfig struct {
+	MaxEdgesPerNode  int
+	MaxEdges         int
+	MaxNodes         int
+	Timeout          time.Duration
+	Mode             string
 	MaxHops          int
 	HopDecayLambda   float64
 	HopDecayExponent float64
@@ -210,6 +216,10 @@ func (e *Engine) Inject(ctx context.Context, req domain.UnifiedRequest) (domain.
 				InputSchema: map[string]any{
 					"type": "object",
 					"properties": map[string]any{
+						"as_of":         map[string]any{"type": "string", "format": "date-time", "description": "Return facts valid at this instant (RFC3339)."},
+						"known_at":      map[string]any{"type": "string", "format": "date-time", "description": "Return only fact versions recorded by this instant (RFC3339)."},
+						"relation_mode": map[string]any{"type": "string", "enum": []string{"neighborhood", "evidence", "dependencies", "dependents", "conflicts"}},
+						"entity_scope":  map[string]any{"type": "string"},
 						"query": map[string]any{
 							"type":        "string",
 							"description": "Semantic query used to search memory.",
@@ -341,6 +351,10 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 	defer span.End()
 
 	cfg := configForVariant(variant)
+	if err := domain.ValidateRelationMode(input.RelationMode); err != nil {
+		return DebugSearchResult{}, err
+	}
+	input.TopN = min(input.TopN, 100)
 	now := e.now()
 	if input.TopN <= 0 {
 		input.TopN = 10
@@ -359,6 +373,9 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 		embeddingModel = generation.EmbeddingModel
 	} else if strings.TrimSpace(input.GenerationID) == "" && strings.TrimSpace(input.UserID) != "" {
 		input.GenerationID = memorygenservice.CurrentGenerationID(input.UserID)
+	}
+	if input.AsOf != nil || input.KnownAt != nil {
+		return e.searchHistoricalFacts(ctx, input, variant, embeddingVersion, embeddingModel)
 	}
 	query := strings.TrimSpace(input.Query)
 	if query == "" {
@@ -407,6 +424,15 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 		}
 		seedScores[nodeID] = combineDirectSignal(semanticScores[nodeID], score)
 	}
+	if err := e.addEntitySeeds(ctx, input, seedScores); err != nil {
+		return DebugSearchResult{}, err
+	}
+	for id, score := range seedScores {
+		if score > combineDirectSignal(semanticScores[id], keywordScores[id]) {
+			semanticScores[id] = 0
+			keywordScores[id] = score
+		}
+	}
 	if len(seedScores) == 0 {
 		return e.searchWithoutVectors(ctx, input, variant)
 	}
@@ -415,18 +441,41 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 	for nodeID := range seedScores {
 		baseNodeIDs = append(baseNodeIDs, nodeID)
 	}
+	sort.Slice(baseNodeIDs, func(i, j int) bool {
+		if seedScores[baseNodeIDs[i]] != seedScores[baseNodeIDs[j]] {
+			return seedScores[baseNodeIDs[i]] > seedScores[baseNodeIDs[j]]
+		}
+		return baseNodeIDs[i] < baseNodeIDs[j]
+	})
+
+	seedBudget := (domain.RelationQuery{MaxNodes: e.RelationRecallConfig().MaxNodes}).Normalized().MaxNodes
+	if len(baseNodeIDs) > seedBudget {
+		for _, id := range baseNodeIDs[seedBudget:] {
+			delete(seedScores, id)
+		}
+		baseNodeIDs = baseNodeIDs[:seedBudget]
+	}
 	scoreMap := cloneScoreMap(seedScores)
 	relationScores := cloneScoreMap(seedScores)
 	relatedMap := map[string][]domain.RelatedMemory{}
 	var relations []domain.MemoryRelation
+	paths := map[string]domain.RecallPath{}
+	graphDegraded := false
 	if cfg.useRelations {
 		relationConfig := e.RelationRecallConfig()
+		relationConfig.Mode = input.RelationMode
 		var relErr error
-		relations, relErr = e.repo.ListRelations(ctx, input.UserID, input.GenerationID, baseNodeIDs, relationConfig.MaxHops)
+		relations, relErr = e.repo.RecallRelations(ctx, domain.RelationQuery{UserID: input.UserID, GenerationID: input.GenerationID, NodeIDs: baseNodeIDs, MaxHops: relationConfig.MaxHops, MaxEdgesPerNode: relationConfig.MaxEdgesPerNode, MaxEdges: relationConfig.MaxEdges, MaxNodes: relationConfig.MaxNodes, Timeout: relationConfig.Timeout, Mode: input.RelationMode})
 		if relErr != nil {
-			return DebugSearchResult{}, relErr
+			if ctx.Err() != nil {
+				return DebugSearchResult{}, ctx.Err()
+			}
+			if !errors.Is(relErr, context.DeadlineExceeded) {
+				return DebugSearchResult{}, relErr
+			}
+			graphDegraded = true
 		}
-		relationScores, relatedMap = expandRelationScores(seedScores, relations, relationConfig)
+		relationScores, relatedMap, paths = expandRelationPaths(seedScores, relations, relationConfig)
 		scoreMap = cloneScoreMap(relationScores)
 	}
 
@@ -489,6 +538,15 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 	rerankConfig := e.RerankConfig()
 	for _, candidate := range candidates {
 		doc := candidate.Document
+		if path, ok := paths[doc.NodeID]; ok {
+			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{"recall_path": path})
+		}
+		if graphDegraded {
+			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{"graph_timeout": true})
+		}
+		if input.RelationMode == "conflicts" {
+			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{"conflict_query": true})
+		}
 		rerankScore := rerankScores[doc.NodeID]
 		rerankWeight := 0.0
 		if _, ok := rerankRanks[doc.NodeID]; ok {
@@ -845,81 +903,8 @@ func cloneScoreMap(items map[string]float64) map[string]float64 {
 }
 
 func expandRelationScores(base map[string]float64, relations []domain.MemoryRelation, cfg RelationRecallConfig) (map[string]float64, map[string][]domain.RelatedMemory) {
-	type edge struct {
-		nodeID       string
-		relationType string
-		weight       float64
-	}
-
-	cfg = cfg.normalized()
-	scoreMap := cloneScoreMap(base)
-	maxSeedScore := 0.0
-	for _, score := range base {
-		if score > maxSeedScore {
-			maxSeedScore = score
-		}
-	}
-	relatedMap := map[string][]domain.RelatedMemory{}
-	graph := map[string][]edge{}
-
-	for _, relation := range relations {
-		if isTemporalRelationType(relation.RelationType) {
-			continue
-		}
-		for _, traversal := range relationTraversalEdges(relation) {
-			graph[traversal.fromNodeID] = append(graph[traversal.fromNodeID], edge{
-				nodeID:       traversal.toNodeID,
-				relationType: relation.RelationType,
-				weight:       relation.Weight,
-			})
-		}
-		relatedMap[relation.SrcNodeID] = append(relatedMap[relation.SrcNodeID], domain.RelatedMemory{
-			NodeID:       relation.DstNodeID,
-			RelationType: relation.RelationType,
-			Weight:       relation.Weight,
-		})
-		relatedMap[relation.DstNodeID] = append(relatedMap[relation.DstNodeID], domain.RelatedMemory{
-			NodeID:       relation.SrcNodeID,
-			RelationType: relation.RelationType,
-			Weight:       relation.Weight,
-		})
-	}
-
-	frontier := cloneScoreMap(base)
-	for hop := 0; hop < cfg.MaxHops && len(frontier) > 0; hop++ {
-		next := map[string]float64{}
-		hopPenalty := cfg.hopPenalty(hop)
-		for nodeID, score := range frontier {
-			for _, edge := range graph[nodeID] {
-				// Graph propagation is a bounded contribution. A graph-only
-				// candidate must not outrank a direct semantic hit solely because
-				// its path contains several edges.
-				candidateScore := score * relationBoostFactor(edge.relationType) * clamp(edge.weight, 0, 1) * hopPenalty
-				if candidateScore <= 0 {
-					continue
-				}
-				// A graph-only candidate may be promoted, but it must not outrank
-				// the strongest direct semantic seed merely because a path has
-				// several edges. Keep it just below the direct candidate ceiling.
-				if _, direct := base[edge.nodeID]; !direct && maxSeedScore > 0 {
-					candidateScore = minFloat(candidateScore, maxSeedScore*0.95)
-				}
-				if candidateScore <= scoreMap[edge.nodeID] {
-					continue
-				}
-				scoreMap[edge.nodeID] = candidateScore
-				if _, hasDirectScore := base[edge.nodeID]; hasDirectScore {
-					continue
-				}
-				if candidateScore > next[edge.nodeID] {
-					next[edge.nodeID] = candidateScore
-				}
-			}
-		}
-		frontier = next
-	}
-
-	return scoreMap, relatedMap
+	scores, related, _ := expandRelationPaths(base, relations, cfg)
+	return scores, related
 }
 
 func (cfg RelationRecallConfig) normalized() RelationRecallConfig {
@@ -1202,23 +1187,6 @@ func rerankDocumentText(doc domain.MemoryDocument) string {
 	return "[" + string(doc.Type) + "] " + content
 }
 
-type relationTraversalEdge struct {
-	fromNodeID string
-	toNodeID   string
-}
-
-func relationTraversalEdges(relation domain.MemoryRelation) []relationTraversalEdge {
-	// Retrieval asks for a bounded neighbourhood of a seed, not for a causal
-	// traversal. Every semantic edge contributes both directions, while the
-	// relation type remains available for scoring and display. This also lets
-	// summaries reach their supporting segments and key memories reach their
-	// source facts.
-	return []relationTraversalEdge{
-		{fromNodeID: relation.SrcNodeID, toNodeID: relation.DstNodeID},
-		{fromNodeID: relation.DstNodeID, toNodeID: relation.SrcNodeID},
-	}
-}
-
 func relationBoostFactor(relationType string) float64 {
 	switch strings.TrimSpace(strings.ToLower(relationType)) {
 	case domain.MemoryRelationDerivedFrom, "promoted_to_key_memory", domain.MemoryRelationResultedIn:
@@ -1291,13 +1259,6 @@ func max(left, right int) int {
 
 func maxFloat(left, right float64) float64 {
 	if left > right {
-		return left
-	}
-	return right
-}
-
-func minFloat(left, right float64) float64 {
-	if left < right {
 		return left
 	}
 	return right

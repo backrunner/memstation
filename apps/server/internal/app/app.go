@@ -224,6 +224,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	memoryEngine := memoryservice.NewEngine(memoryRepo, vectorStore)
 	memoryEngine.SetGenerationService(generations)
 	memoryEngine.SetRelationRecallConfig(memoryservice.RelationRecallConfig{
+		MaxEdgesPerNode: cfg.MemoryRelationMaxEdgesPerNode, MaxEdges: cfg.MemoryRelationMaxEdges, MaxNodes: cfg.MemoryRelationMaxNodes, Timeout: time.Duration(cfg.MemoryRelationTimeoutMS) * time.Millisecond,
 		MaxHops:          cfg.MemoryRelationMaxHops,
 		HopDecayLambda:   cfg.MemoryRelationHopDecayLambda,
 		HopDecayExponent: cfg.MemoryRelationHopDecayExponent,
@@ -360,6 +361,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		},
 		SetMemoryRelationRecall: func(maxHops int, decayLambda, decayExponent float64) {
 			memoryEngine.SetRelationRecallConfig(memoryservice.RelationRecallConfig{
+				MaxEdgesPerNode: cfg.MemoryRelationMaxEdgesPerNode, MaxEdges: cfg.MemoryRelationMaxEdges, MaxNodes: cfg.MemoryRelationMaxNodes, Timeout: time.Duration(cfg.MemoryRelationTimeoutMS) * time.Millisecond,
 				MaxHops:          maxHops,
 				HopDecayLambda:   decayLambda,
 				HopDecayExponent: decayExponent,

@@ -3,6 +3,10 @@ package domain
 import "time"
 
 type SearchInput struct {
+	AsOf                *time.Time   `json:"as_of,omitempty"`
+	KnownAt             *time.Time   `json:"known_at,omitempty"`
+	RelationMode        string       `json:"relation_mode,omitempty"`
+	EntityScope         string       `json:"entity_scope,omitempty"`
 	UserID              string       `json:"user_id"`
 	GenerationID        string       `json:"generation_id,omitempty"`
 	Query               string       `json:"query"`

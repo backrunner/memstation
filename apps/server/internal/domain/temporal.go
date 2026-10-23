@@ -213,3 +213,17 @@ func metadataTime(metadata map[string]any, key string) time.Time {
 	}
 	return time.Time{}
 }
+
+// FactValidAt uses a half-open validity interval. Superseded today does not
+// imply invalid at a historical instant.
+func FactValidAt(doc MemoryDocument, at *time.Time) bool {
+	if at == nil {
+		return !IsStaleMemory(doc, time.Now().UTC())
+	}
+	from := metadataTime(doc.Metadata, "valid_from")
+	if from.IsZero() {
+		from = DeriveActivityAt(doc.ActivityAt, doc.UpdatedAt, doc.CreatedAt)
+	}
+	to := metadataTime(doc.Metadata, "valid_to")
+	return !at.Before(from) && (to.IsZero() || at.Before(to))
+}

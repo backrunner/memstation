@@ -26,12 +26,13 @@ type DatasetLoadOptions struct {
 }
 
 type Dataset struct {
-	Name              string            `json:"name"`
-	Description       string            `json:"description,omitempty"`
-	SmokeExpectations SmokeExpectations `json:"smoke_expectations,omitempty"`
-	Documents         []DatasetDocument `json:"documents"`
-	Relations         []DatasetRelation `json:"relations,omitempty"`
-	Queries           []QueryCase       `json:"queries"`
+	Aliases           []domain.EntityAlias `json:"aliases,omitempty"`
+	Name              string               `json:"name"`
+	Description       string               `json:"description,omitempty"`
+	SmokeExpectations SmokeExpectations    `json:"smoke_expectations,omitempty"`
+	Documents         []DatasetDocument    `json:"documents"`
+	Relations         []DatasetRelation    `json:"relations,omitempty"`
+	Queries           []QueryCase          `json:"queries"`
 }
 
 type SmokeExpectations struct {
@@ -73,6 +74,9 @@ type DatasetRelation struct {
 }
 
 type QueryCase struct {
+	AsOf                *time.Time          `json:"as_of,omitempty"`
+	RelationMode        string              `json:"relation_mode,omitempty"`
+	EntityScope         string              `json:"entity_scope,omitempty"`
 	CaseID              string              `json:"case_id"`
 	UserID              string              `json:"user_id"`
 	GenerationID        string              `json:"generation_id,omitempty"`

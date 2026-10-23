@@ -49,7 +49,9 @@ func (s *Service) Search(ctx context.Context, input domain.SearchInput) (domain.
 	if err != nil {
 		return domain.SearchResult{}, err
 	}
-	s.hydrateRelatedDocumentsBatch(ctx, memoryDocumentPointers(result.Memories))
+	if input.AsOf == nil && input.KnownAt == nil {
+		s.hydrateRelatedDocumentsBatch(ctx, memoryDocumentPointers(result.Memories))
+	}
 	return result, nil
 }
 
@@ -849,6 +851,9 @@ func (s *Service) hydrateRelatedDocumentsBatch(ctx context.Context, items []*dom
 			}
 		}
 		for _, item := range group.items {
+			if item != nil && item.Metadata["graph_timeout"] == true {
+				precomputedSeeds[item.NodeID] = struct{}{}
+			}
 			if item == nil || item.NodeID == "" || len(item.Related) == 0 {
 				continue
 			}
@@ -872,7 +877,7 @@ func (s *Service) hydrateRelatedDocumentsBatch(ctx context.Context, items []*dom
 			relationSeedNodeIDs = append(relationSeedNodeIDs, nodeID)
 		}
 		if len(relationSeedNodeIDs) > 0 {
-			if relations, err := s.repo.ListRelations(ctx, group.userID, group.generationID, relationSeedNodeIDs, 1); err == nil {
+			if relations, err := s.repo.RecallRelations(ctx, domain.RelationQuery{UserID: group.userID, GenerationID: group.generationID, NodeIDs: relationSeedNodeIDs, MaxHops: 1}); err == nil {
 				for _, relation := range relations {
 					if isTemporalRelationTypeForHydration(relation.RelationType) {
 						continue

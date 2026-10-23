@@ -124,6 +124,8 @@ func NewRouter(deps Dependencies) http.Handler {
 		r.Get("/api/admin/memory/documents/{kind}/{id}", adminMemoryDocumentGetHandler(deps.Memory))
 		r.Put("/api/admin/memory/documents/{kind}/{id}", adminMemoryDocumentUpdateHandler(deps.Memory, deps.Audit))
 		r.Post("/api/admin/memory/search", adminMemorySearchHandler(deps.Memory))
+		r.Get("/api/admin/memory/entity-aliases", adminEntityAliasesHandler(deps.Memory))
+		r.Put("/api/admin/memory/entity-aliases", adminEntityAliasPutHandler(deps.Memory, deps.Audit))
 		r.Get("/api/admin/memory/rebuilds", adminMemoryRebuildListHandler(deps.Generations))
 		r.Post("/api/admin/memory/rebuilds", adminMemoryRebuildCreateHandler(deps.Generations, deps.Publisher, deps.Audit))
 		r.Get("/api/admin/memory/rebuilds/{id}", adminMemoryRebuildGetHandler(deps.Generations))
@@ -551,6 +553,10 @@ func deleteFileHandler(service *multimodalservice.Service) http.HandlerFunc {
 
 func memorySearchHandler(service *memoryservice.Service) http.HandlerFunc {
 	type requestBody struct {
+		AsOf                string              `json:"as_of"`
+		KnownAt             string              `json:"known_at"`
+		RelationMode        string              `json:"relation_mode"`
+		EntityScope         string              `json:"entity_scope"`
 		Query               string              `json:"query"`
 		TopN                int                 `json:"top_n"`
 		IncludeConversation bool                `json:"include_conversation"`
@@ -582,7 +588,22 @@ func memorySearchHandler(service *memoryservice.Service) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 			return
 		}
+		asOf, err := parseOptionalRFC3339(body.AsOf)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		knownAt, err := parseOptionalRFC3339(body.KnownAt)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		if err = domain.ValidateRelationMode(body.RelationMode); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
 		result, err := service.Search(r.Context(), domain.SearchInput{
+			AsOf: asOf, KnownAt: knownAt, RelationMode: body.RelationMode, EntityScope: body.EntityScope,
 			UserID:              security.UserIDFromContext(r.Context()),
 			Query:               body.Query,
 			TopN:                body.TopN,
@@ -1226,6 +1247,10 @@ func adminMemoryDocumentUpdateHandler(service *memoryservice.Service, audit *aud
 
 func adminMemorySearchHandler(service *memoryservice.Service) http.HandlerFunc {
 	type requestBody struct {
+		AsOf         string   `json:"as_of"`
+		KnownAt      string   `json:"known_at"`
+		RelationMode string   `json:"relation_mode"`
+		EntityScope  string   `json:"entity_scope"`
 		Query        string   `json:"query"`
 		TopN         int      `json:"top_n"`
 		GenerationID string   `json:"generation_id"`
@@ -1262,7 +1287,22 @@ func adminMemorySearchHandler(service *memoryservice.Service) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
 			return
 		}
+		asOf, err := parseOptionalRFC3339(body.AsOf)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		knownAt, err := parseOptionalRFC3339(body.KnownAt)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		if err = domain.ValidateRelationMode(body.RelationMode); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
 		result, err := service.Search(r.Context(), domain.SearchInput{
+			AsOf: asOf, KnownAt: knownAt, RelationMode: body.RelationMode, EntityScope: body.EntityScope,
 			UserID:       userID,
 			GenerationID: strings.TrimSpace(body.GenerationID),
 			Query:        body.Query,

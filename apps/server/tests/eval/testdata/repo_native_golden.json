@@ -108,7 +108,7 @@
       "node_id": "node-summary-cn-ui-1",
       "user_id": "user-alpha",
       "type": "summary",
-      "content": "\u7528\u6237\u559c\u6b22\u4e2d\u6587\u754c\u9762\uff0c\u5e76\u4e14\u5e0c\u671b\u9ed8\u8ba4\u4f7f\u7528\u6d45\u8272\u4e3b\u9898\u3002",
+      "content": "用户喜欢中文界面，并且希望默认使用浅色主题。",
       "importance": 1.2,
       "decay_factor": 1.0,
       "created_at": "2026-03-13T13:00:00Z",
@@ -119,12 +119,12 @@
       "node_id": "node-key-cn-theme-1",
       "user_id": "user-alpha",
       "type": "key_memory",
-      "content": "ui_theme: \u6d45\u8272\u4e3b\u9898",
+      "content": "ui_theme: 浅色主题",
       "importance": 1.4,
       "decay_factor": 1.0,
       "metadata": {
         "key": "ui_theme",
-        "value": "\u6d45\u8272\u4e3b\u9898"
+        "value": "浅色主题"
       },
       "created_at": "2026-03-13T13:05:00Z",
       "updated_at": "2026-03-14T13:05:00Z"
@@ -262,7 +262,9 @@
       "importance": 1.15,
       "decay_factor": 1.0,
       "metadata": {
-        "modalities": ["image"],
+        "modalities": [
+          "image"
+        ],
         "evidence_count": 1,
         "source_part_count": 1,
         "has_source_blob": true
@@ -280,7 +282,9 @@
       "importance": 1.1,
       "decay_factor": 1.0,
       "metadata": {
-        "modalities": ["audio"],
+        "modalities": [
+          "audio"
+        ],
         "evidence_count": 1,
         "source_part_count": 1,
         "has_source_blob": true
@@ -298,11 +302,15 @@
       "importance": 1.1,
       "decay_factor": 1.0,
       "metadata": {
-        "modalities": ["file"],
+        "modalities": [
+          "file"
+        ],
         "evidence_count": 1,
         "source_part_count": 1,
         "has_source_blob": true,
-        "page_indexes": [2]
+        "page_indexes": [
+          2
+        ]
       },
       "created_at": "2026-03-14T19:20:00Z",
       "updated_at": "2026-03-14T19:20:00Z"
@@ -317,7 +325,10 @@
       "importance": 1.2,
       "decay_factor": 1.0,
       "metadata": {
-        "modalities": ["video", "audio"],
+        "modalities": [
+          "video",
+          "audio"
+        ],
         "evidence_count": 2,
         "source_part_count": 2,
         "has_source_blob": true,
@@ -441,6 +452,529 @@
       "decay_factor": 1.0,
       "created_at": "2026-03-14T08:00:00Z",
       "updated_at": "2026-03-14T08:00:00Z"
+    },
+    {
+      "id": "history-hangzhou",
+      "node_id": "node-history-hangzhou",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "Home location: Hangzhou",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {
+        "fact_key": "home",
+        "valid_from": "2025-01-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "history-shanghai",
+      "node_id": "node-history-shanghai",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "Home location: Shanghai",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {
+        "fact_key": "home",
+        "valid_from": "2026-03-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "alias-station",
+      "node_id": "node-alias-station",
+      "user_id": "graph-diagnostics",
+      "type": "entity",
+      "content": "MemStation project",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "scope-station",
+      "node_id": "node-scope-station",
+      "user_id": "graph-diagnostics",
+      "type": "entity",
+      "content": "Station unrelated personal project",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "conflict-a",
+      "node_id": "node-conflict-a",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "launchgate-conflict approval granted",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "conflict-b",
+      "node_id": "node-conflict-b",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "launchgate-conflict approval withheld",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-topic",
+      "node_id": "node-hub-topic",
+      "user_id": "graph-diagnostics",
+      "type": "entity",
+      "content": "hub-diagnostic shared topic",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-00",
+      "node_id": "node-hub-child-00",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 0",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-01",
+      "node_id": "node-hub-child-01",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 1",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-02",
+      "node_id": "node-hub-child-02",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 2",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-03",
+      "node_id": "node-hub-child-03",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 3",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-04",
+      "node_id": "node-hub-child-04",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 4",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-05",
+      "node_id": "node-hub-child-05",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 5",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-06",
+      "node_id": "node-hub-child-06",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 6",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-07",
+      "node_id": "node-hub-child-07",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 7",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-08",
+      "node_id": "node-hub-child-08",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 8",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-09",
+      "node_id": "node-hub-child-09",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 9",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-10",
+      "node_id": "node-hub-child-10",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 10",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-11",
+      "node_id": "node-hub-child-11",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 11",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-12",
+      "node_id": "node-hub-child-12",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 12",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-13",
+      "node_id": "node-hub-child-13",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 13",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-14",
+      "node_id": "node-hub-child-14",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 14",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-15",
+      "node_id": "node-hub-child-15",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 15",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-16",
+      "node_id": "node-hub-child-16",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 16",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-17",
+      "node_id": "node-hub-child-17",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 17",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-18",
+      "node_id": "node-hub-child-18",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 18",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-19",
+      "node_id": "node-hub-child-19",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 19",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-20",
+      "node_id": "node-hub-child-20",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 20",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-21",
+      "node_id": "node-hub-child-21",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 21",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-22",
+      "node_id": "node-hub-child-22",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 22",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-23",
+      "node_id": "node-hub-child-23",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 23",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-24",
+      "node_id": "node-hub-child-24",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 24",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-25",
+      "node_id": "node-hub-child-25",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 25",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-26",
+      "node_id": "node-hub-child-26",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 26",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-27",
+      "node_id": "node-hub-child-27",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 27",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-28",
+      "node_id": "node-hub-child-28",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 28",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-29",
+      "node_id": "node-hub-child-29",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 29",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-30",
+      "node_id": "node-hub-child-30",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 30",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-31",
+      "node_id": "node-hub-child-31",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 31",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-32",
+      "node_id": "node-hub-child-32",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 32",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-33",
+      "node_id": "node-hub-child-33",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 33",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-34",
+      "node_id": "node-hub-child-34",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 34",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-35",
+      "node_id": "node-hub-child-35",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 35",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-36",
+      "node_id": "node-hub-child-36",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 36",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-37",
+      "node_id": "node-hub-child-37",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 37",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-38",
+      "node_id": "node-hub-child-38",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 38",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
+    },
+    {
+      "id": "hub-child-39",
+      "node_id": "node-hub-child-39",
+      "user_id": "graph-diagnostics",
+      "type": "fact",
+      "content": "hub diagnostic supporting record 39",
+      "importance": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "metadata": {}
     }
   ],
   "relations": [
@@ -483,6 +1017,457 @@
       "relation_type": "used_tool",
       "weight": 0.8,
       "source": "golden"
+    },
+    {
+      "id": "conflict-diag",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-conflict-a",
+      "dst_node_id": "node-conflict-b",
+      "relation_type": "contradicts",
+      "weight": 1,
+      "metadata": {
+        "confidence": 0.9
+      }
+    },
+    {
+      "id": "hub-edge-00",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-00",
+      "relation_type": "mentions_entity",
+      "weight": 0.025,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-01",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-01",
+      "relation_type": "mentions_entity",
+      "weight": 0.05,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-02",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-02",
+      "relation_type": "mentions_entity",
+      "weight": 0.075,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-03",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-03",
+      "relation_type": "mentions_entity",
+      "weight": 0.1,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-04",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-04",
+      "relation_type": "mentions_entity",
+      "weight": 0.125,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-05",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-05",
+      "relation_type": "mentions_entity",
+      "weight": 0.15,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-06",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-06",
+      "relation_type": "mentions_entity",
+      "weight": 0.175,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-07",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-07",
+      "relation_type": "mentions_entity",
+      "weight": 0.2,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-08",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-08",
+      "relation_type": "mentions_entity",
+      "weight": 0.225,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-09",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-09",
+      "relation_type": "mentions_entity",
+      "weight": 0.25,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-10",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-10",
+      "relation_type": "mentions_entity",
+      "weight": 0.275,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-11",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-11",
+      "relation_type": "mentions_entity",
+      "weight": 0.3,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-12",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-12",
+      "relation_type": "mentions_entity",
+      "weight": 0.325,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-13",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-13",
+      "relation_type": "mentions_entity",
+      "weight": 0.35,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-14",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-14",
+      "relation_type": "mentions_entity",
+      "weight": 0.375,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-15",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-15",
+      "relation_type": "mentions_entity",
+      "weight": 0.4,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-16",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-16",
+      "relation_type": "mentions_entity",
+      "weight": 0.425,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-17",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-17",
+      "relation_type": "mentions_entity",
+      "weight": 0.45,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-18",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-18",
+      "relation_type": "mentions_entity",
+      "weight": 0.475,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-19",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-19",
+      "relation_type": "mentions_entity",
+      "weight": 0.5,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-20",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-20",
+      "relation_type": "mentions_entity",
+      "weight": 0.525,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-21",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-21",
+      "relation_type": "mentions_entity",
+      "weight": 0.55,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-22",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-22",
+      "relation_type": "mentions_entity",
+      "weight": 0.575,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-23",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-23",
+      "relation_type": "mentions_entity",
+      "weight": 0.6,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-24",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-24",
+      "relation_type": "mentions_entity",
+      "weight": 0.625,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-25",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-25",
+      "relation_type": "mentions_entity",
+      "weight": 0.65,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-26",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-26",
+      "relation_type": "mentions_entity",
+      "weight": 0.675,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-27",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-27",
+      "relation_type": "mentions_entity",
+      "weight": 0.7,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-28",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-28",
+      "relation_type": "mentions_entity",
+      "weight": 0.725,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-29",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-29",
+      "relation_type": "mentions_entity",
+      "weight": 0.75,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-30",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-30",
+      "relation_type": "mentions_entity",
+      "weight": 0.775,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-31",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-31",
+      "relation_type": "mentions_entity",
+      "weight": 0.8,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-32",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-32",
+      "relation_type": "mentions_entity",
+      "weight": 0.825,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-33",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-33",
+      "relation_type": "mentions_entity",
+      "weight": 0.85,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-34",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-34",
+      "relation_type": "mentions_entity",
+      "weight": 0.875,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-35",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-35",
+      "relation_type": "mentions_entity",
+      "weight": 0.9,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-36",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-36",
+      "relation_type": "mentions_entity",
+      "weight": 0.925,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-37",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-37",
+      "relation_type": "mentions_entity",
+      "weight": 0.95,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-38",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-38",
+      "relation_type": "mentions_entity",
+      "weight": 0.975,
+      "metadata": {
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "hub-edge-39",
+      "user_id": "graph-diagnostics",
+      "src_node_id": "node-hub-topic",
+      "dst_node_id": "node-hub-child-39",
+      "relation_type": "mentions_entity",
+      "weight": 1.0,
+      "metadata": {
+        "confidence": 0.5
+      }
     }
   ],
   "queries": [
@@ -571,7 +1556,7 @@
     {
       "case_id": "retrieval.cn_theme",
       "user_id": "user-alpha",
-      "query": "ui_theme: \u6d45\u8272\u4e3b\u9898",
+      "query": "ui_theme: 浅色主题",
       "top_n": 5,
       "positives": [
         "key-cn-theme-1",
@@ -850,6 +1835,72 @@
       "memory_types": [
         "agent_action"
       ]
+    },
+    {
+      "case_id": "graph.historical_validity",
+      "user_id": "graph-diagnostics",
+      "query": "Home location",
+      "as_of": "2025-06-01T00:00:00Z",
+      "top_n": 3,
+      "memory_types": [
+        "fact"
+      ],
+      "positives": [
+        "history-hangzhou"
+      ],
+      "negatives": [
+        "history-shanghai"
+      ]
+    },
+    {
+      "case_id": "graph.scoped_alias",
+      "user_id": "graph-diagnostics",
+      "query": "记忆站",
+      "entity_scope": "work",
+      "top_n": 1,
+      "memory_types": [
+        "entity"
+      ],
+      "positives": [
+        "alias-station"
+      ],
+      "negatives": [
+        "scope-station"
+      ]
+    },
+    {
+      "case_id": "graph.conflicting_evidence",
+      "user_id": "graph-diagnostics",
+      "query": "launchgate-conflict approval granted",
+      "relation_mode": "conflicts",
+      "top_n": 2,
+      "memory_types": [
+        "fact"
+      ],
+      "positives": [
+        "conflict-a",
+        "conflict-b"
+      ]
+    },
+    {
+      "case_id": "graph.hub_budget",
+      "user_id": "graph-diagnostics",
+      "query": "hub-diagnostic shared topic",
+      "top_n": 3,
+      "positives": [
+        "hub-topic"
+      ],
+      "notes": "Bounded hub expansion diagnostic; storage contracts separately assert hard candidate limits."
+    }
+  ],
+  "aliases": [
+    {
+      "user_id": "graph-diagnostics",
+      "alias": "记忆站",
+      "scope": "work",
+      "target_node_id": "node-alias-station",
+      "status": "confirmed",
+      "reason": "Explicit project alias in diagnostic fixture"
     }
   ]
 }

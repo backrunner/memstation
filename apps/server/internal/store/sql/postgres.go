@@ -746,7 +746,22 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 				return errors.New("fact supersession cycle detected")
 			}
 		}
-		if !supersessionStateSpecified && !incomingIsSuperseded && lineageGroupID != "" && len(supersededIDs) == 0 {
+		if validFromSpecified && !supersessionStateSpecified && !incomingIsSuperseded && lineageGroupID != "" && len(supersededIDs) == 0 {
+			previous, next, nextTime, temporalErr := factTemporalNeighborsTx(ctx, tx, doc)
+			if temporalErr != nil {
+				return temporalErr
+			}
+			if previous != "" {
+				supersededIDs = []string{previous}
+			}
+			if next != "" {
+				incomingIsSuperseded = true
+				supersededByID = next
+				validTo = nextTime
+				validToSpecified = true
+			}
+		}
+		if !supersessionStateSpecified && !incomingIsSuperseded && lineageGroupID != "" && len(supersededIDs) == 0 && !validFromSpecified {
 			lineageHeadIDs, headErr := currentFactLineageHeadIDsTx(ctx, tx, doc.UserID, doc.GenerationID, lineageGroupID, doc.ID)
 			if headErr != nil {
 				return headErr
@@ -803,14 +818,14 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
                     UPDATE facts
                     SET is_superseded = TRUE,
                         superseded_by_id = $4,
-                        valid_to = COALESCE(valid_to, $5),
+                        valid_to = LEAST(valid_to, $5),
                         updated_at = $6
                     WHERE user_id = $1
                       AND generation_id = $2
                       AND id = $3
                       AND id <> $4
                       AND COALESCE(lineage_group_id, '') = $7
-                `, doc.UserID, doc.GenerationID, supersededFactID, doc.ID, doc.ActivityAt, doc.UpdatedAt, lineageGroupID)
+                `, doc.UserID, doc.GenerationID, supersededFactID, doc.ID, factEffectiveFrom(doc), doc.UpdatedAt, lineageGroupID)
 				if execErr != nil {
 					return execErr
 				}
@@ -869,13 +884,24 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 				if queryErr != nil {
 					return queryErr
 				}
-				defer rows.Close()
+
+				type supersededFact struct{ id, nodeID string }
+				pending := []supersededFact{}
 				for rows.Next() {
-					var supersededFactID string
-					var supersededNodeID string
-					if err = rows.Scan(&supersededFactID, &supersededNodeID); err != nil {
+					var item supersededFact
+					if err = rows.Scan(&item.id, &item.nodeID); err != nil {
+						rows.Close()
 						return err
 					}
+					pending = append(pending, item)
+				}
+				rowsErr := rows.Err()
+				rows.Close()
+				if rowsErr != nil {
+					return rowsErr
+				}
+				for _, item := range pending {
+					supersededFactID, supersededNodeID := item.id, item.nodeID
 					if _, err = tx.ExecContext(ctx, `
                         INSERT INTO memory_relations (id, generation_id, user_id, src_node_id, dst_node_id, relation_type, weight, source, metadata, created_at, updated_at)
                         VALUES ($1,$2,$3,$4,$5,$6,1,'fact_supersession',$7,$8,$8)
@@ -893,9 +919,6 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 					}), doc.UpdatedAt); err != nil {
 						return err
 					}
-				}
-				if err = rows.Err(); err != nil {
-					return err
 				}
 			}
 		}

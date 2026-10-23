@@ -41,7 +41,19 @@ func (s *memoryServiceServer) Search(ctx context.Context, req *pb.SearchRequest)
 	if err != nil {
 		return nil, err
 	}
+	asOf, err := parseOptionalTimestamp(req.GetAsOf(), "as_of")
+	if err != nil {
+		return nil, err
+	}
+	knownAt, err := parseOptionalTimestamp(req.GetKnownAt(), "known_at")
+	if err != nil {
+		return nil, err
+	}
+	if err = domain.ValidateRelationMode(req.GetRelationMode()); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 	result, err := s.memory.Search(ctx, domain.SearchInput{
+		AsOf: asOf, KnownAt: knownAt, RelationMode: req.GetRelationMode(), EntityScope: req.GetEntityScope(),
 		UserID:              security.UserIDFromContext(ctx),
 		GenerationID:        strings.TrimSpace(req.GetGenerationId()),
 		Query:               req.GetQuery(),

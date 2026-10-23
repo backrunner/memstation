@@ -12,7 +12,7 @@ type Query {
   facts: [Fact!]!
   keyMemories: [KeyMemory!]!
   auditEvents: [AuditEvent!]!
-  searchMemories(query: String!, topN: Int = 10): SearchMemoriesResult!
+  searchMemories(query: String!, topN: Int = 10, asOf: String, knownAt: String, relationMode: String, entityScope: String): SearchMemoriesResult!
   tokenUsageStats: TokenUsageStats!
   systemOverview: SystemOverview!
 }

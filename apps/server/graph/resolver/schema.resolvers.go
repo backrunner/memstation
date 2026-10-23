@@ -276,8 +276,16 @@ func (r *queryResolver) AuditEvents(ctx context.Context) ([]*generated.AuditEven
 }
 
 // SearchMemories is the resolver for the searchMemories field.
-func (r *queryResolver) SearchMemories(ctx context.Context, query string, topN *int) (*generated.SearchMemoriesResult, error) {
-	result, err := r.MemoryService.Search(ctx, domain.SearchInput{UserID: userIDFromContext(ctx), Query: query, TopN: valueOrDefault(topN, 10), MinScore: 0})
+func (r *queryResolver) SearchMemories(ctx context.Context, query string, topN *int, asOf *string, knownAt *string, relationMode *string, entityScope *string) (*generated.SearchMemoriesResult, error) {
+	validAt, err := parseSearchTime(asOf)
+	if err != nil {
+		return nil, err
+	}
+	recordedAt, err := parseSearchTime(knownAt)
+	if err != nil {
+		return nil, err
+	}
+	result, err := r.MemoryService.Search(ctx, domain.SearchInput{AsOf: validAt, KnownAt: recordedAt, RelationMode: searchString(relationMode), EntityScope: searchString(entityScope), UserID: userIDFromContext(ctx), Query: query, TopN: valueOrDefault(topN, 10), MinScore: 0})
 	if err != nil {
 		return nil, err
 	}

@@ -1078,6 +1078,10 @@ type SearchRequest struct {
 	DateFrom            *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=date_from,json=dateFrom,proto3" json:"date_from,omitempty"`
 	DateTo              *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=date_to,json=dateTo,proto3" json:"date_to,omitempty"`
 	MinScore            float64                `protobuf:"fixed64,10,opt,name=min_score,json=minScore,proto3" json:"min_score,omitempty"`
+	AsOf                *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=as_of,json=asOf,proto3" json:"as_of,omitempty"`
+	KnownAt             *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=known_at,json=knownAt,proto3" json:"known_at,omitempty"`
+	RelationMode        string                 `protobuf:"bytes,13,opt,name=relation_mode,json=relationMode,proto3" json:"relation_mode,omitempty"`
+	EntityScope         string                 `protobuf:"bytes,14,opt,name=entity_scope,json=entityScope,proto3" json:"entity_scope,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -1180,6 +1184,34 @@ func (x *SearchRequest) GetMinScore() float64 {
 		return x.MinScore
 	}
 	return 0
+}
+
+func (x *SearchRequest) GetAsOf() *timestamppb.Timestamp {
+	if x != nil {
+		return x.AsOf
+	}
+	return nil
+}
+
+func (x *SearchRequest) GetKnownAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.KnownAt
+	}
+	return nil
+}
+
+func (x *SearchRequest) GetRelationMode() string {
+	if x != nil {
+		return x.RelationMode
+	}
+	return ""
+}
+
+func (x *SearchRequest) GetEntityScope() string {
+	if x != nil {
+		return x.EntityScope
+	}
+	return ""
 }
 
 type SearchResponse struct {
@@ -3026,7 +3058,7 @@ const file_proto_memstation_v1_api_proto_rawDesc = "" +
 	"\vUsageRecord\x12!\n" +
 	"\finput_tokens\x18\x01 \x01(\x05R\vinputTokens\x12#\n" +
 	"\routput_tokens\x18\x02 \x01(\x05R\foutputTokens\x12!\n" +
-	"\ftotal_tokens\x18\x03 \x01(\x05R\vtotalTokens\"\x8a\x03\n" +
+	"\ftotal_tokens\x18\x03 \x01(\x05R\vtotalTokens\"\xba\x04\n" +
 	"\rSearchRequest\x12#\n" +
 	"\rgeneration_id\x18\x01 \x01(\tR\fgenerationId\x12\x14\n" +
 	"\x05query\x18\x02 \x01(\tR\x05query\x12\x13\n" +
@@ -3039,7 +3071,11 @@ const file_proto_memstation_v1_api_proto_rawDesc = "" +
 	"\tdate_from\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\bdateFrom\x123\n" +
 	"\adate_to\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x06dateTo\x12\x1b\n" +
 	"\tmin_score\x18\n" +
-	" \x01(\x01R\bminScore\"\x97\x01\n" +
+	" \x01(\x01R\bminScore\x12/\n" +
+	"\x05as_of\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\x04asOf\x125\n" +
+	"\bknown_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\aknownAt\x12#\n" +
+	"\rrelation_mode\x18\r \x01(\tR\frelationMode\x12!\n" +
+	"\fentity_scope\x18\x0e \x01(\tR\ventityScope\"\x97\x01\n" +
 	"\x0eSearchResponse\x129\n" +
 	"\bmemories\x18\x01 \x03(\v2\x1d.memstation.v1.MemoryDocumentR\bmemories\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x124\n" +
@@ -3310,67 +3346,69 @@ var file_proto_memstation_v1_api_proto_depIdxs = []int32{
 	39, // 23: memstation.v1.ToolResult.output:type_name -> google.protobuf.Value
 	38, // 24: memstation.v1.SearchRequest.date_from:type_name -> google.protobuf.Timestamp
 	38, // 25: memstation.v1.SearchRequest.date_to:type_name -> google.protobuf.Timestamp
-	17, // 26: memstation.v1.SearchResponse.memories:type_name -> memstation.v1.MemoryDocument
-	15, // 27: memstation.v1.InjectionResult.search:type_name -> memstation.v1.SearchResponse
-	38, // 28: memstation.v1.MemoryDocument.activity_at:type_name -> google.protobuf.Timestamp
-	37, // 29: memstation.v1.MemoryDocument.metadata:type_name -> google.protobuf.Struct
-	19, // 30: memstation.v1.MemoryDocument.related:type_name -> memstation.v1.RelatedMemory
-	38, // 31: memstation.v1.MemoryDocument.created_at:type_name -> google.protobuf.Timestamp
-	38, // 32: memstation.v1.MemoryDocument.updated_at:type_name -> google.protobuf.Timestamp
-	18, // 33: memstation.v1.MemoryDocument.lineage:type_name -> memstation.v1.FactLineage
-	38, // 34: memstation.v1.ListKeyMemoriesRequest.date_from:type_name -> google.protobuf.Timestamp
-	38, // 35: memstation.v1.ListKeyMemoriesRequest.date_to:type_name -> google.protobuf.Timestamp
-	22, // 36: memstation.v1.ListKeyMemoriesResponse.items:type_name -> memstation.v1.KeyMemory
-	38, // 37: memstation.v1.KeyMemory.last_confirmed_at:type_name -> google.protobuf.Timestamp
-	38, // 38: memstation.v1.KeyMemory.activity_at:type_name -> google.protobuf.Timestamp
-	37, // 39: memstation.v1.KeyMemory.metadata:type_name -> google.protobuf.Struct
-	38, // 40: memstation.v1.KeyMemory.created_at:type_name -> google.protobuf.Timestamp
-	38, // 41: memstation.v1.KeyMemory.updated_at:type_name -> google.protobuf.Timestamp
-	38, // 42: memstation.v1.UpsertKeyMemoryRequest.last_confirmed_at:type_name -> google.protobuf.Timestamp
-	37, // 43: memstation.v1.UpsertKeyMemoryRequest.metadata:type_name -> google.protobuf.Struct
-	37, // 44: memstation.v1.OverviewResponse.overview:type_name -> google.protobuf.Struct
-	30, // 45: memstation.v1.ListConversationsResponse.items:type_name -> memstation.v1.ConversationListItem
-	38, // 46: memstation.v1.ConversationListItem.updated_at:type_name -> google.protobuf.Timestamp
-	37, // 47: memstation.v1.ConversationListItem.metadata:type_name -> google.protobuf.Struct
-	8,  // 48: memstation.v1.ConversationRecord.messages:type_name -> memstation.v1.UnifiedMessage
-	33, // 49: memstation.v1.ConversationRecord.segments:type_name -> memstation.v1.ConversationSegment
-	7,  // 50: memstation.v1.ConversationRecord.response:type_name -> memstation.v1.UnifiedResponse
-	13, // 51: memstation.v1.ConversationRecord.usage:type_name -> memstation.v1.UsageRecord
-	37, // 52: memstation.v1.ConversationRecord.metadata:type_name -> google.protobuf.Struct
-	38, // 53: memstation.v1.ConversationRecord.created_at:type_name -> google.protobuf.Timestamp
-	38, // 54: memstation.v1.ConversationRecord.updated_at:type_name -> google.protobuf.Timestamp
-	37, // 55: memstation.v1.ConversationSegment.metadata:type_name -> google.protobuf.Struct
-	38, // 56: memstation.v1.ConversationSegment.created_at:type_name -> google.protobuf.Timestamp
-	38, // 57: memstation.v1.ConversationSegment.updated_at:type_name -> google.protobuf.Timestamp
-	17, // 58: memstation.v1.ConversationMemoryResponse.documents:type_name -> memstation.v1.MemoryDocument
-	22, // 59: memstation.v1.ConversationMemoryResponse.key_memories:type_name -> memstation.v1.KeyMemory
-	40, // 60: memstation.v1.HealthService.GetStatus:input_type -> google.protobuf.Empty
-	40, // 61: memstation.v1.GatewayService.ListModels:input_type -> google.protobuf.Empty
-	4,  // 62: memstation.v1.GatewayService.Complete:input_type -> memstation.v1.CompleteRequest
-	14, // 63: memstation.v1.MemoryService.Search:input_type -> memstation.v1.SearchRequest
-	20, // 64: memstation.v1.MemoryService.ListKeyMemories:input_type -> memstation.v1.ListKeyMemoriesRequest
-	23, // 65: memstation.v1.MemoryService.UpsertKeyMemory:input_type -> memstation.v1.UpsertKeyMemoryRequest
-	24, // 66: memstation.v1.MemoryService.DeleteKeyMemory:input_type -> memstation.v1.DeleteKeyMemoryRequest
-	26, // 67: memstation.v1.AdminService.Overview:input_type -> memstation.v1.OverviewRequest
-	28, // 68: memstation.v1.AdminService.ListConversations:input_type -> memstation.v1.ListConversationsRequest
-	31, // 69: memstation.v1.AdminService.GetConversation:input_type -> memstation.v1.GetConversationRequest
-	34, // 70: memstation.v1.AdminService.GetConversationMemory:input_type -> memstation.v1.GetConversationMemoryRequest
-	0,  // 71: memstation.v1.HealthService.GetStatus:output_type -> memstation.v1.HealthStatusResponse
-	3,  // 72: memstation.v1.GatewayService.ListModels:output_type -> memstation.v1.ListModelsResponse
-	5,  // 73: memstation.v1.GatewayService.Complete:output_type -> memstation.v1.CompleteResponse
-	15, // 74: memstation.v1.MemoryService.Search:output_type -> memstation.v1.SearchResponse
-	21, // 75: memstation.v1.MemoryService.ListKeyMemories:output_type -> memstation.v1.ListKeyMemoriesResponse
-	22, // 76: memstation.v1.MemoryService.UpsertKeyMemory:output_type -> memstation.v1.KeyMemory
-	25, // 77: memstation.v1.MemoryService.DeleteKeyMemory:output_type -> memstation.v1.DeleteKeyMemoryResponse
-	27, // 78: memstation.v1.AdminService.Overview:output_type -> memstation.v1.OverviewResponse
-	29, // 79: memstation.v1.AdminService.ListConversations:output_type -> memstation.v1.ListConversationsResponse
-	32, // 80: memstation.v1.AdminService.GetConversation:output_type -> memstation.v1.ConversationRecord
-	35, // 81: memstation.v1.AdminService.GetConversationMemory:output_type -> memstation.v1.ConversationMemoryResponse
-	71, // [71:82] is the sub-list for method output_type
-	60, // [60:71] is the sub-list for method input_type
-	60, // [60:60] is the sub-list for extension type_name
-	60, // [60:60] is the sub-list for extension extendee
-	0,  // [0:60] is the sub-list for field type_name
+	38, // 26: memstation.v1.SearchRequest.as_of:type_name -> google.protobuf.Timestamp
+	38, // 27: memstation.v1.SearchRequest.known_at:type_name -> google.protobuf.Timestamp
+	17, // 28: memstation.v1.SearchResponse.memories:type_name -> memstation.v1.MemoryDocument
+	15, // 29: memstation.v1.InjectionResult.search:type_name -> memstation.v1.SearchResponse
+	38, // 30: memstation.v1.MemoryDocument.activity_at:type_name -> google.protobuf.Timestamp
+	37, // 31: memstation.v1.MemoryDocument.metadata:type_name -> google.protobuf.Struct
+	19, // 32: memstation.v1.MemoryDocument.related:type_name -> memstation.v1.RelatedMemory
+	38, // 33: memstation.v1.MemoryDocument.created_at:type_name -> google.protobuf.Timestamp
+	38, // 34: memstation.v1.MemoryDocument.updated_at:type_name -> google.protobuf.Timestamp
+	18, // 35: memstation.v1.MemoryDocument.lineage:type_name -> memstation.v1.FactLineage
+	38, // 36: memstation.v1.ListKeyMemoriesRequest.date_from:type_name -> google.protobuf.Timestamp
+	38, // 37: memstation.v1.ListKeyMemoriesRequest.date_to:type_name -> google.protobuf.Timestamp
+	22, // 38: memstation.v1.ListKeyMemoriesResponse.items:type_name -> memstation.v1.KeyMemory
+	38, // 39: memstation.v1.KeyMemory.last_confirmed_at:type_name -> google.protobuf.Timestamp
+	38, // 40: memstation.v1.KeyMemory.activity_at:type_name -> google.protobuf.Timestamp
+	37, // 41: memstation.v1.KeyMemory.metadata:type_name -> google.protobuf.Struct
+	38, // 42: memstation.v1.KeyMemory.created_at:type_name -> google.protobuf.Timestamp
+	38, // 43: memstation.v1.KeyMemory.updated_at:type_name -> google.protobuf.Timestamp
+	38, // 44: memstation.v1.UpsertKeyMemoryRequest.last_confirmed_at:type_name -> google.protobuf.Timestamp
+	37, // 45: memstation.v1.UpsertKeyMemoryRequest.metadata:type_name -> google.protobuf.Struct
+	37, // 46: memstation.v1.OverviewResponse.overview:type_name -> google.protobuf.Struct
+	30, // 47: memstation.v1.ListConversationsResponse.items:type_name -> memstation.v1.ConversationListItem
+	38, // 48: memstation.v1.ConversationListItem.updated_at:type_name -> google.protobuf.Timestamp
+	37, // 49: memstation.v1.ConversationListItem.metadata:type_name -> google.protobuf.Struct
+	8,  // 50: memstation.v1.ConversationRecord.messages:type_name -> memstation.v1.UnifiedMessage
+	33, // 51: memstation.v1.ConversationRecord.segments:type_name -> memstation.v1.ConversationSegment
+	7,  // 52: memstation.v1.ConversationRecord.response:type_name -> memstation.v1.UnifiedResponse
+	13, // 53: memstation.v1.ConversationRecord.usage:type_name -> memstation.v1.UsageRecord
+	37, // 54: memstation.v1.ConversationRecord.metadata:type_name -> google.protobuf.Struct
+	38, // 55: memstation.v1.ConversationRecord.created_at:type_name -> google.protobuf.Timestamp
+	38, // 56: memstation.v1.ConversationRecord.updated_at:type_name -> google.protobuf.Timestamp
+	37, // 57: memstation.v1.ConversationSegment.metadata:type_name -> google.protobuf.Struct
+	38, // 58: memstation.v1.ConversationSegment.created_at:type_name -> google.protobuf.Timestamp
+	38, // 59: memstation.v1.ConversationSegment.updated_at:type_name -> google.protobuf.Timestamp
+	17, // 60: memstation.v1.ConversationMemoryResponse.documents:type_name -> memstation.v1.MemoryDocument
+	22, // 61: memstation.v1.ConversationMemoryResponse.key_memories:type_name -> memstation.v1.KeyMemory
+	40, // 62: memstation.v1.HealthService.GetStatus:input_type -> google.protobuf.Empty
+	40, // 63: memstation.v1.GatewayService.ListModels:input_type -> google.protobuf.Empty
+	4,  // 64: memstation.v1.GatewayService.Complete:input_type -> memstation.v1.CompleteRequest
+	14, // 65: memstation.v1.MemoryService.Search:input_type -> memstation.v1.SearchRequest
+	20, // 66: memstation.v1.MemoryService.ListKeyMemories:input_type -> memstation.v1.ListKeyMemoriesRequest
+	23, // 67: memstation.v1.MemoryService.UpsertKeyMemory:input_type -> memstation.v1.UpsertKeyMemoryRequest
+	24, // 68: memstation.v1.MemoryService.DeleteKeyMemory:input_type -> memstation.v1.DeleteKeyMemoryRequest
+	26, // 69: memstation.v1.AdminService.Overview:input_type -> memstation.v1.OverviewRequest
+	28, // 70: memstation.v1.AdminService.ListConversations:input_type -> memstation.v1.ListConversationsRequest
+	31, // 71: memstation.v1.AdminService.GetConversation:input_type -> memstation.v1.GetConversationRequest
+	34, // 72: memstation.v1.AdminService.GetConversationMemory:input_type -> memstation.v1.GetConversationMemoryRequest
+	0,  // 73: memstation.v1.HealthService.GetStatus:output_type -> memstation.v1.HealthStatusResponse
+	3,  // 74: memstation.v1.GatewayService.ListModels:output_type -> memstation.v1.ListModelsResponse
+	5,  // 75: memstation.v1.GatewayService.Complete:output_type -> memstation.v1.CompleteResponse
+	15, // 76: memstation.v1.MemoryService.Search:output_type -> memstation.v1.SearchResponse
+	21, // 77: memstation.v1.MemoryService.ListKeyMemories:output_type -> memstation.v1.ListKeyMemoriesResponse
+	22, // 78: memstation.v1.MemoryService.UpsertKeyMemory:output_type -> memstation.v1.KeyMemory
+	25, // 79: memstation.v1.MemoryService.DeleteKeyMemory:output_type -> memstation.v1.DeleteKeyMemoryResponse
+	27, // 80: memstation.v1.AdminService.Overview:output_type -> memstation.v1.OverviewResponse
+	29, // 81: memstation.v1.AdminService.ListConversations:output_type -> memstation.v1.ListConversationsResponse
+	32, // 82: memstation.v1.AdminService.GetConversation:output_type -> memstation.v1.ConversationRecord
+	35, // 83: memstation.v1.AdminService.GetConversationMemory:output_type -> memstation.v1.ConversationMemoryResponse
+	73, // [73:84] is the sub-list for method output_type
+	62, // [62:73] is the sub-list for method input_type
+	62, // [62:62] is the sub-list for extension type_name
+	62, // [62:62] is the sub-list for extension extendee
+	0,  // [0:62] is the sub-list for field type_name
 }
 
 func init() { file_proto_memstation_v1_api_proto_init() }

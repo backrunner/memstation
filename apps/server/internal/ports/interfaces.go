@@ -58,6 +58,10 @@ type BlobStore interface {
 }
 
 type MemoryRepository interface {
+	RecallRelations(ctx context.Context, query domain.RelationQuery) ([]domain.MemoryRelation, error)
+	SearchFactsAt(ctx context.Context, input domain.SearchInput) ([]domain.MemoryDocument, error)
+	ListEntityAliases(ctx context.Context, userID, generationID string) ([]domain.EntityAlias, error)
+	PutEntityAlias(ctx context.Context, alias domain.EntityAlias) (domain.EntityAlias, error)
 	Search(ctx context.Context, input domain.SearchInput) (domain.SearchResult, error)
 	StoreDocument(ctx context.Context, doc domain.MemoryDocument) error
 	DeleteDocument(ctx context.Context, userID, id string, kind domain.MemoryType) error

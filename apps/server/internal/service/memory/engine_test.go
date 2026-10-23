@@ -76,3 +76,25 @@ func TestExpandRelationScoresTraversesSemanticEdgesInBothDirections(t *testing.T
 		t.Fatalf("expected summary seed to reach its supporting segment, got %+v", scores)
 	}
 }
+
+func TestRelationPathsConfidenceDirectionAndConflict(t *testing.T) {
+	edges := []domain.MemoryRelation{
+		{ID: "dependency", SrcNodeID: "a", DstNodeID: "b", RelationType: domain.MemoryRelationDependsOn, Weight: 1, Metadata: map[string]any{"confidence": 0.5}},
+		{ID: "conflict", SrcNodeID: "a", DstNodeID: "c", RelationType: domain.MemoryRelationContradicts, Weight: 1},
+	}
+	scores, _, paths := expandRelationPaths(map[string]float64{"a": 1}, edges, RelationRecallConfig{MaxHops: 2})
+	if scores["b"] != 0.08 || scores["c"] != 0 {
+		t.Fatalf("typed scoring: %v", scores)
+	}
+	if paths["b"].SeedNodeID != "a" || len(paths["b"].RelationIDs) != 1 || paths["b"].RelationIDs[0] != "dependency" {
+		t.Fatalf("missing path: %+v", paths)
+	}
+	reverse, _ := expandRelationScores(map[string]float64{"b": 1}, edges, RelationRecallConfig{MaxHops: 2})
+	if reverse["a"] != 0 {
+		t.Fatal("dependency direction ignored")
+	}
+	conflicts, _ := expandRelationScores(map[string]float64{"a": 1}, edges, RelationRecallConfig{MaxHops: 2, Mode: "conflicts"})
+	if conflicts["c"] <= 0 {
+		t.Fatal("conflict query omitted contradictory evidence")
+	}
+}

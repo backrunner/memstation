@@ -4,8 +4,10 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
-const managerUrl = 'http://127.0.0.1:4173';
-const targetUrl = 'http://127.0.0.1:18080';
+const managerPort = process.env.MEMSTATION_E2E_MANAGER_PORT || '4173';
+const targetPort = process.env.MEMSTATION_E2E_TARGET_PORT || '18080';
+const managerUrl = `http://127.0.0.1:${managerPort}`;
+const targetUrl = `http://127.0.0.1:${targetPort}`;
 const fixtureAdminToken = 'memstation-e2e-admin-token';
 
 export default defineConfig({
@@ -33,7 +35,7 @@ export default defineConfig({
     },
     {
       name: 'mobile-webkit',
-      grep: /mobile navigation|mobile filters|short mobile dialogs|mobile settings|memory search keeps|task queue changes|primary admin routes|system section navigation|memory detail prioritizes/,
+      grep: /mobile navigation|mobile filters|short mobile dialogs|mobile settings|memory search keeps|task queue changes|primary admin routes|system section navigation|memory detail prioritizes|memory historical filters|entity alias candidates/,
       use: {
         ...devices['iPhone 13']
       }
@@ -41,14 +43,14 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: `PORT=18080 MANAGER_ORIGIN=http://127.0.0.1:4173 MEMSTATION_ADMIN_TOKEN=${fixtureAdminToken} MEMSTATION_GATEWAY_API_KEY=ms-e2e node ./e2e/fixture/target-server.mjs`,
+      command: `PORT=${targetPort} MANAGER_ORIGIN=${managerUrl} MEMSTATION_ADMIN_TOKEN=${fixtureAdminToken} MEMSTATION_GATEWAY_API_KEY=ms-e2e node ./e2e/fixture/target-server.mjs`,
       cwd: dirname,
       url: `${targetUrl}/__health`,
       timeout: 60_000,
       reuseExistingServer: false
     },
     {
-      command: 'PUBLIC_MEMSTATION_DEFAULT_TARGET=http://127.0.0.1:18080 pnpm run generate && pnpm exec vite dev --host 127.0.0.1 --port 4173',
+      command: `PUBLIC_MEMSTATION_DEFAULT_TARGET=${targetUrl} pnpm run generate && pnpm exec vite dev --host 127.0.0.1 --port ${managerPort}`,
       cwd: dirname,
       url: managerUrl,
       timeout: 120_000,

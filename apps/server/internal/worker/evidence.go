@@ -222,3 +222,72 @@ func firstNonEmptyWorkerString(values ...string) string {
 	}
 	return ""
 }
+
+// groundedNodeEvidences keeps source identities stable across derived nodes.
+// Unmatched summary references are context, never independent corroboration.
+func groundedNodeEvidences(doc domain.MemoryDocument, source []domain.MemoryEvidence) []domain.MemoryEvidence {
+	quotes, _ := doc.Metadata["source_quotes"].([]any)
+	out := []domain.MemoryEvidence{}
+	for _, raw := range quotes {
+		q, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		quote, _ := q["quote"].(string)
+		part, _ := q["part_id"].(string)
+		sourceID, _ := q["source_id"].(string)
+		seq, _ := q["sequence_num"].(int)
+		if quote == "" || sourceID == "" {
+			continue
+		}
+		evidence := domain.MemoryEvidence{ID: memoryEvidenceID(doc.NodeID, doc.ConversationID, part, sourceID, seq, 0), UserID: doc.UserID, GenerationID: doc.GenerationID, NodeID: doc.NodeID, ConversationID: doc.ConversationID, SequenceNum: seq, PartID: part, ExcerptText: quote, EvidenceKind: "exact_quote", Weight: 1, Metadata: cloneMap(q), CreatedAt: time.Now().UTC()}
+		out = append(out, evidence)
+	}
+	if len(out) > 0 {
+		return out
+	}
+	// Artifact observations have explicit identifiers even when textual claims
+	// cannot be matched. Other inherited references are explicitly inferential.
+	for _, e := range cloneNodeEvidences(doc.UserID, doc.GenerationID, doc.NodeID, source) {
+		e.Metadata = cloneMap(e.Metadata)
+		e.Metadata["support_kind"] = "model_inference"
+		e.Metadata["source_id"] = fmt.Sprintf("%s|%s|%d|%s|%s", doc.UserID, e.ConversationID, e.SequenceNum, e.PartID, e.ArtifactID)
+		e.Weight = min(e.Weight, 0.35)
+		e.EvidenceKind = "context_reference"
+		if artifact := stringValue(doc.Metadata, "artifact_id"); artifact != "" && e.ArtifactID == artifact {
+			e.Metadata["support_kind"] = "tool_observation"
+			e.Weight = 0.85
+			e.EvidenceKind = "artifact_observation"
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+func relationWithEvidence(ctx context.Context, services Services, relation domain.MemoryRelation) (domain.MemoryRelation, error) {
+	evidences, err := services.Memories.ListEvidences(ctx, relation.UserID, relation.DstNodeID)
+	if err != nil {
+		return relation, err
+	}
+	relation.Metadata = cloneMap(relation.Metadata)
+	ids := []string{}
+	sources := []string{}
+	seen := map[string]bool{}
+	for _, e := range evidences {
+		source := stringValue(e.Metadata, "source_id")
+		kind := stringValue(e.Metadata, "support_kind")
+		if source == "" || kind == "model_inference" || seen[source] {
+			continue
+		}
+		seen[source] = true
+		ids = append(ids, e.ID)
+		sources = append(sources, source)
+	}
+	relation.Metadata["evidence_ids"] = ids
+	relation.Metadata["source_ids"] = sources
+	relation.Metadata["confidence"] = 0.5
+	if len(sources) > 0 {
+		relation.Metadata["confidence"] = 0.9
+	}
+	return relation, nil
+}

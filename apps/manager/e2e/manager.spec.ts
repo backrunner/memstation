@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const fixtureBaseUrl = 'http://127.0.0.1:18080';
+const fixtureBaseUrl = `http://127.0.0.1:${process.env.MEMSTATION_E2E_TARGET_PORT || '18080'}`;
 const adminToken = 'memstation-e2e-admin-token';
 const adminTokenHash =
   '$memstation-admin-argon2id$v=19$m=65536,t=1,p=4$bWVtc3RhdGlvbi1zYWx0MQ$ITiBXhJ8JgTOQi90bJjQHFgRrs+aA9nOPRW9yfT31N4';
@@ -1053,4 +1053,41 @@ test('manual task form is available on demand and retains its confirmation flow'
   await confirmation.getByRole('button', { name: 'Publish task', exact: true }).click();
   await expect(confirmation).toHaveCount(0);
   await expect(page.getByText('Manual requeue request accepted by the selected target.', { exact: true })).toBeVisible();
+});
+
+
+test('memory historical filters preserve their values and send distinct time parameters', async ({ page }) => {
+  await page.goto('/memory');
+  await page.getByRole('button', { name: /^Filters/ }).click();
+  await page.getByLabel('Facts valid at').fill('2026-02-01T10:30');
+  await page.getByLabel('Known by').fill('2026-03-01T11:30');
+  await page.getByLabel('Entity scope').fill('work');
+  await page.getByRole('button', { name: /^Filters/ }).click();
+  const request = page.waitForRequest((req) => req.url().includes('/api/admin/memory/search') && req.method() === 'POST');
+  await page.getByLabel('Query', { exact: true }).fill('gateway');
+  await page.getByRole('button', { name: 'Run search', exact: true }).click();
+  const body = (await request).postDataJSON();
+  expect(body.as_of).toBeTruthy(); expect(body.known_at).toBeTruthy();
+  expect(body.as_of).not.toBe(body.known_at);
+  expect(body.entity_scope).toBe('work'); expect(body.relation_mode).toBe('neighborhood');
+  await page.getByRole('button', { name: /^Filters/ }).click();
+  await expect(page.getByLabel('Facts valid at')).toHaveValue('2026-02-01T10:30');
+});
+
+test('entity alias candidates require confirmation and can be revoked after reload', async ({ page }) => {
+  await page.goto('/memory/entities/entity-station?user_id=admin');
+  await expect(page.getByRole('heading', {name:'Entity names and merges'})).toBeVisible();
+  await page.getByLabel('Alias', {exact:true}).fill('记忆站');
+  await page.getByLabel('Mapping reason').fill('Confirmed project nickname from the operator');
+  await page.getByRole('button', {name:'Save candidate'}).click();
+  await expect(page.getByText('work · candidate', {exact:true})).toBeVisible();
+  await page.getByRole('button', {name:'Confirm mapping',exact:true}).click();
+  await page.getByRole('alertdialog').getByRole('button', {name:'Confirm',exact:true}).click();
+  await expect(page.getByText('work · confirmed', {exact:true})).toBeVisible();
+  await page.reload();
+  await expect(page.getByText('work · confirmed', {exact:true})).toBeVisible();
+  await page.getByRole('button', {name:'Revoke mapping'}).click();
+  await page.getByRole('alertdialog').getByRole('button', {name:'Revoke',exact:true}).click();
+  await expect(page.getByText('work · revoked', {exact:true})).toBeVisible();
+  await expect(page.locator('.error-state')).toHaveCount(0);
 });

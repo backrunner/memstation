@@ -420,6 +420,10 @@ export async function searchAdminMemories(
     memoryTypes?: SearchMemoryType[];
     minScore?: number;
     userId?: string;
+    asOf?: string;
+    knownAt?: string;
+    relationMode?: string;
+    entityScope?: string;
     dateFrom?: string;
     dateTo?: string;
     timeTiers?: string[];
@@ -430,6 +434,10 @@ export async function searchAdminMemories(
     method: 'POST',
     body: JSON.stringify({
       query: payload.query,
+      as_of: payload.asOf,
+      known_at: payload.knownAt,
+      relation_mode: payload.relationMode,
+      entity_scope: payload.entityScope,
       top_n: payload.topN ?? 10,
       memory_types: payload.memoryTypes ?? [],
       date_from: payload.dateFrom ?? '',
@@ -2056,4 +2064,16 @@ function thinkingText(value: unknown): string {
     return String(record.text);
   }
   return '';
+}
+
+export interface EntityAlias {
+ id: string; user_id: string; generation_id: string; scope: string; alias: string;
+ source_node_id?: string; target_node_id: string; status: 'candidate' | 'confirmed' | 'revoked'; reason: string;
+}
+export function fetchEntityAliases(target: MemStationTarget, userId: string, generationId?: string): Promise<EntityAlias[]> {
+ const query = new URLSearchParams({ user_id: userId, generation_id: generationId ?? '' });
+ return adminRequest(target, `/api/admin/memory/entity-aliases?${query}`);
+}
+export function putEntityAlias(target: MemStationTarget, alias: Omit<EntityAlias, 'id'>): Promise<EntityAlias> {
+ return adminRequest(target, `/api/admin/memory/entity-aliases?user_id=${encodeURIComponent(alias.user_id)}`, { method: 'PUT', body: JSON.stringify(alias) });
 }

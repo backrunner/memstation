@@ -600,7 +600,7 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 				return err
 			}
 			if len(summaryEvidences) > 0 {
-				factEvidences := cloneNodeEvidences(payload.UserID, payload.GenerationID, factDocs[idx].NodeID, summaryEvidences)
+				factEvidences := groundedNodeEvidences(factDocs[idx], summaryEvidences)
 				if err := services.Memories.ReplaceEvidences(ctx, payload.UserID, factDocs[idx].NodeID, factEvidences); err != nil {
 					markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
 					return err
@@ -617,7 +617,7 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 			return err
 		}
 		if len(summaryEvidences) > 0 {
-			impressionEvidences := cloneNodeEvidences(payload.UserID, payload.GenerationID, result.Impression.NodeID, summaryEvidences)
+			impressionEvidences := groundedNodeEvidences(result.Impression, summaryEvidences)
 			if err := services.Memories.ReplaceEvidences(ctx, payload.UserID, result.Impression.NodeID, impressionEvidences); err != nil {
 				markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
 				return err
@@ -633,7 +633,7 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 				return err
 			}
 			if len(summaryEvidences) > 0 {
-				itemEvidences := cloneNodeEvidences(payload.UserID, payload.GenerationID, genericDocs[idx].NodeID, summaryEvidences)
+				itemEvidences := groundedNodeEvidences(genericDocs[idx], summaryEvidences)
 				var evidenceErr error
 				if genericDocs[idx].Type == domain.MemoryTypeEntity {
 					evidenceErr = services.Memories.MergeEvidences(ctx, payload.UserID, genericDocs[idx].NodeID, itemEvidences)
@@ -648,6 +648,11 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 		}
 		result.GenericItems = genericDocs
 		for _, relation := range result.Relations {
+			enriched, evidenceErr := relationWithEvidence(ctx, services, relation)
+			if evidenceErr != nil {
+				return evidenceErr
+			}
+			relation = enriched
 			if err := services.Memories.LinkDocuments(ctx, relation); err != nil {
 				markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
 				return err

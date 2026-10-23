@@ -132,3 +132,5 @@ welcome under the same license. See [NOTICE](NOTICE) and
 
 The bundled IBM Plex Sans font retains its SIL OFL license. External LOCOMO data is
 **CC BY-NC 4.0**, is downloaded separately and is not relicensed under Apache-2.0.
+
+Graph retrieval now includes bounded traversal, fact history and reversible entity mappings. See [Graph memory](docs/graph-memory.md) for configuration, API examples, evidence semantics and historical-query limits.

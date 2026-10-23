@@ -11,6 +11,7 @@
   import { memoryDetailHref, memoryRouteKindFromDocumentType } from '$lib/memory/routes';
   import { matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '$lib/memory/keyword-signals';
   import PageHeader from '$lib/components/PageHeader.svelte';
+  import SelectField from '$lib/components/SelectField.svelte';
   import TextInputField from '$lib/components/TextInputField.svelte';
   import { fetchMemoryWorkspace, searchMemories, type MemoryWorkspaceData } from '$lib/memory/workspace';
   import { selectedTarget, targetState } from '$lib/stores/targets';
@@ -20,6 +21,10 @@
   let searchLoading = false;
   let error = '';
   let query = '';
+  let asOf = '';
+  let knownAt = '';
+  let relationMode = 'neighborhood';
+  let entityScope = '';
   let dateFrom = '';
   let dateTo = '';
   let selectedTiers: string[] = [];
@@ -87,6 +92,9 @@
     searchResult = null;
     try {
       const result = await searchMemories($selectedTarget, query.trim(), 10, activeUserId, {
+        asOf: asOf ? new Date(asOf).toISOString() : undefined,
+        knownAt: knownAt ? new Date(knownAt).toISOString() : undefined,
+        relationMode: asOf || knownAt ? 'neighborhood' : relationMode, entityScope,
         dateFrom: startOfDayISO(dateFrom),
         dateTo: endOfDayISO(dateTo),
         timeTiers: selectedTiers
@@ -146,13 +154,17 @@
   {:else}
     <section class="card page-stack">
       <form on:submit|preventDefault={runSearch}>
-        <FilterToolbar activeCount={Number(Boolean(dateFrom)) + Number(Boolean(dateTo)) + selectedTiers.length} summary={searchResult ? `${searchResult.total} matches` : ''}>
+        <FilterToolbar activeCount={Number(Boolean(asOf)) + Number(Boolean(knownAt)) + Number(Boolean(entityScope)) + Number(relationMode !== 'neighborhood') + Number(Boolean(dateFrom)) + Number(Boolean(dateTo)) + selectedTiers.length} summary={searchResult ? `${searchResult.total} matches` : ''}>
           <TextInputField label="Query" bind:value={query} placeholder="Search memory by topic or question…" />
           {#snippet actions()}
             <button class="btn-primary" type="submit" disabled={searchLoading || !query.trim()}>{searchLoading ? 'Searching…' : 'Run search'}</button>
           {/snippet}
           {#snippet filters()}
             <div class="filters two-up">
+              <TextInputField label="Facts valid at" bind:value={asOf} type="datetime-local" help="Historical fact validity; time is local." />
+              <TextInputField label="Known by" bind:value={knownAt} type="datetime-local" help="Fact versions recorded by this local time. Available from history tracking onward." />
+              <SelectField label="Relation search" bind:value={relationMode} disabled={Boolean(asOf || knownAt)} help="Relation traversal applies to current memories; historical searches return fact snapshots." items={[{value:'neighborhood',label:'Related memories'},{value:'evidence',label:'Supporting evidence'},{value:'dependencies',label:'Prerequisites'},{value:'dependents',label:'Downstream dependents'},{value:'conflicts',label:'Conflicting evidence'}]} />
+              <TextInputField label="Entity scope" bind:value={entityScope} placeholder="Project or workspace" />
               <TextInputField label="Date from" bind:value={dateFrom} type="date" />
               <TextInputField label="Date to" bind:value={dateTo} type="date" />
             </div>
@@ -188,6 +200,8 @@
                 {/if}
               </header>
               <div class="message-body">{memory.content}</div>
+              {#if memory.metadata?.historical_snapshot}<p class="helper-text">Historical fact snapshot. Open shows the current record.</p>{/if}
+              {#if memory.metadata?.recall_path}<details class="compact-details"><summary>Why this memory was recalled</summary><pre>{JSON.stringify(memory.metadata.recall_path, null, 2)}</pre></details>{/if}
               <MemoryKeywordSignals
                 matchedKeywords={matchedKeywordsFromMetadata(memory.metadata)}
                 sourceKeywords={sourceKeywordsFromMetadata(memory.metadata)}

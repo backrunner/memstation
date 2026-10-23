@@ -624,11 +624,13 @@ v1.x 后续路线：
 
 ---
 
-## 14. 当前实现状态（as of 2026-09-09）
+## 14. 当前实现状态（as of 2026-09-17）
 
 本节用于重启时快速恢复上下文；如后续实现进度发生变化，必须同步更新本节，而不能只改代码不改状态。
 
 ### 14.1 已完成
+
+- 2026-09-17 图记忆增强：新增数据库取边预算、关系方向/可信度与路径解释；精确引用和上下文推断分开记录，同源证据去重；新增事实有效时间与系统记录时间查询、迟到事实插入和人工修改历史快照；实体别名支持作用域、候选/确认/撤销、循环及跨用户/跨代校验、事务审计，Manager 提供操作入口。迁移、接口与边界见 `docs/graph-memory.md`；历史快照从迁移开始，历史查询当前限定 Fact，生产量级性能与真实模型召回增益仍需独立评测。
 
 - 2026-09-09 Logo 再设计：通过 Replicate CLI / `openai/gpt-image-2.5-flare` 生成 3 组 low 草案与 medium 精修，采用“记忆终端”纯图形：拱形站点入口、脑状记忆回路与汇入底座；保留 1024px 透明 PNG 原图、完整提示词与 prediction ID，同步 96/512px PNG、16/32px favicon、180px Apple touch icon、共享 BrandMark 和中英文 README，替换旧叠层 SVG；README 提供深色背景变体，导出可本地重生成，无需调用模型；Manager lint/check 与 production build 通过，更新 fixture 截图并验证 320/390px 品牌布局和资源读取
 - 2026-09-09 品牌与开源准备：深绿色“记忆终端”图标统一用于 Manager 登录、桌面与移动导航、favicon、Apple touch icon 和中英文 README；提供 512px PNG、统一 BrandMark 组件与可重生成脚本。README 增加真实 fixture 截图、能力表、架构图、接入示例与文档入口，详细能力说明迁至 `docs/architecture.md`；新增 Apache-2.0 LICENSE / NOTICE、贡献与安全指南、第三方字体及外部数据集许可说明，三个 package manifest 和两种运行镜像同步许可证信息

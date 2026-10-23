@@ -229,11 +229,14 @@ func (r *InMemoryConversationRepository) UpdateConversationState(ctx context.Con
 }
 
 type InMemoryMemoryRepository struct {
-	mu          sync.RWMutex
-	documents   map[string]domain.MemoryDocument
-	keyMemories map[string]domain.KeyMemory
-	relations   []domain.MemoryRelation
-	evidences   map[string][]domain.MemoryEvidence
+	factHistory      []factSnapshot
+	factHistoryHeads map[string]int
+	entityAliases    []domain.EntityAlias
+	mu               sync.RWMutex
+	documents        map[string]domain.MemoryDocument
+	keyMemories      map[string]domain.KeyMemory
+	relations        []domain.MemoryRelation
+	evidences        map[string][]domain.MemoryEvidence
 }
 
 func NewInMemoryMemoryRepository() *InMemoryMemoryRepository {
@@ -349,7 +352,19 @@ func (r *InMemoryMemoryRepository) StoreDocument(_ context.Context, doc domain.M
 	}
 	if doc.Type == domain.MemoryTypeFact {
 		supersessionStateSpecified := metadataContainsKey(doc.Metadata, "superseded_by_id") || metadataContainsKey(doc.Metadata, "is_superseded")
-		if !supersessionStateSpecified && !boolMetadataValue(doc.Metadata, "is_superseded") && stringMetadataValue(doc.Metadata, "superseded_by_id") == "" && len(supersededFactIDsFromMetadata(doc.Metadata)) == 0 {
+		temporal := metadataTimePtr(doc.Metadata, "valid_from") != nil && factLineageGroupIDFromMetadata(doc.Metadata) != ""
+		if temporal && !supersessionStateSpecified && len(supersededFactIDsFromMetadata(doc.Metadata)) == 0 {
+			previous, next, nextTime := r.factTemporalNeighborsLocked(doc)
+			if previous != "" {
+				doc.Metadata["supersedes_fact_ids"] = []string{previous}
+			}
+			if next != "" {
+				doc.Metadata["is_superseded"] = true
+				doc.Metadata["superseded_by_id"] = next
+				doc.Metadata["valid_to"] = nextTime.Format(time.RFC3339Nano)
+			}
+		}
+		if !temporal && !supersessionStateSpecified && !boolMetadataValue(doc.Metadata, "is_superseded") && stringMetadataValue(doc.Metadata, "superseded_by_id") == "" && len(supersededFactIDsFromMetadata(doc.Metadata)) == 0 {
 			if heads := r.currentFactLineageHeadIDsLocked(doc); len(heads) > 0 {
 				doc.Metadata["supersedes_fact_ids"] = heads
 			}
@@ -372,6 +387,9 @@ func (r *InMemoryMemoryRepository) StoreDocument(_ context.Context, doc domain.M
 		}
 	}
 	r.syncTemporalRelationsLocked(doc.UserID, doc.GenerationID, doc.NodeID, doc.ActivityAt)
+	if doc.Type == domain.MemoryTypeFact {
+		r.captureFactHistoryLocked(doc.UserID)
+	}
 	return nil
 }
 
@@ -384,6 +402,7 @@ func (r *InMemoryMemoryRepository) DeleteDocument(_ context.Context, userID, id 
 		return nil
 	}
 	delete(r.documents, key(userID, id))
+	r.purgeGraphAuxLocked(userID, doc.NodeID)
 
 	filtered := r.relations[:0]
 	for _, relation := range r.relations {
@@ -611,6 +630,9 @@ func (r *InMemoryMemoryRepository) UpdateDocument(_ context.Context, userID, id 
 	doc.UpdatedAt = now
 	doc.Metadata = cloneMetadata(doc.Metadata)
 	r.documents[key(userID, id)] = doc
+	if kind == domain.MemoryTypeFact {
+		r.captureFactHistoryLocked(userID)
+	}
 	return attachDocumentRuntimeMetadata(doc), nil
 }
 
@@ -1240,8 +1262,9 @@ func (r *InMemoryMemoryRepository) syncFactSupersedesLocked(doc domain.MemoryDoc
 		candidate.Metadata = cloneMetadata(candidate.Metadata)
 		candidate.Metadata["superseded_by_id"] = doc.ID
 		candidate.Metadata["is_superseded"] = true
-		if _, ok := candidate.Metadata["valid_to"]; !ok && !doc.ActivityAt.IsZero() {
-			candidate.Metadata["valid_to"] = doc.ActivityAt.Format(time.RFC3339)
+		effectiveFrom := factEffectiveFrom(doc)
+		if currentTo := metadataTimePtr(candidate.Metadata, "valid_to"); currentTo == nil || effectiveFrom.Before(*currentTo) {
+			candidate.Metadata["valid_to"] = effectiveFrom.Format(time.RFC3339Nano)
 		}
 		candidate.UpdatedAt = doc.UpdatedAt
 		r.documents[key(candidate.UserID, candidate.ID)] = candidate

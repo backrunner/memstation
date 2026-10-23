@@ -109,3 +109,5 @@ Compose 默认配置用于本地开发。对外部署前需配置独立密钥、
 MemStation 采用 [Apache License 2.0](LICENSE)，欢迎以相同许可证贡献代码。版权和第三方组件说明见 [NOTICE](NOTICE) 与 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 内置 IBM Plex Sans 字体保留 SIL OFL 许可证。LOCOMO 原始数据采用 **CC BY-NC 4.0**，单独下载，不随本仓库分发，也不转为 Apache-2.0。
+
+图检索支持展开预算、事实历史查询和可撤销实体映射；配置、接口示例、证据语义与历史查询边界见[图记忆说明](docs/graph-memory.md)。

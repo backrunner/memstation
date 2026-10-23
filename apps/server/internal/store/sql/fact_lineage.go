@@ -256,3 +256,10 @@ func metadataTimePtr(metadata map[string]any, key string) *time.Time {
 	}
 	return nil
 }
+
+func factEffectiveFrom(doc domain.MemoryDocument) time.Time {
+	if value := metadataTimePtr(doc.Metadata, "valid_from"); value != nil {
+		return *value
+	}
+	return doc.ActivityAt
+}

@@ -19,6 +19,7 @@
   import FactLineagePanel from '$lib/components/FactLineagePanel.svelte';
   import JsonView from '$lib/components/JsonView.svelte';
   import MemoryKeywordSignals from '$lib/components/MemoryKeywordSignals.svelte';
+  import EntityAliasPanel from '$lib/components/EntityAliasPanel.svelte';
   import MemoryRelationGraph from '$lib/components/MemoryRelationGraph.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import SelectField from '$lib/components/SelectField.svelte';
@@ -506,6 +507,7 @@
         </div>
 
         {#if documentItem}
+          {#if documentItem.type === 'entity' && $selectedTarget}<EntityAliasPanel target={$selectedTarget} document={documentItem} />{/if}
           <div class="toolbar">
             <TextareaField label="Content" bind:value={draftContent} rows={10} />
             <details class="record-details">
@@ -722,7 +724,8 @@
                     <div class="debug-block" style="background: var(--bg-panel-muted);">
                       <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px; align-items: flex-start;">
                         <div>
-                          <strong>{evidence.evidence_kind}</strong>
+                          <strong>{evidence.evidence_kind === 'context_reference' ? 'Context reference (not supporting evidence)' : evidence.evidence_kind}</strong>
+                          {#if evidence.metadata?.support_kind}<div class="helper-text">{String(evidence.metadata.support_kind).replaceAll('_', ' ')}</div>{/if}
                           <div class="subtle-text">{formatLocator(evidence, part, artifact)}</div>
                         </div>
                         <div class="runtime-field-status">

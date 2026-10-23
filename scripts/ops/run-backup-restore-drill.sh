@@ -343,6 +343,8 @@ postgres_counts_json() {
     'outbox_events', (SELECT count(*) FROM outbox_events),
     'memory_nodes', (SELECT count(*) FROM memory_nodes),
     'memory_relations', (SELECT count(*) FROM memory_relations),
+    'memory_fact_history', (SELECT count(*) FROM memory_fact_history),
+    'entity_aliases', (SELECT count(*) FROM entity_aliases),
     'memory_summaries', (SELECT count(*) FROM memory_summaries),
     'memory_keywords', (SELECT count(*) FROM memory_keywords),
     'impressions', (SELECT count(*) FROM impressions),

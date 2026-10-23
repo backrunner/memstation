@@ -152,6 +152,10 @@ message SearchRequest {
   google.protobuf.Timestamp date_from = 8;
   google.protobuf.Timestamp date_to = 9;
   double min_score = 10;
+ google.protobuf.Timestamp as_of = 11;
+ google.protobuf.Timestamp known_at = 12;
+ string relation_mode = 13;
+ string entity_scope = 14;
 }
 
 message SearchResponse {

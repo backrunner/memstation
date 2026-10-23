@@ -53,12 +53,16 @@ export function searchMemories(
   query: string,
   topN = 10,
   userId?: string,
-  options?: { dateFrom?: string; dateTo?: string; timeTiers?: string[] }
+  options?: { dateFrom?: string; dateTo?: string; timeTiers?: string[]; asOf?: string; knownAt?: string; relationMode?: string; entityScope?: string }
 ): Promise<SearchMemoriesResult> {
   return searchAdminMemories(target, {
     query,
     topN,
     userId,
+    asOf: options?.asOf,
+    knownAt: options?.knownAt,
+    relationMode: options?.relationMode,
+    entityScope: options?.entityScope,
     dateFrom: options?.dateFrom,
     dateTo: options?.dateTo,
     timeTiers: options?.timeTiers

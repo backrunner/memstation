@@ -36,6 +36,10 @@ type Config struct {
 	MaxContextTokens               int
 	MaxInjectionTokens             int
 	MemoryRelationMaxHops          int
+	MemoryRelationMaxEdgesPerNode  int
+	MemoryRelationMaxEdges         int
+	MemoryRelationMaxNodes         int
+	MemoryRelationTimeoutMS        int
 	MemoryRelationHopDecayLambda   float64
 	MemoryRelationHopDecayExponent float64
 	MessageThreshold               int
@@ -118,6 +122,10 @@ func LoadConfig() (Config, error) {
 	bind("conversation_timeout_minutes", "CONVERSATION_TIMEOUT_MINUTES")
 	bind("max_context_tokens", "MAX_CONTEXT_TOKENS")
 	bind("max_injection_tokens", "MAX_INJECTION_TOKENS")
+	bind("memory_relation_max_edges_per_node", "MEMSTATION_MEMORY_RELATION_MAX_EDGES_PER_NODE")
+	bind("memory_relation_max_edges", "MEMSTATION_MEMORY_RELATION_MAX_EDGES")
+	bind("memory_relation_max_nodes", "MEMSTATION_MEMORY_RELATION_MAX_NODES")
+	bind("memory_relation_timeout_ms", "MEMSTATION_MEMORY_RELATION_TIMEOUT_MS")
 	bind("memory_relation_max_hops", "MEMSTATION_MEMORY_RELATION_MAX_HOPS")
 	bind("memory_relation_hop_decay_lambda", "MEMSTATION_MEMORY_RELATION_HOP_DECAY_LAMBDA")
 	bind("memory_relation_hop_decay_exponent", "MEMSTATION_MEMORY_RELATION_HOP_DECAY_EXPONENT")
@@ -178,6 +186,10 @@ func LoadConfig() (Config, error) {
 	setDefault("conversation_timeout_minutes", 15)
 	setDefault("max_context_tokens", 8192)
 	setDefault("max_injection_tokens", 2048)
+	setDefault("memory_relation_max_edges_per_node", 24)
+	setDefault("memory_relation_max_edges", 256)
+	setDefault("memory_relation_max_nodes", 128)
+	setDefault("memory_relation_timeout_ms", 150)
 	setDefault("memory_relation_max_hops", 2)
 	setDefault("memory_relation_hop_decay_lambda", 0.35)
 	setDefault("memory_relation_hop_decay_exponent", 1.25)
@@ -244,6 +256,10 @@ func LoadConfig() (Config, error) {
 		ConversationTimeout:            time.Duration(v.GetInt("conversation_timeout_minutes")) * time.Minute,
 		MaxContextTokens:               v.GetInt("max_context_tokens"),
 		MaxInjectionTokens:             v.GetInt("max_injection_tokens"),
+		MemoryRelationMaxEdgesPerNode:  v.GetInt("memory_relation_max_edges_per_node"),
+		MemoryRelationMaxEdges:         v.GetInt("memory_relation_max_edges"),
+		MemoryRelationMaxNodes:         v.GetInt("memory_relation_max_nodes"),
+		MemoryRelationTimeoutMS:        v.GetInt("memory_relation_timeout_ms"),
 		MemoryRelationMaxHops:          v.GetInt("memory_relation_max_hops"),
 		MemoryRelationHopDecayLambda:   v.GetFloat64("memory_relation_hop_decay_lambda"),
 		MemoryRelationHopDecayExponent: v.GetFloat64("memory_relation_hop_decay_exponent"),
