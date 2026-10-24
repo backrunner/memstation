@@ -1,72 +1,96 @@
 <div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="apps/manager/static/brand/memstation-dark.png" />
-    <img src="apps/manager/static/brand/memstation.png" width="88" height="88" alt="MemStation logo" />
+    <img src="apps/manager/static/brand/memstation.png" width="96" height="96" alt="MemStation" />
   </picture>
   <h1>MemStation</h1>
-  <p><strong>One gateway. Lasting memory. Your infrastructure.</strong></p>
-  <p>A self-hosted AI gateway, persistent memory system and operations dashboard.</p>
+  <p><strong>A gateway for your models. A home for your memory.</strong></p>
+  <p>Self-hosted AI gateway, long-term memory and a dashboard to inspect it all.</p>
   <p>
-    <a href="https://github.com/backrunner/memstation/actions/workflows/ci.yml"><img src="https://github.com/backrunner/memstation/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-28634f" alt="License: Apache 2.0" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-28634f" alt="Apache 2.0" /></a>
+    <a href="https://github.com/backrunner/memstation/actions/workflows/ci.yml"><img src="https://github.com/backrunner/memstation/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
     <a href="apps/server/go.mod"><img src="https://img.shields.io/badge/Go-1.27.3-00ADD8" alt="Go 1.27.3" /></a>
     <a href="apps/manager/package.json"><img src="https://img.shields.io/badge/Svelte-5-FF3E00" alt="Svelte 5" /></a>
   </p>
-  <p>English · <a href="README.zh-CN.md">简体中文</a></p>
-  <p><a href="#quick-start">Quick start</a> · <a href="docs/architecture.md">Architecture</a> · <a href="CONTRIBUTING.md">Contributing</a> · <a href="docs/ci.md">CI & testing</a></p>
+  <p>English &nbsp; <a href="README.zh-CN.md">简体中文</a></p>
+  <p><a href="#quick-start">Quick start</a> &nbsp; <a href="#how-memory-works">Memory lifecycle</a> &nbsp; <a href="#documentation">Documentation</a> &nbsp; <a href="CONTRIBUTING.md">Contribute</a></p>
 </div>
 
----
+MemStation connects AI clients to model providers and carries useful context from
+one conversation to the next. Keep the conversations, inspect what became a memory,
+correct it when needed, and control how it is recalled.
 
-MemStation gives your AI clients a shared gateway and a memory layer that survives
-individual conversations. Route requests to multiple providers, retrieve relevant
-context for the next turn, and inspect conversations, memories, usage and background
-jobs from one Manager.
+**Current scope:** personal self-hosting, a single instance and Personal workspaces.
+Multiple Agents can share a service with scoped credentials. Group-chat ingestion,
+other workspace kinds, organizations and billing are still on the roadmap.
+Production-scale performance validation is ongoing.
 
-It is designed for **personal self-hosting and a single instance first**. The v1 code
-baseline is implemented; production-scale latency validation and operational tuning
-are ongoing. Organizations, billing and cluster deployment remain future work.
+<a href="docs/assets/manager-preview.png"><img src="docs/assets/manager-preview.png" alt="Manager dashboard with conversation activity, memory counts, queues and audit history" width="1440" /></a>
+<p align="center"><sub>Current Manager UI, captured from synthetic repository fixtures.</sub></p>
 
-<img src="docs/assets/manager-preview.png" alt="MemStation Manager showing conversation activity, memory totals and operational metrics" width="1200" />
-<p align="center"><sub>Manager dashboard · repository fixture data</sub></p>
+## Why MemStation
 
-## What you can do
-
-| | Capabilities |
+| Capability | What you get |
 | --- | --- |
-| **Connect your clients** | OpenAI Chat Completions, OpenAI Responses and Anthropic Messages; streaming and non-streaming; OpenAI, Anthropic and Gemini upstreams. |
-| **Keep useful context** | Summaries, facts, impressions, Key Memory, events, tasks, procedures, artifacts and entities, with source evidence and version history. |
-| **Recall across conversations** | Vector search, bounded graph expansion and ranking by semantic relevance × importance × time decay; configurable context and tool injection. |
-| **Inspect and correct** | Browse conversations, edit memories, manage users and provider settings, inspect usage and costs, retry jobs and review audit events. |
-| **Operate your own stack** | Transactional outbox, retryable workers, encrypted upstream credentials, hashed API keys, OTel/OTLP, health checks and backup/restore drills. |
+| **One client endpoint** | OpenAI Chat Completions, Responses and Anthropic Messages, with streaming and non-streaming requests. Route to OpenAI-compatible providers, Anthropic or Gemini. |
+| **Memory with evidence** | LLM-generated summaries, facts, impressions and Key Memory, plus events, tasks, procedures, artifacts and entities. Preserve source references and fact history. |
+| **Configurable recall** | Vector candidates, bounded graph expansion and semantic relevance × importance × time decay. Inject context or expose memory tools. |
+| **Human control** | Browse conversations, edit memories, inspect relations, manage Agents, configure models, track usage and retry background jobs. |
+| **Your infrastructure** | PostgreSQL with pgvector, Redis, encrypted provider credentials, hashed API keys, transactional outbox, retryable workers and OTel/OTLP telemetry. |
 
-Semantic memory generation uses the configured LLMs for summaries, facts, impressions, Key Memory consolidation and scoring. Failed model calls or invalid output retry without a heuristic fallback. See [LLM memory generation](docs/llm-memory.md) for configuration and upgrade migrations.
+Use hosted models, an OpenAI-compatible local endpoint such as Ollama, or a mixture
+of cloud text generation and local embeddings. Models are configurable; **summary,
+analysis and embedding models must be configured** for automatic memory generation.
+Model failures retry instead of producing rule-based semantic memories.
 
-## How it fits together
+<details>
+<summary><strong>Explore workspace memory on desktop and mobile</strong></summary>
+
+Browse, filter and correct records within the selected workspace.
+
+<img src="docs/assets/manager-memory.png" alt="Personal workspace memory browser with typed records, evidence links and filters" width="1440" />
+
+<img src="docs/assets/manager-mobile.png" alt="The same workspace memory browser at a 390 pixel mobile viewport" width="320" />
+
+Screenshots use synthetic fixtures, not private conversations. [Reproduce them locally](docs/assets/README.md).
+
+</details>
+
+## How memory works
 
 ```mermaid
 flowchart LR
-  Client[AI clients & agents] --> Gateway[MemStation Gateway]
-  Gateway --> Providers[OpenAI / Anthropic / Gemini]
-  Gateway <--> Memory[Memory retrieval & injection]
-  Gateway --> Outbox[Conversations & outbox]
-  Outbox --> Workers[Scheduler & workers]
-  Workers --> Memory
-  Memory <--> Storage[(PostgreSQL + pgvector / Redis)]
+  Client[AI clients and Agents] --> Gateway[Protocol gateway]
+  Gateway --> Models[Configured model providers]
+  Gateway <--> Recall[Recall and injection]
+  Gateway --> Conversations[Conversations and outbox]
+  Conversations --> Workers[Scheduler and workers]
+  Workers --> Memories[Validated memories and evidence]
+  Recall <--> Memories
+  Memories <--> DB[(PostgreSQL and pgvector)]
+  Workers <--> Redis[(Redis)]
   Manager[Manager] --> Admin[REST / GraphQL / gRPC]
-  Admin --> Memory
-  Admin --> Outbox
+  Admin --> Conversations
+  Admin --> Memories
 ```
 
-The Go server is the business core, delivered as one binary with `serve`, `worker`,
-`scheduler`, `migrate` and `seed` roles. Manager is an independently deployed SvelteKit
-app. It keeps target sessions encrypted on the server and uses same-origin browser requests; see [Manager connections](docs/manager-connections.md) for runtime configuration. See the [capability reference](docs/architecture.md) for memory lifecycle,
-generation isolation, fact lineage and management interfaces.
+1. Gateway normalizes requests, recalls context and persists conversations and usage.
+2. Finalization writes an outbox event. Scheduler and workers generate summaries,
+   analyze facts and impressions, consolidate Key Memory and create embeddings.
+3. Server-side validation checks structure, scope and source citations. Checkpoints
+   make retries repeatable; version checks protect manual corrections.
+4. Later requests retrieve memories within their authorized scope. Manager exposes
+   the source, history and editing controls.
+
+The Go server ships as one binary with `serve`, `worker`, `scheduler`, `migrate` and
+`seed` roles. SvelteKit Manager runs separately with encrypted server-side sessions.
+See [architecture](docs/architecture.md), [LLM generation](docs/llm-memory.md) and
+[graph memory](docs/graph-memory.md) for details and current limits.
 
 ## Quick start
 
-For local development, install Docker with Compose, Node.js and **pnpm 12.15.0**.
-CI uses Node.js **26.12.1** and Go **1.27.3**; the devcontainer supplies the Go toolchain.
+For the development workflow, install Docker with Compose, Node.js **26.12.1** and
+pnpm **12.15.0**. The devcontainer supplies Go **1.27.3**.
 
 ```bash
 git clone https://github.com/backrunner/memstation.git
@@ -75,28 +99,24 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-This starts PostgreSQL and Redis, applies migrations and runs the server and Manager
-with reload support inside a devcontainer. The devcontainer CLI is fetched at a pinned
-version if it is not already installed.
+1. Open **http://127.0.0.1:5173** and connect to **http://127.0.0.1:8080**.
+2. The devcontainer's local admin token is `memstation-local-admin-token`, unless
+   overridden with `MEMSTATION_ADMIN_TOKEN`.
+3. Configure provider credentials and chat, summary, analysis and embedding models.
+   Seed or create a user and a MemStation API key.
+4. Start `worker` and `scheduler` when testing automatic memories. `pnpm dev`
+   starts infrastructure, migrations, `serve` and Manager; it does not start workers.
 
-1. Open Manager at **http://127.0.0.1:5173**.
-2. Connect to **http://127.0.0.1:8080** using the local development admin token
-   `memstation-local-admin-token`, or your `MEMSTATION_ADMIN_TOKEN` override.
-3. Configure provider credentials and chat, summary, analysis and embedding models in
-   Settings. Model names are configuration, not hardcoded defaults.
-4. Seed or create a user/API key. Run the `worker` and `scheduler` roles when testing
-   automatic memory generation; the hot-reload command starts `serve` and Manager.
+**Want the whole stack, including workers?** Follow the
+[non-destructive Compose startup](deploy/compose/DEVELOPMENT.md#start-a-full-local-stack).
+For Apple Container or local HTTPS, see [local debugging](docs/local-debugging.md).
+Development defaults are for loopback access. Configure unique secrets, TLS, secure
+cookies and CORS before exposing an instance; see [security](SECURITY.md).
 
-The gRPC endpoint is **127.0.0.1:9090**. For a full Compose stack including workers,
-use the [development stack guide](deploy/compose/DEVELOPMENT.md). Its reset command
-removes the selected project's database and Redis volumes; use it only for disposable
-development data. Apple Container and HTTPS Portless flows are documented in the
-[local debugging guide](docs/local-debugging.md).
+## Connect a client
 
-## Connect an AI client
-
-Point an OpenAI-compatible client at `http://127.0.0.1:8080/v1` and use a **MemStation
-API key**. Provider credentials stay in MemStation. Use a model configured on your instance:
+Use `http://127.0.0.1:8080/v1` as the OpenAI-compatible base URL. Authenticate with a
+**MemStation API key**, not a provider credential. Use a model configured on your instance:
 
 ```bash
 export MEMSTATION_API_KEY='your-memstation-api-key'
@@ -112,28 +132,41 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 | --- | --- |
 | Gateway | `/v1/chat/completions`, `/v1/responses`, `/v1/messages`, `/v1/models` |
 | Memory REST | `/api/v1/memory/search`, `/api/v1/memory/keys` |
-| Management | Admin REST, GraphQL Query/Mutation, server-side session authentication |
-| gRPC | Gateway, Memory, Admin and Health services; [protobuf definitions](apps/server/proto/memstation/v1/api.proto) |
+| Management | Admin REST and GraphQL Query/Mutation |
+| gRPC | Gateway, Memory, Admin and Health; [protobuf definitions](apps/server/proto/memstation/v1/api.proto) |
 | Health | `/health/live`, `/health/ready` |
 
-## Develop, evaluate, deploy
+## Documentation
 
-- **Planned expansion:** [workspaces and multiple agents](docs/plans/workspace-agents/README.md), including Manager design, integration contracts, migration and acceptance criteria. The [Agent identity and credential foundation](docs/plans/workspace-agents/implementation-2026-10-24.md), [Agent management UI](docs/plans/workspace-agents/agent-management-2026-10-24.md), [conversation scope / durable finalization](docs/plans/workspace-agents/conversation-scope-2026-10-24.md), [memory / vector / cache scope](docs/plans/workspace-agents/memory-scope-2026-10-24.md), and [generation / source / media lifecycle](docs/plans/workspace-agents/lifecycle-scope-2026-10-24.md) are implemented for the shared Personal workspace. The [Manager server connection layer](docs/manager-connections.md) and [Personal workspace directory, policy editing and scoped Agent navigation](docs/plans/workspace-agents/workspace-management-2026-10-24.md) plus [workspace memory and conversation browsing](docs/plans/workspace-agents/workspace-browsing-2026-10-24.md), editing, scoped search, and [list pagination and navigation](docs/plans/workspace-agents/workspace-pagination-2026-10-24.md) are also implemented. Advanced audit/rebuild screens retain compatible entry points; other workspace kinds and group ingestion remain in progress.
-- **Development:** [local workflows](docs/local-debugging.md), [engineering specification](AGENTS.md), [contributing](CONTRIBUTING.md).
-- **Testing:** [CI checks and troubleshooting](docs/ci.md), Go unit/integration/contract tests, Manager Vitest and Chromium/WebKit E2E.
-- **Memory evaluation:** [runner and dataset guide](apps/server/tests/eval/README.md). Native golden data and external LOCOMO/LongMemEval adapters produce query details, score breakdowns and regression artifacts. Retrieval benchmarks are explicit local/manual runs, outside default CI/nightly gates.
-- **Deployment:** [Compose](deploy/compose), [Kubernetes baseline](deploy/k8s), [Nginx](deploy/nginx), [OpenTelemetry](deploy/otel), [backup and restore](deploy/compose/BACKUP_RESTORE.md).
+| Start here | Reference |
+| --- | --- |
+| Develop and contribute | [Local workflows](docs/local-debugging.md), [contribution guide](CONTRIBUTING.md), [engineering specification](AGENTS.md) |
+| Configure Manager | [Service connections, sessions and network policy](docs/manager-connections.md) |
+| Understand memory | [Architecture](docs/architecture.md), [LLM generation](docs/llm-memory.md), [graph and fact history](docs/graph-memory.md) |
+| Workspaces and Agents | [Implementation status and integration plan](docs/plans/workspace-agents/README.md); only Personal workspaces are enabled |
+| Verify behavior | [CI and testing](docs/ci.md), [retrieval evaluation](apps/server/tests/eval/README.md) |
+| Deploy and operate | [Compose](deploy/compose/DEVELOPMENT.md), [Kubernetes baseline](deploy/k8s), [Nginx](deploy/nginx), [telemetry](deploy/otel), [backup and restore](deploy/compose/BACKUP_RESTORE.md) |
+| Open-source scope | [Publication audit and licensing boundaries](docs/open-source.md), [third-party notices](THIRD_PARTY_NOTICES.md) |
 
-Compose ships local development defaults. Before exposing an instance, configure your
-own secrets, TLS, secure session cookies and CORS policy; see [SECURITY.md](SECURITY.md).
+Retrieval benchmarks are manual diagnostic runs, outside default CI/nightly gates.
+Native golden data ships in the repository; external LOCOMO and LongMemEval datasets
+are downloaded separately. Deterministic test vectors demonstrate the evaluation
+pipeline, not real-model retrieval quality.
+
+## Contribute
+
+[Report a bug](https://github.com/backrunner/memstation/issues/new/choose), suggest an
+improvement or send a focused pull request. Include reproducible steps and fixture
+data; see [CONTRIBUTING.md](CONTRIBUTING.md). Report vulnerabilities
+[privately](https://github.com/backrunner/memstation/security/advisories/new).
 
 ## License
 
-MemStation is licensed under the [Apache License 2.0](LICENSE). Contributions are
-welcome under the same license. See [NOTICE](NOTICE) and
-[third-party notices](THIRD_PARTY_NOTICES.md) for bundled assets and dependencies.
+[Apache License 2.0](LICENSE), with [NOTICE](NOTICE) and
+[third-party notices](THIRD_PARTY_NOTICES.md). The license permits commercial use,
+modification and redistribution under its terms and includes an express patent grant.
+See the [official license text](https://www.apache.org/licenses/LICENSE-2.0).
 
-The bundled IBM Plex Sans font retains its SIL OFL license. External LOCOMO data is
-**CC BY-NC 4.0**, is downloaded separately and is not relicensed under Apache-2.0.
-
-Graph retrieval now includes bounded traversal, fact history and reversible entity mappings. See [Graph memory](docs/graph-memory.md) for configuration, API examples, evidence semantics and historical-query limits.
+Bundled fonts retain SIL OFL 1.1. Dependencies retain their own licenses. Model weights
+and hosted model access are not included. External LOCOMO data is CC BY-NC 4.0 and
+is neither bundled nor relicensed under Apache-2.0.

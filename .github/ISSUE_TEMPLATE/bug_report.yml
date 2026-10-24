@@ -1,0 +1,35 @@
+name: Bug report
+description: Report a reproducible problem in MemStation.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please use synthetic data and remove credentials, prompts and private conversations from logs and screenshots.
+        Report security vulnerabilities privately through Security → Report a vulnerability.
+        English and Chinese reports are welcome.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the behavior you expected and what you observed.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include a minimal example with synthetic data.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Commit or version, OS, deployment method, affected protocol and model provider. Do not include API keys or connection strings.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted logs or screenshots
+      description: Include only the relevant excerpt; review it before posting.

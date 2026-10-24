@@ -1,0 +1,17 @@
+name: Feature request
+description: Propose an improvement or describe a missing workflow.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or workflow
+      description: What are you trying to accomplish? English and Chinese are welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the result you want, including alternatives you considered.
+    validations:
+      required: true

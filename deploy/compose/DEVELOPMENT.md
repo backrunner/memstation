@@ -2,6 +2,48 @@
 
 MemStation keeps a resettable local Docker Compose stack for development.
 
+## Start a full local stack
+
+For a first run with Server, Manager, Worker and Scheduler, use the following from
+the repository root. Docker with Compose and OpenSSL are required; Node.js and Go
+run in the build containers. This preserves existing volumes and applies pending
+migrations. Back up an existing installation before upgrading its schema.
+
+```bash
+# Create local credentials once; do not overwrite them on later starts.
+if [ ! -f .env.memstation-dev ]; then
+  (umask 077
+    printf 'MEMSTATION_ADMIN_TOKEN=%s\nMEMSTATION_MASTER_KEY=%s\nMEMSTATION_MANAGER_SESSION_KEY=%s\n' \
+      "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" \
+      > .env.memstation-dev
+  )
+fi
+
+ms_compose() {
+  docker compose --project-name memstation-local --env-file .env.memstation-dev \
+    -f deploy/compose/docker-compose.yml "$@"
+}
+
+ms_compose build memstation manager worker scheduler
+ms_compose up -d --wait postgres redis
+ms_compose run --rm memstation migrate
+ms_compose run --rm memstation seed
+ms_compose up -d memstation worker scheduler manager
+```
+
+Open **http://127.0.0.1:4173**, select **Local**, and use the admin token stored in
+`.env.memstation-dev`. Configure providers and chat, summary, analysis and embedding
+models in Manager before testing automatic memory generation. An empty model
+configuration does not generate substitute memories. The seeded development gateway
+key is `ms-local-dev`; create a separate API key for actual client use.
+
+Use `ms_compose logs -f memstation worker scheduler` to inspect processing and
+`ms_compose down` to stop without removing data. Do not add `--volumes` when data
+should be preserved. This is a **local development stack**, not an internet-facing
+production configuration; see [SECURITY.md](../../SECURITY.md).
+
+## Development workflows
+
 Devcontainer debug flow
 - `pnpm dev`: starts the `workspace` devcontainer, applies server migrations inside the container, runs backend watch restart on `:8080`, and starts the manager Vite debug server on `:5173`.
 - `pnpm dev:container`: only boots the devcontainer workspace plus PostgreSQL and Redis.

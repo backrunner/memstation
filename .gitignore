@@ -22,3 +22,27 @@ apps/server/bin/
 apps/server/coverage.out
 apps/server/tmp/
 output/playwright
+
+# Local credentials, persistent state and downloaded models/data are not source.
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.dump
+*.sql.gz
+*.rdb
+*.aof
+*.log
+*.gguf
+*.safetensors
+*.onnx
+/backups/
+/datasets/
+/models/
+.svelte-kit/

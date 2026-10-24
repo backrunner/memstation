@@ -37,6 +37,17 @@ Describe the concrete problem, resulting behavior and validation in your PR. Inc
 screenshots for visual changes, using fixture data. Never commit credentials, private
 conversations, downloaded benchmark datasets or local evaluation artifacts.
 
+Before publishing a branch, scan its reachable history with Gitleaks 8.30.1:
+
+```bash
+gitleaks git --log-opts="--all --full-history" --redact --ignore-gitleaks-allow
+```
+
+Store any local reports under the ignored `.artifacts/` directory. Do not suppress
+an alert without reviewing its origin. A clean scan complements manual review of
+fixtures, screenshots and third-party rights; it does not establish their provenance.
+See the [publication audit](docs/open-source.md).
+
 Keep commits focused and use `type: message`, for example `fix: preserve memory filters`
 or `feat: add provider diagnostics`. Dependency upgrades must include compatibility
 notes and regression results. Do not lower correctness or coverage gates to get a green build.

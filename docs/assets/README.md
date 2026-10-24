@@ -30,5 +30,20 @@ node scripts/brand/generate.mjs
 ```
 
 Original brand assets are covered by the project's [Apache-2.0 license](../../LICENSE).
-`manager-preview.png` is a screenshot of Manager using the repository's synthetic
-Playwright fixture data; it contains no production conversations or credentials.
+`manager-preview.png`, `manager-memory.png` and `manager-mobile.png` show the current
+Manager dashboard and Personal workspace browser, captured on 2026-10-25 with the
+repository's synthetic Playwright fixtures. They contain no production conversations
+or credentials. The workspace prototype under `docs/plans/` illustrates planned
+behavior and is not used as a product screenshot.
+
+To capture the running UI again, install the locked dependencies and Chromium, then:
+
+```bash
+pnpm --dir apps/manager exec playwright install chromium
+node scripts/brand/capture-manager.mjs
+```
+
+The script starts isolated fixture and Manager development servers on loopback
+ports 18472 and 18471, signs in with the fixture token, checks the mobile viewport
+for horizontal overflow and stops its own processes. Both ports must be available.
+It does not use the local application's database, model endpoints or credentials.
