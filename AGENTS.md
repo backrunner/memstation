@@ -250,7 +250,7 @@ ReAct Agent 可以保留，但必须受控：
 
 - 最大工具轮次：`2-3`
 - 必须有 token budget 和超时
-- 失败时必须回退到单轮结构化抽取模式
+- 语义记忆仅由配置的 LLM 生成；禁止关键词、模板、启发式提取或评分兜底。ReAct 如启用，失败只能回退到同样受验证的单轮 LLM 结构化抽取；模型不可用或结果校验失败时任务失败并重试，不生成替代记忆。
 - Agent 不允许直接修改核心事实，写入必须走验证层
 
 ### 6.6 Tool Injection 规则
@@ -632,11 +632,17 @@ v1.x 后续路线：
 
 ---
 
-## 14. 当前实现状态（as of 2026-10-24）
+## 14. 当前实现状态（as of 2026-10-25）
 
 本节用于重启时快速恢复上下文；如后续实现进度发生变化，必须同步更新本节，而不能只改代码不改状态。
 
 ### 14.1 已完成
+
+- 2026-10-25 LLM-only 提交前复核：修复摘要／分析／Key 检查点被并发结果覆盖、检查点反序列化复用 map 导致的竞态，改为同来源保留首个已验证结果并读取持久化版本；内存仓库深拷贝检查点。补齐旧事实上下文预算、已替代事实过滤、分块局部关系键、空自动写入白名单及按键读取 Key 上下文；新增迁移修正事实历史快照的来源元数据形状。验证与范围见 [复核记录](docs/llm-memory-review-2026-10-25.md)。
+
+- 2026-10-24 记忆生成改为 LLM-only：摘要／主题／关键词、事实／画像／通用条目／语义关系、Key Memory 合并及评分共用配置化模型链路，删除关键词和模板兜底；Worker、generation rebuild、Playground 预览同步切换。保留严格 schema、原文引用、作用域、替代链和预算校验；失败进入任务重试，已验证结果持久化复用，Key 更新使用条件写入保护人工修改。新增三项元数据迁移，Ent 同步；完整 Go／独立 PostgreSQL、相关 race、format／lint／生成一致性、Atlas、恢复演练及真实 Ollama／Manager／重启召回验证通过。现有历史记忆不自动删除或重建；真实 Ollama 联调和验证边界见 [LLM 记忆生成](docs/llm-memory.md)。
+
+- 2026-10-24 Ollama 真实中文联调发现并修复记忆链路按字节截断导致的非法 UTF-8：摘要／分段、工具内容首尾压缩、事实分析与长摘要分块改用共享 UTF-8 字节边界工具，保留原有字节预算；新增中文与 emoji 回归。4B Q8 本地向量实际写入 PostgreSQL，失败的分析任务经重试恢复；Go 全量（独立 PostgreSQL 测试库）、相关回归、format 与 lint 通过。本机模型、凭据和测试服务配置仅存放在忽略的本地文件中。
 
 - 2026-10-24 提交前累积复核：修复 Gateway metadata 复用污染、可信 Owner 归一化晚于配置读取，Manager IPv6 特殊地址压缩／补零判定，以及关联 Key Memory 错走普通文档路径；新增回归先复现再修复。Go 全量／相关 race／格式／lint／生成一致性／契约、Manager 31 项单测／98 项完整 E2E 及关系跳转 8 项复测／生产构建、Atlas 17 项重放与本批 4 项 lint、coverage、Worker recovery、备份 dry-run、真实 PostgreSQL dump/restore 31 表计数和 Go／Redis 生产 Manager 联调通过。当前仍仅 Personal，验证与限制见 [累积复核记录](docs/plans/workspace-agents/review-2026-10-24.md)。
 
@@ -699,9 +705,9 @@ v1.x 后续路线：
 - analysis worker 已加入受控 `MemoryWritePolicy`/classifier，从 summary、tool calls/results、message blocks 与 artifacts 提升 durable generic memory；raw payload 仍保留在 source snapshot/message 层，写入类 tool 仍不直接修改核心 fact/key memory
 - 记忆注入已补强为结构化 User Profile / Active Tasks / Relevant Procedures / Relevant Facts / Relevant Events / Relevant Agent Actions / Relevant Artifacts / Relevant Entities / Relevant Memories / Relevant Impressions 格式，并按 Key Memory、Task、Procedure、Fact、Event、Agent Action、Artifact、Entity、Summary/Segment、Impression 的固定优先级装包
 - Manager / REST / gRPC / GraphQL 已扩展通用 memory DTO 与 related memory 字段，Manager 新增 Agent Memory 集合页并在详情页展示 metadata、evidence 与 typed relations
-- Fact fallback extraction 已使用规范化 category taxonomy 和轻量多事实输出，并通过 `fact_key / lineage_group_id / revision_seq + supersedes_fact_ids` 在写入侧同步旧 fact 的 `is_superseded / superseded_by_id` 与专用 `supersedes` lineage relation；supersession 写入已收紧为必须携带明确 lineage 锚点和可解析目标，不再从旧事实指针或旧 topic ID 反推
+- Fact 语义提取、分类和替代判断由 LLM 完成；仅允许引用原文及明确的同属主旧事实 ID，写入侧继续校验 `fact_key / lineage_group_id / revision_seq + supersedes_fact_ids`，同步旧 fact 状态与专用 `supersedes` 边。旧 fallback extraction 已移除。
 - Fact lineage 已产品化到存储、检索和管理面板：搜索默认折叠到 current head，GraphQL / gRPC / REST / Manager 返回或展示 `lineage_path`、`superseded_alias_node_ids`、`revision_depth` 与 current-head 状态
-- Summary worker 已加入 `summary_chunk_max_tokens=6000`、`summary_chunk_overlap=600` 的长上下文 chunking 入口，并写入 chunk metadata
+- Summary worker 使用 UTF-8 安全的来源字节分块、分层 LLM 合并和持久化检查点，写入 chunk metadata；不再使用原先的 token 估算与模板摘要路径。
 - Gateway / Memory / Worker 热路径已补充 Go `Benchmark*` 函数，`go test -bench=.` 可发现并执行非流式代理、流式代理、注入、记忆检索、outbox relay 等基准
 - 2026-07-11 graph hardening 最终复核已确认 `scripts/go/format.sh --check`、`scripts/go/lint.sh`、`go test ./...`（77 packages / 223 tests）、`go generate ./...` generated diff、Manager lint/Svelte check、Vitest（15/15）、production build 与 Playwright E2E（19/19）通过
 

@@ -69,7 +69,7 @@ memstation-local-admin-token
 ms-local-dev
 ```
 
-然后在 Manager 的 Provider 和 Model 设置中配置至少一个可用的上游模型。不要把真实密钥提交到仓库。
+然后在 Manager 的 Provider 和 Model 设置中配置可用的 Chat、Summary、Analysis 模型及部署级 Embedding 模型。语义记忆仅使用 LLM，Summary／Analysis 未配置或调用失败会使对应任务失败重试，不会生成规则兜底记忆。配置与本机 Ollama 测试边界见 [LLM 记忆生成](llm-memory.md)。不要把真实密钥提交到仓库。
 
 Compose reset 会把随机生成的本地密钥写入 `.env.memstation-dev`，此时应使用该文件中的 `MEMSTATION_ADMIN_TOKEN`，而不是上述默认值。
 

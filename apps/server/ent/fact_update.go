@@ -205,6 +205,12 @@ func (_u *FactUpdate) SetNillableContent(v *string) *FactUpdate {
 	return _u
 }
 
+// SetMetadata sets the "metadata" field.
+func (_u *FactUpdate) SetMetadata(v map[string]interface{}) *FactUpdate {
+	_u.mutation.SetMetadata(v)
+	return _u
+}
+
 // SetConfidence sets the "confidence" field.
 func (_u *FactUpdate) SetConfidence(v float64) *FactUpdate {
 	_u.mutation.ResetConfidence()
@@ -397,6 +403,9 @@ func (_u *FactUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Content(); ok {
 		_spec.SetField(fact.FieldContent, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Metadata(); ok {
+		_spec.SetField(fact.FieldMetadata, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.Confidence(); ok {
 		_spec.SetField(fact.FieldConfidence, field.TypeFloat64, value)
@@ -622,6 +631,12 @@ func (_u *FactUpdateOne) SetNillableContent(v *string) *FactUpdateOne {
 	return _u
 }
 
+// SetMetadata sets the "metadata" field.
+func (_u *FactUpdateOne) SetMetadata(v map[string]interface{}) *FactUpdateOne {
+	_u.mutation.SetMetadata(v)
+	return _u
+}
+
 // SetConfidence sets the "confidence" field.
 func (_u *FactUpdateOne) SetConfidence(v float64) *FactUpdateOne {
 	_u.mutation.ResetConfidence()
@@ -844,6 +859,9 @@ func (_u *FactUpdateOne) sqlSave(ctx context.Context) (_node *Fact, err error) {
 	}
 	if value, ok := _u.mutation.Content(); ok {
 		_spec.SetField(fact.FieldContent, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Metadata(); ok {
+		_spec.SetField(fact.FieldMetadata, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.Confidence(); ok {
 		_spec.SetField(fact.FieldConfidence, field.TypeFloat64, value)

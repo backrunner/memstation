@@ -10,4 +10,6 @@ type MemoryWriteCondition struct {
 	UpdatedAt    time.Time `json:"expected_updated_at"`
 	GenerationID string    `json:"generation_id"`
 	Create       bool      `json:"-"`
+	ActorType    string    `json:"-"`
+	ActorID      string    `json:"-"`
 }

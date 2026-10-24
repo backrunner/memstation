@@ -20,6 +20,7 @@ import (
 	"memstation/apps/server/internal/provider"
 	"memstation/apps/server/internal/security"
 	adminservice "memstation/apps/server/internal/service/admin"
+	analysisservice "memstation/apps/server/internal/service/analysis"
 	apikeyservice "memstation/apps/server/internal/service/apikey"
 	auditsvc "memstation/apps/server/internal/service/audit"
 	conversationservice "memstation/apps/server/internal/service/conversation"
@@ -34,6 +35,7 @@ import (
 	blobstore "memstation/apps/server/internal/store/blob"
 	"memstation/apps/server/internal/store/sql"
 	"memstation/apps/server/internal/store/vector"
+	"memstation/apps/server/internal/testutil/memoryllmfixture"
 	httptransport "memstation/apps/server/internal/transport/http"
 	"memstation/apps/server/internal/worker"
 	"memstation/apps/server/tests/testutil/mockprovider"
@@ -285,6 +287,7 @@ func TestCORSPreflightAllowsConfiguredManagerOrigin(t *testing.T) {
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 	audit := auditsvc.NewService(nil)
 	admin := adminservice.NewService(conversations, mediaRepo, memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""))
+	admin.SetMemoryProcessor(analysisservice.NewService(memoryllmfixture.Generator{}), []string{"preferences"})
 	engine := memoryservice.NewEngine(memoryRepo, vector.NewPGVectorStore(nil))
 	memorySvc := memoryservice.NewService(engine, memoryRepo)
 	session := security.NewAdminSessionManager(e2eTestAdminToken, time.Hour)
@@ -915,6 +918,7 @@ func newTestRouter() http.Handler {
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 	audit := auditsvc.NewService(nil)
 	admin := adminservice.NewService(conversations, sql.NewInMemoryMediaRepository(), memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""))
+	admin.SetMemoryProcessor(analysisservice.NewService(memoryllmfixture.Generator{}), []string{"preferences"})
 	users := userservice.NewService(nil)
 	apiKeys := apikeyservice.NewService(nil)
 	usage := usageservice.NewService(nil, conversations)
@@ -1010,6 +1014,7 @@ func newProxyRouter() http.Handler {
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 	audit := auditsvc.NewService(nil)
 	admin := adminservice.NewService(conversations, sql.NewInMemoryMediaRepository(), memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""))
+	admin.SetMemoryProcessor(analysisservice.NewService(memoryllmfixture.Generator{}), []string{"preferences"})
 	users := userservice.NewService(nil)
 	apiKeys := apikeyservice.NewService(nil)
 	usage := usageservice.NewService(nil, conversations)

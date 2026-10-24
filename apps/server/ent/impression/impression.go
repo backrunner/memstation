@@ -37,6 +37,8 @@ const (
 	FieldFamiliarity = "familiarity"
 	// FieldDescription holds the string denoting the description field in the database.
 	FieldDescription = "description"
+	// FieldMetadata holds the string denoting the metadata field in the database.
+	FieldMetadata = "metadata"
 	// Table holds the table name of the impression in the database.
 	Table = "impressions"
 )
@@ -56,6 +58,7 @@ var Columns = []string{
 	FieldSentiment,
 	FieldFamiliarity,
 	FieldDescription,
+	FieldMetadata,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -77,6 +80,8 @@ var (
 	UpdateDefaultUpdatedAt func() time.Time
 	// DefaultGenerationID holds the default value on creation for the "generation_id" field.
 	DefaultGenerationID string
+	// DefaultMetadata holds the default value on creation for the "metadata" field.
+	DefaultMetadata map[string]interface{}
 )
 
 // OrderOption defines the ordering options for the Impression queries.

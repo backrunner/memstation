@@ -235,12 +235,13 @@ func groundedNodeEvidences(doc domain.MemoryDocument, source []domain.MemoryEvid
 		}
 		quote, _ := q["quote"].(string)
 		part, _ := q["part_id"].(string)
+		artifact, _ := q["artifact_id"].(string)
 		sourceID, _ := q["source_id"].(string)
-		seq, _ := q["sequence_num"].(int)
+		seq := intValue(q, "sequence_num")
 		if quote == "" || sourceID == "" {
 			continue
 		}
-		evidence := domain.MemoryEvidence{ID: memoryEvidenceID(doc.NodeID, doc.ConversationID, part, sourceID, seq, 0), UserID: doc.UserID, GenerationID: doc.GenerationID, NodeID: doc.NodeID, ConversationID: doc.ConversationID, SequenceNum: seq, PartID: part, ExcerptText: quote, EvidenceKind: "exact_quote", Weight: 1, Metadata: cloneMap(q), CreatedAt: time.Now().UTC()}
+		evidence := domain.MemoryEvidence{ID: memoryEvidenceID(doc.NodeID, doc.ConversationID, part, sourceID, seq, 0), UserID: doc.UserID, GenerationID: doc.GenerationID, NodeID: doc.NodeID, ConversationID: doc.ConversationID, SequenceNum: seq, PartID: part, ArtifactID: artifact, ExcerptText: quote, EvidenceKind: "exact_quote", Weight: 1, Metadata: cloneMap(q), CreatedAt: time.Now().UTC()}
 		out = append(out, evidence)
 	}
 	if len(out) > 0 {

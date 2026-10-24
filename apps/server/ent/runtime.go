@@ -170,12 +170,16 @@ func init() {
 	factDescRevisionSeq := factFields[8].Descriptor()
 	// fact.DefaultRevisionSeq holds the default value on creation for the revision_seq field.
 	fact.DefaultRevisionSeq = factDescRevisionSeq.Default.(int)
+	// factDescMetadata is the schema descriptor for metadata field.
+	factDescMetadata := factFields[10].Descriptor()
+	// fact.DefaultMetadata holds the default value on creation for the metadata field.
+	fact.DefaultMetadata = factDescMetadata.Default.(map[string]interface{})
 	// factDescConfidence is the schema descriptor for confidence field.
-	factDescConfidence := factFields[10].Descriptor()
+	factDescConfidence := factFields[11].Descriptor()
 	// fact.DefaultConfidence holds the default value on creation for the confidence field.
 	fact.DefaultConfidence = factDescConfidence.Default.(float64)
 	// factDescIsSuperseded is the schema descriptor for is_superseded field.
-	factDescIsSuperseded := factFields[11].Descriptor()
+	factDescIsSuperseded := factFields[12].Descriptor()
 	// fact.DefaultIsSuperseded holds the default value on creation for the is_superseded field.
 	fact.DefaultIsSuperseded = factDescIsSuperseded.Default.(bool)
 	impressionMixin := schema.Impression{}.Mixin()
@@ -197,6 +201,10 @@ func init() {
 	impressionDescGenerationID := impressionFields[0].Descriptor()
 	// impression.DefaultGenerationID holds the default value on creation for the generation_id field.
 	impression.DefaultGenerationID = impressionDescGenerationID.Default.(string)
+	// impressionDescMetadata is the schema descriptor for metadata field.
+	impressionDescMetadata := impressionFields[10].Descriptor()
+	// impression.DefaultMetadata holds the default value on creation for the metadata field.
+	impression.DefaultMetadata = impressionDescMetadata.Default.(map[string]interface{})
 	keymemoryMixin := schema.KeyMemory{}.Mixin()
 	keymemoryMixinFields0 := keymemoryMixin[0].Fields()
 	_ = keymemoryMixinFields0
@@ -390,16 +398,20 @@ func init() {
 	memorysummaryDescGenerationID := memorysummaryFields[0].Descriptor()
 	// memorysummary.DefaultGenerationID holds the default value on creation for the generation_id field.
 	memorysummary.DefaultGenerationID = memorysummaryDescGenerationID.Default.(string)
+	// memorysummaryDescMetadata is the schema descriptor for metadata field.
+	memorysummaryDescMetadata := memorysummaryFields[5].Descriptor()
+	// memorysummary.DefaultMetadata holds the default value on creation for the metadata field.
+	memorysummary.DefaultMetadata = memorysummaryDescMetadata.Default.(map[string]interface{})
 	// memorysummaryDescSummaryVersion is the schema descriptor for summary_version field.
-	memorysummaryDescSummaryVersion := memorysummaryFields[6].Descriptor()
+	memorysummaryDescSummaryVersion := memorysummaryFields[7].Descriptor()
 	// memorysummary.DefaultSummaryVersion holds the default value on creation for the summary_version field.
 	memorysummary.DefaultSummaryVersion = memorysummaryDescSummaryVersion.Default.(int)
 	// memorysummaryDescChunkIndex is the schema descriptor for chunk_index field.
-	memorysummaryDescChunkIndex := memorysummaryFields[7].Descriptor()
+	memorysummaryDescChunkIndex := memorysummaryFields[8].Descriptor()
 	// memorysummary.DefaultChunkIndex holds the default value on creation for the chunk_index field.
 	memorysummary.DefaultChunkIndex = memorysummaryDescChunkIndex.Default.(int)
 	// memorysummaryDescChunkTotal is the schema descriptor for chunk_total field.
-	memorysummaryDescChunkTotal := memorysummaryFields[8].Descriptor()
+	memorysummaryDescChunkTotal := memorysummaryFields[9].Descriptor()
 	// memorysummary.DefaultChunkTotal holds the default value on creation for the chunk_total field.
 	memorysummary.DefaultChunkTotal = memorysummaryDescChunkTotal.Default.(int)
 	messageMixin := schema.Message{}.Mixin()

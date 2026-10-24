@@ -4514,6 +4514,7 @@ type FactMutation struct {
 	revision_seq     *int
 	addrevision_seq  *int
 	content          *string
+	metadata         *map[string]interface{}
 	confidence       *float64
 	addconfidence    *float64
 	is_superseded    *bool
@@ -5128,6 +5129,42 @@ func (m *FactMutation) ResetContent() {
 	m.content = nil
 }
 
+// SetMetadata sets the "metadata" field.
+func (m *FactMutation) SetMetadata(value map[string]interface{}) {
+	m.metadata = &value
+}
+
+// Metadata returns the value of the "metadata" field in the mutation.
+func (m *FactMutation) Metadata() (r map[string]interface{}, exists bool) {
+	v := m.metadata
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMetadata returns the old "metadata" field's value of the Fact entity.
+// If the Fact object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *FactMutation) OldMetadata(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMetadata is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMetadata requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMetadata: %w", err)
+	}
+	return oldValue.Metadata, nil
+}
+
+// ResetMetadata resets all changes to the "metadata" field.
+func (m *FactMutation) ResetMetadata() {
+	m.metadata = nil
+}
+
 // SetConfidence sets the "confidence" field.
 func (m *FactMutation) SetConfidence(f float64) {
 	m.confidence = &f
@@ -5401,7 +5438,7 @@ func (m *FactMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *FactMutation) Fields() []string {
-	fields := make([]string, 0, 17)
+	fields := make([]string, 0, 18)
 	if m.created_at != nil {
 		fields = append(fields, fact.FieldCreatedAt)
 	}
@@ -5437,6 +5474,9 @@ func (m *FactMutation) Fields() []string {
 	}
 	if m.content != nil {
 		fields = append(fields, fact.FieldContent)
+	}
+	if m.metadata != nil {
+		fields = append(fields, fact.FieldMetadata)
 	}
 	if m.confidence != nil {
 		fields = append(fields, fact.FieldConfidence)
@@ -5485,6 +5525,8 @@ func (m *FactMutation) Field(name string) (ent.Value, bool) {
 		return m.RevisionSeq()
 	case fact.FieldContent:
 		return m.Content()
+	case fact.FieldMetadata:
+		return m.Metadata()
 	case fact.FieldConfidence:
 		return m.Confidence()
 	case fact.FieldIsSuperseded:
@@ -5528,6 +5570,8 @@ func (m *FactMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldRevisionSeq(ctx)
 	case fact.FieldContent:
 		return m.OldContent(ctx)
+	case fact.FieldMetadata:
+		return m.OldMetadata(ctx)
 	case fact.FieldConfidence:
 		return m.OldConfidence(ctx)
 	case fact.FieldIsSuperseded:
@@ -5630,6 +5674,13 @@ func (m *FactMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetContent(v)
+		return nil
+	case fact.FieldMetadata:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMetadata(v)
 		return nil
 	case fact.FieldConfidence:
 		v, ok := value.(float64)
@@ -5823,6 +5874,9 @@ func (m *FactMutation) ResetField(name string) error {
 	case fact.FieldContent:
 		m.ResetContent()
 		return nil
+	case fact.FieldMetadata:
+		m.ResetMetadata()
+		return nil
 	case fact.FieldConfidence:
 		m.ResetConfidence()
 		return nil
@@ -5908,6 +5962,7 @@ type ImpressionMutation struct {
 	sentiment       *string
 	familiarity     *string
 	description     *string
+	metadata        *map[string]interface{}
 	clearedFields   map[string]struct{}
 	done            bool
 	oldValue        func(context.Context) (*Impression, error)
@@ -6509,6 +6564,42 @@ func (m *ImpressionMutation) ResetDescription() {
 	m.description = nil
 }
 
+// SetMetadata sets the "metadata" field.
+func (m *ImpressionMutation) SetMetadata(value map[string]interface{}) {
+	m.metadata = &value
+}
+
+// Metadata returns the value of the "metadata" field in the mutation.
+func (m *ImpressionMutation) Metadata() (r map[string]interface{}, exists bool) {
+	v := m.metadata
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMetadata returns the old "metadata" field's value of the Impression entity.
+// If the Impression object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ImpressionMutation) OldMetadata(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMetadata is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMetadata requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMetadata: %w", err)
+	}
+	return oldValue.Metadata, nil
+}
+
+// ResetMetadata resets all changes to the "metadata" field.
+func (m *ImpressionMutation) ResetMetadata() {
+	m.metadata = nil
+}
+
 // Where appends a list predicates to the ImpressionMutation builder.
 func (m *ImpressionMutation) Where(ps ...predicate.Impression) {
 	m.predicates = append(m.predicates, ps...)
@@ -6543,7 +6634,7 @@ func (m *ImpressionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ImpressionMutation) Fields() []string {
-	fields := make([]string, 0, 12)
+	fields := make([]string, 0, 13)
 	if m.created_at != nil {
 		fields = append(fields, impression.FieldCreatedAt)
 	}
@@ -6580,6 +6671,9 @@ func (m *ImpressionMutation) Fields() []string {
 	if m.description != nil {
 		fields = append(fields, impression.FieldDescription)
 	}
+	if m.metadata != nil {
+		fields = append(fields, impression.FieldMetadata)
+	}
 	return fields
 }
 
@@ -6612,6 +6706,8 @@ func (m *ImpressionMutation) Field(name string) (ent.Value, bool) {
 		return m.Familiarity()
 	case impression.FieldDescription:
 		return m.Description()
+	case impression.FieldMetadata:
+		return m.Metadata()
 	}
 	return nil, false
 }
@@ -6645,6 +6741,8 @@ func (m *ImpressionMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldFamiliarity(ctx)
 	case impression.FieldDescription:
 		return m.OldDescription(ctx)
+	case impression.FieldMetadata:
+		return m.OldMetadata(ctx)
 	}
 	return nil, fmt.Errorf("unknown Impression field %s", name)
 }
@@ -6737,6 +6835,13 @@ func (m *ImpressionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetDescription(v)
+		return nil
+	case impression.FieldMetadata:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMetadata(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Impression field %s", name)
@@ -6855,6 +6960,9 @@ func (m *ImpressionMutation) ResetField(name string) error {
 		return nil
 	case impression.FieldDescription:
 		m.ResetDescription()
+		return nil
+	case impression.FieldMetadata:
+		m.ResetMetadata()
 		return nil
 	}
 	return fmt.Errorf("unknown Impression field %s", name)
@@ -12701,6 +12809,7 @@ type MemorySummaryMutation struct {
 	conversation_id    *string
 	node_id            *string
 	summary            *string
+	metadata           *map[string]interface{}
 	topic_label        *string
 	summary_version    *int
 	addsummary_version *int
@@ -13064,6 +13173,42 @@ func (m *MemorySummaryMutation) ResetSummary() {
 	m.summary = nil
 }
 
+// SetMetadata sets the "metadata" field.
+func (m *MemorySummaryMutation) SetMetadata(value map[string]interface{}) {
+	m.metadata = &value
+}
+
+// Metadata returns the value of the "metadata" field in the mutation.
+func (m *MemorySummaryMutation) Metadata() (r map[string]interface{}, exists bool) {
+	v := m.metadata
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMetadata returns the old "metadata" field's value of the MemorySummary entity.
+// If the MemorySummary object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemorySummaryMutation) OldMetadata(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMetadata is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMetadata requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMetadata: %w", err)
+	}
+	return oldValue.Metadata, nil
+}
+
+// ResetMetadata resets all changes to the "metadata" field.
+func (m *MemorySummaryMutation) ResetMetadata() {
+	m.metadata = nil
+}
+
 // SetTopicLabel sets the "topic_label" field.
 func (m *MemorySummaryMutation) SetTopicLabel(s string) {
 	m.topic_label = &s
@@ -13315,7 +13460,7 @@ func (m *MemorySummaryMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *MemorySummaryMutation) Fields() []string {
-	fields := make([]string, 0, 11)
+	fields := make([]string, 0, 12)
 	if m.created_at != nil {
 		fields = append(fields, memorysummary.FieldCreatedAt)
 	}
@@ -13336,6 +13481,9 @@ func (m *MemorySummaryMutation) Fields() []string {
 	}
 	if m.summary != nil {
 		fields = append(fields, memorysummary.FieldSummary)
+	}
+	if m.metadata != nil {
+		fields = append(fields, memorysummary.FieldMetadata)
 	}
 	if m.topic_label != nil {
 		fields = append(fields, memorysummary.FieldTopicLabel)
@@ -13371,6 +13519,8 @@ func (m *MemorySummaryMutation) Field(name string) (ent.Value, bool) {
 		return m.NodeID()
 	case memorysummary.FieldSummary:
 		return m.Summary()
+	case memorysummary.FieldMetadata:
+		return m.Metadata()
 	case memorysummary.FieldTopicLabel:
 		return m.TopicLabel()
 	case memorysummary.FieldSummaryVersion:
@@ -13402,6 +13552,8 @@ func (m *MemorySummaryMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldNodeID(ctx)
 	case memorysummary.FieldSummary:
 		return m.OldSummary(ctx)
+	case memorysummary.FieldMetadata:
+		return m.OldMetadata(ctx)
 	case memorysummary.FieldTopicLabel:
 		return m.OldTopicLabel(ctx)
 	case memorysummary.FieldSummaryVersion:
@@ -13467,6 +13619,13 @@ func (m *MemorySummaryMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetSummary(v)
+		return nil
+	case memorysummary.FieldMetadata:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMetadata(v)
 		return nil
 	case memorysummary.FieldTopicLabel:
 		v, ok := value.(string)
@@ -13613,6 +13772,9 @@ func (m *MemorySummaryMutation) ResetField(name string) error {
 		return nil
 	case memorysummary.FieldSummary:
 		m.ResetSummary()
+		return nil
+	case memorysummary.FieldMetadata:
+		m.ResetMetadata()
 		return nil
 	case memorysummary.FieldTopicLabel:
 		m.ResetTopicLabel()

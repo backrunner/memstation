@@ -2,347 +2,242 @@ package analysis
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
+	"errors"
+	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"memstation/apps/server/internal/domain"
+	"memstation/apps/server/internal/service/memoryllm"
+	"memstation/apps/server/internal/testutil/memoryllmfixture"
 )
 
-func TestAnalyzeConversationBuildsFactImpressionAndRelations(t *testing.T) {
-	t.Parallel()
+type generatorFunc func(context.Context, memoryllm.Request) (json.RawMessage, error)
 
-	service := NewService()
-	result, err := service.AnalyzeConversation(context.Background(), Input{
-		UserID:         "user-1",
-		ConversationID: "conv-1",
-		Conversation: domain.ConversationRecord{
-			ConversationID: "conv-1",
-			UserID:         "user-1",
-			Messages: []domain.UnifiedMessage{
-				{Role: domain.RoleUser, Text: "Please help me design the MemStation server architecture."},
-				{Role: domain.RoleAssistant, Text: "We should start from the gateway and memory pipeline."},
-			},
-		},
-		Summary: domain.MemoryDocument{
-			ID:      "summary:conv-1:v1",
-			NodeID:  "node:summary:conv-1:v1",
-			UserID:  "user-1",
-			Type:    domain.MemoryTypeSummary,
-			Content: "User asked to design the MemStation server architecture and implementation roadmap.",
-		},
-	})
-	if err != nil {
-		t.Fatalf("analyze conversation: %v", err)
-	}
-
-	if !strings.HasPrefix(result.Fact.ID, "fact:conv_1:") {
-		t.Fatalf("unexpected fact id: %s", result.Fact.ID)
-	}
-	if result.Fact.Metadata["fact_key"] == "" {
-		t.Fatalf("expected fact key metadata, got %+v", result.Fact.Metadata)
-	}
-	if result.Fact.Metadata["lineage_group_id"] == "" {
-		t.Fatalf("expected lineage group metadata, got %+v", result.Fact.Metadata)
-	}
-	if !strings.HasPrefix(result.Fact.Metadata["lineage_group_id"].(string), "fact-lineage:user-1:") {
-		t.Fatalf("expected unsanitized user id in lineage group, got %+v", result.Fact.Metadata)
-	}
-	if result.Fact.Metadata["lineage_revision_key"] == "" {
-		t.Fatalf("expected lineage revision metadata, got %+v", result.Fact.Metadata)
-	}
-	if !strings.Contains(strings.ToLower(result.Fact.Content), "memstation") {
-		t.Fatalf("expected fact content to reference summary topic, got %q", result.Fact.Content)
-	}
-	if result.Impression.ID != ImpressionDocumentID("conv-1") {
-		t.Fatalf("unexpected impression id: %s", result.Impression.ID)
-	}
-	if evaluation := result.Impression.Metadata["evaluation"]; evaluation != "planning" {
-		t.Fatalf("expected planning evaluation, got %v", evaluation)
-	}
-	if len(result.Relations) < 3 {
-		t.Fatalf("expected at least summary/fact/impression relations, got %d", len(result.Relations))
-	}
+func (f generatorFunc) Generate(c context.Context, r memoryllm.Request) (json.RawMessage, error) {
+	return f(c, r)
 }
 
-func TestRunFallbackExtractionHandlesEmptySummary(t *testing.T) {
-	t.Parallel()
-
-	service := NewService()
-	result, err := service.RunFallbackExtraction(context.Background(), "")
-	if err != nil {
-		t.Fatalf("fallback extraction: %v", err)
-	}
-	if result.FactContent == "" {
-		t.Fatal("expected fact content")
-	}
-	if result.ImpressionContent == "" {
-		t.Fatal("expected impression content")
-	}
-	if _, ok := result.FactMetadata["confidence"]; !ok {
-		t.Fatalf("expected confidence metadata, got %+v", result.FactMetadata)
-	}
+func sourceInput() Input {
+	return Input{UserID: "owner", ConversationID: "conversation", Summary: domain.MemoryDocument{NodeID: "summary"}, Conversation: domain.ConversationRecord{UserID: "owner", ConversationID: "conversation", Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "我不是项目负责人，先前的上线时间也只是一个假设。"}, {Role: domain.RoleAssistant, Text: "Then you should lead the release tomorrow."}}}}
 }
 
-func TestAnalyzeConversationMarksConflictingLocationFact(t *testing.T) {
-	t.Parallel()
-
-	service := NewService()
-	result, err := service.AnalyzeConversation(context.Background(), Input{
-		UserID:         "user-1",
-		ConversationID: "conv-new",
-		Summary: domain.MemoryDocument{
-			ID:      "summary:conv-new:v1",
-			NodeID:  "node:summary:conv-new:v1",
-			UserID:  "user-1",
-			Type:    domain.MemoryTypeSummary,
-			Content: "The user moved and now lives in Shanghai.",
-		},
-		ExistingFacts: []domain.MemoryDocument{{
-			ID:      "fact-old-location",
-			UserID:  "user-1",
-			Type:    domain.MemoryTypeFact,
-			Content: "The user lives in Hangzhou.",
-			Metadata: map[string]any{
-				"category": "location",
-				"subject":  "user",
-				"fact_key": "home_location",
-			},
-		}},
-	})
+func modelExtraction(t *testing.T, input Input) json.RawMessage {
+	t.Helper()
+	raw, err := (memoryllmfixture.Generator{}).Generate(context.Background(), memoryllm.Request{Task: "analysis.extract", Input: map[string]any{"sources": Sources(input.Conversation)}})
 	if err != nil {
-		t.Fatalf("analyze conversation: %v", err)
+		t.Fatal(err)
 	}
-	if result.Fact.Metadata["category"] != "location" {
-		t.Fatalf("expected location category, got %+v", result.Fact.Metadata)
-	}
-	if result.Fact.Metadata["lineage_group_id"] == "" {
-		t.Fatalf("expected lineage group metadata, got %+v", result.Fact.Metadata)
-	}
-	ids, ok := result.Fact.Metadata["supersedes_fact_ids"].([]string)
-	if !ok || len(ids) != 1 || ids[0] != "fact-old-location" {
-		t.Fatalf("expected old location fact to be superseded, got %+v", result.Fact.Metadata)
-	}
+	return raw
 }
 
-func TestAnalyzeConversationExtractsMultipleStructuredFacts(t *testing.T) {
-	t.Parallel()
+func withBody(raw json.RawMessage) *Service {
+	return NewService(generatorFunc(func(context.Context, memoryllm.Request) (json.RawMessage, error) { return raw, nil }))
+}
 
-	service := NewService()
-	result, err := service.AnalyzeConversation(context.Background(), Input{
-		UserID:         "user-1",
-		ConversationID: "conv-preference-plan",
-		Summary: domain.MemoryDocument{
-			ID:      "summary:conv-preference-plan:v1",
-			NodeID:  "node:summary:conv-preference-plan:v1",
-			UserID:  "user-1",
-			Type:    domain.MemoryTypeSummary,
-			Content: "The user prefers a light UI theme and plans to move to Shanghai next month.",
-		},
-	})
-	if err != nil {
-		t.Fatalf("analyze conversation: %v", err)
-	}
-	if len(result.Facts) < 2 {
-		t.Fatalf("expected multiple structured facts, got %+v", result.Facts)
-	}
-	keys := map[string]struct{}{}
-	for _, fact := range result.Facts {
-		key, _ := fact.Metadata["fact_key"].(string)
-		keys[key] = struct{}{}
-		if fact.Metadata["lineage_group_id"] == "" || fact.Metadata["lineage_revision_key"] == "" {
-			t.Fatalf("expected lineage metadata on fact %+v", fact.Metadata)
+func TestAnalysisRequiresLLMAndNeverGeneratesFallback(t *testing.T) {
+	input := sourceInput()
+	for _, s := range []*Service{NewService(), NewService(generatorFunc(func(context.Context, memoryllm.Request) (json.RawMessage, error) {
+		return nil, errors.New("provider unavailable")
+	}))} {
+		result, err := s.AnalyzeConversation(context.Background(), input)
+		if err == nil || len(result.Facts) != 0 || result.Impression.ID != "" {
+			t.Fatal("failed model produced memory", result, err)
 		}
 	}
-	if _, ok := keys["preference_ui_theme"]; !ok {
-		t.Fatalf("expected preference fact, got keys %+v", keys)
-	}
-	if _, ok := keys["plan_relocation"]; !ok {
-		t.Fatalf("expected plan fact, got keys %+v", keys)
-	}
-	minRelations := len(result.Facts)*2 + 1
-	if len(result.Relations) < minRelations {
-		t.Fatalf("expected summary/fact/impression relations for all facts, got %d relations for %d facts", len(result.Relations), len(result.Facts))
+}
+
+func TestAnalysisAcceptsGenuineEmptyModelResult(t *testing.T) {
+	result, err := withBody(json.RawMessage(`{"facts":[],"impression":null,"items":[]}`)).AnalyzeConversation(context.Background(), sourceInput())
+	if err != nil || len(result.Facts) != 0 || result.Fact.ID != "" || result.Impression.ID != "" || len(result.GenericItems) != 0 {
+		t.Fatal(result, err)
 	}
 }
 
-func TestAnalyzeConversationKeepsDistinctFactKeysForUnrelatedPreferenceAndPlans(t *testing.T) {
-	t.Parallel()
-
-	service := NewService()
-	result, err := service.AnalyzeConversation(context.Background(), Input{
-		UserID:         "user-1",
-		ConversationID: "conv-distinct-facts",
-		Summary: domain.MemoryDocument{
-			ID:      "summary:conv-distinct-facts:v1",
-			NodeID:  "node:summary:conv-distinct-facts:v1",
-			UserID:  "user-1",
-			Type:    domain.MemoryTypeSummary,
-			Content: "The user prefers a compact UI layout. The user plans to renew their passport. The gateway service deadline is next week.",
-		},
-	})
+func TestAnalysisStoresOnlyModelSelectedContentAndStableIDs(t *testing.T) {
+	input := sourceInput()
+	body := modelExtraction(t, input)
+	s := withBody(body)
+	first, err := s.AnalyzeConversation(context.Background(), input)
 	if err != nil {
-		t.Fatalf("analyze conversation: %v", err)
+		t.Fatal(err)
 	}
-	keys := map[string]struct{}{}
-	for _, fact := range result.Facts {
-		if key, _ := fact.Metadata["fact_key"].(string); key != "" {
-			keys[key] = struct{}{}
+	second, err := s.AnalyzeConversation(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(first, second) {
+		t.Fatal("same validated model output changed identities")
+	}
+	if first.Fact.Content != input.Conversation.Messages[0].Text || first.Fact.Metadata["fact_key"] != "test_fact" || first.Fact.Metadata["extraction_method"] != "llm" {
+		t.Fatal(first.Fact)
+	}
+	for _, doc := range append(first.Facts, first.GenericItems...) {
+		if !utf8.ValidString(doc.Content) || doc.UserID != "owner" || doc.Metadata["support_kind"] != "user_statement" {
+			t.Fatal(doc)
 		}
-	}
-	if _, ok := keys["preference_ui_layout"]; !ok {
-		t.Fatalf("expected layout preference key, got %+v", keys)
-	}
-	if _, ok := keys["user_plan_passport"]; !ok {
-		t.Fatalf("expected scoped passport plan key, got %+v", keys)
-	}
-	if _, ok := keys["work_schedule_gateway"]; !ok {
-		t.Fatalf("expected scoped gateway schedule key, got %+v", keys)
 	}
 }
 
-func TestAnalyzeConversationExtractsGenericAgentMemoryItems(t *testing.T) {
-	t.Parallel()
-
-	service := NewService()
-	result, err := service.AnalyzeConversation(context.Background(), Input{
-		UserID:         "user-1",
-		ConversationID: "conv-agent",
-		Conversation: domain.ConversationRecord{
-			ConversationID: "conv-agent",
-			UserID:         "user-1",
-			Messages: []domain.UnifiedMessage{{
-				Role: domain.RoleAssistant,
-				ToolCalls: []domain.ToolCall{{
-					ID:   "call-1",
-					Name: "inspect_assets",
-					Arguments: map[string]any{
-						"path": "/tmp/report.pdf",
-					},
-				}},
-			}, {
-				Role: domain.RoleTool,
-				ToolResults: []domain.ToolResult{{
-					ToolCallID: "call-1",
-					Name:       "inspect_assets",
-					Output: map[string]any{
-						"status":     "sk-test-raw-payload",
-						"result":     "sk-result-raw-payload",
-						"error_type": "sk-error-raw-payload",
-						"pages":      3,
-					},
-				}},
-			}},
+func TestAnalysisRejectsMalformedOrUnsupportedModelOutput(t *testing.T) {
+	input := sourceInput()
+	base := modelExtraction(t, input)
+	cases := map[string]func(map[string]any){
+		"extra owner":   func(v map[string]any) { v["user_id"] = "foreign" },
+		"invalid score": func(v map[string]any) { v["facts"].([]any)[0].(map[string]any)["importance"] = 9 },
+		"invented quote": func(v map[string]any) {
+			v["facts"].([]any)[0].(map[string]any)["quotes"] = []any{map[string]any{"source_id": "message-1", "text": "I own the project"}}
 		},
-		Summary: domain.MemoryDocument{
-			ID:      "summary:conv-agent:v1",
-			NodeID:  "node:summary:conv-agent:v1",
-			UserID:  "user-1",
-			Type:    domain.MemoryTypeSummary,
-			Content: "The user plans to review the report next week. The workflow should use inspect_assets for PDF inspection.",
+		"assistant evidence": func(v map[string]any) {
+			v["facts"].([]any)[0].(map[string]any)["quotes"] = []any{map[string]any{"source_id": "message-2", "text": input.Conversation.Messages[1].Text}}
 		},
-	})
-	if err != nil {
-		t.Fatalf("analyze conversation: %v", err)
+		"unknown source": func(v map[string]any) {
+			v["facts"].([]any)[0].(map[string]any)["quotes"] = []any{map[string]any{"source_id": "missing", "text": "fake"}}
+		},
+		"missing facts": func(v map[string]any) { delete(v, "facts") },
+		"unknown kind":  func(v map[string]any) { v["items"].([]any)[0].(map[string]any)["type"] = "api_key" },
+		"foreign supersession": func(v map[string]any) {
+			v["facts"].([]any)[0].(map[string]any)["supersedes"] = []string{"another-owner-fact"}
+		},
 	}
-	types := map[domain.MemoryType]int{}
-	for _, item := range result.GenericItems {
-		types[item.Type]++
-		if item.ID == "" || item.NodeID == "" {
-			t.Fatalf("expected stable IDs for generic item: %+v", item)
-		}
-		if item.Type == domain.MemoryTypeAgentAction {
-			serializedMetadata := fmt.Sprint(item.Metadata)
-			for _, secret := range []string{"sk-test-raw-payload", "sk-result-raw-payload", "sk-error-raw-payload"} {
-				if strings.Contains(item.Content, secret) || strings.Contains(serializedMetadata, secret) {
-					t.Fatalf("agent action should not retain raw tool output payload %q: %+v", secret, item)
-				}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			var value map[string]any
+			if err := json.Unmarshal(base, &value); err != nil {
+				t.Fatal(err)
 			}
-			if strings.Contains(metadataString(item.Metadata, "result_summary"), "status=sk") {
-				t.Fatalf("agent action should not retain raw tool output payload: %+v", item)
+			mutate(value)
+			raw, _ := json.Marshal(value)
+			if result, err := withBody(raw).AnalyzeConversation(context.Background(), input); err == nil || len(result.Facts) != 0 {
+				t.Fatal("invalid batch accepted", result, err)
+			}
+		})
+	}
+}
+
+func TestAnalysisOnlySupersedesExplicitMatchingFactIDs(t *testing.T) {
+	input := sourceInput()
+	input.ExistingFacts = []domain.MemoryDocument{{ID: "old", UserID: "owner", Type: domain.MemoryTypeFact, Content: "Old assertion", Metadata: map[string]any{"fact_key": "test_fact", "subject": "user"}}}
+	raw := modelExtraction(t, input)
+	var extraction Extraction
+	if err := json.Unmarshal(raw, &extraction); err != nil {
+		t.Fatal(err)
+	}
+	result, err := withBody(raw).AnalyzeConversation(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Fact.Metadata["supersedes_fact_ids"].([]string)) != 0 {
+		t.Fatal("matching key implicitly superseded another fact")
+	}
+	extraction.Facts[0].Supersedes = []string{"old"}
+	raw, _ = json.Marshal(extraction)
+	result, err = withBody(raw).AnalyzeConversation(context.Background(), input)
+	if err != nil || len(result.Fact.Metadata["supersedes_fact_ids"].([]string)) != 1 {
+		t.Fatal(result, err)
+	}
+	input.ExistingFacts[0].UserID = "foreign"
+	if _, err := withBody(raw).AnalyzeConversation(context.Background(), input); err == nil {
+		t.Fatal("foreign existing fact accepted")
+	}
+}
+
+func TestSummaryUsesModelForEveryChunkAndMerge(t *testing.T) {
+	input := sourceInput()
+	input.Conversation.Messages = []domain.UnifiedMessage{{Role: domain.RoleUser, Text: strings.Repeat("中文🙂", 6000)}}
+	calls := []string{}
+	generator := generatorFunc(func(ctx context.Context, r memoryllm.Request) (json.RawMessage, error) {
+		calls = append(calls, r.Task)
+		if r.Role != "summary_model" {
+			t.Fatal(r.Role)
+		}
+		return json.RawMessage(`{"summary":"模型提炼后的摘要","topic_label":"项目计划","keywords":["项目"],"importance":1.2,"decay_factor":1.3}`), nil
+	})
+	result, err := NewService(generator).SummarizeConversation(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Summary != "模型提炼后的摘要" || result.ChunkCount < 2 || calls[len(calls)-1] != "summary.merge" {
+		t.Fatal(result, calls)
+	}
+	for _, batch := range mustSourceBatches(t, Sources(input.Conversation)) {
+		for _, source := range batch {
+			if !utf8.ValidString(source.Text) {
+				t.Fatal("invalid UTF-8 source chunk")
 			}
 		}
 	}
-	for _, kind := range []domain.MemoryType{domain.MemoryTypeTask, domain.MemoryTypeProcedure, domain.MemoryTypeAgentAction, domain.MemoryTypeEntity} {
-		if types[kind] == 0 {
-			t.Fatalf("expected generic memory type %s, got counts %+v", kind, types)
-		}
+}
+
+func mustSourceBatches(t *testing.T, sources []Source) [][]Source {
+	t.Helper()
+	b, err := sourceBatches(sources)
+	if err != nil {
+		t.Fatal(err)
 	}
-	foundToolRelation := false
-	for _, relation := range result.Relations {
-		if relation.RelationType == domain.MemoryRelationUsedTool {
-			foundToolRelation = true
-			break
-		}
+	return b
+}
+
+func TestKeyMemoryRequiresAllowedKeyAndValidatedFactReferences(t *testing.T) {
+	input := sourceInput()
+	documents := []domain.MemoryDocument{{ID: "fact", UserID: "owner", ConversationID: "conversation", Type: domain.MemoryTypeFact, Content: "偏好简洁的中文回复"}}
+	good := json.RawMessage(`{"memories":[{"key":"preferences","value":"偏好简洁的中文回复","category":"profile","importance":1.4,"decay_factor":2,"source_document_ids":["fact"]}]}`)
+	candidates, err := withBody(good).ReconcileKeyMemories(context.Background(), input, documents, nil, []string{"preferences"})
+	if err != nil || len(candidates) != 1 {
+		t.Fatal(candidates, err)
 	}
-	if !foundToolRelation {
-		t.Fatalf("expected used_tool relation, got %+v", result.Relations)
+	for _, raw := range []json.RawMessage{json.RawMessage(strings.ReplaceAll(string(good), "preferences", "unauthorized")), json.RawMessage(strings.ReplaceAll(string(good), `["fact"]`, `["foreign"]`)), json.RawMessage(`{"memories":null}`)} {
+		if _, err := withBody(raw).ReconcileKeyMemories(context.Background(), input, documents, nil, []string{"preferences"}); err == nil {
+			t.Fatal("invalid key memory output accepted")
+		}
 	}
 }
 
-func TestSummarizeConversationAndHelpers(t *testing.T) {
-	t.Parallel()
-
-	summary := summarizeConversation([]domain.UnifiedMessage{
-		{Role: domain.RoleSystem, Text: "ignore me"},
-		{Role: domain.RoleUser, Text: "We hit an incident during rollout and need a rollback plan."},
-		{Role: domain.RoleAssistant, Text: "Let's confirm the owner and retry safely."},
-	})
-	if !strings.Contains(strings.ToLower(summary), "incident") {
-		t.Fatalf("expected summary to include user content, got %q", summary)
+func TestFactValidityUsesInstantsAcrossTimeZones(t *testing.T) {
+	input := sourceInput()
+	raw := modelExtraction(t, input)
+	var extracted Extraction
+	if err := json.Unmarshal(raw, &extracted); err != nil {
+		t.Fatal(err)
 	}
-
-	impression, metadata := inferImpression(summary)
-	if !strings.Contains(strings.ToLower(impression), "problem-solving") {
-		t.Fatalf("expected operational/problem-solving impression, got %q", impression)
-	}
-	if metadata["evaluation"] != "problem_solving" {
-		t.Fatalf("unexpected evaluation metadata: %v", metadata["evaluation"])
-	}
-
-	if got := leadingSentence("First sentence. Second sentence."); got != "First sentence" {
-		t.Fatalf("unexpected leading sentence: %q", got)
-	}
-	if got := truncate("abcdef", 4); got != "abcd..." {
-		t.Fatalf("unexpected truncated string: %q", got)
-	}
-	if got := firstNonEmpty("", "alpha", "beta"); got != "alpha" {
-		t.Fatalf("unexpected first non-empty value: %q", got)
+	for _, tc := range []struct {
+		from, to string
+		valid    bool
+	}{
+		{"2026-10-24T09:00:00+08:00", "2026-10-24T02:00:00Z", true},
+		{"2026-10-24T09:00:00+08:00", "2026-10-24T08:00:00+07:00", false},
+	} {
+		extracted.Facts[0].ValidFrom = tc.from
+		extracted.Facts[0].ValidTo = tc.to
+		raw, _ = json.Marshal(extracted)
+		_, err := withBody(raw).AnalyzeConversation(context.Background(), input)
+		if (err == nil) != tc.valid {
+			t.Fatalf("%s..%s: %v", tc.from, tc.to, err)
+		}
 	}
 }
 
-func TestEntityNodesAreCanonicalAcrossConversations(t *testing.T) {
-	t.Parallel()
-
-	service := NewService()
-	classify := func(conversationID string) domain.MemoryDocument {
-		items := service.ClassifyGenericMemoryItems(Input{
-			UserID:         "user-1",
-			ConversationID: conversationID,
-			Conversation: domain.ConversationRecord{
-				UserID:         "user-1",
-				ConversationID: conversationID,
-				Messages: []domain.UnifiedMessage{{
-					Role:      domain.RoleAssistant,
-					ToolCalls: []domain.ToolCall{{ID: "call-" + conversationID, Name: "inspect_assets"}},
-				}},
-			},
-		}, "The workflow should use inspect_assets.")
-		for _, item := range items {
-			if item.Type == domain.MemoryTypeEntity && metadataString(item.Metadata, "entity_kind") == "tool" {
-				return item
+func TestSummaryMergeBoundsAllRequests(t *testing.T) {
+	input := sourceInput()
+	input.Conversation.Messages = []domain.UnifiedMessage{{Role: domain.RoleUser, Text: strings.Repeat("中文🙂", 15000)}}
+	merges := 0
+	generator := generatorFunc(func(ctx context.Context, r memoryllm.Request) (json.RawMessage, error) {
+		encoded, _ := json.Marshal(r.Input)
+		if len(encoded) > 128*1024 {
+			t.Fatal("unbounded merge input")
+		}
+		if r.Task == "summary.merge" {
+			merges++
+			if len(r.Input.(map[string]any)["chunk_summaries"].([]Summary)) > 4 {
+				t.Fatal("unbounded merge group")
 			}
 		}
-		t.Fatalf("tool entity not found for %s", conversationID)
-		return domain.MemoryDocument{}
-	}
-
-	first := classify("conv-1")
-	second := classify("conv-2")
-	if first.ID != second.ID || first.NodeID != second.NodeID {
-		t.Fatalf("expected canonical entity identity, first=%+v second=%+v", first, second)
-	}
-	if first.Metadata["canonical_key"] != "tool:inspect_assets" {
-		t.Fatalf("unexpected canonical key: %+v", first.Metadata)
+		return json.Marshal(Summary{Summary: strings.Repeat("文", 8000), TopicLabel: "项目", Keywords: []string{}, Importance: 1, DecayFactor: 1})
+	})
+	result, err := NewService(generator).SummarizeConversation(context.Background(), input)
+	if err != nil || result.ChunkCount < 5 || merges < 3 {
+		t.Fatal(result.ChunkCount, merges, err)
 	}
 }

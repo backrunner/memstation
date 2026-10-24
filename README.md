@@ -40,6 +40,8 @@ are ongoing. Organizations, billing and cluster deployment remain future work.
 | **Inspect and correct** | Browse conversations, edit memories, manage users and provider settings, inspect usage and costs, retry jobs and review audit events. |
 | **Operate your own stack** | Transactional outbox, retryable workers, encrypted upstream credentials, hashed API keys, OTel/OTLP, health checks and backup/restore drills. |
 
+Semantic memory generation uses the configured LLMs for summaries, facts, impressions, Key Memory consolidation and scoring. Failed model calls or invalid output retry without a heuristic fallback. See [LLM memory generation](docs/llm-memory.md) for configuration and upgrade migrations.
+
 ## How it fits together
 
 ```mermaid

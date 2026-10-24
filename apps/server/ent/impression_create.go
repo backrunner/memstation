@@ -156,6 +156,12 @@ func (_c *ImpressionCreate) SetDescription(v string) *ImpressionCreate {
 	return _c
 }
 
+// SetMetadata sets the "metadata" field.
+func (_c *ImpressionCreate) SetMetadata(v map[string]interface{}) *ImpressionCreate {
+	_c.mutation.SetMetadata(v)
+	return _c
+}
+
 // Mutation returns the ImpressionMutation object of the builder.
 func (_c *ImpressionCreate) Mutation() *ImpressionMutation {
 	return _c.mutation
@@ -203,6 +209,10 @@ func (_c *ImpressionCreate) defaults() {
 		v := impression.DefaultGenerationID
 		_c.mutation.SetGenerationID(v)
 	}
+	if _, ok := _c.mutation.Metadata(); !ok {
+		v := impression.DefaultMetadata
+		_c.mutation.SetMetadata(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -227,6 +237,9 @@ func (_c *ImpressionCreate) check() error {
 	}
 	if _, ok := _c.mutation.Description(); !ok {
 		return &ValidationError{Name: "description", err: errors.New(`ent: missing required field "Impression.description"`)}
+	}
+	if _, ok := _c.mutation.Metadata(); !ok {
+		return &ValidationError{Name: "metadata", err: errors.New(`ent: missing required field "Impression.metadata"`)}
 	}
 	return nil
 }
@@ -301,6 +314,10 @@ func (_c *ImpressionCreate) createSpec() (*Impression, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Description(); ok {
 		_spec.SetField(impression.FieldDescription, field.TypeString, value)
 		_node.Description = value
+	}
+	if value, ok := _c.mutation.Metadata(); ok {
+		_spec.SetField(impression.FieldMetadata, field.TypeJSON, value)
+		_node.Metadata = value
 	}
 	return _node, _spec
 }

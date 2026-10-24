@@ -46,7 +46,4 @@ func TestBuildSegmentsCreatesOrderedOverlappingDialogueWindows(t *testing.T) {
 	if !strings.Contains(segments[0].Content, "user: u1") || !strings.Contains(segments[0].Content, "assistant: a2") {
 		t.Fatalf("unexpected segment content: %q", segments[0].Content)
 	}
-	if got := SummarizeSegments(segments); got == "" {
-		t.Fatal("expected segment summary to be non-empty")
-	}
 }

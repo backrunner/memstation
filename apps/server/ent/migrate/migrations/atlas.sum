@@ -1,4 +1,4 @@
-h1:amF0I8IzOvbQnlM5wI54u4QBKAQLmgX18s1axMjIlSg=
+h1:Vu3zicmYCzsqJB5dzZ0wtSSSGANnQeV+z94MiOPzKFY=
 202603160001_init.sql h1:ecZzJiW+oq76K0Huh5JvCblYWZkn0IA1m2ZmPEYoi+A=
 202603220001_conversation_segments.sql h1:pJyav1BaIrN3+3LGiqMXyHsVJtDMGp9TbIl6sCpT6Og=
 202604080001_memory_rebuild.sql h1:NkMTZr8zkRgiZvUskf8qdxkBPNbPk1lWDiPIz+rcipQ=
@@ -16,3 +16,7 @@ h1:amF0I8IzOvbQnlM5wI54u4QBKAQLmgX18s1axMjIlSg=
 202610240002_conversation_scope.sql h1:DeD9eHACxygUzx1gntA7/eqxU2FHe/xJb7aop4BfupA=
 202610240003_memory_node_scope.sql h1:E8rM5myllFmHmJz+O7sTrZpW+3qvXkG+OwAt7DSKqmk=
 202610240004_generation_media_scope.sql h1:kL2Odr3E6siIA6+LuIQJF13umAuAy7vDasX94AbLsII=
+202610240005_llm_summary_metadata.sql h1:XWbxx5reWZdQ1dSM05ThiVC8x6Fgw62eb8+Gc6r+nRs=
+202610240006_llm_impression_metadata.sql h1:4lindFAApZmiCc0nfwiogf2VKaJKsg86q3qSL34vasY=
+202610240007_llm_fact_metadata.sql h1:hzlFcVhV3FzbAuMObrgohF12lwV6OzPm3XgVzmiABpg=
+202610250001_llm_fact_history_metadata.sql h1:xtKCnO3xVljYLA7upQblwU2+ts5lw+5hja06gvjsDtM=

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -18,11 +19,7 @@ import (
 	memoryservice "memstation/apps/server/internal/service/memory"
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
 	multimodalservice "memstation/apps/server/internal/service/multimodal"
-)
-
-const (
-	summaryChunkMaxTokens     = 6000
-	summaryChunkOverlapTokens = 600
+	"memstation/apps/server/internal/textutil"
 )
 
 type Services struct {
@@ -341,11 +338,17 @@ func handleSummaryGenerate(logger *slog.Logger, services Services) func(context.
 			return err
 		}
 		conversation.Segments = segments
-		summaryText := buildSummary(conversation.Messages, parts, artifacts)
-		if summaryText == "" {
-			summaryText = conversationservice.SummarizeSegments(segments)
+		if services.Analysis == nil {
+			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, true)
+			return fmt.Errorf("memory LLM is not configured")
 		}
-		chunkCount := summaryChunkCount(conversation.Messages, parts, artifacts)
+		generated, err := summarizeWithCheckpoint(ctx, services, analysisservice.Input{UserID: payload.UserID, ConversationID: payload.ConversationID, Conversation: conversation}, scopeStableID(payload.UserID, payload.GenerationID, summaryDocumentID(payload.ConversationID, payload.SummaryVersion)), payload.GenerationID)
+		if err != nil {
+			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, true)
+			return err
+		}
+		summaryText := generated.Summary
+		chunkCount := generated.ChunkCount
 		summaryEvidences := buildNodeEvidences(payload.UserID, payload.GenerationID, "", payload.ConversationID, parts, artifacts, nil, nil)
 		doc := domain.MemoryDocument{
 			ID:             summaryDocumentID(payload.ConversationID, payload.SummaryVersion),
@@ -354,29 +357,34 @@ func handleSummaryGenerate(logger *slog.Logger, services Services) func(context.
 			ConversationID: payload.ConversationID,
 			Type:           domain.MemoryTypeSummary,
 			Content:        summaryText,
-			Importance:     1,
-			DecayFactor:    1,
+			Importance:     generated.Importance,
+			DecayFactor:    generated.DecayFactor,
 			Metadata: map[string]any{
-				"summary_version":          payload.SummaryVersion,
-				"finalize_reason":          payload.FinalizeReason,
-				"topic_label":              summarizeTopic(summaryText),
-				"keywords":                 extractKeywords(summaryText),
-				"segment_count":            len(segments),
-				"segment_strategy":         "dialogue_window_v1",
-				"segment_overlap_messages": conversationservice.DefaultSegmentOptions().Overlap,
-				"summary_chunk_count":      chunkCount,
-				"summary_chunk_max_tokens": summaryChunkMaxTokens,
-				"summary_chunk_overlap":    summaryChunkOverlapTokens,
-				"modalities":               modalitiesFromParts(parts),
-				"evidence_count":           len(summaryEvidences),
-				"source_part_count":        len(parts),
-				"has_source_blob":          hasSourceBlob(parts),
+				"summary_version":             payload.SummaryVersion,
+				"finalize_reason":             payload.FinalizeReason,
+				"topic_label":                 generated.TopicLabel,
+				"keywords":                    generated.Keywords,
+				"extraction_method":           "llm",
+				"_llm_summary_checkpoint":     newSummaryCheckpoint(conversation, generated),
+				"segment_count":               len(segments),
+				"segment_strategy":            "dialogue_window_v1",
+				"segment_overlap_messages":    conversationservice.DefaultSegmentOptions().Overlap,
+				"summary_chunk_count":         chunkCount,
+				"summary_chunk_max_bytes":     16000,
+				"summary_chunk_overlap_bytes": 0,
+				"modalities":                  modalitiesFromParts(parts),
+				"evidence_count":              len(summaryEvidences),
+				"source_part_count":           len(parts),
+				"has_source_blob":             hasSourceBlob(parts),
 			},
 		}
 		doc = applyGenerationToDocument(payload.UserID, payload.GenerationID, doc)
-		applyDocumentScore(ctx, services.Scorer, &doc, conversation.UpdatedAt)
+		if err := applyDocumentScore(ctx, services.Scorer, &doc, conversation.UpdatedAt); err != nil {
+			return err
+		}
 		logger.InfoContext(ctx, "summary stored", "conversation_id", payload.ConversationID)
-		if err := services.Memories.StoreDocument(ctx, doc); err != nil {
+		doc, err = storeSummaryWithCheckpoint(ctx, services, doc)
+		if err != nil {
 			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, true)
 			return err
 		}
@@ -595,10 +603,10 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 		}
 		analyzer := services.Analysis
 		if analyzer == nil {
-			analyzer = analysisservice.NewService()
+			return fmt.Errorf("memory LLM is not configured")
 		}
 
-		result, err := analyzer.AnalyzeConversation(ctx, analysisservice.Input{
+		result, err := analyzeWithCheckpoint(ctx, services, analysisservice.Input{
 			UserID:         payload.UserID,
 			ConversationID: payload.ConversationID,
 			Conversation:   conversation,
@@ -610,7 +618,7 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 			return err
 		}
 		factDocs := result.Facts
-		if len(factDocs) == 0 {
+		if len(factDocs) == 0 && result.Fact.ID != "" {
 			factDocs = []domain.MemoryDocument{result.Fact}
 		}
 		factDocs = append([]domain.MemoryDocument(nil), factDocs...)
@@ -622,7 +630,9 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 		}
 		for idx := range factDocs {
 			factDocs[idx] = applyGenerationToDocument(payload.UserID, payload.GenerationID, factDocs[idx])
-			applyDocumentScore(ctx, services.Scorer, &factDocs[idx], conversation.UpdatedAt)
+			if err := applyDocumentScore(ctx, services.Scorer, &factDocs[idx], conversation.UpdatedAt); err != nil {
+				return err
+			}
 			if err := services.Memories.StoreDocument(ctx, factDocs[idx]); err != nil {
 				markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
 				return err
@@ -635,27 +645,36 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 				}
 			}
 		}
-		result.Fact = factDocs[0]
-		result.Facts = factDocs
-		result.Impression = applyGenerationToDocument(payload.UserID, payload.GenerationID, result.Impression)
-		result.Relations = applyGenerationToRelations(payload.UserID, payload.GenerationID, result.Relations)
-		applyDocumentScore(ctx, services.Scorer, &result.Impression, conversation.UpdatedAt)
-		if err := services.Memories.StoreDocument(ctx, result.Impression); err != nil {
-			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
-			return err
+		if len(factDocs) > 0 {
+			result.Fact = factDocs[0]
 		}
-		if len(summaryEvidences) > 0 {
-			impressionEvidences := groundedNodeEvidences(result.Impression, summaryEvidences)
-			if err := services.Memories.ReplaceEvidences(ctx, payload.UserID, result.Impression.NodeID, impressionEvidences); err != nil {
+		result.Facts = factDocs
+		result.Relations = applyGenerationToRelations(payload.UserID, payload.GenerationID, result.Relations)
+		if result.Impression.ID != "" {
+			result.Impression = applyGenerationToDocument(payload.UserID, payload.GenerationID, result.Impression)
+			if err := applyDocumentScore(ctx, services.Scorer, &result.Impression, conversation.UpdatedAt); err != nil {
+				return err
+			}
+			if err := services.Memories.StoreDocument(ctx, result.Impression); err != nil {
 				markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
 				return err
 			}
+			if len(summaryEvidences) > 0 {
+				impressionEvidences := groundedNodeEvidences(result.Impression, summaryEvidences)
+				if err := services.Memories.ReplaceEvidences(ctx, payload.UserID, result.Impression.NodeID, impressionEvidences); err != nil {
+					markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
+					return err
+				}
+			}
+
 		}
 		genericDocs := append([]domain.MemoryDocument(nil), result.GenericItems...)
 		for idx := range genericDocs {
 			genericDocs[idx] = applyGenerationToDocument(payload.UserID, payload.GenerationID, genericDocs[idx])
 			genericDocs[idx] = mergeCanonicalEntityDocument(ctx, services, genericDocs[idx])
-			applyDocumentScore(ctx, services.Scorer, &genericDocs[idx], conversation.UpdatedAt)
+			if err := applyDocumentScore(ctx, services.Scorer, &genericDocs[idx], conversation.UpdatedAt); err != nil {
+				return err
+			}
 			if err := services.Memories.StoreDocument(ctx, genericDocs[idx]); err != nil {
 				markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
 				return err
@@ -702,21 +721,24 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 		}); err != nil {
 			return err
 		}
-		followups := []domain.TaskMessage{
-			{
-				Type:      TypeEmbeddingGenerate,
-				Queue:     QueueDefault,
-				UniqueKey: TypeEmbeddingGenerate + ":" + payload.GenerationID + ":" + result.Impression.NodeID + ":" + itoa(payload.EmbeddingVersion),
-				Payload: map[string]any{
-					"user_id":           payload.UserID,
-					"generation_id":     payload.GenerationID,
-					"node_id":           result.Impression.NodeID,
-					"node_type":         string(result.Impression.Type),
-					"embedding_version": payload.EmbeddingVersion,
-					"embedding_model":   payload.EmbeddingModel,
-					"content":           result.Impression.Content,
+		followups := []domain.TaskMessage{}
+		if result.Impression.ID != "" {
+			followups = []domain.TaskMessage{
+				{
+					Type:      TypeEmbeddingGenerate,
+					Queue:     QueueDefault,
+					UniqueKey: TypeEmbeddingGenerate + ":" + payload.GenerationID + ":" + result.Impression.NodeID + ":" + itoa(payload.EmbeddingVersion),
+					Payload: map[string]any{
+						"user_id":           payload.UserID,
+						"generation_id":     payload.GenerationID,
+						"node_id":           result.Impression.NodeID,
+						"node_type":         string(result.Impression.Type),
+						"embedding_version": payload.EmbeddingVersion,
+						"embedding_model":   payload.EmbeddingModel,
+						"content":           result.Impression.Content,
+					},
 				},
-			},
+			}
 		}
 		for _, factDoc := range result.Facts {
 			followups = append([]domain.TaskMessage{{
@@ -857,43 +879,67 @@ func handleKeyMemoryReconcile(logger *slog.Logger, services Services) func(conte
 			}
 			generationID = generation.GenerationID
 		}
-		if !isAllowedKey(services.AllowedKeyMemoryKeys, "recent_conversation") {
-			return fmt.Errorf("key memory write is not allowed for key %q", "recent_conversation")
+		if services.Analysis == nil {
+			return fmt.Errorf("memory LLM is not configured")
 		}
-		keyMemory := domain.KeyMemory{
-			ID:       keyMemoryID(userID, "recent_conversation"),
-			UserID:   userID,
-			Key:      "recent_conversation",
-			Value:    conversationID,
-			Category: "system",
-			Source:   "worker",
-			Metadata: map[string]any{
-				"node_id":         keyMemoryNodeID(userID, "recent_conversation"),
-				"generation_id":   generationID,
-				"conversation_id": conversationID,
-			},
-		}
-		logger.InfoContext(ctx, "key memory reconciled", "conversation_id", conversationID)
-		if err := services.Memories.UpsertKeyMemory(ctx, keyMemory); err != nil {
+		documents, err := services.Memories.ListDocumentsByConversationInGeneration(ctx, userID, generationID, conversationID)
+		if err != nil {
 			return err
 		}
-		if err := syncConversationKeyMemoryRelations(ctx, services.Memories, keyMemory, conversationID, generationID); err != nil {
+		allowed := []string{}
+		for key := range services.AllowedKeyMemoryKeys {
+			allowed = append(allowed, key)
+		}
+		sort.Strings(allowed)
+		current := []domain.KeyMemory{}
+		for _, key := range allowed {
+			item, found, err := services.Memories.GetKeyMemory(ctx, userID, key)
+			if err != nil {
+				return err
+			}
+			if found {
+				current = append(current, item)
+			}
+		}
+		checkpoint, err := reconcileWithCheckpoint(ctx, services, analysisservice.Input{UserID: userID, ConversationID: conversationID}, documents, current, allowed)
+		if err != nil {
 			return err
+		}
+		candidates := checkpoint.Candidates
+		conditional, ok := services.Memories.(ports.ConditionalMemoryRepository)
+		if !ok {
+			return fmt.Errorf("conditional Key Memory writes are required")
+		}
+		for _, candidate := range candidates {
+			km := domain.KeyMemory{
+				ID: keyMemoryID(userID, candidate.Key), UserID: userID, Key: candidate.Key, Value: candidate.Value, Category: candidate.Category, Source: "llm", ReviewStatus: "approved", Importance: candidate.Importance, DecayFactor: candidate.DecayFactor,
+				Metadata: map[string]any{"node_id": keyMemoryNodeID(userID, candidate.Key), "generation_id": generationID, "conversation_id": conversationID, "extraction_method": "llm", "source_document_ids": candidate.SourceDocumentIDs, "score_reason": "llm_extracted"},
+			}
+			km.Metadata["llm_checkpoint_id"] = checkpoint.ID
+			alreadyStored := false
+			for _, item := range current {
+				if item.Key == candidate.Key && item.Value == candidate.Value && stringValue(item.Metadata, "llm_checkpoint_id") == checkpoint.ID {
+					km = item
+					alreadyStored = true
+					break
+				}
+			}
+			if !alreadyStored {
+				condition := checkpoint.Conditions[candidate.Key]
+				if err := conditional.UpsertKeyMemoryConditional(ctx, km, domain.MemoryWriteCondition{ID: condition.ID, UpdatedAt: condition.UpdatedAt, Create: condition.Create, ActorType: "system", ActorID: "worker"}); err != nil {
+					return err
+				}
+			}
+			if err := syncConversationKeyMemoryRelations(ctx, services.Memories, km, conversationID, generationID); err != nil {
+				return err
+			}
+			recordAudit(ctx, services, domain.AuditEvent{ActorType: "system", ActorID: "worker", Action: "keymemory_reconcile", TargetType: "key_memory", TargetID: km.ID, Payload: map[string]any{"key": km.Key, "conversation_id": conversationID}, CreatedAt: time.Now().UTC()})
 		}
 		if services.InvalidateKeyMemory != nil {
 			services.InvalidateKeyMemory(ctx, userID)
 		}
-		recordAudit(ctx, services, domain.AuditEvent{
-			ActorType:  "system",
-			ActorID:    "worker",
-			Action:     "keymemory_reconcile",
-			TargetType: "key_memory",
-			TargetID:   keyMemory.ID,
-			Payload: map[string]any{
-				"key":             keyMemory.Key,
-				"conversation_id": conversationID,
-			},
-		})
+		logger.InfoContext(ctx, "LLM key memory reconciled", "conversation_id", conversationID, "count", len(candidates))
+
 		return nil
 	}
 }
@@ -913,7 +959,14 @@ func syncConversationKeyMemoryRelations(ctx context.Context, repo ports.MemoryRe
 	if err != nil {
 		return err
 	}
+	allowed := map[string]bool{}
+	for _, id := range stringSliceValue(km.Metadata, "source_document_ids") {
+		allowed[id] = true
+	}
 	for _, doc := range docs {
+		if !allowed[doc.ID] {
+			continue
+		}
 		if doc.NodeID == "" || doc.NodeID == nodeID {
 			continue
 		}
@@ -934,222 +987,6 @@ func syncConversationKeyMemoryRelations(ctx context.Context, repo ports.MemoryRe
 		}
 	}
 	return nil
-}
-
-func buildSummary(messages []domain.UnifiedMessage, parts []domain.MessagePart, artifacts []domain.MessagePartArtifact) string {
-	if chunks := summaryChunks(messages, parts, artifacts); len(chunks) > 1 {
-		return summarizeChunks(chunks)
-	}
-	promptSummary := strings.TrimSpace(conversationservice.BuildMemoryPromptInput(messages))
-	timelineSummary := strings.TrimSpace(conversationservice.SummarizeMessagesWithTimeline(messages, parts, artifacts))
-	switch {
-	case timelineSummary != "" && promptSummary != "" && timelineSummary != promptSummary:
-		if strings.Contains(strings.ToLower(promptSummary), "tool ") || strings.Contains(strings.ToLower(promptSummary), "tool_") {
-			return truncate(timelineSummary+" | "+promptSummary, 700)
-		}
-		return timelineSummary
-	case timelineSummary != "":
-		return timelineSummary
-	case promptSummary != "":
-		return promptSummary
-	}
-	return ""
-}
-
-func summaryChunkCount(messages []domain.UnifiedMessage, parts []domain.MessagePart, artifacts []domain.MessagePartArtifact) int {
-	chunks := summaryChunks(messages, parts, artifacts)
-	if len(chunks) == 0 {
-		return 1
-	}
-	return len(chunks)
-}
-
-func summaryChunks(messages []domain.UnifiedMessage, parts []domain.MessagePart, artifacts []domain.MessagePartArtifact) []string {
-	source := buildSummaryChunkSource(messages, parts, artifacts)
-	if estimateSummaryTokens(source) <= summaryChunkMaxTokens {
-		if strings.TrimSpace(source) == "" {
-			return nil
-		}
-		return []string{source}
-	}
-	return chunkTextByTokens(source, summaryChunkMaxTokens, summaryChunkOverlapTokens)
-}
-
-func buildSummaryChunkSource(messages []domain.UnifiedMessage, parts []domain.MessagePart, artifacts []domain.MessagePartArtifact) string {
-	if len(parts) > 0 {
-		artifactIndex := make(map[string][]domain.MessagePartArtifact, len(parts))
-		for _, artifact := range artifacts {
-			artifactIndex[artifact.PartID] = append(artifactIndex[artifact.PartID], artifact)
-		}
-		lines := make([]string, 0, len(parts))
-		for _, part := range parts {
-			if part.Role == domain.RoleSystem {
-				continue
-			}
-			textParts := make([]string, 0, 1+len(artifactIndex[part.PartID]))
-			for _, artifact := range artifactIndex[part.PartID] {
-				if text := strings.TrimSpace(artifact.TextContent); text != "" {
-					textParts = append(textParts, text)
-				}
-			}
-			if len(textParts) == 0 {
-				if text := strings.TrimSpace(firstNonEmptyWorkerString(part.TextContent, part.RawPayload)); text != "" {
-					textParts = append(textParts, text)
-				}
-			}
-			if len(textParts) == 0 {
-				continue
-			}
-			lines = append(lines, fmt.Sprintf("%s: %s", part.Role, strings.Join(textParts, " | ")))
-		}
-		return strings.Join(lines, "\n")
-	}
-
-	lines := make([]string, 0, len(messages))
-	for _, message := range messages {
-		if message.Role == domain.RoleSystem {
-			continue
-		}
-		text := messageTextForSummaryChunk(message)
-		if text == "" {
-			continue
-		}
-		lines = append(lines, fmt.Sprintf("%s: %s", message.Role, text))
-	}
-	return strings.Join(lines, "\n")
-}
-
-func messageTextForSummaryChunk(message domain.UnifiedMessage) string {
-	parts := make([]string, 0, 1+len(message.Blocks))
-	add := func(value string) {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			return
-		}
-		for _, existing := range parts {
-			if existing == value {
-				return
-			}
-		}
-		parts = append(parts, value)
-	}
-	add(message.Text)
-	for _, block := range message.Blocks {
-		if block.Type == domain.ContentBlockText {
-			add(block.Text)
-		}
-	}
-	if len(message.ToolCalls) > 0 {
-		names := make([]string, 0, len(message.ToolCalls))
-		for _, call := range message.ToolCalls {
-			if name := strings.TrimSpace(firstNonEmptyWorkerString(call.Name, call.ID)); name != "" {
-				names = append(names, name)
-			}
-		}
-		if len(names) > 0 {
-			add("tool calls: " + strings.Join(names, ", "))
-		}
-	}
-	if len(message.ToolResults) > 0 {
-		names := make([]string, 0, len(message.ToolResults))
-		for _, result := range message.ToolResults {
-			if name := strings.TrimSpace(firstNonEmptyWorkerString(result.Name, result.ToolCallID)); name != "" {
-				names = append(names, name)
-			}
-		}
-		if len(names) > 0 {
-			add("tool results: " + strings.Join(names, ", "))
-		}
-	}
-	return strings.Join(parts, " | ")
-}
-
-func chunkTextByTokens(source string, maxTokens int, overlapTokens int) []string {
-	words := strings.Fields(source)
-	if len(words) == 0 {
-		return nil
-	}
-	if maxTokens <= 0 {
-		maxTokens = summaryChunkMaxTokens
-	}
-	if len(words) <= maxTokens && estimateSummaryTokens(source) <= maxTokens {
-		return []string{strings.Join(words, " ")}
-	}
-	if len(words) <= 1 {
-		return chunkTextByChars(source, maxTokens*4, overlapTokens*4)
-	}
-	if overlapTokens < 0 {
-		overlapTokens = 0
-	}
-	if overlapTokens >= maxTokens {
-		overlapTokens = maxTokens / 10
-	}
-	stride := maxTokens - overlapTokens
-	chunks := make([]string, 0, len(words)/stride+1)
-	for start := 0; start < len(words); start += stride {
-		end := min(start+maxTokens, len(words))
-		chunks = append(chunks, strings.Join(words[start:end], " "))
-		if end == len(words) {
-			break
-		}
-	}
-	return chunks
-}
-
-func chunkTextByChars(source string, maxChars int, overlapChars int) []string {
-	source = strings.TrimSpace(source)
-	if source == "" {
-		return nil
-	}
-	if maxChars <= 0 {
-		maxChars = summaryChunkMaxTokens * 4
-	}
-	if len(source) <= maxChars {
-		return []string{source}
-	}
-	if overlapChars < 0 {
-		overlapChars = 0
-	}
-	if overlapChars >= maxChars {
-		overlapChars = maxChars / 10
-	}
-	stride := maxChars - overlapChars
-	chunks := make([]string, 0, len(source)/stride+1)
-	for start := 0; start < len(source); start += stride {
-		end := min(start+maxChars, len(source))
-		chunks = append(chunks, source[start:end])
-		if end == len(source) {
-			break
-		}
-	}
-	return chunks
-}
-
-func summarizeChunks(chunks []string) string {
-	if len(chunks) == 0 {
-		return ""
-	}
-	parts := make([]string, 0, len(chunks))
-	for idx, chunk := range chunks {
-		parts = append(parts, fmt.Sprintf("Chunk %d/%d: %s", idx+1, len(chunks), compactSummaryChunk(chunk)))
-	}
-	return strings.Join(parts, " | ")
-}
-
-func compactSummaryChunk(chunk string) string {
-	chunk = normalizeWhitespace(chunk)
-	if len(chunk) <= 1400 {
-		return chunk
-	}
-	return chunk[:900] + " ... " + chunk[len(chunk)-400:]
-}
-
-func normalizeWhitespace(value string) string {
-	return strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
-}
-
-func estimateSummaryTokens(value string) int {
-	return max(len(strings.Fields(value)), len(value)/4)
 }
 
 func embeddingContentForDocument(doc domain.MemoryDocument) string {
@@ -1177,20 +1014,9 @@ func embeddingContentForDocument(doc domain.MemoryDocument) string {
 	return strings.Join(parts, "\n")
 }
 
-func summarizeTopic(summary string) string {
-	keywords := extractKeywords(summary)
-	if len(keywords) == 0 {
-		return "general"
-	}
-	if len(keywords) > 2 {
-		keywords = keywords[:2]
-	}
-	return strings.Join(keywords, ", ")
-}
-
-func applyDocumentScore(ctx context.Context, scorer *memoryservice.Scorer, doc *domain.MemoryDocument, referenceTime time.Time) {
+func applyDocumentScore(ctx context.Context, scorer *memoryservice.Scorer, doc *domain.MemoryDocument, referenceTime time.Time) error {
 	if doc == nil {
-		return
+		return nil
 	}
 	input := memoryservice.ScoreInput{
 		UserID:         doc.UserID,
@@ -1204,7 +1030,10 @@ func applyDocumentScore(ctx context.Context, scorer *memoryservice.Scorer, doc *
 		Importance:  doc.Importance,
 		DecayFactor: doc.DecayFactor,
 		ActivityAt:  domain.DeriveActivityAt(doc.ActivityAt, referenceTime, referenceTime),
-		Reason:      "preset",
+		Reason:      stringValue(doc.Metadata, "score_reason"),
+	}
+	if score.Reason == "" {
+		score.Reason = "explicit_source"
 	}
 	if score.Importance == 0 {
 		score.Importance = 1
@@ -1212,8 +1041,12 @@ func applyDocumentScore(ctx context.Context, scorer *memoryservice.Scorer, doc *
 	if score.DecayFactor == 0 {
 		score.DecayFactor = 1
 	}
-	if scorer != nil {
-		score = scorer.Score(ctx, input)
+	if scorer != nil && stringValue(doc.Metadata, "extraction_method") != "llm" {
+		var err error
+		score, err = scorer.Score(ctx, input)
+		if err != nil {
+			return err
+		}
 	}
 	doc.Importance = domain.ClampImportance(score.Importance)
 	doc.DecayFactor = domain.ClampDecayFactor(score.DecayFactor)
@@ -1225,27 +1058,7 @@ func applyDocumentScore(ctx context.Context, scorer *memoryservice.Scorer, doc *
 	doc.Metadata["activity_at"] = doc.ActivityAt.Format(time.RFC3339)
 	doc.Metadata["time_tier"] = doc.TimeTier
 	doc.Metadata["score_reason"] = score.Reason
-}
-
-func extractKeywords(summary string) []string {
-	seen := map[string]struct{}{}
-	words := strings.Fields(strings.ToLower(summary))
-	out := make([]string, 0, 5)
-	for _, word := range words {
-		word = strings.Trim(word, ".,;:!?()[]{}\"'")
-		if len(word) < 4 {
-			continue
-		}
-		if _, ok := seen[word]; ok {
-			continue
-		}
-		seen[word] = struct{}{}
-		out = append(out, word)
-		if len(out) == 5 {
-			break
-		}
-	}
-	return out
+	return nil
 }
 
 func cloneMap(value map[string]any) map[string]any {
@@ -1313,10 +1126,14 @@ func currentStoredDocumentForEmbeddingByNode(ctx context.Context, services Servi
 }
 
 func sourceSnapshotVersionValue(metadata map[string]any) int {
+	return intValue(metadata, "source_snapshot_version")
+}
+
+func intValue(metadata map[string]any, key string) int {
 	if len(metadata) == 0 {
 		return 0
 	}
-	switch typed := metadata["source_snapshot_version"].(type) {
+	switch typed := metadata[key].(type) {
 	case int:
 		return typed
 	case int32:
@@ -1338,7 +1155,7 @@ func truncate(value string, limit int) string {
 	if len(value) <= limit {
 		return value
 	}
-	return fmt.Sprintf("%s...", value[:limit])
+	return fmt.Sprintf("%s...", textutil.PrefixBytes(value, limit))
 }
 
 func itoa(value int) string {
@@ -1426,14 +1243,6 @@ func keyMemoryID(userID, key string) string {
 
 func keyMemoryNodeID(userID, key string) string {
 	return fmt.Sprintf("node:keymemory:%s:%s", userID, key)
-}
-
-func isAllowedKey(allowed map[string]struct{}, key string) bool {
-	if len(allowed) == 0 {
-		return false
-	}
-	_, ok := allowed[key]
-	return ok
 }
 
 func recordAudit(ctx context.Context, services Services, event domain.AuditEvent) {

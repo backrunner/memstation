@@ -18,6 +18,7 @@ func (Fact) Fields() []ent.Field {
 		field.String("lineage_group_id").Optional(),
 		field.Int("revision_seq").Default(1),
 		field.String("content"),
+		field.JSON("metadata", map[string]any{}).Default(map[string]any{}),
 		field.Float("confidence").Default(0.8),
 		field.Bool("is_superseded").Default(false),
 		field.String("superseded_by_id").Optional(),

@@ -27,6 +27,8 @@ const (
 	FieldNodeID = "node_id"
 	// FieldSummary holds the string denoting the summary field in the database.
 	FieldSummary = "summary"
+	// FieldMetadata holds the string denoting the metadata field in the database.
+	FieldMetadata = "metadata"
 	// FieldTopicLabel holds the string denoting the topic_label field in the database.
 	FieldTopicLabel = "topic_label"
 	// FieldSummaryVersion holds the string denoting the summary_version field in the database.
@@ -49,6 +51,7 @@ var Columns = []string{
 	FieldConversationID,
 	FieldNodeID,
 	FieldSummary,
+	FieldMetadata,
 	FieldTopicLabel,
 	FieldSummaryVersion,
 	FieldChunkIndex,
@@ -74,6 +77,8 @@ var (
 	UpdateDefaultUpdatedAt func() time.Time
 	// DefaultGenerationID holds the default value on creation for the "generation_id" field.
 	DefaultGenerationID string
+	// DefaultMetadata holds the default value on creation for the "metadata" field.
+	DefaultMetadata map[string]interface{}
 	// DefaultSummaryVersion holds the default value on creation for the "summary_version" field.
 	DefaultSummaryVersion int
 	// DefaultChunkIndex holds the default value on creation for the "chunk_index" field.

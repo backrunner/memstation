@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"memstation/apps/server/internal/domain"
+	"memstation/apps/server/internal/textutil"
 )
 
 const (
@@ -126,51 +127,6 @@ func BuildSegmentsFromTimeline(userID, conversationID string, messages []domain.
 		start = end - overlap
 	}
 	return segments
-}
-
-func SummarizeSegments(segments []domain.ConversationSegment) string {
-	if len(segments) == 0 {
-		return ""
-	}
-	parts := make([]string, 0, len(segments))
-	for _, segment := range segments {
-		text := strings.TrimSpace(segment.Content)
-		if text == "" {
-			continue
-		}
-		parts = append(parts, text)
-	}
-	return truncateSummary(strings.Join(parts, " || "), 400)
-}
-
-func SummarizeMessages(messages []domain.UnifiedMessage) string {
-	return SummarizeMessagesWithTimeline(messages, nil, nil)
-}
-
-func SummarizeMessagesWithTimeline(messages []domain.UnifiedMessage, parts []domain.MessagePart, artifacts []domain.MessagePartArtifact) string {
-	timeline := collectDialogueMessages(messages, parts, artifacts)
-	if len(timeline) > 0 {
-		lines := make([]string, 0, len(timeline))
-		for _, item := range timeline {
-			lines = append(lines, fmt.Sprintf("%s: %s", item.Role, item.Text))
-		}
-		return truncateSummary(strings.Join(lines, " | "), 400)
-	}
-	summaryParts := make([]string, 0, len(messages))
-	for _, message := range messages {
-		if message.Role != domain.RoleUser && message.Role != domain.RoleAssistant && message.Role != domain.RoleTool {
-			continue
-		}
-		contentParts := summarizedMessageParts(message)
-		if len(contentParts) == 0 {
-			continue
-		}
-		summaryParts = append(summaryParts, fmt.Sprintf("%s: %s", message.Role, strings.Join(contentParts, " | ")))
-	}
-	if len(summaryParts) > 0 {
-		return truncateSummary(strings.Join(summaryParts, " | "), 400)
-	}
-	return summarizeMessageEnvelope(messages)
 }
 
 func collectDialogueMessages(messages []domain.UnifiedMessage, parts []domain.MessagePart, artifacts []domain.MessagePartArtifact) []dialogueMessage {
@@ -368,52 +324,6 @@ func segmentEndMS(items []dialogueMessage) int64 {
 	return value
 }
 
-func summarizedMessageParts(message domain.UnifiedMessage) []string {
-	parts := make([]string, 0, 1+len(message.Blocks)+len(message.ToolCalls)+len(message.ToolResults))
-	appendUnique := func(value string) {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			return
-		}
-		for _, existing := range parts {
-			if existing == value {
-				return
-			}
-		}
-		parts = append(parts, value)
-	}
-
-	if digest := memoryPromptTextFromMetadata(message.Metadata); digest != "" {
-		appendUnique(digest)
-		if len(message.ToolCalls) > 0 || len(message.ToolResults) > 0 || hasNonTextBlocks(message.Blocks) {
-			return parts
-		}
-	}
-
-	appendUnique(message.Text)
-	for _, block := range message.Blocks {
-		appendUnique(firstNonEmptyString(block.Text, block.Raw))
-	}
-	for _, call := range message.ToolCalls {
-		name := strings.TrimSpace(call.Name)
-		if name == "" {
-			continue
-		}
-		appendUnique("tool call: " + name)
-	}
-	for _, result := range message.ToolResults {
-		name := strings.TrimSpace(result.Name)
-		if name == "" {
-			name = strings.TrimSpace(result.ToolCallID)
-		}
-		if name == "" {
-			continue
-		}
-		appendUnique("tool result: " + name)
-	}
-	return parts
-}
-
 func summarizeMessageEnvelope(messages []domain.UnifiedMessage) string {
 	if len(messages) == 0 {
 		return "Conversation captured no persisted messages."
@@ -462,7 +372,7 @@ func truncateSummary(value string, limit int) string {
 	if limit <= 0 || len(value) <= limit {
 		return value
 	}
-	return value[:limit] + "..."
+	return textutil.PrefixBytes(value, limit) + "..."
 }
 
 func segmentContentHash(content string) string {

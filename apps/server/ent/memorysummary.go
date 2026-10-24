@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"memstation/apps/server/ent/memorysummary"
 	"strings"
@@ -31,6 +32,8 @@ type MemorySummary struct {
 	NodeID string `json:"node_id,omitempty"`
 	// Summary holds the value of the "summary" field.
 	Summary string `json:"summary,omitempty"`
+	// Metadata holds the value of the "metadata" field.
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
 	// TopicLabel holds the value of the "topic_label" field.
 	TopicLabel string `json:"topic_label,omitempty"`
 	// SummaryVersion holds the value of the "summary_version" field.
@@ -47,6 +50,8 @@ func (*MemorySummary) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case memorysummary.FieldMetadata:
+			values[i] = new([]byte)
 		case memorysummary.FieldID, memorysummary.FieldSummaryVersion, memorysummary.FieldChunkIndex, memorysummary.FieldChunkTotal:
 			values[i] = new(sql.NullInt64)
 		case memorysummary.FieldGenerationID, memorysummary.FieldUserID, memorysummary.FieldConversationID, memorysummary.FieldNodeID, memorysummary.FieldSummary, memorysummary.FieldTopicLabel:
@@ -115,6 +120,14 @@ func (_m *MemorySummary) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field summary", values[i])
 			} else if value.Valid {
 				_m.Summary = value.String
+			}
+		case memorysummary.FieldMetadata:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field metadata", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Metadata); err != nil {
+					return fmt.Errorf("unmarshal field metadata: %w", err)
+				}
 			}
 		case memorysummary.FieldTopicLabel:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -196,6 +209,9 @@ func (_m *MemorySummary) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("summary=")
 	builder.WriteString(_m.Summary)
+	builder.WriteString(", ")
+	builder.WriteString("metadata=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Metadata))
 	builder.WriteString(", ")
 	builder.WriteString("topic_label=")
 	builder.WriteString(_m.TopicLabel)

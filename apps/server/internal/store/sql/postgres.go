@@ -699,6 +699,22 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 	if err = ensureMemoryWorkspaceTx(ctx, tx, doc.UserID); err != nil {
 		return err
 	}
+	if doc.Type == domain.MemoryTypeSummary && doc.Metadata["_llm_summary_checkpoint"] != nil {
+		var metadata []byte
+		err := tx.QueryRowContext(ctx, `SELECT metadata FROM memory_summaries WHERE user_id=$1 AND id=$2`, doc.UserID, doc.ID).Scan(&metadata)
+		if err != nil && !errors.Is(err, sqlpkg.ErrNoRows) {
+			return err
+		}
+		var previous map[string]any
+		if len(metadata) > 0 {
+			if err := json.Unmarshal(metadata, &previous); err != nil {
+				return err
+			}
+		}
+		if sameProcessingCheckpoint(previous["_llm_summary_checkpoint"], doc.Metadata["_llm_summary_checkpoint"]) {
+			return tx.Commit()
+		}
+	}
 
 	_, err = tx.ExecContext(ctx, `
 	        INSERT INTO memory_nodes (id, generation_id, user_id, node_type, entity_id, importance, decay_factor, activity_at, time_tier, embedding_status, created_at, updated_at, workspace_id)
@@ -722,14 +738,15 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 	switch doc.Type {
 	case domain.MemoryTypeSummary:
 		_, err = tx.ExecContext(ctx, `
-            INSERT INTO memory_summaries (id, generation_id, user_id, conversation_id, node_id, summary, topic_label, summary_version, chunk_index, chunk_total, created_at, updated_at)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+            INSERT INTO memory_summaries (id, generation_id, user_id, conversation_id, node_id, summary, topic_label, summary_version, chunk_index, chunk_total, created_at, updated_at, metadata)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
             ON CONFLICT (id) DO UPDATE SET
                 generation_id = EXCLUDED.generation_id,
                 summary = EXCLUDED.summary,
+                metadata = EXCLUDED.metadata,
                 topic_label = EXCLUDED.topic_label,
                 updated_at = EXCLUDED.updated_at
-        `, doc.ID, doc.GenerationID, doc.UserID, doc.ConversationID, doc.NodeID, doc.Content, stringValue(doc.Metadata, "topic_label"), 1, 0, 1, doc.CreatedAt, doc.UpdatedAt)
+        `, doc.ID, doc.GenerationID, doc.UserID, doc.ConversationID, doc.NodeID, doc.Content, stringValue(doc.Metadata, "topic_label"), 1, 0, 1, doc.CreatedAt, doc.UpdatedAt, marshalJSON(doc.Metadata))
 		if err == nil {
 			keywords := stringSlice(doc.Metadata, "keywords")
 			rows := make([]memoryKeywordRow, 0, len(keywords))
@@ -775,15 +792,16 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 			doc.Content, defaultString(stringValue(doc.Metadata, "content_hash"), doc.ID), marshalJSON(doc.Metadata), doc.CreatedAt, doc.UpdatedAt)
 	case domain.MemoryTypeImpression:
 		_, err = tx.ExecContext(ctx, `
-            INSERT INTO impressions (id, generation_id, user_id, conversation_id, node_id, subject, subject_type, evaluation, sentiment, familiarity, description, created_at, updated_at)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+            INSERT INTO impressions (id, generation_id, user_id, conversation_id, node_id, subject, subject_type, evaluation, sentiment, familiarity, description, created_at, updated_at, metadata)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
             ON CONFLICT (id) DO UPDATE SET
                 generation_id = EXCLUDED.generation_id,
                 description = EXCLUDED.description,
+                metadata = EXCLUDED.metadata,
                 subject = EXCLUDED.subject,
                 subject_type = EXCLUDED.subject_type,
                 updated_at = EXCLUDED.updated_at
-        `, doc.ID, doc.GenerationID, doc.UserID, doc.ConversationID, doc.NodeID, stringValue(doc.Metadata, "subject"), stringValue(doc.Metadata, "subject_type"), stringValue(doc.Metadata, "evaluation"), stringValue(doc.Metadata, "sentiment"), stringValue(doc.Metadata, "familiarity"), doc.Content, doc.CreatedAt, doc.UpdatedAt)
+        `, doc.ID, doc.GenerationID, doc.UserID, doc.ConversationID, doc.NodeID, stringValue(doc.Metadata, "subject"), stringValue(doc.Metadata, "subject_type"), stringValue(doc.Metadata, "evaluation"), stringValue(doc.Metadata, "sentiment"), stringValue(doc.Metadata, "familiarity"), doc.Content, doc.CreatedAt, doc.UpdatedAt, marshalJSON(doc.Metadata))
 	case domain.MemoryTypeFact:
 		supersededByIDValue := strings.TrimSpace(stringValue(doc.Metadata, "superseded_by_id"))
 		supersessionStateSpecified := metadataHasKey(doc.Metadata, "superseded_by_id") || metadataHasKey(doc.Metadata, "is_superseded")
@@ -833,7 +851,7 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 				return errors.New("fact supersession cycle detected")
 			}
 		}
-		if validFromSpecified && !supersessionStateSpecified && !incomingIsSuperseded && lineageGroupID != "" && len(supersededIDs) == 0 {
+		if validFromSpecified && !metadataHasKey(doc.Metadata, "supersedes_fact_ids") && !supersessionStateSpecified && !incomingIsSuperseded && lineageGroupID != "" && len(supersededIDs) == 0 {
 			previous, next, nextTime, temporalErr := factTemporalNeighborsTx(ctx, tx, doc)
 			if temporalErr != nil {
 				return temporalErr
@@ -848,7 +866,7 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 				validToSpecified = true
 			}
 		}
-		if !supersessionStateSpecified && !incomingIsSuperseded && lineageGroupID != "" && len(supersededIDs) == 0 && !validFromSpecified {
+		if !metadataHasKey(doc.Metadata, "supersedes_fact_ids") && !supersessionStateSpecified && !incomingIsSuperseded && lineageGroupID != "" && len(supersededIDs) == 0 && !validFromSpecified {
 			lineageHeadIDs, headErr := currentFactLineageHeadIDsTx(ctx, tx, doc.UserID, doc.GenerationID, lineageGroupID, doc.ID)
 			if headErr != nil {
 				return headErr
@@ -864,9 +882,9 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
                 id, generation_id, user_id, conversation_id, node_id,
                 category, subject, fact_key, lineage_group_id, revision_seq,
                 content, confidence, is_superseded, superseded_by_id,
-                valid_from, valid_to, created_at, updated_at
+                valid_from, valid_to, created_at, updated_at, metadata
             )
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$22)
             ON CONFLICT (id) DO UPDATE SET
                 generation_id = EXCLUDED.generation_id,
                 content = EXCLUDED.content,
@@ -876,13 +894,14 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
                 lineage_group_id = COALESCE(NULLIF(EXCLUDED.lineage_group_id, ''), facts.lineage_group_id),
                 revision_seq = CASE WHEN EXCLUDED.revision_seq > 0 THEN EXCLUDED.revision_seq ELSE facts.revision_seq END,
                 confidence = EXCLUDED.confidence,
+                metadata = EXCLUDED.metadata,
                 is_superseded = CASE WHEN $19 THEN EXCLUDED.is_superseded ELSE facts.is_superseded OR EXCLUDED.is_superseded END,
                 superseded_by_id = CASE WHEN $19 THEN EXCLUDED.superseded_by_id ELSE COALESCE(facts.superseded_by_id, EXCLUDED.superseded_by_id) END,
                 valid_from = CASE WHEN $20 THEN EXCLUDED.valid_from ELSE COALESCE(EXCLUDED.valid_from, facts.valid_from) END,
                 valid_to = CASE WHEN $21 THEN EXCLUDED.valid_to ELSE COALESCE(EXCLUDED.valid_to, facts.valid_to) END,
                 updated_at = EXCLUDED.updated_at
             RETURNING COALESCE(superseded_by_id, '')
-		`, doc.ID, doc.GenerationID, doc.UserID, doc.ConversationID, doc.NodeID, stringValue(doc.Metadata, "category"), stringValue(doc.Metadata, "subject"), factKey, lineageGroupID, revisionSeq, doc.Content, floatValue(doc.Metadata, "confidence", 0.8), incomingIsSuperseded, supersededByID, validFrom, validTo, doc.CreatedAt, doc.UpdatedAt, supersessionStateSpecified, validFromSpecified, validToSpecified).Scan(&effectiveSupersededByID)
+		`, doc.ID, doc.GenerationID, doc.UserID, doc.ConversationID, doc.NodeID, stringValue(doc.Metadata, "category"), stringValue(doc.Metadata, "subject"), factKey, lineageGroupID, revisionSeq, doc.Content, floatValue(doc.Metadata, "confidence", 0.8), incomingIsSuperseded, supersededByID, validFrom, validTo, doc.CreatedAt, doc.UpdatedAt, supersessionStateSpecified, validFromSpecified, validToSpecified, marshalJSON(doc.Metadata)).Scan(&effectiveSupersededByID)
 		if err == nil {
 			if err = syncFactKeywordsTx(ctx, tx, doc); err != nil {
 				return err
@@ -1316,7 +1335,7 @@ func (r *PostgresMemoryRepository) listDocumentsInGeneration(ctx context.Context
                        COALESCE(n.activity_at, s.updated_at) AS activity_at,
                        COALESCE(n.time_tier, '') AS time_tier,
                        s.created_at, s.updated_at,
-                       jsonb_build_object(
+                       COALESCE(s.metadata, '{}'::jsonb) || jsonb_build_object(
                            'topic_label', s.topic_label,
                            'keywords', COALESCE((
                                SELECT json_agg(k.keyword ORDER BY k.weight DESC)
@@ -1362,7 +1381,7 @@ func (r *PostgresMemoryRepository) listDocumentsInGeneration(ctx context.Context
                        COALESCE(n.activity_at, i.updated_at) AS activity_at,
                        COALESCE(n.time_tier, '') AS time_tier,
                        i.created_at, i.updated_at,
-                       jsonb_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity) AS metadata,
+                       COALESCE(i.metadata, '{}'::jsonb) || jsonb_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity) AS metadata,
                        'impression' AS memory_type
                 FROM impressions i
                 LEFT JOIN memory_nodes n ON n.user_id = i.user_id AND n.id = i.node_id
@@ -1376,7 +1395,7 @@ func (r *PostgresMemoryRepository) listDocumentsInGeneration(ctx context.Context
                        COALESCE(n.activity_at, f.updated_at) AS activity_at,
                        COALESCE(n.time_tier, '') AS time_tier,
                        f.created_at, f.updated_at,
-                       jsonb_build_object(
+                       COALESCE(f.metadata, '{}'::jsonb) || jsonb_build_object(
                            'category', f.category,
                            'subject', f.subject,
                            'fact_key', f.fact_key,
@@ -1510,7 +1529,7 @@ func (r *PostgresMemoryRepository) ListDocumentsByNodeIDsInGeneration(ctx contex
                    COALESCE(n.activity_at, s.updated_at) AS activity_at,
                    COALESCE(n.time_tier, '') AS time_tier,
                    s.created_at, s.updated_at,
-                   jsonb_build_object(
+                   COALESCE(s.metadata, '{}'::jsonb) || jsonb_build_object(
                        'topic_label', s.topic_label,
                        'keywords', COALESCE((
                            SELECT jsonb_agg(k.keyword ORDER BY k.weight DESC)
@@ -1556,7 +1575,7 @@ func (r *PostgresMemoryRepository) ListDocumentsByNodeIDsInGeneration(ctx contex
                    COALESCE(n.activity_at, i.updated_at) AS activity_at,
                    COALESCE(n.time_tier, '') AS time_tier,
                    i.created_at, i.updated_at,
-                   jsonb_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity) AS metadata,
+                   COALESCE(i.metadata, '{}'::jsonb) || jsonb_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity) AS metadata,
                    'impression' AS memory_type
             FROM memory_nodes n
             JOIN impressions i ON i.user_id = n.user_id AND i.node_id = n.id
@@ -1570,7 +1589,7 @@ func (r *PostgresMemoryRepository) ListDocumentsByNodeIDsInGeneration(ctx contex
                    COALESCE(n.activity_at, f.updated_at) AS activity_at,
                    COALESCE(n.time_tier, '') AS time_tier,
                    f.created_at, f.updated_at,
-                   jsonb_build_object(
+                   COALESCE(f.metadata, '{}'::jsonb) || jsonb_build_object(
                        'category', f.category,
                        'subject', f.subject,
                        'fact_key', f.fact_key,
@@ -1665,7 +1684,7 @@ func (r *PostgresMemoryRepository) listByEntityIDsInGeneration(ctx context.Conte
                    COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1),
                    COALESCE(n.activity_at, s.updated_at), COALESCE(n.time_tier, ''),
                    s.created_at, s.updated_at,
-                   jsonb_build_object(
+                   COALESCE(s.metadata, '{}'::jsonb) || jsonb_build_object(
                        'topic_label', s.topic_label,
                        'keywords', COALESCE((
                            SELECT json_agg(k.keyword ORDER BY k.weight DESC)
@@ -1713,7 +1732,7 @@ func (r *PostgresMemoryRepository) listByEntityIDsInGeneration(ctx context.Conte
                    COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1),
                    COALESCE(n.activity_at, i.updated_at), COALESCE(n.time_tier, ''),
                    i.created_at, i.updated_at,
-                   jsonb_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity),
+                   COALESCE(i.metadata, '{}'::jsonb) || jsonb_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity),
                    'impression'
             FROM impressions i
             JOIN memory_nodes n ON n.user_id = i.user_id AND n.id = i.node_id
@@ -1728,7 +1747,7 @@ func (r *PostgresMemoryRepository) listByEntityIDsInGeneration(ctx context.Conte
                    COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1),
                    COALESCE(n.activity_at, f.updated_at), COALESCE(n.time_tier, ''),
                    f.created_at, f.updated_at,
-                   jsonb_build_object(
+                   COALESCE(f.metadata, '{}'::jsonb) || jsonb_build_object(
                        'category', f.category,
                        'subject', f.subject,
                        'fact_key', f.fact_key,
@@ -1838,7 +1857,7 @@ func (r *PostgresMemoryRepository) ListConversationDocumentsInGeneration(ctx con
                    COALESCE(n.importance, 1) AS importance, COALESCE(n.decay_factor, 1) AS decay_factor,
                    COALESCE(n.activity_at, s.updated_at) AS activity_at, COALESCE(n.time_tier, '') AS time_tier,
                    s.created_at, s.updated_at,
-                   jsonb_build_object(
+                   COALESCE(s.metadata, '{}'::jsonb) || jsonb_build_object(
                        'topic_label', s.topic_label,
                        'keywords', COALESCE((
                            SELECT jsonb_agg(k.keyword ORDER BY k.weight DESC)
@@ -1858,7 +1877,7 @@ func (r *PostgresMemoryRepository) ListConversationDocumentsInGeneration(ctx con
                    COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1),
                    COALESCE(n.activity_at, i.updated_at), COALESCE(n.time_tier, ''),
                    i.created_at, i.updated_at,
-                   jsonb_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity),
+                   COALESCE(i.metadata, '{}'::jsonb) || jsonb_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity),
                    'impression'
             FROM impressions i
             LEFT JOIN memory_nodes n ON n.user_id = i.user_id AND n.id = i.node_id
@@ -1871,7 +1890,7 @@ func (r *PostgresMemoryRepository) ListConversationDocumentsInGeneration(ctx con
                    COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1),
                    COALESCE(n.activity_at, f.updated_at), COALESCE(n.time_tier, ''),
                    f.created_at, f.updated_at,
-                   jsonb_build_object(
+                   COALESCE(f.metadata, '{}'::jsonb) || jsonb_build_object(
                        'category', f.category,
                        'subject', f.subject,
                        'fact_key', f.fact_key,
@@ -2286,7 +2305,7 @@ func (r *PostgresMemoryRepository) listFactsByLineageGroup(ctx context.Context, 
                COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1),
                COALESCE(n.activity_at, f.updated_at), COALESCE(n.time_tier, ''),
                f.created_at, f.updated_at,
-               jsonb_build_object(
+               COALESCE(f.metadata, '{}'::jsonb) || jsonb_build_object(
                    'category', f.category,
                    'subject', f.subject,
                    'fact_key', f.fact_key,

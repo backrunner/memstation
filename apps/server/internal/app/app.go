@@ -41,6 +41,7 @@ import (
 	gatewayservice "memstation/apps/server/internal/service/gateway"
 	memoryservice "memstation/apps/server/internal/service/memory"
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
+	"memstation/apps/server/internal/service/memoryllm"
 	multimodalservice "memstation/apps/server/internal/service/multimodal"
 	providerconfigservice "memstation/apps/server/internal/service/providerconfig"
 	rerankservice "memstation/apps/server/internal/service/rerank"
@@ -273,11 +274,12 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	memories.SetScorer(memoryservice.NewScorer(internalProviderRegistry, settings))
 	memories.SetGenerationService(generations)
 	gateway.SetToolRuntime(gatewayservice.NewToolRuntime(memories, audit, keySet(cfg.KeyMemoryWriteKeys), 3))
+	analysis := analysisservice.NewService(memoryllm.NewClient(internalProviderRegistry, settings, cfg.ProviderTimeout))
 	admin := adminservice.NewService(conversationRepo, mediaRepo, memoryRepo, settings, audit, models)
 	admin.SetGenerationService(generations)
+	admin.SetMemoryProcessor(analysis, cfg.KeyMemoryAutoKeys)
 	usage := usageservice.NewService(dbHandle, conversationRepo)
 	admin.AttachUserRuntime(users, apiKeys, usage)
-	analysis := analysisservice.NewService()
 	sessionManager := security.NewAdminSessionManager(cfg.MasterKey, 8*time.Hour)
 	auth := security.Authenticator{
 		AdminToken:                 cfg.AdminToken,
@@ -398,7 +400,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		Multimodal:           multimodal,
 		Scorer:               memoryservice.NewScorer(internalProviderRegistry, settings),
 		EmbeddingModel:       cfg.EmbeddingModel,
-		AllowedKeyMemoryKeys: keySet(cfg.KeyMemoryWriteKeys),
+		AllowedKeyMemoryKeys: keySet(cfg.KeyMemoryAutoKeys),
 		RecordAudit:          audit.Record,
 		InvalidateKeyMemory:  memories.InvalidateKeyMemoryCache,
 	})

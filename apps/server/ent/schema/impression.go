@@ -18,5 +18,6 @@ func (Impression) Fields() []ent.Field {
 		field.String("sentiment").Optional(),
 		field.String("familiarity").Optional(),
 		field.String("description"),
+		field.JSON("metadata", map[string]any{}).Default(map[string]any{}),
 	}
 }

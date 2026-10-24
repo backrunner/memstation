@@ -156,6 +156,12 @@ func (_c *FactCreate) SetContent(v string) *FactCreate {
 	return _c
 }
 
+// SetMetadata sets the "metadata" field.
+func (_c *FactCreate) SetMetadata(v map[string]interface{}) *FactCreate {
+	_c.mutation.SetMetadata(v)
+	return _c
+}
+
 // SetConfidence sets the "confidence" field.
 func (_c *FactCreate) SetConfidence(v float64) *FactCreate {
 	_c.mutation.SetConfidence(v)
@@ -277,6 +283,10 @@ func (_c *FactCreate) defaults() {
 		v := fact.DefaultRevisionSeq
 		_c.mutation.SetRevisionSeq(v)
 	}
+	if _, ok := _c.mutation.Metadata(); !ok {
+		v := fact.DefaultMetadata
+		_c.mutation.SetMetadata(v)
+	}
 	if _, ok := _c.mutation.Confidence(); !ok {
 		v := fact.DefaultConfidence
 		_c.mutation.SetConfidence(v)
@@ -312,6 +322,9 @@ func (_c *FactCreate) check() error {
 	}
 	if _, ok := _c.mutation.Content(); !ok {
 		return &ValidationError{Name: "content", err: errors.New(`ent: missing required field "Fact.content"`)}
+	}
+	if _, ok := _c.mutation.Metadata(); !ok {
+		return &ValidationError{Name: "metadata", err: errors.New(`ent: missing required field "Fact.metadata"`)}
 	}
 	if _, ok := _c.mutation.Confidence(); !ok {
 		return &ValidationError{Name: "confidence", err: errors.New(`ent: missing required field "Fact.confidence"`)}
@@ -392,6 +405,10 @@ func (_c *FactCreate) createSpec() (*Fact, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Content(); ok {
 		_spec.SetField(fact.FieldContent, field.TypeString, value)
 		_node.Content = value
+	}
+	if value, ok := _c.mutation.Metadata(); ok {
+		_spec.SetField(fact.FieldMetadata, field.TypeJSON, value)
+		_node.Metadata = value
 	}
 	if value, ok := _c.mutation.Confidence(); ok {
 		_spec.SetField(fact.FieldConfidence, field.TypeFloat64, value)

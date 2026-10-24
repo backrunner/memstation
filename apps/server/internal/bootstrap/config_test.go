@@ -5,6 +5,17 @@ import (
 	"testing"
 )
 
+func TestEmptyAutoKeyWhitelistDisablesLLMConsolidation(t *testing.T) {
+	t.Setenv("MEMSTATION_KEY_MEMORY_AUTO_KEYS", "")
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.KeyMemoryAutoKeys) != 0 {
+		t.Fatal("empty whitelist unexpectedly enabled automatic writes", cfg.KeyMemoryAutoKeys)
+	}
+}
+
 func TestLoadConfigRejectsWildcardCredentialedCORSOrigin(t *testing.T) {
 	t.Setenv("MEMSTATION_CORS_ALLOWED_ORIGINS", "*")
 

@@ -17,6 +17,7 @@ import (
 	analysisservice "memstation/apps/server/internal/service/analysis"
 	sqlstore "memstation/apps/server/internal/store/sql"
 	vectorstore "memstation/apps/server/internal/store/vector"
+	"memstation/apps/server/internal/testutil/memoryllmfixture"
 )
 
 type RecoveryOptions struct {
@@ -102,10 +103,10 @@ func RunRecoveryDrill(ctx context.Context, options RecoveryOptions) (RecoveryRep
 		Memories:       memories,
 		Vectors:        vectors,
 		Publisher:      queue,
-		Analysis:       analysisservice.NewService(),
+		Analysis:       analysisservice.NewService(memoryllmfixture.Generator{}),
 		EmbeddingModel: "benchmark-recovery",
 		AllowedKeyMemoryKeys: map[string]struct{}{
-			"recent_conversation": {},
+			"projects": {},
 		},
 	}
 	relay := NewRelay(logger, outbox, queue)

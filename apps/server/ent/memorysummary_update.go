@@ -104,6 +104,12 @@ func (_u *MemorySummaryUpdate) SetNillableSummary(v *string) *MemorySummaryUpdat
 	return _u
 }
 
+// SetMetadata sets the "metadata" field.
+func (_u *MemorySummaryUpdate) SetMetadata(v map[string]interface{}) *MemorySummaryUpdate {
+	_u.mutation.SetMetadata(v)
+	return _u
+}
+
 // SetTopicLabel sets the "topic_label" field.
 func (_u *MemorySummaryUpdate) SetTopicLabel(v string) *MemorySummaryUpdate {
 	_u.mutation.SetTopicLabel(v)
@@ -255,6 +261,9 @@ func (_u *MemorySummaryUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if value, ok := _u.mutation.Summary(); ok {
 		_spec.SetField(memorysummary.FieldSummary, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Metadata(); ok {
+		_spec.SetField(memorysummary.FieldMetadata, field.TypeJSON, value)
+	}
 	if value, ok := _u.mutation.TopicLabel(); ok {
 		_spec.SetField(memorysummary.FieldTopicLabel, field.TypeString, value)
 	}
@@ -372,6 +381,12 @@ func (_u *MemorySummaryUpdateOne) SetNillableSummary(v *string) *MemorySummaryUp
 	if v != nil {
 		_u.SetSummary(*v)
 	}
+	return _u
+}
+
+// SetMetadata sets the "metadata" field.
+func (_u *MemorySummaryUpdateOne) SetMetadata(v map[string]interface{}) *MemorySummaryUpdateOne {
+	_u.mutation.SetMetadata(v)
 	return _u
 }
 
@@ -555,6 +570,9 @@ func (_u *MemorySummaryUpdateOne) sqlSave(ctx context.Context) (_node *MemorySum
 	}
 	if value, ok := _u.mutation.Summary(); ok {
 		_spec.SetField(memorysummary.FieldSummary, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Metadata(); ok {
+		_spec.SetField(memorysummary.FieldMetadata, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.TopicLabel(); ok {
 		_spec.SetField(memorysummary.FieldTopicLabel, field.TypeString, value)

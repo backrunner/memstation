@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"memstation/apps/server/ent/impression"
 	"strings"
@@ -40,7 +41,9 @@ type Impression struct {
 	// Familiarity holds the value of the "familiarity" field.
 	Familiarity string `json:"familiarity,omitempty"`
 	// Description holds the value of the "description" field.
-	Description  string `json:"description,omitempty"`
+	Description string `json:"description,omitempty"`
+	// Metadata holds the value of the "metadata" field.
+	Metadata     map[string]interface{} `json:"metadata,omitempty"`
 	selectValues sql.SelectValues
 }
 
@@ -49,6 +52,8 @@ func (*Impression) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case impression.FieldMetadata:
+			values[i] = new([]byte)
 		case impression.FieldID:
 			values[i] = new(sql.NullInt64)
 		case impression.FieldGenerationID, impression.FieldUserID, impression.FieldConversationID, impression.FieldNodeID, impression.FieldSubject, impression.FieldSubjectType, impression.FieldEvaluation, impression.FieldSentiment, impression.FieldFamiliarity, impression.FieldDescription:
@@ -148,6 +153,14 @@ func (_m *Impression) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Description = value.String
 			}
+		case impression.FieldMetadata:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field metadata", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Metadata); err != nil {
+					return fmt.Errorf("unmarshal field metadata: %w", err)
+				}
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -219,6 +232,9 @@ func (_m *Impression) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("description=")
 	builder.WriteString(_m.Description)
+	builder.WriteString(", ")
+	builder.WriteString("metadata=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Metadata))
 	builder.WriteByte(')')
 	return builder.String()
 }

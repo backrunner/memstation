@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -67,6 +68,7 @@ type Config struct {
 	RerankBlendWeight              float64
 	ProviderTimeout                time.Duration
 	KeyMemoryWriteKeys             []string
+	KeyMemoryAutoKeys              []string
 	RateLimitRPS                   int
 	RateLimitBurst                 int
 	OTLPHTTPEndpoint               string
@@ -154,6 +156,7 @@ func LoadConfig() (Config, error) {
 	bind("rerank_blend_weight", "MEMSTATION_RERANK_BLEND_WEIGHT")
 	bind("provider_timeout_seconds", "MEMSTATION_PROVIDER_TIMEOUT_SECONDS")
 	bind("key_memory_write_keys", "MEMSTATION_KEY_MEMORY_WRITE_KEYS")
+	bind("key_memory_auto_keys", "MEMSTATION_KEY_MEMORY_AUTO_KEYS")
 	bind("rate_limit_rps", "MEMSTATION_RATE_LIMIT_RPS")
 	bind("rate_limit_burst", "MEMSTATION_RATE_LIMIT_BURST")
 	bind("otlp_http_endpoint", "OTEL_EXPORTER_OTLP_ENDPOINT")
@@ -211,6 +214,7 @@ func LoadConfig() (Config, error) {
 	setDefault("rerank_blend_weight", 0.35)
 	setDefault("provider_timeout_seconds", 60)
 	setDefault("key_memory_write_keys", "recent_conversation")
+	setDefault("key_memory_auto_keys", "identity,preferences,projects")
 	setDefault("rate_limit_rps", 20)
 	setDefault("rate_limit_burst", 40)
 	setDefault("log_level", "info")
@@ -237,6 +241,11 @@ func LoadConfig() (Config, error) {
 		"video/quicktime",
 	}, ","))
 
+	// Viper normally ignores empty environment values. This allowlist uses
+	// an explicit empty value to disable automatic memory writes.
+	if value, present := os.LookupEnv("MEMSTATION_KEY_MEMORY_AUTO_KEYS"); present {
+		v.Set("key_memory_auto_keys", value)
+	}
 	cfg := Config{
 		AppName:                        v.GetString("app_name"),
 		Version:                        v.GetString("version"),
@@ -288,6 +297,7 @@ func LoadConfig() (Config, error) {
 		RerankBlendWeight:              v.GetFloat64("rerank_blend_weight"),
 		ProviderTimeout:                time.Duration(v.GetInt("provider_timeout_seconds")) * time.Second,
 		KeyMemoryWriteKeys:             csvList(v.GetString("key_memory_write_keys")),
+		KeyMemoryAutoKeys:              csvList(v.GetString("key_memory_auto_keys")),
 		RateLimitRPS:                   v.GetInt("rate_limit_rps"),
 		RateLimitBurst:                 v.GetInt("rate_limit_burst"),
 		OTLPHTTPEndpoint:               v.GetString("otlp_http_endpoint"),

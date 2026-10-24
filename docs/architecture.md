@@ -30,9 +30,9 @@ MemStation 的业务核心位于 `apps/server`。Manager 独立部署，通过�
 - 时间能力：`importance * time_decay` 排序、`activity_at`、`time_tier`、temporal graph
 - 记忆检索：向量候选 + SQL hydrate + 1-2 hop relation expansion + 混合 key memory 注入
 - 记忆注入：结构化 User Profile / Active Tasks / Relevant Procedures / Relevant Facts / Relevant Events / Relevant Agent Actions / Relevant Artifacts / Relevant Entities / Relevant Memories / Relevant Impressions，上下文装包按 Key Memory、Task、Procedure、Fact、Event、Agent Action、Artifact、Entity、Summary/Segment、Impression 分区优先级执行
-- Fact 写入：fallback extraction 使用规范化 category taxonomy 和轻量多事实输出，按 `fact_key` / `lineage_group_id` / `revision_seq` 聚合版本；supersession 写入必须带明确 lineage 锚点和可解析目标，并在新 fact supersede 旧 fact 时同步 current head、`superseded_by_id` 与专用 `supersedes` 图边
+- Fact 写入：LLM 从原始来源提取事实、语义键和分类，按 `fact_key` / `lineage_group_id` / `revision_seq` 聚合版本；supersession 写入必须带明确 lineage 锚点和可解析目标，并在新 fact supersede 旧 fact 时同步 current head、`superseded_by_id` 与专用 `supersedes` 图边
 - Fact 检索与管理：默认折叠到 current head，搜索 / GraphQL / gRPC / Manager 均返回 lineage metadata，包括 `lineage_path`、`superseded_alias_node_ids` 与 `revision_depth`
-- Summary 写入：长上下文按 `summary_chunk_max_tokens=6000`、`summary_chunk_overlap=600` 进行 chunking，并保留 chunk metadata
+- Summary 写入：LLM 生成摘要、主题、关键词与评分，UTF-8 安全分块，每批来源最多 16,000 bytes，单来源片段最多 12,000 bytes，最多 32 批；多块摘要分层通过 LLM 合并，无规则兜底。详见 [LLM 记忆生成](llm-memory.md)
 - Memory REST：
   - `POST /api/v1/memory/search`
   - `GET /api/v1/memory/keys`

@@ -398,12 +398,15 @@ func (r *InMemoryMemoryRepository) StoreDocument(ctx context.Context, doc domain
 		if shouldKeepExistingSnapshot(existing.Metadata, doc.Metadata) {
 			return nil
 		}
+		if doc.Type == domain.MemoryTypeSummary && sameProcessingCheckpoint(existing.Metadata["_llm_summary_checkpoint"], doc.Metadata["_llm_summary_checkpoint"]) {
+			return nil
+		}
 		doc = preserveFactSupersessionMetadata(doc, existing)
 	}
 	if doc.Type == domain.MemoryTypeFact {
 		supersessionStateSpecified := metadataContainsKey(doc.Metadata, "superseded_by_id") || metadataContainsKey(doc.Metadata, "is_superseded")
 		temporal := metadataTimePtr(doc.Metadata, "valid_from") != nil && factLineageGroupIDFromMetadata(doc.Metadata) != ""
-		if temporal && !supersessionStateSpecified && len(supersededFactIDsFromMetadata(doc.Metadata)) == 0 {
+		if temporal && !metadataContainsKey(doc.Metadata, "supersedes_fact_ids") && !supersessionStateSpecified && len(supersededFactIDsFromMetadata(doc.Metadata)) == 0 {
 			previous, next, nextTime := r.factTemporalNeighborsLocked(doc)
 			if previous != "" {
 				doc.Metadata["supersedes_fact_ids"] = []string{previous}
@@ -414,7 +417,7 @@ func (r *InMemoryMemoryRepository) StoreDocument(ctx context.Context, doc domain
 				doc.Metadata["valid_to"] = nextTime.Format(time.RFC3339Nano)
 			}
 		}
-		if !temporal && !supersessionStateSpecified && !boolMetadataValue(doc.Metadata, "is_superseded") && stringMetadataValue(doc.Metadata, "superseded_by_id") == "" && len(supersededFactIDsFromMetadata(doc.Metadata)) == 0 {
+		if !temporal && !metadataContainsKey(doc.Metadata, "supersedes_fact_ids") && !supersessionStateSpecified && !boolMetadataValue(doc.Metadata, "is_superseded") && stringMetadataValue(doc.Metadata, "superseded_by_id") == "" && len(supersededFactIDsFromMetadata(doc.Metadata)) == 0 {
 			if heads := r.currentFactLineageHeadIDsLocked(doc); len(heads) > 0 {
 				doc.Metadata["supersedes_fact_ids"] = heads
 			}

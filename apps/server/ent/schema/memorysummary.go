@@ -13,6 +13,7 @@ func (MemorySummary) Fields() []ent.Field {
 		field.String("conversation_id"),
 		field.String("node_id").Unique(),
 		field.String("summary"),
+		field.JSON("metadata", map[string]any{}).Default(map[string]any{}),
 		field.String("topic_label").Optional(),
 		field.Int("summary_version").Default(1),
 		field.Int("chunk_index").Default(0),

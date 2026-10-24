@@ -405,6 +405,7 @@ func toProtoRelatedMemories(items []domain.RelatedMemory) []*pb.RelatedMemory {
 }
 
 func toProtoMemoryDocument(item domain.MemoryDocument) *pb.MemoryDocument {
+	item.Metadata = domain.PublicMemoryMetadata(item.Metadata)
 	return &pb.MemoryDocument{
 		Id:             item.ID,
 		NodeId:         item.NodeID,

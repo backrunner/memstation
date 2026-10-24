@@ -204,6 +204,12 @@ func (_u *ImpressionUpdate) SetNillableDescription(v *string) *ImpressionUpdate 
 	return _u
 }
 
+// SetMetadata sets the "metadata" field.
+func (_u *ImpressionUpdate) SetMetadata(v map[string]interface{}) *ImpressionUpdate {
+	_u.mutation.SetMetadata(v)
+	return _u
+}
+
 // Mutation returns the ImpressionMutation object of the builder.
 func (_u *ImpressionUpdate) Mutation() *ImpressionMutation {
 	return _u.mutation
@@ -301,6 +307,9 @@ func (_u *ImpressionUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	}
 	if value, ok := _u.mutation.Description(); ok {
 		_spec.SetField(impression.FieldDescription, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Metadata(); ok {
+		_spec.SetField(impression.FieldMetadata, field.TypeJSON, value)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -498,6 +507,12 @@ func (_u *ImpressionUpdateOne) SetNillableDescription(v *string) *ImpressionUpda
 	return _u
 }
 
+// SetMetadata sets the "metadata" field.
+func (_u *ImpressionUpdateOne) SetMetadata(v map[string]interface{}) *ImpressionUpdateOne {
+	_u.mutation.SetMetadata(v)
+	return _u
+}
+
 // Mutation returns the ImpressionMutation object of the builder.
 func (_u *ImpressionUpdateOne) Mutation() *ImpressionMutation {
 	return _u.mutation
@@ -625,6 +640,9 @@ func (_u *ImpressionUpdateOne) sqlSave(ctx context.Context) (_node *Impression, 
 	}
 	if value, ok := _u.mutation.Description(); ok {
 		_spec.SetField(impression.FieldDescription, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Metadata(); ok {
+		_spec.SetField(impression.FieldMetadata, field.TypeJSON, value)
 	}
 	_node = &Impression{config: _u.config}
 	_spec.Assign = _node.assignValues

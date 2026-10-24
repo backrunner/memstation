@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"memstation/apps/server/internal/domain"
+	"memstation/apps/server/internal/textutil"
 )
 
 const (
@@ -631,5 +632,5 @@ func truncateMiddle(value string, limit int) string {
 	if edge <= 0 {
 		return truncateSummary(value, limit)
 	}
-	return value[:edge] + "..." + value[len(value)-edge:]
+	return textutil.PrefixBytes(value, edge) + "..." + textutil.SuffixBytes(value, edge)
 }

@@ -216,6 +216,8 @@ type UnifiedRequest struct {
 	Provider                     Provider         `json:"provider"`
 	Mode                         Mode             `json:"mode"`
 	Model                        string           `json:"model,omitempty"`
+	MaxOutputTokens              int              `json:"max_output_tokens,omitempty"`
+	JSONOutput                   bool             `json:"-"`
 	Stream                       bool             `json:"stream"`
 	EndConversation              bool             `json:"end_conversation"`
 	InjectContext                bool             `json:"inject_context"`

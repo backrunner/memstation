@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -13,7 +14,6 @@ import (
 	analysisservice "memstation/apps/server/internal/service/analysis"
 	apikeyservice "memstation/apps/server/internal/service/apikey"
 	auditsvc "memstation/apps/server/internal/service/audit"
-	conversationservice "memstation/apps/server/internal/service/conversation"
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
 	settingssvc "memstation/apps/server/internal/service/settings"
 	usageservice "memstation/apps/server/internal/service/usage"
@@ -30,6 +30,8 @@ type Service struct {
 	users         *userservice.Service
 	apiKeys       *apikeyservice.Service
 	usage         *usageservice.Service
+	processor     *analysisservice.Service
+	autoKeys      []string
 	generations   *memorygenservice.Service
 }
 
@@ -207,96 +209,69 @@ func (s *Service) ConversationMemory(ctx context.Context, userID, conversationID
 	}, nil
 }
 
+func (s *Service) SetMemoryProcessor(processor *analysisservice.Service, autoKeys []string) {
+	s.processor = processor
+	s.autoKeys = append([]string{}, autoKeys...)
+}
+
 func (s *Service) PreviewMemory(ctx context.Context, userID, conversationID string, messages []domain.UnifiedMessage) (MemoryPreview, error) {
-	summaryText := previewSummary(messages)
-	keywords := previewKeywords(summaryText)
+	if s.processor == nil {
+		return MemoryPreview{}, fmt.Errorf("memory LLM is not configured")
+	}
+	if conversationID == "" {
+		conversationID = "preview"
+	}
 	now := time.Now().UTC()
-	analysis := analysisservice.NewService()
-	result, err := analysis.AnalyzeConversation(ctx, analysisservice.Input{
-		UserID:         userID,
-		ConversationID: conversationID,
-		Conversation: domain.ConversationRecord{
-			ConversationID: conversationID,
-			UserID:         userID,
-			Messages:       messages,
-		},
-		Summary: domain.MemoryDocument{
-			ID:             "preview:summary:" + conversationID,
-			NodeID:         "preview:node:summary:" + conversationID,
-			UserID:         userID,
-			ConversationID: conversationID,
-			Type:           domain.MemoryTypeSummary,
-			Content:        summaryText,
-			Metadata: map[string]any{
-				"topic_label": previewTopicLabel(keywords),
-				"keywords":    keywords,
-			},
-		},
-	})
+	input := analysisservice.Input{UserID: userID, ConversationID: conversationID, Conversation: domain.ConversationRecord{UserID: userID, ConversationID: conversationID, Messages: messages}}
+	generated, err := s.processor.SummarizeConversation(ctx, input)
 	if err != nil {
 		return MemoryPreview{}, err
 	}
-
-	keyMemoryCandidates := []map[string]any{}
-	if strings.TrimSpace(conversationID) != "" {
-		keyMemoryCandidates = append(keyMemoryCandidates, map[string]any{
-			"key":             "recent_conversation",
-			"value":           conversationID,
-			"source":          "preview",
-			"category":        "system",
-			"status":          "candidate",
-			"importance":      1.4,
-			"decay_factor":    2.2,
-			"activity_at":     now,
-			"time_tier":       domain.ClassifyTimeTier(now, now),
-			"effective_score": 1.4 * domain.TimeDecay(domain.MemoryTypeKeyMemory, now, 2.2, 1.4, now),
-		})
+	input.Summary = domain.MemoryDocument{ID: "preview:summary:" + conversationID, NodeID: "preview:node:summary:" + conversationID, UserID: userID, ConversationID: conversationID, Type: domain.MemoryTypeSummary, Content: generated.Summary}
+	input.ExistingFacts, err = s.memories.ListDocuments(ctx, userID, []domain.MemoryType{domain.MemoryTypeFact}, 64)
+	if err != nil {
+		return MemoryPreview{}, err
 	}
-
-	factPreviews := make([]map[string]any, 0, len(result.Facts))
+	result, err := s.processor.AnalyzeConversation(ctx, input)
+	if err != nil {
+		return MemoryPreview{}, err
+	}
+	current := []domain.KeyMemory{}
+	for _, key := range s.autoKeys {
+		item, found, err := s.memories.GetKeyMemory(ctx, userID, key)
+		if err != nil {
+			return MemoryPreview{}, err
+		}
+		if found {
+			current = append(current, item)
+		}
+	}
+	candidates, err := s.processor.ReconcileKeyMemories(ctx, input, result.Facts, current, s.autoKeys)
+	if err != nil {
+		return MemoryPreview{}, err
+	}
+	preview := MemoryPreview{
+		ConversationID: conversationID, SummaryStatus: "preview", AnalysisStatus: "preview", Keywords: generated.Keywords,
+		Summary: map[string]any{"id": input.Summary.ID, "type": "summary", "content": generated.Summary, "topic_label": generated.TopicLabel, "importance": generated.Importance, "decay_factor": generated.DecayFactor, "activity_at": now, "time_tier": domain.ClassifyTimeTier(now, now), "extraction_method": "llm"},
+		Facts:   []map[string]any{}, GenericItems: []map[string]any{}, KeyMemories: []map[string]any{}, Metadata: map[string]any{"message_count": len(messages), "extraction_method": "llm"},
+	}
 	for _, fact := range result.Facts {
-		factPreviews = append(factPreviews, previewFactMap(fact, now))
+		preview.Facts = append(preview.Facts, previewFactMap(fact, now))
 	}
-	genericPreviews := make([]map[string]any, 0, len(result.GenericItems))
+	if result.Fact.ID != "" {
+		preview.Fact = previewFactMap(result.Fact, now)
+	}
+	if result.Impression.ID != "" {
+		doc := result.Impression
+		preview.Impression = map[string]any{"id": doc.ID, "type": doc.Type, "content": doc.Content, "metadata": doc.Metadata, "importance": doc.Importance, "decay_factor": doc.DecayFactor, "activity_at": now, "time_tier": domain.ClassifyTimeTier(now, now)}
+	}
 	for _, item := range result.GenericItems {
-		genericPreviews = append(genericPreviews, previewGenericMemoryItemMap(item, now))
+		preview.GenericItems = append(preview.GenericItems, previewGenericMemoryItemMap(item, now))
 	}
-
-	return MemoryPreview{
-		ConversationID: conversationID,
-		SummaryStatus:  "preview",
-		AnalysisStatus: "preview",
-		Keywords:       keywords,
-		Summary: map[string]any{
-			"id":              "preview:summary:" + conversationID,
-			"type":            "summary",
-			"content":         summaryText,
-			"topic_label":     previewTopicLabel(keywords),
-			"importance":      1.0,
-			"decay_factor":    1.0,
-			"activity_at":     now,
-			"time_tier":       domain.ClassifyTimeTier(now, now),
-			"effective_score": 1.0,
-		},
-		Fact:  previewFactMap(result.Fact, now),
-		Facts: factPreviews,
-		Impression: map[string]any{
-			"id":              result.Impression.ID,
-			"type":            result.Impression.Type,
-			"content":         result.Impression.Content,
-			"metadata":        result.Impression.Metadata,
-			"importance":      result.Impression.Importance,
-			"decay_factor":    result.Impression.DecayFactor,
-			"activity_at":     now,
-			"time_tier":       domain.ClassifyTimeTier(now, now),
-			"effective_score": result.Impression.Importance * domain.TimeDecay(domain.MemoryTypeImpression, now, result.Impression.DecayFactor, result.Impression.Importance, now),
-		},
-		GenericItems: genericPreviews,
-		KeyMemories:  keyMemoryCandidates,
-		Metadata: map[string]any{
-			"message_count": len(messages),
-		},
-	}, nil
+	for _, candidate := range candidates {
+		preview.KeyMemories = append(preview.KeyMemories, map[string]any{"key": candidate.Key, "value": candidate.Value, "category": candidate.Category, "source": "llm", "status": "candidate", "importance": candidate.Importance, "decay_factor": candidate.DecayFactor, "source_document_ids": candidate.SourceDocumentIDs})
+	}
+	return preview, nil
 }
 
 func previewGenericMemoryItemMap(item domain.MemoryDocument, now time.Time) map[string]any {
@@ -512,41 +487,6 @@ func countDocumentsByType(ctx context.Context, repo ports.MemoryRepository, gene
 		return 0
 	}
 	return len(items)
-}
-
-func previewSummary(messages []domain.UnifiedMessage) string {
-	return conversationservice.SummarizeMessages(messages)
-}
-
-func previewKeywords(summary string) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, 5)
-	for _, part := range strings.Fields(strings.ToLower(summary)) {
-		part = strings.Trim(part, ".,;:!?()[]{}\"'")
-		if len(part) < 4 {
-			continue
-		}
-		if _, ok := seen[part]; ok {
-			continue
-		}
-		seen[part] = struct{}{}
-		out = append(out, part)
-		if len(out) == 5 {
-			break
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-func previewTopicLabel(keywords []string) string {
-	if len(keywords) == 0 {
-		return "general"
-	}
-	if len(keywords) > 2 {
-		keywords = keywords[:2]
-	}
-	return strings.Join(keywords, ", ")
 }
 
 func anyString(value any) string {

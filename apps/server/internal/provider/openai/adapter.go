@@ -129,6 +129,12 @@ func (a *Adapter) completeChat(ctx context.Context, req domain.UnifiedRequest, c
 		"messages": buildMessages(req.Messages),
 		"stream":   false,
 	}
+	if req.MaxOutputTokens > 0 {
+		payload["max_tokens"] = req.MaxOutputTokens
+	}
+	if req.JSONOutput {
+		payload["response_format"] = map[string]any{"type": "json_object"}
+	}
 	if len(req.Tools) > 0 {
 		payload["tools"] = buildTools(req.Tools)
 	}
@@ -205,6 +211,12 @@ func (a *Adapter) completeResponses(ctx context.Context, req domain.UnifiedReque
 		"model":  req.Model,
 		"input":  buildResponsesInput(req.Messages),
 		"stream": false,
+	}
+	if req.MaxOutputTokens > 0 {
+		payload["max_output_tokens"] = req.MaxOutputTokens
+	}
+	if req.JSONOutput {
+		payload["text"] = map[string]any{"format": map[string]any{"type": "json_object"}}
 	}
 	if len(req.Tools) > 0 {
 		payload["tools"] = buildResponsesTools(req.Tools)

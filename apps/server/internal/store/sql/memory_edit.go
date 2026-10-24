@@ -16,7 +16,11 @@ func lockKeyMemoryEditTx(ctx context.Context, tx *sql.Tx, user, key string) erro
 }
 
 func memoryEditEvent(user, action, kind, id string, condition *domain.MemoryWriteCondition) domain.AuditEvent {
-	return domain.AuditEvent{ID: uuid.NewString(), ActorType: "admin", ActorID: "admin", Action: action, TargetType: kind, TargetID: id, CreatedAt: time.Now().UTC(), Payload: map[string]any{"user_id": user, "workspace_id": domain.PersonalWorkspaceID(user), "generation_id": condition.GenerationID, "expected_updated_at": condition.UpdatedAt}}
+	actorType, actorID := "admin", "admin"
+	if condition.ActorType != "" && condition.ActorID != "" {
+		actorType, actorID = condition.ActorType, condition.ActorID
+	}
+	return domain.AuditEvent{ID: uuid.NewString(), ActorType: actorType, ActorID: actorID, Action: action, TargetType: kind, TargetID: id, CreatedAt: time.Now().UTC(), Payload: map[string]any{"user_id": user, "workspace_id": domain.PersonalWorkspaceID(user), "generation_id": condition.GenerationID, "expected_updated_at": condition.UpdatedAt}}
 }
 
 func memoryEditAuditTx(ctx context.Context, tx *sql.Tx, user, action, kind, id string, condition *domain.MemoryWriteCondition) error {

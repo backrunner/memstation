@@ -86,6 +86,12 @@ func (_c *MemorySummaryCreate) SetSummary(v string) *MemorySummaryCreate {
 	return _c
 }
 
+// SetMetadata sets the "metadata" field.
+func (_c *MemorySummaryCreate) SetMetadata(v map[string]interface{}) *MemorySummaryCreate {
+	_c.mutation.SetMetadata(v)
+	return _c
+}
+
 // SetTopicLabel sets the "topic_label" field.
 func (_c *MemorySummaryCreate) SetTopicLabel(v string) *MemorySummaryCreate {
 	_c.mutation.SetTopicLabel(v)
@@ -189,6 +195,10 @@ func (_c *MemorySummaryCreate) defaults() {
 		v := memorysummary.DefaultGenerationID
 		_c.mutation.SetGenerationID(v)
 	}
+	if _, ok := _c.mutation.Metadata(); !ok {
+		v := memorysummary.DefaultMetadata
+		_c.mutation.SetMetadata(v)
+	}
 	if _, ok := _c.mutation.SummaryVersion(); !ok {
 		v := memorysummary.DefaultSummaryVersion
 		_c.mutation.SetSummaryVersion(v)
@@ -225,6 +235,9 @@ func (_c *MemorySummaryCreate) check() error {
 	}
 	if _, ok := _c.mutation.Summary(); !ok {
 		return &ValidationError{Name: "summary", err: errors.New(`ent: missing required field "MemorySummary.summary"`)}
+	}
+	if _, ok := _c.mutation.Metadata(); !ok {
+		return &ValidationError{Name: "metadata", err: errors.New(`ent: missing required field "MemorySummary.metadata"`)}
 	}
 	if _, ok := _c.mutation.SummaryVersion(); !ok {
 		return &ValidationError{Name: "summary_version", err: errors.New(`ent: missing required field "MemorySummary.summary_version"`)}
@@ -288,6 +301,10 @@ func (_c *MemorySummaryCreate) createSpec() (*MemorySummary, *sqlgraph.CreateSpe
 	if value, ok := _c.mutation.Summary(); ok {
 		_spec.SetField(memorysummary.FieldSummary, field.TypeString, value)
 		_node.Summary = value
+	}
+	if value, ok := _c.mutation.Metadata(); ok {
+		_spec.SetField(memorysummary.FieldMetadata, field.TypeJSON, value)
+		_node.Metadata = value
 	}
 	if value, ok := _c.mutation.TopicLabel(); ok {
 		_spec.SetField(memorysummary.FieldTopicLabel, field.TypeString, value)

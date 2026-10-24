@@ -21,6 +21,7 @@ import (
 	blobstore "memstation/apps/server/internal/store/blob"
 	"memstation/apps/server/internal/store/sql"
 	"memstation/apps/server/internal/store/vector"
+	"memstation/apps/server/internal/testutil/memoryllmfixture"
 )
 
 type recordingPublisher struct {
@@ -84,6 +85,7 @@ func TestConversationFinalizeHandlerTransitionsToFinalAndQueuesSummary(t *testin
 	}
 
 	handler := handleConversationFinalize(nilLogger(), Services{
+		Analysis:      analysisservice.NewService(memoryllmfixture.Generator{}),
 		Conversations: conversations,
 		Publisher:     publisher,
 	})
@@ -139,6 +141,7 @@ func TestSummaryGenerateHandlerIsDeterministicAndMarksCompleted(t *testing.T) {
 	}
 
 	handler := handleSummaryGenerate(nilLogger(), Services{
+		Analysis:       analysisservice.NewService(memoryllmfixture.Generator{}),
 		Conversations:  conversations,
 		Memories:       memories,
 		Vectors:        vector.NewPGVectorStore(nil),
@@ -239,6 +242,7 @@ func TestSummaryGenerateHandlerStoresSegmentGraphAndEmbeddings(t *testing.T) {
 	}
 
 	handler := handleSummaryGenerate(nilLogger(), Services{
+		Analysis:       analysisservice.NewService(memoryllmfixture.Generator{}),
 		Conversations:  conversations,
 		Memories:       memories,
 		Vectors:        vector.NewPGVectorStore(nil),
@@ -368,6 +372,7 @@ func TestSummaryGenerateHandlerCompactsToolPayloadsForMemory(t *testing.T) {
 	}
 
 	handler := handleSummaryGenerate(nilLogger(), Services{
+		Analysis:       analysisservice.NewService(memoryllmfixture.Generator{SummaryText: "recall_memory(rollback owner): Rollback owner is Alice; keep the deployment playbook visible."}),
 		Conversations:  conversations,
 		Memories:       memories,
 		Vectors:        vector.NewPGVectorStore(nil),
@@ -435,6 +440,7 @@ func TestSummaryGenerateHandlerRemovesStaleSegmentsAfterRewrite(t *testing.T) {
 	}
 
 	handler := handleSummaryGenerate(nilLogger(), Services{
+		Analysis:       analysisservice.NewService(memoryllmfixture.Generator{}),
 		Conversations:  conversations,
 		Memories:       memories,
 		Vectors:        vectors,
@@ -629,6 +635,7 @@ func TestSummaryGenerateHandlerRemovesStaleSegmentsAfterSideTableRewrite(t *test
 	}
 
 	handler := handleSummaryGenerate(nilLogger(), Services{
+		Analysis:       analysisservice.NewService(memoryllmfixture.Generator{}),
 		Conversations:  conversations,
 		Memories:       memories,
 		Vectors:        vectors,
@@ -702,17 +709,19 @@ func TestKeyMemoryReconcileHandlerEnforcesWhitelistAndAudits(t *testing.T) {
 	}
 
 	denied := handleKeyMemoryReconcile(nilLogger(), Services{
+		Analysis:      analysisservice.NewService(memoryllmfixture.Generator{}),
 		Conversations: conversationsFromRecords(t, "user-1", "conv-1"),
 		Memories:      memories,
 	})
-	if err := denied(ctx, newTask(t, TypeKeyMemoryReconcile, map[string]any{
-		"user_id":         "user-1",
-		"conversation_id": "conv-1",
-	})); err == nil {
-		t.Fatal("expected reconcile to fail when whitelist is empty")
+	if err := denied(ctx, newTask(t, TypeKeyMemoryReconcile, map[string]any{"user_id": "user-1", "conversation_id": "conv-1"})); err != nil {
+		t.Fatal(err)
+	}
+	if keys, err := memories.ListKeyMemories(ctx, "user-1", 10); err != nil || len(keys) != 0 {
+		t.Fatal("disabled auto keys generated memory", keys, err)
 	}
 
 	allowed := handleKeyMemoryReconcile(nilLogger(), Services{
+		Analysis:      analysisservice.NewService(memoryllmfixture.Generator{}),
 		Conversations: conversationsFromRecords(t, "user-1", "conv-1"),
 		Memories:      memories,
 		AllowedKeyMemoryKeys: map[string]struct{}{
@@ -754,8 +763,8 @@ func TestKeyMemoryReconcileHandlerEnforcesWhitelistAndAudits(t *testing.T) {
 			promoted = append(promoted, relation)
 		}
 	}
-	if len(promoted) != 2 {
-		t.Fatalf("expected 2 promoted key memory relations, got %d", len(promoted))
+	if len(promoted) != 1 {
+		t.Fatalf("expected only the cited fact relation, got %d", len(promoted))
 	}
 	for _, relation := range promoted {
 		if relation.RelationType != "promoted_to_key_memory" {
@@ -782,7 +791,7 @@ func TestKeyMemoryReconcileHandlerScopesRelationsToRequestedGeneration(t *testin
 			GenerationID:   currentGenerationID,
 			UserID:         "user-1",
 			ConversationID: "conv-1",
-			Type:           domain.MemoryTypeSummary,
+			Type:           domain.MemoryTypeFact,
 			Content:        "Current generation summary that should stay isolated.",
 		},
 		{
@@ -791,7 +800,7 @@ func TestKeyMemoryReconcileHandlerScopesRelationsToRequestedGeneration(t *testin
 			GenerationID:   candidateGenerationID,
 			UserID:         "user-1",
 			ConversationID: "conv-1",
-			Type:           domain.MemoryTypeSummary,
+			Type:           domain.MemoryTypeFact,
 			Content:        "Candidate generation summary that should be linked.",
 		},
 	} {
@@ -801,6 +810,7 @@ func TestKeyMemoryReconcileHandlerScopesRelationsToRequestedGeneration(t *testin
 	}
 
 	handler := handleKeyMemoryReconcile(nilLogger(), Services{
+		Analysis:      analysisservice.NewService(memoryllmfixture.Generator{}),
 		Conversations: conversationsFromRecords(t, "user-1", "conv-1"),
 		Memories:      memories,
 		AllowedKeyMemoryKeys: map[string]struct{}{
@@ -888,7 +898,7 @@ func TestAnalysisExtractHandlerStoresDerivedDocumentsAndFollowups(t *testing.T) 
 		Conversations:  conversations,
 		Memories:       memories,
 		Publisher:      publisher,
-		Analysis:       analysisservice.NewService(),
+		Analysis:       analysisservice.NewService(memoryllmfixture.Generator{}),
 		EmbeddingModel: "test-embedding",
 	})
 	if err := handler(ctx, newTask(t, TypeAnalysisExtract, AnalysisPayload{
@@ -927,8 +937,8 @@ func TestAnalysisExtractHandlerStoresDerivedDocumentsAndFollowups(t *testing.T) 
 	if conversation.AnalysisStatus != domain.ProcessingStatusCompleted {
 		t.Fatalf("expected completed analysis status, got %s", conversation.AnalysisStatus)
 	}
-	if len(publisher.tasks) != 3 {
-		t.Fatalf("expected 3 follow-up tasks, got %d", len(publisher.tasks))
+	if len(publisher.tasks) != 4 {
+		t.Fatalf("expected embeddings for 3 model-selected memories plus reconciliation, got %d", len(publisher.tasks))
 	}
 }
 
@@ -1013,7 +1023,7 @@ func TestAnalysisExtractHandlerQueuesKeyMemoryForActiveNonCurrentGeneration(t *t
 		Conversations:  conversations,
 		Memories:       memories,
 		Publisher:      publisher,
-		Analysis:       analysisservice.NewService(),
+		Analysis:       analysisservice.NewService(memoryllmfixture.Generator{}),
 		Generations:    generations,
 		EmbeddingModel: "test-embedding",
 	})
@@ -1085,6 +1095,7 @@ func TestMemoryRebuildConversationSkipsSupersededSnapshot(t *testing.T) {
 	}
 
 	handler := handleMemoryRebuildConversation(nilLogger(), Services{
+		Analysis:    analysisservice.NewService(memoryllmfixture.Generator{}),
 		Generations: generations,
 	})
 	if err := handler(ctx, newTask(t, TypeMemoryRebuildConversation, MemoryRebuildConversationPayload{
@@ -1172,6 +1183,7 @@ func TestMemoryRebuildConversationReplaysSnapshotArtifacts(t *testing.T) {
 	}
 
 	handler := handleMemoryRebuildConversation(nilLogger(), Services{
+		Analysis:    analysisservice.NewService(memoryllmfixture.Generator{GenericTypes: []string{"artifact"}, PreferLastSource: true}),
 		Generations: generations,
 		Memories:    memories,
 		Vectors:     vectors,
@@ -1270,7 +1282,7 @@ func TestAnalysisExtractHandlerSelectsSummaryDocumentByType(t *testing.T) {
 		Conversations:  conversations,
 		Memories:       memories,
 		Publisher:      publisher,
-		Analysis:       analysisservice.NewService(),
+		Analysis:       analysisservice.NewService(memoryllmfixture.Generator{}),
 		EmbeddingModel: "test-embedding",
 	})
 	if err := handler(ctx, newTask(t, TypeAnalysisExtract, AnalysisPayload{
@@ -1322,6 +1334,7 @@ func TestConversationFinalizeHandlerSkipsMemoryPipelineWhenPersistDisabled(t *te
 	}
 
 	handler := handleConversationFinalize(nilLogger(), Services{
+		Analysis:      analysisservice.NewService(memoryllmfixture.Generator{}),
 		Conversations: conversations,
 		Publisher:     publisher,
 	})
@@ -1408,6 +1421,7 @@ func TestEmbeddingHandlersAndHelpers(t *testing.T) {
 	}
 
 	mux := NewServeMux(nilLogger(), Services{
+		Analysis:      analysisservice.NewService(memoryllmfixture.Generator{}),
 		Conversations: conversationsFromRecords(t, "user-1", "conv-helper"),
 		Memories:      repo,
 		Vectors:       vectors,
@@ -1417,19 +1431,6 @@ func TestEmbeddingHandlersAndHelpers(t *testing.T) {
 		t.Fatal("expected serve mux")
 	}
 
-	if got := buildSummary([]domain.UnifiedMessage{
-		{Role: domain.RoleSystem, Text: "ignore"},
-		{Role: domain.RoleUser, Text: "Need a release checklist."},
-		{Role: domain.RoleAssistant, Text: "Let's capture the owner."},
-	}, nil, nil); got == "" {
-		t.Fatal("expected non-empty summary helper output")
-	}
-	if got := summarizeTopic("Release checklist ownership release checklist"); got == "" {
-		t.Fatal("expected non-empty topic summary")
-	}
-	if len(extractKeywords("Release checklist ownership checklist rollback owner")) == 0 {
-		t.Fatal("expected extracted keywords")
-	}
 	if got := truncate("abcdef", 4); got != "abcd..." {
 		t.Fatalf("unexpected truncate result: %q", got)
 	}
@@ -1447,24 +1448,6 @@ func TestEmbeddingHandlersAndHelpers(t *testing.T) {
 	}
 	if conversationMemoryPersistEnabled(domain.ConversationRecord{Metadata: map[string]any{"memory_persist_enabled": "false"}}) {
 		t.Fatal("expected string false metadata to disable memory persistence")
-	}
-}
-
-func TestBuildSummaryChunksLongInputs(t *testing.T) {
-	t.Parallel()
-
-	longText := strings.Repeat("alpha ", summaryChunkMaxTokens+100) + "tail_marker"
-	messages := []domain.UnifiedMessage{{Role: domain.RoleUser, Text: longText}}
-
-	summary := buildSummary(messages, nil, nil)
-	if !strings.Contains(summary, "Chunk 1/2") || !strings.Contains(summary, "Chunk 2/2") {
-		t.Fatalf("expected chunked summary labels, got %q", summary)
-	}
-	if !strings.Contains(summary, "tail_marker") {
-		t.Fatalf("expected chunk compaction to retain tail content, got %q", summary)
-	}
-	if got := summaryChunkCount(messages, nil, nil); got != 2 {
-		t.Fatalf("expected 2 chunks, got %d", got)
 	}
 }
 
@@ -1494,6 +1477,7 @@ func TestEmbeddingGenerateUsesCurrentStoredDocumentContent(t *testing.T) {
 	}
 
 	handler := handleEmbeddingGenerate(nilLogger(), Services{
+		Analysis: analysisservice.NewService(memoryllmfixture.Generator{}),
 		Memories: repo,
 		Vectors:  vectors,
 	})
@@ -1526,6 +1510,7 @@ func TestEmbeddingGenerateSkipsDeletedDocument(t *testing.T) {
 	generationID := memorygenservice.CurrentGenerationID("user-1")
 
 	handler := handleEmbeddingGenerate(nilLogger(), Services{
+		Analysis: analysisservice.NewService(memoryllmfixture.Generator{}),
 		Memories: repo,
 		Vectors:  vectors,
 	})
@@ -1575,6 +1560,7 @@ func TestMarkConversationFailedAndRecordAuditHelpers(t *testing.T) {
 
 	var recorded []domain.AuditEvent
 	recordAudit(ctx, Services{
+		Analysis: analysisservice.NewService(memoryllmfixture.Generator{}),
 		RecordAudit: func(_ context.Context, event domain.AuditEvent) {
 			recorded = append(recorded, event)
 		},
@@ -1649,6 +1635,7 @@ func TestMultimodalTimelineFeedsSummaryAndEvidence(t *testing.T) {
 	}
 
 	mediaHandler := handleMediaExtract(nilLogger(), Services{
+		Analysis:      analysisservice.NewService(memoryllmfixture.Generator{}),
 		Conversations: conversations,
 		MediaStore:    media,
 		Multimodal:    multimodal,
@@ -1681,6 +1668,7 @@ func TestMultimodalTimelineFeedsSummaryAndEvidence(t *testing.T) {
 	}
 
 	summaryHandler := handleSummaryGenerate(nilLogger(), Services{
+		Analysis:       analysisservice.NewService(memoryllmfixture.Generator{}),
 		Conversations:  conversations,
 		MediaStore:     media,
 		Memories:       memories,
@@ -1762,6 +1750,7 @@ func TestMediaExtractRefreshesRetainedSourceSnapshotWithArtifacts(t *testing.T) 
 	}
 
 	if err := handleConversationFinalize(nilLogger(), Services{
+		Analysis:      analysisservice.NewService(memoryllmfixture.Generator{}),
 		Conversations: conversations,
 		Generations:   generations,
 		Multimodal:    multimodal,
@@ -1790,6 +1779,7 @@ func TestMediaExtractRefreshesRetainedSourceSnapshotWithArtifacts(t *testing.T) 
 	}
 
 	if err := handleMediaExtract(nilLogger(), Services{
+		Analysis:      analysisservice.NewService(memoryllmfixture.Generator{}),
 		Conversations: conversations,
 		Generations:   generations,
 		MediaStore:    media,
@@ -1890,6 +1880,7 @@ func TestToolPayloadMultimodalContentEntersTimeline(t *testing.T) {
 	}
 
 	services := Services{
+		Analysis:       analysisservice.NewService(memoryllmfixture.Generator{GenericTypes: []string{"agent_action", "artifact", "entity"}, ContentByType: map[string]string{"agent_action": "inspect_assets returned the retained report observation."}}),
 		Conversations:  conversations,
 		MediaStore:     media,
 		Memories:       memories,
@@ -1983,8 +1974,8 @@ func TestToolPayloadMultimodalContentEntersTimeline(t *testing.T) {
 		strings.Contains(fmt.Sprint(types[domain.MemoryTypeAgentAction].Metadata), "sk-source-replay") {
 		t.Fatalf("agent action should not retain raw tool result payload: %+v", types[domain.MemoryTypeAgentAction])
 	}
-	if source := types[domain.MemoryTypeArtifact].Metadata["source"]; source != "message_part_artifact" {
-		t.Fatalf("expected artifact memory to come from retained artifact metadata, got %+v", types[domain.MemoryTypeArtifact].Metadata)
+	if source := types[domain.MemoryTypeArtifact].Metadata["source"]; source != "llm" {
+		t.Fatalf("expected artifact memory to retain LLM provenance, got %+v", types[domain.MemoryTypeArtifact].Metadata)
 	}
 	for _, doc := range genericDocs {
 		evidences, err := memories.ListEvidences(ctx, "user-1", doc.NodeID)
@@ -2093,7 +2084,7 @@ func TestAnalysisCleanupRemovesBlobButKeepsArtifactsAndEvidences(t *testing.T) {
 		Memories:       memories,
 		Vectors:        vector.NewPGVectorStore(nil),
 		Publisher:      publisher,
-		Analysis:       analysisservice.NewService(),
+		Analysis:       analysisservice.NewService(memoryllmfixture.Generator{}),
 		Multimodal:     multimodal,
 		EmbeddingModel: "test-embedding",
 	}

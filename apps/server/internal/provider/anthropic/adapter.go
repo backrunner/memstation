@@ -48,6 +48,9 @@ func (a *Adapter) Complete(ctx context.Context, req domain.UnifiedRequest) (*dom
 		"max_tokens": 1024,
 		"messages":   buildMessages(chatMessages),
 	}
+	if req.MaxOutputTokens > 0 {
+		payload["max_tokens"] = req.MaxOutputTokens
+	}
 	if systemText := provider.JoinSystem(systemParts); systemText != "" {
 		payload["system"] = systemText
 	}
@@ -221,6 +224,9 @@ func (a *Adapter) Stream(ctx context.Context, req domain.UnifiedRequest, emit fu
 		"max_tokens": 1024,
 		"stream":     true,
 		"messages":   buildMessages(chatMessages),
+	}
+	if req.MaxOutputTokens > 0 {
+		payload["max_tokens"] = req.MaxOutputTokens
 	}
 	if systemText := provider.JoinSystem(systemParts); systemText != "" {
 		payload["system"] = systemText

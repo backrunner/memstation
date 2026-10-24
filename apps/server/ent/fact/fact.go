@@ -37,6 +37,8 @@ const (
 	FieldRevisionSeq = "revision_seq"
 	// FieldContent holds the string denoting the content field in the database.
 	FieldContent = "content"
+	// FieldMetadata holds the string denoting the metadata field in the database.
+	FieldMetadata = "metadata"
 	// FieldConfidence holds the string denoting the confidence field in the database.
 	FieldConfidence = "confidence"
 	// FieldIsSuperseded holds the string denoting the is_superseded field in the database.
@@ -66,6 +68,7 @@ var Columns = []string{
 	FieldLineageGroupID,
 	FieldRevisionSeq,
 	FieldContent,
+	FieldMetadata,
 	FieldConfidence,
 	FieldIsSuperseded,
 	FieldSupersededByID,
@@ -94,6 +97,8 @@ var (
 	DefaultGenerationID string
 	// DefaultRevisionSeq holds the default value on creation for the "revision_seq" field.
 	DefaultRevisionSeq int
+	// DefaultMetadata holds the default value on creation for the "metadata" field.
+	DefaultMetadata map[string]interface{}
 	// DefaultConfidence holds the default value on creation for the "confidence" field.
 	DefaultConfidence float64
 	// DefaultIsSuperseded holds the default value on creation for the "is_superseded" field.

@@ -45,7 +45,9 @@ func storeSegmentDocuments(ctx context.Context, services Services, segments []do
 	stored := make([]domain.MemoryDocument, 0, len(segments))
 	for idx, segment := range segments {
 		doc := segmentDocument(segment)
-		applyDocumentScore(ctx, services.Scorer, &doc, referenceTime)
+		if err := applyDocumentScore(ctx, services.Scorer, &doc, referenceTime); err != nil {
+			return nil, err
+		}
 		if err := services.Memories.StoreDocument(ctx, doc); err != nil {
 			return nil, err
 		}

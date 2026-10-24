@@ -47,6 +47,17 @@ func (a *Adapter) Complete(ctx context.Context, req domain.UnifiedRequest) (*dom
 	payload := map[string]any{
 		"contents": buildContents(chatMessages),
 	}
+	if req.MaxOutputTokens > 0 {
+		payload["generationConfig"] = map[string]any{"maxOutputTokens": req.MaxOutputTokens}
+	}
+	if req.JSONOutput {
+		config, ok := payload["generationConfig"].(map[string]any)
+		if !ok {
+			config = map[string]any{}
+		}
+		config["responseMimeType"] = "application/json"
+		payload["generationConfig"] = config
+	}
 	if systemText := provider.JoinSystem(systemParts); systemText != "" {
 		payload["systemInstruction"] = map[string]any{
 			"parts": []map[string]any{{"text": systemText}},
@@ -103,6 +114,17 @@ func (a *Adapter) Stream(ctx context.Context, req domain.UnifiedRequest, emit fu
 	systemParts, chatMessages := provider.SplitMessages(req.Messages)
 	payload := map[string]any{
 		"contents": buildContents(chatMessages),
+	}
+	if req.MaxOutputTokens > 0 {
+		payload["generationConfig"] = map[string]any{"maxOutputTokens": req.MaxOutputTokens}
+	}
+	if req.JSONOutput {
+		config, ok := payload["generationConfig"].(map[string]any)
+		if !ok {
+			config = map[string]any{}
+		}
+		config["responseMimeType"] = "application/json"
+		payload["generationConfig"] = config
 	}
 	if systemText := provider.JoinSystem(systemParts); systemText != "" {
 		payload["systemInstruction"] = map[string]any{

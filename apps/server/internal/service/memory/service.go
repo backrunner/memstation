@@ -349,7 +349,10 @@ func (s *Service) upsertKeyMemory(ctx context.Context, km domain.KeyMemory, cond
 		km.CreatedAt = now
 	}
 	km.UpdatedAt = now
-	km = s.applyKeyMemoryScore(ctx, km)
+	km, err = s.applyKeyMemoryScore(ctx, km)
+	if err != nil {
+		return domain.KeyMemory{}, err
+	}
 	if condition == nil {
 		err = s.repo.UpsertKeyMemory(ctx, km)
 	} else if repo, ok := s.repo.(ports.ConditionalMemoryRepository); ok {
@@ -446,7 +449,7 @@ func hasTransactionalMemoryOutbox(repo ports.MemoryRepository) bool {
 	return ok && typed.HasTransactionalMemoryOutbox()
 }
 
-func (s *Service) applyKeyMemoryScore(ctx context.Context, km domain.KeyMemory) domain.KeyMemory {
+func (s *Service) applyKeyMemoryScore(ctx context.Context, km domain.KeyMemory) (domain.KeyMemory, error) {
 	if km.Metadata == nil {
 		km.Metadata = map[string]any{}
 	}
@@ -461,9 +464,19 @@ func (s *Service) applyKeyMemoryScore(ctx context.Context, km domain.KeyMemory) 
 		Metadata:       cloneMetadata(km.Metadata),
 		ReferenceTime:  domain.DeriveActivityAt(km.ActivityAt, km.UpdatedAt, time.Now().UTC()),
 	}
-	score := fallbackScore(input)
-	if s.scorer != nil {
-		score = s.scorer.Score(ctx, input)
+	score := MemoryScore{Importance: km.Importance, DecayFactor: km.DecayFactor, ActivityAt: input.ReferenceTime, Reason: "explicit_write"}
+	if score.Importance == 0 {
+		score.Importance = 1
+	}
+	if score.DecayFactor == 0 {
+		score.DecayFactor = 1
+	}
+	if s.scorer != nil && stringMetadataValue(km.Metadata, "extraction_method") != "llm" {
+		var err error
+		score, err = s.scorer.Score(ctx, input)
+		if err != nil {
+			return domain.KeyMemory{}, err
+		}
 	}
 	km.Importance = score.Importance
 	km.DecayFactor = score.DecayFactor
@@ -473,7 +486,7 @@ func (s *Service) applyKeyMemoryScore(ctx context.Context, km domain.KeyMemory) 
 	km.Metadata["activity_at"] = km.ActivityAt.UTC().Format(time.RFC3339)
 	km.Metadata["time_tier"] = km.TimeTier
 	km.Metadata["score_reason"] = score.Reason
-	return km
+	return km, nil
 }
 
 func (s *Service) InvalidateKeyMemoryCache(ctx context.Context, userID string) {

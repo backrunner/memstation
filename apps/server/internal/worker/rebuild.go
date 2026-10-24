@@ -122,11 +122,15 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 		return 0, err
 	}
 
-	summaryText := buildSummary(snapshot.Messages, snapshot.Parts, snapshot.Artifacts)
-	if summaryText == "" {
-		summaryText = conversationservice.SummarizeSegments(segments)
+	if services.Analysis == nil {
+		return 0, errors.New("memory LLM is not configured")
 	}
-	chunkCount := summaryChunkCount(snapshot.Messages, snapshot.Parts, snapshot.Artifacts)
+	generated, err := summarizeWithCheckpoint(ctx, services, analysisservice.Input{UserID: snapshot.UserID, ConversationID: snapshot.ConversationID, Conversation: conversation}, scopeStableID(snapshot.UserID, generation.GenerationID, summaryDocumentID(snapshot.ConversationID, 1)), generation.GenerationID)
+	if err != nil {
+		return 0, err
+	}
+	summaryText := generated.Summary
+	chunkCount := generated.ChunkCount
 	summaryEvidences := buildNodeEvidences(snapshot.UserID, generation.GenerationID, "", snapshot.ConversationID, snapshot.Parts, snapshot.Artifacts, nil, nil)
 	summaryDoc := applyGenerationToDocument(snapshot.UserID, generation.GenerationID, domain.MemoryDocument{
 		ID:             summaryDocumentID(snapshot.ConversationID, 1),
@@ -135,30 +139,35 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 		ConversationID: snapshot.ConversationID,
 		Type:           domain.MemoryTypeSummary,
 		Content:        summaryText,
-		Importance:     1,
-		DecayFactor:    1,
+		Importance:     generated.Importance,
+		DecayFactor:    generated.DecayFactor,
 		Metadata: mergeMetadata(snapshotMetadata(snapshot), map[string]any{
-			"summary_version":          1,
-			"finalize_reason":          finalizeReason,
-			"topic_label":              summarizeTopic(summaryText),
-			"keywords":                 extractKeywords(summaryText),
-			"segment_count":            len(segments),
-			"segment_strategy":         "dialogue_window_v1",
-			"segment_overlap_messages": conversationservice.DefaultSegmentOptions().Overlap,
-			"summary_chunk_count":      chunkCount,
-			"summary_chunk_max_tokens": summaryChunkMaxTokens,
-			"summary_chunk_overlap":    summaryChunkOverlapTokens,
-			"modalities":               modalitiesFromParts(snapshot.Parts),
-			"evidence_count":           len(summaryEvidences),
-			"source_part_count":        len(snapshot.Parts),
-			"has_source_blob":          hasSourceBlob(snapshot.Parts),
+			"summary_version":             1,
+			"finalize_reason":             finalizeReason,
+			"topic_label":                 generated.TopicLabel,
+			"keywords":                    generated.Keywords,
+			"extraction_method":           "llm",
+			"_llm_summary_checkpoint":     newSummaryCheckpoint(conversation, generated),
+			"segment_count":               len(segments),
+			"segment_strategy":            "dialogue_window_v1",
+			"segment_overlap_messages":    conversationservice.DefaultSegmentOptions().Overlap,
+			"summary_chunk_count":         chunkCount,
+			"summary_chunk_max_bytes":     16000,
+			"summary_chunk_overlap_bytes": 0,
+			"modalities":                  modalitiesFromParts(snapshot.Parts),
+			"evidence_count":              len(summaryEvidences),
+			"source_part_count":           len(snapshot.Parts),
+			"has_source_blob":             hasSourceBlob(snapshot.Parts),
 		}),
 	})
-	applyDocumentScore(ctx, services.Scorer, &summaryDoc, conversation.UpdatedAt)
+	if err := applyDocumentScore(ctx, services.Scorer, &summaryDoc, conversation.UpdatedAt); err != nil {
+		return 0, err
+	}
 	if err := ensureCurrentGenerationSource(ctx, services, snapshot.UserID, generation.GenerationID, snapshot.SnapshotID); err != nil {
 		return 0, err
 	}
-	if err := services.Memories.StoreDocument(ctx, summaryDoc); err != nil {
+	summaryDoc, err = storeSummaryWithCheckpoint(ctx, services, summaryDoc)
+	if err != nil {
 		return 0, err
 	}
 	if err := storeDocumentEvidences(ctx, services, snapshot.UserID, generation.GenerationID, summaryDoc.NodeID, snapshot.ConversationID, summaryEvidences); err != nil {
@@ -171,13 +180,13 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 
 	analyzer := services.Analysis
 	if analyzer == nil {
-		analyzer = analysisservice.NewService()
+		return 0, errors.New("memory LLM is not configured")
 	}
 	existingFacts, err := services.Memories.ListDocumentsInGeneration(ctx, snapshot.UserID, generation.GenerationID, []domain.MemoryType{domain.MemoryTypeFact}, 500)
 	if err != nil {
 		return 0, err
 	}
-	result, err := analyzer.AnalyzeConversation(ctx, analysisservice.Input{
+	result, err := analyzeWithCheckpoint(ctx, services, analysisservice.Input{
 		UserID:         snapshot.UserID,
 		ConversationID: snapshot.ConversationID,
 		Conversation:   conversation,
@@ -188,14 +197,16 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 		return 0, err
 	}
 	factDocs := result.Facts
-	if len(factDocs) == 0 {
+	if len(factDocs) == 0 && result.Fact.ID != "" {
 		factDocs = []domain.MemoryDocument{result.Fact}
 	}
 	factDocs = append([]domain.MemoryDocument(nil), factDocs...)
 	for idx := range factDocs {
 		factDocs[idx] = applyGenerationToDocument(snapshot.UserID, generation.GenerationID, factDocs[idx])
 		factDocs[idx].Metadata = mergeMetadata(factDocs[idx].Metadata, snapshotMetadata(snapshot))
-		applyDocumentScore(ctx, services.Scorer, &factDocs[idx], conversation.UpdatedAt)
+		if err := applyDocumentScore(ctx, services.Scorer, &factDocs[idx], conversation.UpdatedAt); err != nil {
+			return 0, err
+		}
 		if err := services.Memories.StoreDocument(ctx, factDocs[idx]); err != nil {
 			return 0, err
 		}
@@ -206,30 +217,39 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 			}
 		}
 	}
-	result.Fact = factDocs[0]
+	if len(factDocs) > 0 {
+		result.Fact = factDocs[0]
+	}
 	result.Facts = factDocs
-	result.Impression = applyGenerationToDocument(snapshot.UserID, generation.GenerationID, result.Impression)
-	result.Impression.Metadata = mergeMetadata(result.Impression.Metadata, snapshotMetadata(snapshot))
 	result.Relations = applySnapshotMetadataToRelations(snapshot, applyGenerationToRelations(snapshot.UserID, generation.GenerationID, result.Relations))
-	applyDocumentScore(ctx, services.Scorer, &result.Impression, conversation.UpdatedAt)
-	if err := ensureCurrentGenerationSource(ctx, services, snapshot.UserID, generation.GenerationID, snapshot.SnapshotID); err != nil {
-		return 0, err
-	}
-	if err := services.Memories.StoreDocument(ctx, result.Impression); err != nil {
-		return 0, err
-	}
-	if len(summaryEvidences) > 0 {
-		impressionEvidences := groundedNodeEvidences(result.Impression, summaryEvidences)
-		if err := services.Memories.ReplaceEvidences(ctx, snapshot.UserID, result.Impression.NodeID, impressionEvidences); err != nil {
+	if result.Impression.ID != "" {
+		result.Impression = applyGenerationToDocument(snapshot.UserID, generation.GenerationID, result.Impression)
+		result.Impression.Metadata = mergeMetadata(result.Impression.Metadata, snapshotMetadata(snapshot))
+		if err := applyDocumentScore(ctx, services.Scorer, &result.Impression, conversation.UpdatedAt); err != nil {
 			return 0, err
 		}
+		if err := ensureCurrentGenerationSource(ctx, services, snapshot.UserID, generation.GenerationID, snapshot.SnapshotID); err != nil {
+			return 0, err
+		}
+		if err := services.Memories.StoreDocument(ctx, result.Impression); err != nil {
+			return 0, err
+		}
+		if len(summaryEvidences) > 0 {
+			impressionEvidences := groundedNodeEvidences(result.Impression, summaryEvidences)
+			if err := services.Memories.ReplaceEvidences(ctx, snapshot.UserID, result.Impression.NodeID, impressionEvidences); err != nil {
+				return 0, err
+			}
+		}
+
 	}
 	genericDocs := append([]domain.MemoryDocument(nil), result.GenericItems...)
 	for idx := range genericDocs {
 		genericDocs[idx] = applyGenerationToDocument(snapshot.UserID, generation.GenerationID, genericDocs[idx])
 		genericDocs[idx].Metadata = mergeMetadata(genericDocs[idx].Metadata, snapshotMetadata(snapshot))
 		genericDocs[idx] = mergeCanonicalEntityDocument(ctx, services, genericDocs[idx])
-		applyDocumentScore(ctx, services.Scorer, &genericDocs[idx], conversation.UpdatedAt)
+		if err := applyDocumentScore(ctx, services.Scorer, &genericDocs[idx], conversation.UpdatedAt); err != nil {
+			return 0, err
+		}
 		if err := ensureCurrentGenerationSource(ctx, services, snapshot.UserID, generation.GenerationID, snapshot.SnapshotID); err != nil {
 			return 0, err
 		}
@@ -265,7 +285,9 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 	docs = append(docs, summaryDoc)
 	docs = append(docs, segmentDocs...)
 	docs = append(docs, factDocs...)
-	docs = append(docs, result.Impression)
+	if result.Impression.ID != "" {
+		docs = append(docs, result.Impression)
+	}
 	docs = append(docs, genericDocs...)
 	return upsertStoredDocumentEmbeddings(ctx, services, generation, snapshot, docs)
 }

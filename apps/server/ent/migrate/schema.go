@@ -155,6 +155,7 @@ var (
 		{Name: "lineage_group_id", Type: field.TypeString, Nullable: true},
 		{Name: "revision_seq", Type: field.TypeInt, Default: 1},
 		{Name: "content", Type: field.TypeString},
+		{Name: "metadata", Type: field.TypeJSON},
 		{Name: "confidence", Type: field.TypeFloat64, Default: 0.8},
 		{Name: "is_superseded", Type: field.TypeBool, Default: false},
 		{Name: "superseded_by_id", Type: field.TypeString, Nullable: true},
@@ -182,6 +183,7 @@ var (
 		{Name: "sentiment", Type: field.TypeString, Nullable: true},
 		{Name: "familiarity", Type: field.TypeString, Nullable: true},
 		{Name: "description", Type: field.TypeString},
+		{Name: "metadata", Type: field.TypeJSON},
 	}
 	// ImpressionsTable holds the schema information for the "impressions" table.
 	ImpressionsTable = &schema.Table{
@@ -373,6 +375,7 @@ var (
 		{Name: "conversation_id", Type: field.TypeString},
 		{Name: "node_id", Type: field.TypeString, Unique: true},
 		{Name: "summary", Type: field.TypeString},
+		{Name: "metadata", Type: field.TypeJSON},
 		{Name: "topic_label", Type: field.TypeString, Nullable: true},
 		{Name: "summary_version", Type: field.TypeInt, Default: 1},
 		{Name: "chunk_index", Type: field.TypeInt, Default: 0},
