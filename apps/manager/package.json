@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
+    "start": "node server.mjs",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0 --port 3000",
     "lint": "pnpm run generate && pnpm run check && eslint . --max-warnings 0",
@@ -18,6 +19,8 @@
     "format": "pnpm run generate && eslint . --fix"
   },
   "dependencies": {
+    "@lucide/svelte": "1.61.0",
+    "@redis/client": "6.3.0",
     "@sveltejs/adapter-node": "6.0.0",
     "@sveltejs/kit": "3.1.0",
     "bits-ui": "2.20.2",
@@ -26,8 +29,7 @@
     "marked": "18.1.1",
     "shadcn-svelte": "1.7.0",
     "shiki": "4.5.0",
-    "svelte": "5.57.2",
-    "@lucide/svelte": "1.61.0"
+    "svelte": "5.57.2"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -29,11 +29,9 @@
   </div>
   {/snippet}
   {#if filters}
-    <CollapsibleSection title={`Filters${activeCount > 0 ? ` (${activeCount})` : ''}`} variant="toolbar" contentClass="filter-toolbar-options">
+    <CollapsibleSection title="Filters" count={activeCount || undefined} variant="toolbar" contentClass="filter-toolbar-options">
       {#snippet header(trigger)}{@render main(trigger)}{/snippet}
-      {#snippet triggerContent()}
-        <SlidersHorizontal size={14} aria-hidden="true" /> Filters{activeCount > 0 ? ` (${activeCount})` : ''}
-      {/snippet}
+      {#snippet icon()}<SlidersHorizontal size={16} />{/snippet}
       {@render filters()}
     </CollapsibleSection>
   {:else}

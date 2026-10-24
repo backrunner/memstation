@@ -1,6 +1,8 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import MetadataRow from '#lib/components/MetadataRow.svelte';
+  import { workspaceEntryURL } from '#lib/scope/navigation.ts';
   import SelectField from '#lib/components/SelectField.svelte';
   import { onMount } from 'svelte';
 
@@ -68,7 +70,7 @@
 
   $: userItems = [
     { value: 'all', label: 'All users' },
-    ...users.map((user) => ({ value: user.user_id, label: `${user.name} · ${user.user_id}` }))
+    ...users.map((user) => ({ value: user.user_id, label: `${user.name} (${user.user_id})` }))
   ];
 
   $: allConversations = selectedUserId === 'all'
@@ -249,10 +251,10 @@
             {#each topConversations as item}
               <tr>
                 <td>
-                  <a href={`/conversations/${item.conversation_id}?user_id=${item.user_id}`}>
+                  <a href={workspaceEntryURL($selectedTarget?.id, `/conversations/${encodeURIComponent(item.conversation_id)}?user_id=${encodeURIComponent(item.user_id)}`)}>
                     <strong class="mono">{item.conversation_id}</strong>
                   </a>
-                  <div class="subtle-text">{item.protocol} · {item.mode}</div>
+                  <MetadataRow items={[item.protocol, item.mode]} />
                 </td>
                 <td class="mono">{item.user_id}</td>
                 <td class="mono">{item.provider}</td>

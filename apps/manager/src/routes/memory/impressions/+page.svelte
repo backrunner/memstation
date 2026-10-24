@@ -216,7 +216,7 @@
                   <span class="helper-text mono">{impression.id}</span>
                 </div>
                 <div class="inline-group">
-                  <a class="btn-ghost btn-sm" href={memoryDetailHref('impressions', impression.id, activeUserId)}>Open</a>
+                  <a class="btn-ghost btn-sm" href={memoryDetailHref('impressions', impression.id, activeUserId ?? impression.user_id, $selectedTarget?.id)}>Open</a>
                   {#if editingId === impression.id}
                     <Button class="btn-ghost btn-sm" type="button" onclick={cancelEdit}>Cancel</Button>
                     <Button class="btn-primary btn-sm" type="button" disabled={saving} onclick={() => saveEdit(impression)}>

@@ -2,20 +2,19 @@
 
 <script lang="ts">
   import Button from '#lib/components/Button.svelte';
-  import { browser } from '$app/env';
-  import { PUBLIC_MEMSTATION_DEFAULT_TARGET } from '$app/env/public';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import BrandMark from '#lib/components/BrandMark.svelte';
 
   import { fetchHealth, loginAdmin } from '#lib/api/client.ts';
+  import SelectField from '#lib/components/SelectField.svelte';
   import TextInputField from '#lib/components/TextInputField.svelte';
-  import { rememberTargetCredential } from '#lib/targets/credentials.ts';
   import { parseTargetLocator } from '#lib/targets/uri.ts';
   import type { ParsedTargetLocator } from '#lib/targets/uri.ts';
-  import { markTargetSessionConnected, updateSession, upsertTarget } from '#lib/stores/targets.ts';
+  import { availableTargets, markTargetSessionConnected, updateSession, upsertTarget } from '#lib/stores/targets.ts';
 
-  let connectionInput = defaultConnectionInput();
+  let connectionInput = '';
+  let initialTargetSet = false;
   let adminToken = '';
   let label = '';
   let error = '';
@@ -32,19 +31,9 @@
     hydrated = true;
   });
 
-  function defaultConnectionInput(): string {
-    const configuredTarget = PUBLIC_MEMSTATION_DEFAULT_TARGET?.trim();
-    if (configuredTarget) {
-      try {
-        return parseTargetLocator(configuredTarget).target.baseUrl ?? configuredTarget;
-      } catch {
-        return configuredTarget;
-      }
-    }
-    if (browser && window.location.hostname) {
-      return `http://${window.location.hostname}:8080`;
-    }
-    return 'http://127.0.0.1:8080';
+  $: if (hydrated && !initialTargetSet && $availableTargets.length) {
+    connectionInput = $availableTargets[0].baseUrl;
+    initialTargetSet = true;
   }
 
   function inspectLocator(input: string): LocatorPreview {
@@ -84,13 +73,16 @@
         ...resolvedTarget,
         label: label.trim() || resolvedTarget.label
       });
-      rememberTargetCredential(savedTarget.id, resolvedAdminKey);
+      adminToken = '';
+      connectionInput = resolvedTarget.baseUrl;
       markTargetSessionConnected(savedTarget.id, connection.checkedAt);
       updateSession({ authenticated: true, checking: false, checkedAt: connection.checkedAt });
       await goto('/dashboard');
     } catch (cause) {
       error = cause instanceof Error ? cause.message : 'Connection failed';
     } finally {
+      adminToken = '';
+      if (resolvedTarget?.baseUrl) connectionInput = resolvedTarget.baseUrl;
       submitting = false;
     }
   }
@@ -105,7 +97,15 @@
 
     <h1 class="auth-title">Connect target</h1>
 
+    {#if $availableTargets.length === 0}
+      <div class="error-state">No services are enabled in this Manager. Configure a service before connecting.</div>
+    {/if}
     <form class="auth-actions" on:submit|preventDefault={submit}>
+      {#if $availableTargets.length > 1}
+        <SelectField label="Available service" value={$availableTargets.find((item) => item.baseUrl === resolvedTarget?.baseUrl)?.id ?? ''}
+          items={$availableTargets.map((item) => ({ value: item.id, label: item.label }))}
+          onValueChange={(id) => { const target = $availableTargets.find((item) => item.id === id); if (target) { connectionInput = target.baseUrl; label = target.label; adminToken = ''; } }} />
+      {/if}
       <TextInputField
         label="Connection URI or base URL"
         bind:value={connectionInput}
@@ -131,7 +131,7 @@
         <div class="error-state">{error}</div>
       {/if}
 
-      <Button class="btn-primary" type="submit" disabled={!hydrated || submitting}>
+      <Button class="btn-primary" type="submit" disabled={!hydrated || submitting || !$availableTargets.length}>
         {submitting ? 'Connecting…' : 'Connect target'}
       </Button>
     </form>

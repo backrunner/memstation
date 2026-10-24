@@ -1,6 +1,8 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import MetadataRow from '#lib/components/MetadataRow.svelte';
+  import { workspaceEntryURL } from '#lib/scope/navigation.ts';
   import Button from '#lib/components/Button.svelte';
   import { onMount } from 'svelte';
   import { createPageStore } from '#lib/stores/page.ts';
@@ -157,7 +159,7 @@
           <div class="debug-block">
             <div class="sidebar-label">Conversation</div>
             {#if detail.item.conversation_id}
-              <a href={`/conversations/${detail.item.conversation_id}${detail.item.user_id ? `?user_id=${encodeURIComponent(detail.item.user_id)}` : ''}`}>{detail.item.conversation_id}</a>
+              <a href={workspaceEntryURL($selectedTarget?.id, `/conversations/${encodeURIComponent(detail.item.conversation_id)}${detail.item.user_id ? `?user_id=${encodeURIComponent(detail.item.user_id)}` : ''}`)}>{detail.item.conversation_id}</a>
             {:else}
               <div>n/a</div>
             {/if}
@@ -224,7 +226,7 @@
                   <strong>{event.action}</strong>
                   <StatusBadge tone="brand" label={event.created_at ? new Date(event.created_at).toLocaleString() : 'n/a'} />
                 </div>
-                <div class="helper-text">{event.actor_type ?? 'admin'} · {event.actor_id ?? 'unknown'}</div>
+                <MetadataRow items={[event.actor_type ?? 'admin', event.actor_id ?? 'unknown']} />
                 <div style="margin-top: 10px;">
                   <JsonView value={event.payload ?? {}} emptyLabel="No audit payload" />
                 </div>
@@ -241,7 +243,7 @@
   bind:open={rerunConfirmOpen}
   title="Run this task again?"
   description="The selected payload will be republished to its worker queue immediately."
-  subject={detail?.item ? `${detail.item.queue} · ${detail.item.id}` : $page.params.id}
+  subject={detail?.item ? `${detail.item.queue}, ${detail.item.id}` : $page.params.id}
   confirmLabel="Run task now"
   tone="primary"
   busy={actionLoading}

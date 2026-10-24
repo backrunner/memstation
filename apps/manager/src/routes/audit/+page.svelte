@@ -1,6 +1,7 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import MetadataRow from '#lib/components/MetadataRow.svelte';
   import Button from '#lib/components/Button.svelte';
   import { onDestroy, onMount } from 'svelte';
   import { createPageStore } from '#lib/stores/page.ts';
@@ -153,7 +154,7 @@
                 >
                   <td>
                     <Button class="table-select-button mono" type="button" aria-pressed={selected?.id === event.id} onclick={() => (selected = event)}>{event.action}</Button>
-                    <div class="subtle-text">{event.actor_type ?? 'system'} · {event.actor_id ?? 'unknown'}</div>
+                    <MetadataRow items={[event.actor_type ?? 'system', event.actor_id ?? 'unknown']} />
                   </td>
                   <td>
                     <div class="mono">{event.target_type}</div>
@@ -162,7 +163,7 @@
                   <td class="subtle-text no-wrap">{event.created_at ? new Date(event.created_at).toLocaleString() : 'n/a'}</td>
                 </tr>
               {/each}
-              {#if visibleEvents.length === 0}
+              {#if visibleEvents.length === 0 && !loading && !error}
                 <tr>
                   <td colspan="3">
                     <div class="empty-state" style="border: none; padding: 12px 0;">No audit events match the current filter.</div>
@@ -192,7 +193,7 @@
             </div>
             <div>
               <dt>Actor</dt>
-              <dd>{selected.actor_type ?? 'system'} <span class="subtle-text">· {selected.actor_id ?? 'unknown'}</span></dd>
+              <dd><MetadataRow items={[selected.actor_type ?? 'system', selected.actor_id ?? 'unknown']} /></dd>
             </div>
             <div>
               <dt>Created</dt>

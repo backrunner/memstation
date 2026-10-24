@@ -100,15 +100,18 @@ services:
     build:
       context: ../..
       dockerfile: apps/manager/Dockerfile
-      args:
-        PUBLIC_MEMSTATION_DEFAULT_TARGET: ${PUBLIC_MEMSTATION_DEFAULT_TARGET:-}
     environment:
-      PUBLIC_MEMSTATION_URL: http://memstation:8080
+      ORIGIN: ${MEMSTATION_MANAGER_ORIGIN:-http://127.0.0.1:4173}
+      MEMSTATION_MANAGER_TARGETS: '[{"id":"local","label":"Local","baseUrl":"http://memstation:8080","allowPrivateNetwork":true}]'
+      MEMSTATION_MANAGER_REDIS_URL: redis://redis:6379/1
+      MEMSTATION_MANAGER_SESSION_KEY: ${MEMSTATION_MANAGER_SESSION_KEY:-}
     ports:
       - "${MEMSTATION_MANAGER_BIND:-127.0.0.1}:4173:3000"
     depends_on:
       memstation:
         condition: service_started
+      redis:
+        condition: service_healthy
 
   postgres:
     image: pgvector/pgvector:pg16

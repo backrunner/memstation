@@ -5,7 +5,7 @@
 
   import { onMount } from 'svelte';
   import type { Snippet } from 'svelte';
-  import { goto } from '$app/navigation';
+  import { goto, invalidate } from '$app/navigation';
   import { page } from '$app/state';
   import { Dialog } from 'bits-ui';
   import {
@@ -18,6 +18,7 @@
     ClipboardList,
     Database,
     LayoutDashboard,
+    KeyRound,
     LogOut,
     Menu,
     MessageSquareText,
@@ -36,11 +37,13 @@
   import TargetManagerDialog from '#lib/components/TargetManagerDialog.svelte';
   import { fetchAdminSession, fetchHealth, loginAdmin, logoutAdmin } from '#lib/api/client.ts';
   import BrandMark from '#lib/components/BrandMark.svelte';
-  import { forgetTargetCredential, rememberTargetCredential } from '#lib/targets/credentials.ts';
+  import { workspaceEntryURL } from '#lib/scope/navigation.ts';
+  import { workspaceDirectoryURL } from '#lib/scope/routes.ts';
   import {
+    beginTargetSessionCheck,
+    finishTargetSessionCheck,
     clearAllTargets,
     initializeTargets,
-    markTargetSessionConnected,
     removeTarget,
     selectTarget,
     selectedTarget,
@@ -57,9 +60,10 @@
 
   interface Props {
     children?: Snippet | undefined;
+    data: { availableTargets: import('#lib/types.ts').MemStationTarget[]; legacyTargetId: string | null };
   }
 
-  let { children = undefined }: Props = $props();
+  let { children = undefined, data }: Props = $props();
 
   type NavSection = {
     label: string;
@@ -68,11 +72,13 @@
 
   const navSections: NavSection[] = [
     {
-      label: 'Workspace',
+      label: 'Browse',
       items: [
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { href: '/workspaces', label: 'Workspaces', icon: Blocks },
         { href: '/conversations', label: 'Conversations', icon: MessageSquareText },
         { href: '/memory', label: 'Memory', icon: Brain },
+        { href: '/memory/keys', label: 'Key memories', icon: KeyRound },
         { href: '/users', label: 'Users', icon: Users }
       ]
     },
@@ -114,6 +120,8 @@
     protocols: 'Protocols',
     conversations: 'Conversations',
     users: 'Users',
+    agents: 'Agents',
+    workspaces: 'Workspaces',
     statistics: 'Statistics',
     tokens: 'Tokens',
     settings: 'Settings',
@@ -134,6 +142,7 @@
   };
 
   let targetDialogOpen = $state(false);
+  let disconnecting = $state(false);
   let mobileSidebarOpen = $state(false);
   let mobileNavTrigger: HTMLButtonElement | null = $state(null);
   let mobileViewport = $state(false);
@@ -159,7 +168,9 @@
     syncViewport();
     media.addEventListener('change', syncViewport);
     mounted = true;
-    initializeTargets();
+    initializeTargets(data.availableTargets);
+    const routeTarget = page.params.target || data.legacyTargetId;
+    if (routeTarget && data.availableTargets.some((target) => target.id === routeTarget)) selectRouteTarget(routeTarget);
     void refreshSelectedTarget();
     return () => {
       media.removeEventListener('change', syncViewport);
@@ -176,27 +187,36 @@
     if (!target?.id || !target.baseUrl) {
       return;
     }
-    updateSession({ authenticated: false, checking: true });
+    const generation = beginTargetSessionCheck(target.id);
     const [session] = await Promise.all([fetchAdminSession(target), refreshTargetVersion(target)]);
     if ($targetState.selectedId !== target.id) {
       return;
     }
-    updateSession(session);
+    finishTargetSessionCheck(target.id, generation, session);
   }
 
   async function resetConnections(): Promise<void> {
-    const logoutTargets = $targetState.targets.filter((target) => target.baseUrl);
-    await Promise.allSettled(logoutTargets.map((target) => logoutAdmin(target)));
-    clearAllTargets();
-    await goto('/login');
+    if (disconnecting) return;
+    disconnecting = true;
+    try {
+      const logoutTargets = $targetState.targets.filter((target) => target.baseUrl);
+      const results = await Promise.allSettled(logoutTargets.map((target) => logoutAdmin(target)));
+      if (results.some((result) => result.status === 'rejected')) {
+        updateSession({ ...$targetState.session, error: 'Some connections could not be disconnected. Retry when Manager is available.' });
+        return;
+      }
+      clearAllTargets();
+      await goto('/login');
+    } finally { disconnecting = false; }
   }
 
   function isActive(pathname: string, href: string): boolean {
     return pathname === href || pathname.startsWith(`${href}/`);
   }
 
-  function refreshSelectedSession(): void {
-    void refreshSelectedTarget();
+  async function refreshSelectedSession(): Promise<void> {
+    await refreshSelectedTarget();
+    if (page.params.target) await Promise.all([invalidate('workspace:directory'), invalidate('workspace:detail'), invalidate('workspace:read')]);
   }
 
   async function refreshTargetVersion(target = $selectedTarget): Promise<void> {
@@ -223,6 +243,10 @@
   }
 
   function buildBreadcrumbs(pathname: string): Array<{ label: string; href: string; isLast: boolean }> {
+    if (page.params.target) {
+      const directory = workspaceDirectoryURL(page.params.target);
+      return [{ label: 'Workspaces', href: directory, isLast: !page.params.workspace }, ...(page.params.workspace ? [{ label: pathname.includes('/access') ? 'Workspace agents' : pathname.includes('/conversations') ? 'Workspace conversations' : pathname.includes('/keys') ? 'Workspace key memories' : pathname.includes('/memory') ? 'Workspace memory' : 'Workspace settings', href: pathname, isLast: true }] : [])];
+    }
     const segments = pathname.split('/').filter(Boolean);
     if (segments.length === 0) {
       return [{ label: 'Dashboard', href: '/dashboard', isLast: true }];
@@ -283,38 +307,27 @@
     return version;
   }
 
-  function handleTargetSave(
-    event: CustomEvent<{ target: Parameters<typeof upsertTarget>[0]; adminKey?: string }>
-  ): void {
-    const savedTarget = upsertTarget(event.detail.target);
-    lastTargetId = savedTarget.id;
-    if (event.detail.adminKey?.trim()) {
-      rememberTargetCredential(savedTarget.id, event.detail.adminKey);
-      void connectSavedTarget(savedTarget, event.detail.adminKey);
+  async function handleTargetSave(input: { target: Parameters<typeof upsertTarget>[0]; adminKey?: string }): Promise<void> {
+    const targetToVerify = { baseUrl: input.target.baseUrl ?? '' };
+    if (input.adminKey) {
+      await loginAdmin(targetToVerify, input.adminKey);
     } else {
-      void refreshSelectedTarget(savedTarget);
+      const target = data.availableTargets.find((item) => item.baseUrl === targetToVerify.baseUrl);
+      if (!target) throw new Error('Select an available service.');
+      const session = await fetchAdminSession(target);
+      if (!session.authenticated) throw new Error(session.error ?? 'Enter an admin token to reconnect this service.');
     }
+    const savedTarget = upsertTarget(input.target);
+    if ((page.params.target || data.legacyTargetId) && (page.params.target || data.legacyTargetId) !== savedTarget.id) await goto(workspaceDirectoryURL(savedTarget.id));
+    lastTargetId = savedTarget.id;
+    await refreshSelectedTarget(savedTarget);
+    if (page.params.target) await Promise.all([invalidate('workspace:directory'), invalidate('workspace:detail'), invalidate('workspace:read')]);
   }
 
-  async function connectSavedTarget(savedTarget: ReturnType<typeof upsertTarget>, adminKey: string): Promise<void> {
-    try {
-      const payload = await loginAdmin(savedTarget, adminKey);
-      rememberTargetCredential(savedTarget.id, adminKey);
-      markTargetSessionConnected(savedTarget.id, payload.checkedAt);
-      targetVersions = {
-        ...targetVersions,
-        [savedTarget.id]: ''
-      };
-      void refreshTargetVersion(savedTarget);
-      updateSession({ authenticated: true, checking: false, checkedAt: payload.checkedAt });
-    } catch (error) {
-      updateSession({
-        authenticated: false,
-        checking: false,
-        checkedAt: new Date().toISOString(),
-        error: error instanceof Error ? error.message : 'Connection failed'
-      });
-    }
+  async function handleTargetRemove(id: string): Promise<void> {
+    const target = $targetState.targets.find((item) => item.id === id);
+    if (target) await logoutAdmin(target);
+    removeTarget(id);
   }
 
   function sessionStatusLabel(): string {
@@ -324,6 +337,30 @@
     return 'Session required';
   }
 
+  function selectRouteTarget(id: string): void {
+    const registered = data.availableTargets.find((target) => target.id === id);
+    if (!registered) return;
+    if ($targetState.targets.some((target) => target.id === id)) selectTarget(id);
+    else upsertTarget(registered);
+  }
+  function navHref(href: string): string {
+    const target = page.params.target || data.legacyTargetId || $selectedTarget?.id;
+    if (!target) return href;
+    if (href === '/workspaces') return workspaceDirectoryURL(target);
+    if (href !== '/memory' && !href.startsWith('/memory/') && href !== '/conversations') return href;
+    const owner = page.url.searchParams.get('user_id');
+    return workspaceEntryURL(target, owner && !page.params.workspace ? `${href}?user_id=${encodeURIComponent(owner)}` : href, page.params.workspace);
+  }
+  async function switchTarget(id: string): Promise<void> {
+    if (page.params.target || data.legacyTargetId) { await goto(workspaceDirectoryURL(id)); return; }
+    selectTarget(id);
+  }
+  $effect(() => {
+    const targetId = page.params.target || data.legacyTargetId;
+    if (mounted && targetId && targetId !== $targetState.selectedId && data.availableTargets.some((target) => target.id === targetId)) selectRouteTarget(targetId);
+  });
+
+  let pinnedTargetId = $derived(page.params.target || data.legacyTargetId);
   let targetItems = $derived($targetState.targets.map((target) => ({
     value: target.id,
     label: target.label,
@@ -370,9 +407,9 @@
                 <a
                   class="sidebar-nav-link"
                   tabindex="0"
-                  class:is-active={isActive(page.url.pathname, item.href)}
-                  aria-current={isActive(page.url.pathname, item.href) ? 'page' : undefined}
-                  href={item.href}
+                  class:is-active={isActive(page.url.pathname, navHref(item.href))}
+                  aria-current={(isActive(page.url.pathname, navHref(item.href))) ? 'page' : undefined}
+                  href={navHref(item.href)}
                   onclick={closeMobileSidebar}
                 >
                   <span class="sidebar-nav-icon">
@@ -388,7 +425,9 @@
 
 {/snippet}
 
-{#if isAuthRoute || needsInitialConnect}
+{#if !$targetState.loaded}
+  <main class="auth-shell"><p role="status">Loading service connections…</p></main>
+{:else if isAuthRoute || needsInitialConnect}
   <div class="app-shell is-auth">
     {@render children?.()}
   </div>
@@ -430,7 +469,7 @@
         <div class="topbar-actions">
           <div class="target-selector">
             <SelectField label="Switch target" hideLabel value={$targetState.selectedId} items={targetItems}
-              onValueChange={(value) => selectTarget(value)} title={sessionStatusLabel()}
+              onValueChange={(value) => void switchTarget(value)} title={sessionStatusLabel()}
               triggerClass="target-selector-trigger" contentClass="target-selector-content" itemClass="target-selector-item" align="end">
               {#snippet selection(item)}<span class="target-selector-label">{item?.endpoint ?? 'Select target'}</span>{/snippet}
               {#snippet option(item)}
@@ -464,6 +503,7 @@
             class="btn-ghost btn-icon"
             type="button"
             onclick={resetConnections}
+            disabled={disconnecting}
             title="Disconnect targets"
             aria-label="Disconnect targets"
           >
@@ -474,11 +514,18 @@
       {#if $targetState.session.checking || $targetState.session.error || !$targetState.session.authenticated}
         <p class="connection-notice" class:is-error={Boolean($targetState.session.error)} role="status">
           {sessionStatusLabel()}
+          {#if !$targetState.session.checking && !$targetState.session.authenticated}
+            <Button class="btn-ghost btn-sm" type="button" onclick={() => (targetDialogOpen = true)}>Reconnect</Button>
+          {/if}
         </p>
       {/if}
 
       <div class="app-content">
-        {@render children?.()}
+        {#if pinnedTargetId && data.availableTargets.some((target) => target.id === pinnedTargetId) && ($targetState.selectedId !== pinnedTargetId || !$targetState.session.authenticated)}
+          <p class="panel-meta" role="status">{$targetState.session.checking ? 'Checking workspace connection…' : 'Connect this service to view its workspaces.'}</p>
+        {:else}
+          {@render children?.()}
+        {/if}
       </div>
     </main>
   </div>
@@ -505,9 +552,6 @@
   bind:open={targetDialogOpen}
   targets={$targetState.targets}
   selectedId={$targetState.selectedId}
-  on:save={handleTargetSave}
-  on:remove={(event) => {
-    forgetTargetCredential(event.detail.id);
-    removeTarget(event.detail.id);
-  }}
+  onsave={handleTargetSave}
+  onremove={handleTargetRemove}
 />

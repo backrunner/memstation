@@ -15,7 +15,7 @@
       <div class="kpi-meta">
         {#if trend && trendLabel}
           <span class={`kpi-trend ${trend}`}>{trendLabel}</span>
-          {#if meta}<span> · {meta}</span>{/if}
+          {#if meta}<span>{meta}</span>{/if}
         {:else if meta}
           <span>{meta}</span>
         {/if}
@@ -30,7 +30,7 @@
       <div class="kpi-meta">
         {#if trend && trendLabel}
           <span class={`kpi-trend ${trend}`}>{trendLabel}</span>
-          {#if meta}<span> · {meta}</span>{/if}
+          {#if meta}<span>{meta}</span>{/if}
         {:else if meta}
           <span>{meta}</span>
         {/if}
@@ -38,3 +38,7 @@
     {/if}
   </article>
 {/if}
+
+<style>
+  .kpi-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+</style>

@@ -180,7 +180,7 @@
                     <StatusBadge tone={statusTone(reviewStatus)} label={reviewStatus} />
                   {/if}
                   {#if routeKind}
-                    <a class="btn-ghost btn-sm" href={memoryDetailHref(routeKind, item.id, activeUserId)}>Open</a>
+                    <a class="btn-ghost btn-sm" href={memoryDetailHref(routeKind, item.id, activeUserId ?? item.user_id, $selectedTarget?.id)}>Open</a>
                   {/if}
                 </div>
               </header>

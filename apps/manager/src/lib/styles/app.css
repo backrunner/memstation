@@ -1282,35 +1282,6 @@ samp {
  * Collapsible / Dialog / Drawer
  * ============================================================ */
 
-.disclosure { min-width: 0; }
-.disclosure-panel { padding: 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
-.disclosure-trigger {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  width: 100%; min-height: 36px; padding: 6px 0; border: 0; border-radius: var(--radius-sm);
-  background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--font-size-sm);
-  font-weight: 500; text-align: left; cursor: pointer;
-}
-.disclosure-trigger:hover { color: var(--text); background: var(--surface-muted); }
-.disclosure-trigger:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-.disclosure-trigger:disabled { opacity: 0.6; cursor: not-allowed; }
-.disclosure-panel > .disclosure-trigger { padding: 12px 16px; color: var(--text); }
-.disclosure-chevron { flex-shrink: 0; color: var(--text-muted); transition: transform 160ms ease; }
-[data-state='open'] > .disclosure-chevron { transform: rotate(180deg); }
-.disclosure-content { min-width: 0; }
-.disclosure-content[data-starting-style], .disclosure-content[data-ending-style] { overflow: hidden; }
-.disclosure-content[data-state='open'] { animation: disclosure-open 160ms ease-out; }
-.disclosure-content[data-state='closed'] { animation: disclosure-close 130ms ease-in; }
-.disclosure-content[hidden] { display: none; }
-.disclosure-body { display: grid; gap: 12px; min-width: 0; padding-block: 8px 4px; }
-.disclosure-panel > .disclosure-content > .disclosure-body { padding: 8px 16px 16px; }
-.disclosure-toolbar > .disclosure-content > .disclosure-body { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
-@keyframes disclosure-open { from { height: 0; } to { height: var(--bits-collapsible-content-height); } }
-@keyframes disclosure-close { from { height: var(--bits-collapsible-content-height); } to { height: 0; } }
-@media (prefers-reduced-motion: reduce) {
-  .disclosure-content { animation: none !important; }
-  .disclosure-chevron { transition: none; }
-}
-
 .dialog-overlay {
   position: fixed;
   inset: 0;
@@ -2452,7 +2423,6 @@ samp {
   .input { min-height: 44px; }
   .sidebar-brand { flex-shrink: 0; }
   .dialog-card { overscroll-behavior: contain; scroll-padding-block: 16px; }
-  .disclosure-trigger { min-height: 44px; padding-block: 10px; }
 }
 
 @media (max-width: 640px) {

@@ -352,7 +352,7 @@
     if (sessionId) {
       parts.push(sessionId);
     }
-    return parts.join(' · ');
+    return parts.join(', ');
   }
 
   function responseMeta(): string {
@@ -363,7 +363,7 @@
     if (rawEvents.length > 0) {
       pieces.push(`${rawEvents.length} raw frame${rawEvents.length === 1 ? '' : 's'}`);
     }
-    return pieces.join(' · ');
+    return pieces.join(', ');
   }
 </script>
 

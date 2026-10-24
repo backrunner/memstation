@@ -2,24 +2,25 @@
 
 <script lang="ts">
   import Button from '#lib/components/Button.svelte';
-  import { createEventDispatcher } from 'svelte';
   import { AlertDialog, ContextMenu, Dialog, DropdownMenu } from 'bits-ui';
   import { Ellipsis, Trash2 } from '@lucide/svelte';
 
   import TextInputField from '#lib/components/TextInputField.svelte';
   import { isHTTPURL } from '#lib/forms/validation.ts';
   import type { MemStationTarget } from '#lib/types.ts';
-  import { readTargetCredential } from '#lib/targets/credentials.ts';
+  import { availableTargets } from '#lib/stores/targets.ts';
+  import SelectField from '#lib/components/SelectField.svelte';
   import { parseTargetLocator } from '#lib/targets/uri.ts';
 
   export let open = false;
   export let targets: MemStationTarget[] = [];
   export let selectedId = '';
 
-  const dispatch = createEventDispatcher<{
-    save: { target: Partial<MemStationTarget>; adminKey?: string };
-    remove: { id: string };
-  }>();
+  export let onsave: (input: { target: Partial<MemStationTarget>; adminKey?: string }) => Promise<void>;
+  export let onremove: (id: string) => Promise<void>;
+  let saving = false;
+  let removing = false;
+  let wasOpen = false;
 
   const defaultBaseUrl = 'http://localhost:8080';
   const defaultEnvironment = 'custom';
@@ -34,6 +35,8 @@
   let saveError = '';
   let formErrors: Record<string, string> = {};
   let removeConfirmOpen = false;
+  let removeError = '';
+  $: pending = saving || removing;
   let removeTargetCandidate: MemStationTarget | undefined;
 
   $: locatorPreview = inspectLocator(connectionInput);
@@ -44,16 +47,12 @@
       : undefined;
   $: targetRows = draftTargetRow ? [draftTargetRow, ...targets] : targets;
 
-  $: if (open) {
-    const current = targets.find((item) => item.id === selectedId) ?? targets[0];
-    if (current) {
-      editingId = current.id;
-      label = current.label;
-      connectionInput = current.baseUrl;
-      adminKey = readTargetCredential(current.id);
-      saveError = '';
-      formErrors = {};
-    }
+  $: if (open !== wasOpen) {
+    wasOpen = open;
+    if (open) {
+      const current = targets.find((item) => item.id === selectedId) ?? targets[0];
+      if (current) loadTarget(current); else resetForm();
+    } else { adminKey = ''; connectionInput = ''; }
   }
 
   function inspectLocator(input: string): { target?: Partial<MemStationTarget>; adminKey?: string; error?: string } {
@@ -71,26 +70,29 @@
   }
 
   function loadTarget(target: MemStationTarget): void {
-    if (isDraftTarget(target)) {
+    if (pending || isDraftTarget(target)) {
       return;
     }
     editingId = target.id;
     label = target.label;
     connectionInput = target.baseUrl;
-    adminKey = readTargetCredential(target.id);
+    adminKey = '';
+    formErrors = {};
     saveError = '';
   }
 
   function resetForm(): void {
+    if (pending) return;
     editingId = draftTargetId;
     label = '';
-    connectionInput = defaultBaseUrl;
+    connectionInput = $availableTargets[0]?.baseUrl ?? defaultBaseUrl;
     adminKey = '';
     saveError = '';
     formErrors = {};
   }
 
-  function saveTarget(): void {
+  async function saveTarget(): Promise<void> {
+    if (pending) return;
     const nextErrors: Record<string, string> = {};
     if (locatorPreview.error) {
       saveError = locatorPreview.error;
@@ -107,7 +109,7 @@
     if (!label.trim() && !parsed.label?.trim()) {
       nextErrors.label = 'Give this target a short label so it is easy to recognize.';
     }
-    if (editingId === draftTargetId && !resolvedAdminKey) {
+    if ((editingId === draftTargetId || targets.find((item) => item.id === editingId)?.baseUrl !== baseUrl) && !resolvedAdminKey) {
       nextErrors.adminKey = 'Admin token is required to connect a new target.';
     }
     formErrors = nextErrors;
@@ -118,7 +120,9 @@
 
     saveError = '';
     const isDraft = editingId === draftTargetId;
-    dispatch('save', {
+    saving = true;
+    try {
+    await onsave({
       target: {
         id: isDraft ? undefined : editingId || undefined,
         label: label.trim() || parsed.label,
@@ -131,6 +135,13 @@
       adminKey: resolvedAdminKey || undefined
     });
     open = false;
+    } catch (cause) {
+      saveError = cause instanceof Error ? cause.message : 'Connection failed';
+    } finally {
+      saving = false;
+      adminKey = '';
+      connectionInput = baseUrl;
+    }
   }
 
   function isDraftTarget(target: MemStationTarget): boolean {
@@ -143,7 +154,7 @@
     preview: { target?: Partial<MemStationTarget> }
   ): MemStationTarget {
     const hasDraftInput = Boolean(
-      draftLabel.trim() || draftConnectionInput.trim() !== defaultBaseUrl
+      draftLabel.trim() || draftConnectionInput.trim() !== ($availableTargets[0]?.baseUrl ?? defaultBaseUrl)
     );
     const parsed = hasDraftInput ? (preview.target ?? {}) : {};
     const rawConnection = draftConnectionInput.trim();
@@ -159,6 +170,8 @@
   }
 
   function requestRemoveTarget(target: MemStationTarget): void {
+    if (pending) return;
+    removeError = '';
     removeTargetCandidate = target;
     removeConfirmOpen = true;
   }
@@ -168,33 +181,40 @@
     removeConfirmOpen = false;
   }
 
-  function confirmRemoveTarget(): void {
-    if (!removeTargetCandidate) {
+  async function confirmRemoveTarget(): Promise<void> {
+    if (pending || !removeTargetCandidate) {
       return;
     }
-    dispatch('remove', { id: removeTargetCandidate.id });
-    removeTargetCandidate = undefined;
-    removeConfirmOpen = false;
+    removing = true;
+    try {
+      await onremove(removeTargetCandidate.id);
+      removeTargetCandidate = undefined;
+      removeConfirmOpen = false;
+      removing = false;
+      const current = targets[0];
+      if (current) loadTarget(current); else resetForm();
+    } catch (cause) { removeError = cause instanceof Error ? cause.message : 'Could not remove target'; }
+    finally { removing = false; }
   }
 </script>
 
-<Dialog.Root bind:open>
+<Dialog.Root {open} onOpenChange={(value) => { if (!saving && !removing) open = value; }}>
   <Dialog.Portal>
     <Dialog.Overlay class="dialog-overlay" />
     <Dialog.Content class="dialog-card">
-      <div class="page-header">
+      <div class="page-header target-dialog-header">
         <div class="page-header-meta">
           <Dialog.Title class="page-title" level={3}>Target connections</Dialog.Title>
-          <p class="panel-meta">Manage MemStation endpoints this manager can connect to.</p>
+          <p class="panel-meta">Connect to services registered by your Manager administrator.</p>
         </div>
-        <Dialog.Close class="btn-ghost btn-sm">Close</Dialog.Close>
+        <Dialog.Close class="btn-ghost btn-sm" disabled={saving || removing}>Close</Dialog.Close>
       </div>
 
       <div class="target-dialog-body">
         <section class="target-dialog-list">
           <div class="target-dialog-list-header">
             <span class="sidebar-label">Saved targets</span>
-            <Button class="btn-secondary btn-sm" type="button" onclick={resetForm}>New target</Button>
+            <Button class="btn-secondary btn-sm" type="button" onclick={resetForm} disabled={pending}>New target</Button>
           </div>
           {#if targetRows.length === 0}
             <div class="empty-state">No saved targets yet. Add one to connect.</div>
@@ -217,6 +237,7 @@
                         class="target-row {target.id === editingId ? 'is-active' : ''}"
 
                         type="button"
+                        disabled={pending}
                         onclick={() => loadTarget(target)}
                       >
                         <div class="target-row-primary">
@@ -238,7 +259,7 @@
                     </ContextMenu.Portal>
                   </ContextMenu.Root>
                   <DropdownMenu.Root>
-                    <DropdownMenu.Trigger class="btn-ghost btn-icon btn-sm" aria-label={`Actions for ${target.label}`}><Ellipsis size={16} /></DropdownMenu.Trigger>
+                    <DropdownMenu.Trigger class="btn-ghost btn-icon btn-sm" disabled={pending} aria-label={`Actions for ${target.label}`}><Ellipsis size={16} /></DropdownMenu.Trigger>
                     <DropdownMenu.Portal>
                       <DropdownMenu.Content class="select-content target-context-menu" sideOffset={6} align="end">
                         <DropdownMenu.Item class="select-item target-context-menu-danger" onSelect={() => requestRemoveTarget(target)}>
@@ -255,26 +276,33 @@
         </section>
 
         <section class="target-dialog-form">
+          {#if $availableTargets.length > 1}
+            <SelectField label="Available service" value={$availableTargets.find((item) => item.baseUrl === locatorPreview.target?.baseUrl)?.id ?? ''}
+              items={$availableTargets.map((item) => ({ value: item.id, label: item.label }))} disabled={pending}
+              onValueChange={(id) => { const target = $availableTargets.find((item) => item.id === id); if (target) { connectionInput = target.baseUrl; label = target.label; adminKey = ''; } }} />
+          {/if}
           <div class="field">
             <TextInputField
               label="Connection URI or base URL"
               bind:value={connectionInput}
+              disabled={pending}
               placeholder="memstation://127.0.0.1:8080?key=..."
               help="URI parameters can prefill label and key=. New targets exchange the token once for a session."
               error={locatorPreview.error ?? formErrors.connection}
             />
           </div>
 
-          <TextInputField label="Label" bind:value={label} placeholder={locatorPreview.target?.label ?? 'Shanghai Primary'} error={formErrors.label} />
+          <TextInputField label="Label" bind:value={label} disabled={pending} placeholder={locatorPreview.target?.label ?? 'Shanghai Primary'} error={formErrors.label} />
 
           {#if !locatorPreview.adminKey}
             <TextInputField
               label="Admin token"
               bind:value={adminKey}
+              disabled={pending}
               type="password"
               autocomplete="off"
               placeholder="MEMSTATION_ADMIN_TOKEN"
-              help="Required when adding a new target unless the URI includes key=. The token is not saved in browser storage."
+              help="Required when adding a new target unless the URI includes key=. The token is used once; reconnecting requires entering it again."
               error={formErrors.adminKey}
               inputClass="input-mono"
             />
@@ -286,10 +314,10 @@
 
           <div class="target-dialog-footer">
             <p class="helper-text">
-              Target metadata is saved locally; admin tokens are only exchanged for HttpOnly sessions.
+              Labels are saved on this browser. Login sessions are held by Manager for each service.
             </p>
             <div class="inline-group">
-              <Button class="btn-primary" type="button" onclick={saveTarget}>Save target</Button>
+              <Button class="btn-primary" type="button" onclick={saveTarget} disabled={saving || removing}>{saving ? 'Connecting…' : 'Save target'}</Button>
             </div>
           </div>
         </section>
@@ -298,7 +326,7 @@
   </Dialog.Portal>
 </Dialog.Root>
 
-<AlertDialog.Root bind:open={removeConfirmOpen}>
+<AlertDialog.Root open={removeConfirmOpen} onOpenChange={(value) => { if (!removing) removeConfirmOpen = value; }}>
   <AlertDialog.Portal>
     <AlertDialog.Overlay class="dialog-overlay target-remove-overlay" />
     <AlertDialog.Content class="dialog-card target-remove-dialog">
@@ -312,15 +340,17 @@
         <strong>{removeTargetCandidate?.label ?? 'Target'}</strong>
         <span class="helper-text mono">{removeTargetCandidate?.baseUrl ?? ''}</span>
       </div>
+      {#if removeError}<div class="error-state" role="alert">{removeError}</div>{/if}
       <div class="target-remove-actions">
-        <Button class="btn-secondary" type="button" onclick={cancelRemoveTarget}>Cancel</Button>
-        <Button class="btn-danger" type="button" onclick={confirmRemoveTarget}>Delete target</Button>
+        <Button class="btn-secondary" type="button" onclick={cancelRemoveTarget} disabled={removing}>Cancel</Button>
+        <Button class="btn-danger" type="button" onclick={confirmRemoveTarget} disabled={removing}>{removing ? 'Removing…' : 'Delete target'}</Button>
       </div>
     </AlertDialog.Content>
   </AlertDialog.Portal>
 </AlertDialog.Root>
 
 <style>
+  .target-dialog-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
   .target-list-entry { display: grid; grid-template-columns: minmax(0, 1fr) 30px; align-items: center; }
   .target-dialog-body {
     display: grid;

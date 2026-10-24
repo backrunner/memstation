@@ -224,7 +224,7 @@
                       label={(fact.lineage.current_head_id ?? fact.id) === fact.id ? 'current head' : 'historical'}
                     />
                   {/if}
-                  <a class="btn-ghost btn-sm" href={memoryDetailHref('facts', fact.id, activeUserId)}>Open</a>
+                  <a class="btn-ghost btn-sm" href={memoryDetailHref('facts', fact.id, activeUserId ?? fact.user_id, $selectedTarget?.id)}>Open</a>
                   {#if editingId === fact.id}
                     <Button class="btn-ghost btn-sm" type="button" onclick={cancelEdit}>Cancel</Button>
                     <Button class="btn-primary btn-sm" type="button" disabled={saving} onclick={() => saveEdit(fact)}>

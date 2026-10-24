@@ -1,6 +1,7 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import MetadataRow from '#lib/components/MetadataRow.svelte';
   import Button from '#lib/components/Button.svelte';
   import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
   import { onMount } from 'svelte';
@@ -358,7 +359,7 @@
                   onclick={() => selectedTask && requestConfirmation(
                     'Run this task again?',
                     'The selected payload will be republished to its worker queue immediately.',
-                    `${selectedTask.queue} · ${selectedTask.id}`,
+                    `${selectedTask.queue}, ${selectedTask.id}`,
                     'Run task now',
                     runSelectedTask
                   )}
@@ -389,7 +390,7 @@
                         label={rebuild.is_active ? 'active' : rebuild.status}
                       />
                     </div>
-                    <div class="helper-text">{rebuild.processed_count}/{rebuild.source_count} snapshots · {rebuild.embedding_count} embeddings</div>
+                    <MetadataRow items={[`${rebuild.processed_count}/${rebuild.source_count} snapshots`, `${rebuild.embedding_count} embeddings`]} />
                     {#if rebuild.last_error}
                       <div class="helper-text" style="color: var(--danger);">{rebuild.last_error}</div>
                     {/if}
@@ -450,7 +451,7 @@
                 onclick={() => requestConfirmation(
                   'Publish manual task?',
                   'A new worker task will be queued for this conversation.',
-                  `${manualTaskType} · ${manualConversationId.trim()}`,
+                  `${manualTaskType}, ${manualConversationId.trim()}`,
                   'Publish task',
                   runManualRequeue
                 )}

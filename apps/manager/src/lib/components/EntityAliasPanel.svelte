@@ -1,5 +1,6 @@
 <svelte:options runes={false} />
 <script lang="ts">
+  import MetadataRow from '#lib/components/MetadataRow.svelte';
   import Button from '#lib/components/Button.svelte';
   import { onMount } from 'svelte';
   import { fetchAdminMemoryDocuments, fetchEntityAliases, putEntityAlias, type EntityAlias } from '#lib/api/client.ts';
@@ -68,7 +69,7 @@
   <div class="data-list">
     {#each visible as item (item.id)}
       <div class="data-list-row">
-        <strong>{item.alias}</strong> <span class="helper-text">{item.scope || 'Default scope'} · {item.status}</span>
+        <strong>{item.alias}</strong> <MetadataRow items={[item.scope || 'Default scope', item.status]} />
         <p>{item.reason}</p>
         <div class="toolbar">
           {#if item.status !== 'confirmed'}<Button class="btn-secondary btn-sm" disabled={busy} onclick={() => review(item, 'confirmed')}>Confirm mapping</Button>{/if}

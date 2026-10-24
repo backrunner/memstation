@@ -11,7 +11,7 @@
     {/if}
 
     {#if sourceKeywords.length > 0}
-      <p><span>Keyword source · {sourceLabel}</span> {sourceKeywords.join(', ')}</p>
+      <p><span>Keyword source: {sourceLabel}</span> {sourceKeywords.join(', ')}</p>
     {/if}
   </div>
 {/if}

@@ -1,6 +1,7 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import MetadataRow from '#lib/components/MetadataRow.svelte';
   import Button from '#lib/components/Button.svelte';
   import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
   import { onMount } from 'svelte';
@@ -199,7 +200,7 @@
                 {#if routeKind && routeKind !== 'keys'}
                   <a
                     class="btn-ghost btn-sm"
-                    href={memoryDetailHref(routeKind, memory.id, activeUserId)}
+                    href={memoryDetailHref(routeKind, memory.id, activeUserId ?? memory.user_id, $selectedTarget?.id)}
                   >Open</a>
                 {/if}
               </header>
@@ -214,9 +215,7 @@
                 <FactLineagePanel lineage={memory.lineage} currentFactId={memory.id} userId={activeUserId} compact />
               {/if}
               {#if memory.time_tier || memory.activity_at}
-                <div class="helper-text mono">
-                  {memory.time_tier ?? ''}{#if memory.time_tier && memory.activity_at} · {/if}{#if memory.activity_at}{dateTimeLabel(memory.activity_at)}{/if}
-                </div>
+                <MetadataRow class="mono" items={[memory.time_tier, memory.activity_at && dateTimeLabel(memory.activity_at)]} />
               {/if}
             </article>
           {/each}
@@ -236,7 +235,7 @@
             <article class="excerpt-card data-list-row">
               <header class="excerpt-head">
                 <strong>{summary.topicLabel ?? 'Summary'}</strong>
-                <a class="btn-link" href={memoryDetailHref('summaries', summary.id, activeUserId)}>Open</a>
+                <a class="btn-link" href={memoryDetailHref('summaries', summary.id, activeUserId ?? summary.user_id, $selectedTarget?.id)}>Open</a>
               </header>
               <div class="message-body">{summary.summary}</div>
             </article>
@@ -245,7 +244,7 @@
             <article class="excerpt-card data-list-row">
               <header class="excerpt-head">
                 <strong>Fact</strong>
-                <a class="btn-link" href={memoryDetailHref('facts', fact.id, activeUserId)}>Open</a>
+                <a class="btn-link" href={memoryDetailHref('facts', fact.id, activeUserId ?? fact.user_id, $selectedTarget?.id)}>Open</a>
               </header>
               <div class="message-body">{fact.content}</div>
             </article>
@@ -256,7 +255,7 @@
               <header class="excerpt-head">
                 <strong>{item.type}</strong>
                 {#if itemRouteKind}
-                  <a class="btn-link" href={memoryDetailHref(itemRouteKind, item.id, activeUserId)}>Open</a>
+                  <a class="btn-link" href={memoryDetailHref(itemRouteKind, item.id, activeUserId ?? item.user_id, $selectedTarget?.id)}>Open</a>
                 {/if}
               </header>
               <div class="message-body">{item.content}</div>

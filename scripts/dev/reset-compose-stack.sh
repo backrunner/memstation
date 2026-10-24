@@ -47,13 +47,18 @@ PY
 
 ensure_env_file() {
   if [[ -f "$ENV_FILE" ]]; then
+    if ! grep -q '^MEMSTATION_MANAGER_SESSION_KEY=' "$ENV_FILE"; then
+      printf '\nMEMSTATION_MANAGER_SESSION_KEY=%s\n' "$(random_hex 32)" >>"$ENV_FILE"
+    fi
     return
   fi
   mkdir -p "$(dirname "$ENV_FILE")"
+  (umask 077; touch "$ENV_FILE")
   cat >"$ENV_FILE" <<EOF
 MEMSTATION_ADMIN_TOKEN=ms-admin-$(random_hex 12)
 MEMSTATION_MASTER_KEY=ms-master-$(random_hex 24)
 MEMSTATION_DEV_API_KEY=ms-local-dev
+MEMSTATION_MANAGER_SESSION_KEY=$(random_hex 32)
 EOF
   echo "Created local development env file at $ENV_FILE"
 }

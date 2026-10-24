@@ -1,6 +1,7 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import MetadataRow from '#lib/components/MetadataRow.svelte';
   import Button from '#lib/components/Button.svelte';
   import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
 
@@ -258,7 +259,7 @@
               <article class="debug-block debug-block-muted">
                 <div class="inline-group" style="justify-content: space-between;">
                   <strong>{item.type}</strong>
-                  <span class="helper-text mono">semantic {item.score.toFixed(3)} · effective {item.effectiveScore.toFixed(3)}</span>
+                  <MetadataRow class="mono" items={[`Semantic ${item.score.toFixed(3)}`, `Effective ${item.effectiveScore.toFixed(3)}`]} />
                 </div>
                 <div class="message-body" style="margin-top: 6px;">{item.content}</div>
                 <MemoryKeywordSignals

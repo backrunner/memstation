@@ -1,6 +1,8 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import { selectedTarget } from '#lib/stores/targets.ts';
+  import { workspaceEntryURL } from '#lib/scope/navigation.ts';
   import { onMount } from 'svelte';
   import { createPageStore } from '#lib/stores/page.ts';
 
@@ -9,7 +11,7 @@
   export let current = '/memory';
 
   const items = [
-    { href: '/memory', label: 'Workspace' },
+    { href: '/memory', label: 'Memory documents' },
     { href: '/memory/summaries', label: 'Summaries' },
     { href: '/memory/impressions', label: 'Impressions' },
     { href: '/memory/facts', label: 'Facts' },
@@ -44,7 +46,7 @@
       tabindex="0"
       class:is-active={current === item.href}
       aria-current={current === item.href ? 'page' : undefined}
-      href={`${item.href}${suffix}`}
+      href={workspaceEntryURL($selectedTarget?.id, `${item.href}${suffix}`)}
     >{item.label}</a>
   {/each}
 </nav>

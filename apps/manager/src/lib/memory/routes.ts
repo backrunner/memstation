@@ -1,3 +1,4 @@
+import { workspaceEntryURL } from '#lib/scope/navigation.ts';
 import type { GenericMemoryDocumentKind, MemoryDocumentKind } from '#lib/types.ts';
 
 export type MemoryRouteKind =
@@ -97,16 +98,16 @@ export function memoryRouteKindFromDocumentType(value: string): MemoryRouteKind 
   }
 }
 
-export function memoryCollectionHref(kind: MemoryRouteKind, userId?: string): string {
+export function memoryCollectionHref(kind: MemoryRouteKind, userId?: string, targetId?: string): string {
   const documentKind = documentKindFromRoute(kind);
   if (documentKind && kind in genericRouteKinds) {
-    return `/memory/items${querySuffix({ type: documentKind, user_id: userId })}`;
+    return workspaceEntryURL(targetId, `/memory/items${querySuffix({ type: documentKind, user_id: userId })}`);
   }
   const suffix = querySuffix({ user_id: userId });
-  return `/memory/${kind}${suffix}`;
+  return workspaceEntryURL(targetId, `/memory/${kind}${suffix}`);
 }
 
-export function memoryDetailHref(kind: MemoryRouteKind, id: string, userId?: string): string {
+export function memoryDetailHref(kind: MemoryRouteKind, id: string, userId?: string, targetId?: string): string {
   const suffix = querySuffix({ user_id: userId });
-  return `/memory/${kind}/${encodeURIComponent(id)}${suffix}`;
+  return workspaceEntryURL(targetId, `/memory/${kind}/${encodeURIComponent(id)}${suffix}`);
 }

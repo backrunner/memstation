@@ -217,7 +217,7 @@
                   <span class="helper-text mono">{summary.id}</span>
                 </div>
                 <div class="inline-group">
-                  <a class="btn-ghost btn-sm" href={memoryDetailHref('summaries', summary.id, activeUserId)}>Open</a>
+                  <a class="btn-ghost btn-sm" href={memoryDetailHref('summaries', summary.id, activeUserId ?? summary.user_id, $selectedTarget?.id)}>Open</a>
                   {#if editingId === summary.id}
                     <Button class="btn-ghost btn-sm" type="button" onclick={cancelEdit}>Cancel</Button>
                     <Button class="btn-primary btn-sm" type="button" disabled={saving} onclick={() => saveEdit(summary)}>

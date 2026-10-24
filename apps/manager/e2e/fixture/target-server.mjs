@@ -756,6 +756,7 @@ function allSearchableMemories(userId) {
     .filter((item) => !userId || item.user_id === userId)
     .map((item) => ({
       id: item.id,
+      user_id: item.user_id,
       type: item.type,
       content: item.content,
       score: 0,
@@ -766,6 +767,7 @@ function allSearchableMemories(userId) {
     .filter((item) => !userId || item.user_id === userId)
     .map((item) => ({
       id: item.id,
+      user_id: item.user_id,
       type: 'key_memory',
       content: `${item.key}: ${item.value}`,
       score: 0,
@@ -1546,6 +1548,7 @@ function createState() {
     id: 'summary-1',
     node_id: 'node-summary-1',
     user_id: 'admin',
+    generation_id: 'generation-admin-active',
     conversation_id: 'conv-seed-1',
     type: 'summary',
     content: 'MemStation launch tracks gateway rollout, memory verification, and admin observability.',
@@ -1556,7 +1559,8 @@ function createState() {
       keywords: ['gateway', 'memory', 'observability']
     },
     related: [
-      { node_id: 'node-fact-1', document_id: 'fact-1', document_type: 'fact', relation_type: 'supports', weight: 0.86 }
+      { node_id: 'node-fact-1', document_id: 'fact-1', document_type: 'fact', relation_type: 'supports', weight: 0.86 },
+      { node_id: 'node-key-1', document_id: 'key-1', document_type: 'key_memory', relation_type: 'context', weight: 0.7 }
     ],
     created_at: createdAt,
     updated_at: createdAt
@@ -1566,6 +1570,7 @@ function createState() {
     id: 'fact-1',
     node_id: 'node-fact-1',
     user_id: 'admin',
+    generation_id: 'generation-admin-active',
     conversation_id: 'conv-seed-1',
     type: 'fact',
     content: 'Gateway smoke coverage is required before rollout.',
@@ -1583,6 +1588,7 @@ function createState() {
     id: 'impression-1',
     node_id: 'node-impression-1',
     user_id: 'admin',
+    generation_id: 'generation-admin-active',
     conversation_id: 'conv-seed-1',
     type: 'impression',
     content: 'The operator prefers explicit rollout checklists and traceable validation.',
@@ -1611,6 +1617,9 @@ function createState() {
       ])
     ),
     model_settings: clone(modelDefaults),
+    workspaces: [{ id: 'personal-bob', user_id: 'bob', name: 'Bob notes', kind: 'personal', status: 'active', capabilities: ['memory.read'], policy_version: 1, created_at: now, updated_at: now }, { id: 'personal', user_id: 'admin', name: 'Personal', kind: 'personal', status: 'active', capabilities: ['gateway.invoke','memory.read','memory.edit','files.read','files.write'], policy_version: 1, created_at: now, updated_at: now }],
+    agents: ['coding-agent', 'legacy-agent'].map((id) => ({ id, user_id: 'admin', actor_id: `actor-${id}`, name: id === 'coding-agent' ? 'Coding agent' : 'Legacy agent', status: 'active', default_workspace_id: 'personal', revision: 1, legacy: id === 'legacy-agent', created_at: now, updated_at: now })),
+    grants: Object.fromEntries(['coding-agent', 'legacy-agent'].map((id) => [id, { user_id: 'admin', agent_id: id, workspace_id: 'personal', capabilities: ['gateway.invoke', 'memory.read', 'files.read'], revision: 1 }])),
     users: [
       {
         user_id: 'admin',
@@ -1646,6 +1655,7 @@ function createState() {
     memory_documents: {
       entity: [{id:'entity-station',node_id:'node-entity-station',user_id:'admin',generation_id:'generation-admin-active',type:'entity',content:'MemStation project',metadata:{title:'MemStation',entity_scope:'work'},created_at:now,updated_at:now}],
       summary: [memorySummary],
+      segment: [{id:'segment-browse',node_id:'node-segment-browse',user_id:'admin',generation_id:'generation-admin-active',type:'segment',content:'Retained conversation segment',conversation_id:'conv-seed-1',created_at:now,updated_at:now}],
       fact: [fact],
       impression: [impression]
     },
@@ -1750,6 +1760,26 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/__health') {
     json(req, res, { status: 'ok' });
     return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/__test/record-pages') {
+    const conversation = state.conversations['conv-seed-1'];
+    const key = state.key_memories[0];
+    for (let i = 0; i < 105; i++) {
+      const id = `page-${String(i).padStart(3, '0')}`;
+      state.conversations[id] = { ...clone(conversation), conversation_id: id, updated_at: '2026-10-24T00:00:00.000Z' };
+      state.key_memories.push({ ...clone(key), id, key: id, value: `Paginated key ${i}`, updated_at: '2026-10-24T00:00:00.000Z' });
+    }
+    state.conversations['old-archive'] = { ...clone(conversation), conversation_id: 'old-archive', updated_at: '2020-01-01T00:00:00.000Z' };
+    state.key_memories.push({ ...clone(key), id: 'old-archive', key: 'old-archive', value: 'Unique old archive key', updated_at: '2020-01-01T00:00:00.000Z' });
+    json(req,res,{ok:true}); return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/__test/browse-seed') {
+    const template = state.memory_documents.summary[0];
+    for (let i = 0; i < 105; i++) state.memory_documents.summary.push({ ...template, id: `paged-${String(i).padStart(3, '0')}`, node_id: `paged-node-${i}`, content: `Paginated evidence ${i}`, updated_at: `2026-10-24T00:00:00.000Z` });
+    state.memory_documents.summary.push({ ...template, id: 'old-filter-record', node_id: 'old-filter-node', content: 'Unique old archive evidence', updated_at: '2020-01-01T00:00:00.000Z' });
+    json(req,res,{ok:true}); return;
   }
 
   if (req.method === 'POST' && url.pathname === '/__test/reset') {
@@ -1905,6 +1935,111 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Mirror the real scoped GET contract; never reuse a fixture record from another owner.
+  const scopedRead = url.pathname.match(/^\/api\/admin\/workspaces\/([^/]+)(\/(?:conversations|memory\/(?:documents|keys|search))(?:\/.*)?)$/);
+  if (scopedRead) {
+    const workspace = state.workspaces.find(item => item.id === decodeURIComponent(scopedRead[1]));
+    const mismatch = !workspace || url.searchParams.has('user_id') && url.searchParams.get('user_id') !== workspace.user_id;
+    if (mismatch) { json(req,res,{ error:{message:'workspace not found'} },404); return; }
+    url.searchParams.set('user_id', workspace.user_id);
+    url.pathname = '/api/admin' + scopedRead[2];
+    const conversation = url.pathname.match(/^\/api\/admin\/conversations\/([^/]+)/);
+    if (conversation && conversation[1] !== 'page' && state.conversations[decodeURIComponent(conversation[1])]?.user_id !== workspace.user_id) { json(req,res,{error:{message:'conversation not found'}},404); return; }
+    const document = url.pathname.match(/^\/api\/admin\/memory\/documents\/([^/]+)\/([^/]+)$/);
+    if (document && findDocument(document[1], decodeURIComponent(document[2]))?.user_id !== workspace.user_id) { json(req,res,{error:{message:'memory not found'}},404); return; }
+  }
+
+  if (req.method === 'GET' && scopedRead && ['/api/admin/conversations/page', '/api/admin/memory/keys/page'].includes(url.pathname)) {
+    const owner = url.searchParams.get('user_id');
+    const q = (url.searchParams.get('q') || '').trim().toLowerCase();
+    const isKeys = url.pathname.includes('/keys/');
+    const scope = JSON.stringify([scopedRead[1], owner, isKeys, q]);
+    let after;
+    try { if (url.searchParams.get('after')) { after = JSON.parse(Buffer.from(url.searchParams.get('after'), 'base64url').toString()); if (after.scope !== scope) throw new Error('scope'); } }
+    catch { json(req,res,{error:{message:'Invalid cursor'}},400); return; }
+    const id = item => isKeys ? item.id : item.conversation_id;
+    const source = isKeys ? state.key_memories.filter(item => item.user_id === owner) : conversationList(owner);
+    const items = source.filter(item => (isKeys ? [item.id,item.key,item.value,item.category,item.review_status] : [item.conversation_id,item.provider,item.protocol,item.mode,item.finalize_status]).join(' ').toLowerCase().includes(q))
+      .filter(item => !after || item.updated_at < after.updated_at || item.updated_at === after.updated_at && id(item) < after.id)
+      .sort((a,b) => a.updated_at === b.updated_at ? (id(a) < id(b) ? 1 : id(a) > id(b) ? -1 : 0) : a.updated_at < b.updated_at ? 1 : -1);
+    const limit = Number(url.searchParams.get('limit')) || 30;
+    const pageItems = items.slice(0,limit), last = pageItems.at(-1);
+    json(req,res,{items:clone(pageItems),next_cursor:items.length>limit ? Buffer.from(JSON.stringify({scope,id:id(last),updated_at:last.updated_at})).toString('base64url') : ''}); return;
+  }
+
+  const workspaceMatch = url.pathname.match(/^\/api\/admin\/workspaces(?:\/([^/]+))?$/);
+  if (workspaceMatch) {
+    const workspaceId = workspaceMatch[1] ? decodeURIComponent(workspaceMatch[1]) : '';
+    const item = state.workspaces.find((workspace) => workspace.id === workspaceId);
+    if (req.method === 'GET' && !workspaceId) {
+      const q = (url.searchParams.get('q') || '').toLowerCase();
+      const owner = url.searchParams.get('user_id');
+      const limit = Number(url.searchParams.get('limit')) || 50;
+      const filtered = state.workspaces.filter((workspace) => (!owner || workspace.user_id === owner) && (workspace.name.toLowerCase().includes(q) || workspace.user_id.toLowerCase().includes(q)) && workspace.id > (url.searchParams.get('after') || '')).sort((a,b) => a.id.localeCompare(b.id));
+      const items = filtered.slice(0, limit);
+      json(req,res,{ items: clone(items), next_cursor: filtered.length > limit ? items.at(-1).id : '', workspace_mode: 'personal_only' }); return;
+    }
+    if (!item || url.searchParams.get('user_id') && url.searchParams.get('user_id') !== item.user_id) { json(req,res,{ error: { message: 'workspace not found' } },404); return; }
+    if (req.method === 'GET') { json(req,res,clone(item)); return; }
+    if (req.method === 'PUT') {
+      const body = await readJSON(req);
+      if (body.user_id !== item.user_id) { json(req,res,{ error: { message: 'invalid owner' } },400); return; }
+      if (body.expected_policy_version !== item.policy_version) { json(req,res,{ error: { message: 'workspace changed; reload before saving' } },409); return; }
+      item.name = body.name; item.capabilities = body.capabilities; item.policy_version++; item.updated_at = nowISO();
+      json(req,res,clone(item)); return;
+    }
+    json(req,res,{ error: { message: 'unsupported workspace operation' } },405); return;
+  }
+
+  const agentsMatch = url.pathname.match(/^\/api\/admin\/users\/([^/]+)\/agents(?:\/([^/]+))?(?:\/(grant|api-keys))?$/);
+  if (agentsMatch) {
+    const userId = decodeURIComponent(agentsMatch[1]);
+    const agentId = agentsMatch[2] ? decodeURIComponent(agentsMatch[2]) : '';
+    const operation = agentsMatch[3];
+    const agent = state.agents.find((item) => item.user_id === userId && item.id === agentId);
+    if (agentId && !agent) { json(req,res,{ error: { message: 'identity not found' } },404); return; }
+    const paginate = (items) => {
+      const limit = Math.min(Number(url.searchParams.get('limit')) || 50,100);
+      const selected = items.filter((item) => item.id > (url.searchParams.get('after') || '')).sort((a,b) => a.id.localeCompare(b.id)).slice(0,limit);
+      return { items: clone(selected), next_cursor: selected.length === limit ? selected.at(-1).id : '' };
+    };
+    if (req.method === 'GET') {
+      if (!agentId) {
+        const q=(url.searchParams.get('q') || '').toLowerCase();
+        const status=url.searchParams.get('status');
+        json(req,res,{ ...paginate(state.agents.filter((item) => item.user_id === userId && (!status || item.status === status) && (item.name.toLowerCase().includes(q) || item.id.toLowerCase().includes(q)))), workspace_mode: 'personal_only' }); return;
+      }
+      const grant = state.grants[agentId];
+      if (operation === 'grant') { json(req,res,grant); return; }
+      const workspace = state.workspaces.find((item) => item.id === agent.default_workspace_id);
+      const effective = agent.status === 'active' ? grant.capabilities.filter((cap) => workspace.capabilities.includes(cap)) : [];
+      if (operation === 'api-keys') {
+        json(req,res,paginate((state.api_keys[userId] || []).filter((key) => key.agent_id === agentId).map((key) => ({ ...key, effective_capabilities: key.revoked_at || key.expires_at && Date.parse(key.expires_at)<=Date.now() ? [] : (key.capabilities || []).filter((cap) => effective.includes(cap)) })))); return;
+      }
+      json(req,res,{ agent, grant, workspace: clone(workspace), effective_capabilities: effective }); return;
+    }
+    const body=await readJSON(req);
+    if (req.method === 'POST' && !agentId) {
+      const id=`agent-${randomUUID()}`;
+      const item={ id, user_id: userId, actor_id: `actor-${id}`, name: body.name, status: 'active', default_workspace_id: 'personal', revision: 1, legacy: false, created_at: nowISO(), updated_at: nowISO() };
+      state.agents.push(item);
+      state.grants[id]={ user_id: userId, agent_id: id, workspace_id: 'personal', capabilities: body.capabilities, revision: 1 };
+      json(req,res,item,201); return;
+    }
+    if (req.method === 'PUT' && agent) {
+      const record = operation === 'grant' ? state.grants[agentId] : agent;
+      if (record.revision !== body.expected_revision) { json(req,res,{ error: { message: 'identity changed; reload before saving' } },409); return; }
+      if (operation === 'grant') record.capabilities=body.capabilities;
+      else {
+        record.name=body.name; record.status=body.status;
+        if (record.status === 'disabled') for (const key of state.api_keys[userId] || []) if (key.agent_id === agentId) key.revoked_at ||= nowISO();
+      }
+      record.revision++;
+      json(req,res,record); return;
+    }
+    json(req,res,{ error: { message: 'unsupported agent operation' } },405); return;
+  }
+
   const userDetailMatch = url.pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
   if (req.method === 'GET' && userDetailMatch) {
     const userId = decodeURIComponent(userDetailMatch[1]);
@@ -1923,6 +2058,8 @@ const server = http.createServer(async (req, res) => {
       },
       settings: clone(state.user_settings[userId] || {}),
       api_keys: clone(state.api_keys[userId] || []),
+      identity_mode: 'personal_only',
+      agents: clone(state.agents.filter((item) => item.user_id === userId)),
       conversations: conversationList(userId),
       key_memories: clone(state.key_memories.filter((item) => item.user_id === userId)),
       token_usage: tokenStats().find((item) => item.user_id === userId) || { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
@@ -1952,6 +2089,7 @@ const server = http.createServer(async (req, res) => {
     const userId = decodeURIComponent(userKeysMatch[1]);
     const body = await readJSON(req);
     const { record, plaintext } = nextAPIKey(userId, String(body.name || 'manager-created'));
+    Object.assign(record, { agent_id: body.agent_id || 'legacy-agent', agent_name: state.agents.find((item) => item.id === (body.agent_id || 'legacy-agent'))?.name || 'Legacy agent', default_workspace_id: 'personal', capabilities: body.capabilities || state.grants[body.agent_id || 'legacy-agent']?.capabilities || [], expires_at: body.expires_at });
     state.api_keys[userId] = [record, ...(state.api_keys[userId] || [])];
     addAudit('api_key_create', 'api_key', record.id, { user_id: userId, name: record.name, prefix: record.prefix });
     json(req, res, { record, api_key: plaintext });
@@ -2059,16 +2197,27 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/admin/memory/documents/page') {
+    const owner = url.searchParams.get('user_id');
+    const q = (url.searchParams.get('q') || '').toLowerCase();
+    const kinds = (url.searchParams.get('kind') || '').split(',').filter(Boolean);
+    const after = Number(url.searchParams.get('after') || 0);
+    const limit = Number(url.searchParams.get('limit') || 30);
+    const all = Object.values(state.memory_documents).flat().filter(item => item.user_id === owner && (!kinds.length || kinds.includes(item.type)) && `${item.id} ${item.content}`.toLowerCase().includes(q)).sort((a,b) => b.updated_at.localeCompare(a.updated_at) || b.id.localeCompare(a.id));
+    const items = all.slice(after, after + limit);
+    json(req,res,{items, next_cursor: after + limit < all.length ? String(after + limit) : '', generation_id: 'generation-fixture' }); return;
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/admin/memory/documents') {
-    const kind = url.searchParams.get('kind') || 'summary';
+    const kind = url.searchParams.get('kind') || (scopedRead ? '' : 'summary');
     const userId = url.searchParams.get('user_id');
     const limit = Number(url.searchParams.get('limit') || '200');
-    const items = (state.memory_documents[kind] || []).filter((item) => !userId || item.user_id === userId).slice(0, limit);
+    const items = (kind ? kind.split(',').flatMap(type => state.memory_documents[type] || []) : Object.values(state.memory_documents).flat()).filter((item) => !userId || item.user_id === userId).slice(0, limit);
     json(req, res, { items });
     return;
   }
 
-  const memoryDocMatch = url.pathname.match(/^\/api\/admin\/memory\/documents\/(summary|fact|impression|entity)\/([^/]+)$/);
+  const memoryDocMatch = url.pathname.match(/^\/api\/admin\/memory\/documents\/(summary|segment|fact|impression|entity)\/([^/]+)$/);
   if (memoryDocMatch) {
     const kind = memoryDocMatch[1];
     const id = decodeURIComponent(memoryDocMatch[2]);
@@ -2083,6 +2232,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'PUT') {
       const body = await readJSON(req);
+      if (scopedRead && (body.expected_updated_at !== item.updated_at || body.generation_id !== item.generation_id)) { json(req,res,{error:{message:'memory changed; reload before saving'}},409);return; }
       item.content = String(body.content || item.content);
       item.updated_at = nowISO();
       addAudit('memory_document_update', kind, item.id, { content: item.content });
@@ -2107,7 +2257,9 @@ const server = http.createServer(async (req, res) => {
       query_embedding_tokens: result.queryEmbeddingTokens,
       memories: result.memories.map((item) => ({
         id: item.id,
+        user_id: item.user_id,
         node_id: item.node_id,
+        generation_id: item.generation_id,
         type: item.type,
         content: item.content,
         score: item.score,
@@ -2116,6 +2268,7 @@ const server = http.createServer(async (req, res) => {
         conversation_id: item.conversation_id,
         metadata: {
           ...(item.metadata || {}),
+          ...(body.as_of || body.known_at ? { historical_snapshot: true, recorded_at: item.updated_at } : {}),
           matched_keywords: tokensFromQuery(String(body.query || '')).filter((token) =>
             Array.isArray(item.metadata?.keywords) && item.metadata.keywords.some((keyword) => String(keyword).toLowerCase().includes(token))
           )
@@ -2137,6 +2290,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && url.pathname === '/api/admin/memory/keys') {
     const body = await readJSON(req);
     const userId = url.searchParams.get('user_id') || 'admin';
+    if (scopedRead && state.key_memories.some(item => item.user_id === userId && item.key === body.key)) {json(req,res,{error:{message:'key already exists'}},409);return;}
     const item = {
       id: `key-${state.next_key_memory_id++}`,
       user_id: userId,
@@ -2169,6 +2323,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'PUT') {
       const body = await readJSON(req);
+      if (scopedRead && body.expected_updated_at !== item.updated_at) {json(req,res,{error:{message:'memory changed; reload before saving'}},409);return;}
       if (body.value !== undefined) {
         item.value = String(body.value);
       }
@@ -2184,9 +2339,10 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === 'DELETE') {
+      if (scopedRead && (await readJSON(req)).expected_updated_at !== item.updated_at) {json(req,res,{error:{message:'memory changed; reload before saving'}},409);return;}
       state.key_memories = state.key_memories.filter((entry) => entry.id !== id);
       addAudit('key_memory_delete', 'key_memory', id, { user_id: item.user_id, key: item.key });
-      noContent(req, res);
+      if (scopedRead) json(req,res,{deleted:true});else noContent(req, res);
       return;
     }
   }

@@ -675,13 +675,13 @@
     const defaultValue = formatRuntimeValue(key, runtimeDefaults[key]);
 
     if (draftDiffers(key)) {
-      return `Draft ${draftValue} · Saved ${savedValue}`;
+      return `Draft ${draftValue}, Saved ${savedValue}`;
     }
     if (runtimeDiffers(key)) {
-      return `Saved ${savedValue} · Live ${liveValue}`;
+      return `Saved ${savedValue}, Live ${liveValue}`;
     }
     if (isCustomized(key)) {
-      return `Saved ${savedValue} · Default ${defaultValue}`;
+      return `Saved ${savedValue}, Default ${defaultValue}`;
     }
     return `Draft ${draftValue}`;
   }
@@ -713,7 +713,7 @@
     if (ready?.status && ready.status !== 'unknown') {
       parts.push(`Health ${ready.status}`);
     }
-    return parts.join(' · ');
+    return parts.join(', ');
   }
 
   function requestConfirmation(
@@ -758,7 +758,7 @@
             onclick={() => requestConfirmation(
               'Reset all runtime overrides?',
               'Every stored runtime override will be cleared back to its deployment default.',
-              `${countDirty(runtime, runtimeSaved)} draft · ${countOverrides(runtimeSaved, runtimeDefaults)} active overrides`,
+              `${countDirty(runtime, runtimeSaved)} draft, ${countOverrides(runtimeSaved, runtimeDefaults)} active overrides`,
               'Reset all overrides',
               resetAll
             )}
@@ -899,7 +899,7 @@
           </div>
         </div>
         </SettingsSection>
-        <SettingsSection id="system-database" title="Database connection" description={`${database.status} · ${databaseSourceLabel(database.source)}. Applied separately.`}>
+        <SettingsSection id="system-database" title="Database connection" description={`${database.status}, ${databaseSourceLabel(database.source)}. Applied separately.`}>
 <div class="database-summary">
           <strong class="mono">{database.display ?? 'No database connection is configured.'}</strong>
           {#if database.updated_at}

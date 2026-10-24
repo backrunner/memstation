@@ -1,6 +1,8 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import MetadataRow from '#lib/components/MetadataRow.svelte';
+  import { workspaceEntryURL } from '#lib/scope/navigation.ts';
   import Button from '#lib/components/Button.svelte';
   import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
   import { goto } from '$app/navigation';
@@ -121,7 +123,7 @@
 
   $: itemTitle = titleForKind(routeKind);
   $: itemDescription = descriptionForKind(routeKind);
-  $: currentCollectionHref = routeKind ? memoryCollectionHref(routeKind, activeUserId) : '/memory';
+  $: currentCollectionHref = routeKind ? memoryCollectionHref(routeKind, activeUserId, $selectedTarget?.id) : '/memory';
   $: sourcePreview = sourceConversation?.messages?.slice(-4) ?? [];
   $: sourcePartsByID = new Map((sourceConversation?.parts ?? []).map((part) => [part.part_id, part]));
   $: sourceArtifactsByID = new Map((sourceConversation?.artifacts ?? []).map((artifact) => [artifact.artifact_id, artifact]));
@@ -428,7 +430,7 @@
       const endLabel = formatMilliseconds(end ?? 0);
       labels.push(endLabel ? `${startLabel} -> ${endLabel}` : startLabel);
     }
-    return labels.join(' · ');
+    return labels.join(', ');
   }
 
   function evidencePreview(evidence: MemoryEvidence, part?: MessagePart, artifact?: MessagePartArtifact): string {
@@ -473,9 +475,9 @@
     <div class="inline-group" style="justify-content: space-between; flex-wrap: wrap;">
       <div class="inline-group" style="flex-wrap: wrap;">
         <a class="btn-ghost" href={currentCollectionHref}>Back to collection</a>
-        <a class="btn-ghost" href="/memory">Memory workspace</a>
+        <a class="btn-ghost" href={workspaceEntryURL($selectedTarget?.id, `/memory?user_id=${encodeURIComponent((documentItem?.user_id ?? keyMemoryItem?.user_id) ?? '')}`)}>Memory workspace</a>
         {#if documentItem?.conversation_id}
-          <a class="btn-ghost" href={`/conversations/${documentItem.conversation_id}?user_id=${encodeURIComponent(documentItem.user_id)}`}>Open source conversation</a>
+          <a class="btn-ghost" href={workspaceEntryURL($selectedTarget?.id, `/conversations/${encodeURIComponent(documentItem.conversation_id)}?user_id=${encodeURIComponent(documentItem.user_id)}`)}>Open source conversation</a>
         {/if}
         {#if documentItem || keyMemoryItem}
           <a class="btn-ghost" href={`/users/${encodeURIComponent((documentItem?.user_id ?? keyMemoryItem?.user_id) ?? 'admin')}`}>Open user</a>
@@ -652,10 +654,10 @@
               <div class="sidebar-label">Source conversation</div>
               {#if documentItem.conversation_id}
                 <div class="toolbar">
-                  <a href={`/conversations/${documentItem.conversation_id}?user_id=${encodeURIComponent(documentItem.user_id)}`}>{documentItem.conversation_id}</a>
+                  <a href={workspaceEntryURL($selectedTarget?.id, `/conversations/${encodeURIComponent(documentItem.conversation_id)}?user_id=${encodeURIComponent(documentItem.user_id)}`)}>{documentItem.conversation_id}</a>
                   {#if sourceConversation}
                     <div class="helper-text">
-                      {sourceConversation.messages.length} messages · updated {new Date(sourceConversation.updated_at).toLocaleString()}
+                      <MetadataRow items={[`${sourceConversation.messages.length} messages`, `Updated ${new Date(sourceConversation.updated_at).toLocaleString()}`]} />
                     </div>
                   {/if}
                 </div>
@@ -744,7 +746,7 @@
                           <StatusBadge tone="brand" label={`artifact ${artifact.artifact_id}`} />
                         {/if}
                         {#if documentItem.conversation_id}
-                          <a class="btn-ghost" href={`/conversations/${documentItem.conversation_id}?user_id=${encodeURIComponent(documentItem.user_id)}`}>Open conversation timeline</a>
+                          <a class="btn-ghost" href={workspaceEntryURL($selectedTarget?.id, `/conversations/${encodeURIComponent(documentItem.conversation_id)}?user_id=${encodeURIComponent(documentItem.user_id)}`)}>Open conversation timeline</a>
                         {/if}
                       </div>
                     </div>
@@ -790,7 +792,7 @@
                   <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px; align-items: flex-start;">
                     <div>
                       <strong>{event.action}</strong>
-                      <div class="subtle-text">{event.actor_type ?? 'system'} · {event.actor_id ?? 'unknown'}</div>
+                      <MetadataRow items={[event.actor_type ?? 'system', event.actor_id ?? 'unknown']} />
                     </div>
                     <StatusBadge tone={auditTone(event.action)} label={event.created_at ? new Date(event.created_at).toLocaleString() : 'n/a'} />
                   </div>
@@ -809,7 +811,7 @@
   bind:open={deleteConfirmOpen}
   title="Delete key memory?"
   description="This permanently removes the key memory from active recall and memory tools."
-  subject={keyMemoryItem ? `${keyMemoryItem.key} · ${keyMemoryItem.id}` : $page.params.id}
+  subject={keyMemoryItem ? `${keyMemoryItem.key}, ${keyMemoryItem.id}` : $page.params.id}
   confirmLabel="Delete key memory"
   busy={deleting}
   on:confirm={deleteKeyMemory}

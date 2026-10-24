@@ -176,8 +176,8 @@
               {#each detail.parts ?? [] as part}
                 <div class="debug-block debug-block-muted">
                   <div class="inline-group" style="justify-content: space-between;">
-                    <strong>{part.role} · {part.part_type}</strong>
-                    <span class="helper-text mono">seq {part.sequence_num} · part {part.part_index}</span>
+                    <strong>{part.role}, {part.part_type}</strong>
+                    <span class="helper-text mono">seq {part.sequence_num}, part {part.part_index}</span>
                   </div>
                   {#if part.source_url && part.part_type === 'image'}
                     <img src={part.source_url} alt={part.filename ?? 'image part'} style="max-width: 100%; border-radius: var(--radius-sm); margin-top: 8px;" />
@@ -310,7 +310,7 @@
                     <div class="helper-text">
                       {segment.message_count} msgs
                       {#if segment.overlap_message_count > 0}
-                        · overlap {segment.overlap_message_count}
+                       , overlap {segment.overlap_message_count}
                       {/if}
                     </div>
                   </div>
@@ -345,8 +345,8 @@
                     </div>
                     <div class="inline-group" style="gap: 4px;">
                       {#if routeKind}
-                        <a class="btn-ghost btn-sm" href={memoryDetailHref(routeKind, item.id, detail.user_id)}>Open</a>
-                        <a class="btn-ghost btn-sm" href={memoryCollectionHref(routeKind, detail.user_id)}>Workspace</a>
+                        <a class="btn-ghost btn-sm" href={memoryDetailHref(routeKind, item.id, detail.user_id, $selectedTarget?.id)}>Open</a>
+                        <a class="btn-ghost btn-sm" href={memoryCollectionHref(routeKind, detail.user_id, $selectedTarget?.id)}>Workspace</a>
                       {/if}
                     </div>
                   </div>

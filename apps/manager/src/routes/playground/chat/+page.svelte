@@ -1,6 +1,7 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import MetadataRow from '#lib/components/MetadataRow.svelte';
   import Button from '#lib/components/Button.svelte';
   import TextareaField from '#lib/components/TextareaField.svelte';
   import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
@@ -903,7 +904,7 @@
     } else {
       parts.push('Ready');
     }
-    return parts.join(' · ');
+    return parts.join(', ');
   }
 
   function threadCountLabel(thread: ChatPlaygroundThreadDraft): string {
@@ -998,7 +999,7 @@
       protocolLabel(protocol),
       modeLabel(mode)
     ];
-    return parts.join(' · ');
+    return parts.join(', ');
   }
 
   function threadMetaLine(): string {
@@ -1008,7 +1009,7 @@
     } else if (threadStatus === 'failed') {
       parts.push('Retry needed');
     }
-    return parts.join(' · ');
+    return parts.join(', ');
   }
 
   function runMetaLine(): string {
@@ -1021,7 +1022,7 @@
     } else if (threadStatus === 'failed') {
       parts.push('Failed');
     }
-    return parts.join(' · ');
+    return parts.join(', ');
   }
 </script>
 
@@ -1201,24 +1202,13 @@
                         <div class="inline-group" style="justify-content: space-between;">
                           <div class="page-header-meta">
                             <strong>{String(item.type ?? 'memory')}</strong>
-                            <div class="helper-text">
-                              {#if item.injection_bucket}
-                                {String(item.injection_bucket)}
-                              {/if}
-                              {#if item.time_tier}
-                                {item.injection_bucket ? ' · ' : ''}{String(item.time_tier)}
-                              {/if}
-                            </div>
+                            <MetadataRow items={[item.injection_bucket ? String(item.injection_bucket) : null, item.time_tier ? String(item.time_tier) : null]} />
                           </div>
                           <span class="helper-text mono">#{index + 1}</span>
                         </div>
                         <div class="message-body">{String(item.content ?? '')}</div>
-                        <div class="helper-text mono">
-                          semantic {numericLabel(item.score)} · effective {numericLabel(item.effective_score)} · importance {numericLabel(item.importance)} · decay {numericLabel(item.decay_factor)}
-                        </div>
-                        <div class="helper-text">
-                          activity {dateTimeLabel(item.activity_at)}{item.score_reason ? ` · ${String(item.score_reason)}` : ''}
-                        </div>
+                        <MetadataRow class="mono" items={[`Semantic ${numericLabel(item.score)}`, `Effective ${numericLabel(item.effective_score)}`, `Importance ${numericLabel(item.importance)}`, `Decay ${numericLabel(item.decay_factor)}`]} />
+                        <MetadataRow items={[`Activity ${dateTimeLabel(item.activity_at)}`, item.score_reason ? String(item.score_reason) : null]} />
                         <MemoryKeywordSignals
                           matchedKeywords={stringList(item.matched_keywords)}
                           sourceKeywords={stringList(item.keywords)}
@@ -1259,21 +1249,12 @@
                         <div class="inline-group" style="justify-content: space-between;">
                           <div class="page-header-meta">
                             <strong>{item.type}</strong>
-                            <div class="helper-text">
-                              {#if item.time_tier}
-                                {item.time_tier}
-                              {/if}
-                              {#if item.effective_score !== undefined}
-                                {item.time_tier ? ' · ' : ''}effective {numericLabel(item.effective_score)}
-                              {/if}
-                            </div>
+                            <MetadataRow items={[item.time_tier, item.effective_score !== undefined && `Effective ${numericLabel(item.effective_score)}`]} />
                           </div>
                           <span class="helper-text mono">{item.id}</span>
                         </div>
                         <div class="message-body">{item.content}</div>
-                        <div class="helper-text mono">
-                          activity {dateTimeLabel(item.activity_at)} · importance {numericLabel(item.importance)} · decay {numericLabel(item.decay_factor)}
-                        </div>
+                        <MetadataRow class="mono" items={[`Activity ${dateTimeLabel(item.activity_at)}`, `Importance ${numericLabel(item.importance)}`, `Decay ${numericLabel(item.decay_factor)}`]} />
                         <MemoryKeywordSignals
                           matchedKeywords={matchedKeywordsFromMetadata(item.metadata)}
                           sourceKeywords={sourceKeywordsFromMetadata(item.metadata)}
@@ -1285,21 +1266,12 @@
                         <div class="inline-group" style="justify-content: space-between;">
                           <div class="page-header-meta">
                             <strong>{item.key}</strong>
-                            <div class="helper-text">
-                              {#if item.time_tier}
-                                {item.time_tier}
-                              {/if}
-                              {#if item.effective_score !== undefined}
-                                {item.time_tier ? ' · ' : ''}effective {numericLabel(item.effective_score)}
-                              {/if}
-                            </div>
+                            <MetadataRow items={[item.time_tier, item.effective_score !== undefined && `Effective ${numericLabel(item.effective_score)}`]} />
                           </div>
                           <span class="helper-text mono">{item.id}</span>
                         </div>
                         <div class="message-body">{item.value}</div>
-                        <div class="helper-text mono">
-                          activity {dateTimeLabel(item.activity_at)} · importance {numericLabel(item.importance)} · decay {numericLabel(item.decay_factor)}
-                        </div>
+                        <MetadataRow class="mono" items={[`Activity ${dateTimeLabel(item.activity_at)}`, `Importance ${numericLabel(item.importance)}`, `Decay ${numericLabel(item.decay_factor)}`]} />
                       </div>
                     {/each}
                   </div>
@@ -1402,7 +1374,7 @@
                     <JsonView value={{ headers: debug.requestHeaders, body: debug.requestBody }} />
                   </div>
                 </CollapsibleSection>
-              <CollapsibleSection title="Raw events ({debug.rawEvents.length})">
+              <CollapsibleSection title="Raw events" count={debug.rawEvents.length}>
                   <div style="margin-top: 8px;">
                     <JsonView value={debug.rawEvents} emptyLabel="No raw protocol events captured." />
                   </div>

@@ -1,6 +1,7 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import { workspaceEntryURL } from '#lib/scope/navigation.ts';
   import Button from '#lib/components/Button.svelte';
   import { onMount } from 'svelte';
   import { RefreshCw } from '@lucide/svelte';
@@ -171,7 +172,7 @@
               {#each filtered as item}
                 <tr>
                   <td>
-                    <a href={`/conversations/${item.conversation_id}`}>
+                    <a href={workspaceEntryURL($selectedTarget?.id, `/conversations/${encodeURIComponent(item.conversation_id)}?user_id=${encodeURIComponent(item.user_id)}`)}>
                       <strong class="mono">{item.conversation_id}</strong>
                     </a>
                     <div class="subtle-text">{item.mode}</div>

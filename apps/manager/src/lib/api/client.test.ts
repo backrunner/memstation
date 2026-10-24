@@ -1,5 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('$app/env', () => ({ browser: false }));
+import { get } from 'svelte/store';
+import { markTargetSessionConnected, targetState } from '#lib/stores/targets.ts';
+import { configureTargetCatalog } from '#lib/targets/catalog.ts';
 import { deleteAdminKeyMemory, requestGatewayExchange, revokeUserAPIKey } from '#lib/api/client.ts';
 import type { ChatThreadMessage, GatewayProtocol, JSONValue, MemStationTarget } from '#lib/types.ts';
 
@@ -12,6 +16,8 @@ const target: MemStationTarget = {
   region: 'local',
   kind: 'single'
 };
+
+beforeEach(() => configureTargetCatalog([target]));
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -60,11 +66,11 @@ describe('api client delete flows', () => {
 
     await expect(deleteAdminKeyMemory(target, 'key-1', 'admin')).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://127.0.0.1:18080/api/admin/memory/keys/key-1?user_id=admin',
+      '/manager/api/targets/fixture/api/admin/memory/keys/key-1?user_id=admin',
       expect.objectContaining({ method: 'DELETE' })
     );
     const init = firstFetchInit(fetchMock);
-    expect(init.credentials).toBe('include');
+    expect(init.credentials).toBe('same-origin');
     expect(new Headers(init.headers).get('Authorization')).toBeNull();
   });
 
@@ -74,12 +80,28 @@ describe('api client delete flows', () => {
 
     await expect(revokeUserAPIKey(target, 'admin', 'api-key-1')).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://127.0.0.1:18080/api/admin/users/admin/api-keys/api-key-1',
+      '/manager/api/targets/fixture/api/admin/users/admin/api-keys/api-key-1',
       expect.objectContaining({ method: 'DELETE' })
     );
     const init = firstFetchInit(fetchMock);
-    expect(init.credentials).toBe('include');
+    expect(init.credentials).toBe('same-origin');
     expect(new Headers(init.headers).get('Authorization')).toBeNull();
+  });
+});
+
+describe('admin session expiry', () => {
+  it('shows reconnect on current 401 and ignores a response from before a new login', async () => {
+    targetState.set({ loaded: true, targets: [target], selectedId: target.id, session: { authenticated: true, checking: false } });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"message":"Reconnect this target."}', { status: 401 })));
+    await expect(revokeUserAPIKey(target, 'admin', 'key')).rejects.toThrow('Reconnect');
+    expect(get(targetState).session.authenticated).toBe(false);
+    let release!: (response: Response) => void;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { release = resolve; })));
+    const old = revokeUserAPIKey(target, 'admin', 'key');
+    markTargetSessionConnected(target.id);
+    release(new Response('{"message":"expired"}', { status: 401 }));
+    await expect(old).rejects.toThrow('expired');
+    expect(get(targetState).session.authenticated).toBe(true);
   });
 });
 

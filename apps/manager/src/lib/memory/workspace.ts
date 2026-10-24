@@ -22,6 +22,7 @@ export const genericMemoryKinds: GenericMemoryDocumentKind[] = ['event', 'task',
 function toSummaryRecord(item: MemoryDocument): MemorySummaryRecord {
   return {
     id: item.id,
+    user_id: item.user_id,
     summary: item.content,
     topicLabel: typeof item.metadata?.topic_label === 'string' ? item.metadata.topic_label : null
   };
@@ -30,6 +31,7 @@ function toSummaryRecord(item: MemoryDocument): MemorySummaryRecord {
 function toFactRecord(item: MemoryDocument): FactRecord {
   return {
     id: item.id,
+    user_id: item.user_id,
     content: item.content
   };
 }

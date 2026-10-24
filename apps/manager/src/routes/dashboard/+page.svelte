@@ -1,6 +1,7 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import { workspaceEntryURL } from '#lib/scope/navigation.ts';
   import Button from '#lib/components/Button.svelte';
   import { onMount } from 'svelte';
 
@@ -144,17 +145,17 @@
       <KpiCard
         label="Active Conversations"
         value={String(overview?.active_conversations ?? 0)}
-        href="/conversations"
+        href={workspaceEntryURL($selectedTarget?.id, '/conversations')}
       />
       <KpiCard
         label="Stored Memories"
         value={String(overview?.memory_count ?? 0)}
-        href="/memory"
+        href={workspaceEntryURL($selectedTarget?.id, '/memory')}
       />
       <KpiCard
         label="Key Memories"
         value={String(overview?.key_memory_count ?? 0)}
-        href="/memory/keys"
+        href={workspaceEntryURL($selectedTarget?.id, '/memory/keys')}
       />
       <KpiCard
         label="Queue Backlog"
@@ -219,7 +220,7 @@
             </tbody>
           </table>
         </div>
-        <a class="link-inline" href="/memory/keys">Browse key memories →</a>
+        <a class="link-inline" href={workspaceEntryURL($selectedTarget?.id, '/memory/keys')}>Browse key memories →</a>
       </section>
     </div>
 

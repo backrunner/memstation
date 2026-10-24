@@ -1,6 +1,7 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import { selectedTarget } from '#lib/stores/targets.ts';
   import StatusBadge from '#lib/components/StatusBadge.svelte';
   import { memoryDetailHref } from '#lib/memory/routes.ts';
   import type { MemoryLineage } from '#lib/types.ts';
@@ -61,7 +62,7 @@
             class:lineage-node={true}
             class:is-active={factId === currentFactId}
             class:is-head={factId === currentHeadId}
-            href={memoryDetailHref('facts', factId, userId)}
+            href={memoryDetailHref('facts', factId, userId, $selectedTarget?.id)}
           >
             <span class="lineage-node-index">{index + 1}</span>
             <span class="mono">{shortID(factId)}</span>

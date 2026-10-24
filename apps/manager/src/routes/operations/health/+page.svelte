@@ -1,6 +1,7 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import MetadataRow from '#lib/components/MetadataRow.svelte';
   import Button from '#lib/components/Button.svelte';
   import { onMount } from 'svelte';
 
@@ -141,7 +142,7 @@
       <article class="kpi-card">
         <span class="kpi-label">Provider issues</span>
         <strong class="kpi-value">{degradedProviders + warningProviders}</strong>
-        <span class="kpi-meta">{degradedProviders} degraded · {warningProviders} warning</span>
+        <MetadataRow items={[`${degradedProviders} degraded`, `${warningProviders} warning`]} />
       </article>
     </div>
 
@@ -248,7 +249,7 @@
                 />
               </div>
               <div class="helper-text">
-                pending {queue.pending} · active {queue.active} · retry {queue.retry} · archived {queue.archived ?? 0}
+                <MetadataRow items={[`Pending ${queue.pending}`, `Active ${queue.active}`, `Retry ${queue.retry}`, `Archived ${queue.archived ?? 0}`]} />
               </div>
               <div class="helper-text">latency {queue.latency_ms ?? 0} ms</div>
             </div>

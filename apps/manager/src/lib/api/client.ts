@@ -1,4 +1,12 @@
+import { markTargetSessionDisconnected, targetSessionGeneration } from '#lib/stores/targets.ts';
+import { managerTargetURL, registeredTarget } from '#lib/targets/catalog.ts';
 import type {
+  AgentRecord,
+  WorkspaceRecord,
+  AgentDetail,
+  AgentGrant,
+  AgentCredential,
+  CursorPage,
   AdminConfigPayload,
   AdminSessionState,
   APIKeyRecord,
@@ -113,17 +121,21 @@ async function readError(response: Response): Promise<string> {
   }
 
   try {
-    const parsed = JSON.parse(body) as { error?: { message?: string } };
-    return parsed.error?.message ?? body;
+    const parsed = JSON.parse(body) as { message?: string; error?: { message?: string } };
+    return parsed.error?.message ?? parsed.message ?? body;
   } catch {
     return body;
   }
 }
 
+export class APIError extends Error {
+  constructor(message: string, public readonly status: number) { super(message); this.name = 'APIError'; }
+}
+
 async function requestJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) {
-    throw new Error(await readError(response));
+    throw new APIError(await readError(response), response.status);
   }
 
   if (response.status === 204) {
@@ -144,17 +156,19 @@ async function adminRequest<T>(target: MemStationTarget, path: string, init?: Re
     headers.set('Content-Type', 'application/json');
   }
   headers.delete('Authorization');
-  return requestJSON<T>(`${normalizeBaseUrl(target.baseUrl)}${path}`, {
-    ...init,
-    credentials: 'include',
-    headers
-  });
+  const generation = targetSessionGeneration();
+  try {
+    return await requestJSON<T>(managerTargetURL(target, path), { ...init, credentials: 'same-origin', headers });
+  } catch (error) {
+    if (error instanceof APIError && error.status === 401) markTargetSessionDisconnected(target.id, generation);
+    throw error;
+  }
 }
 
 export async function loginAdmin(target: Pick<MemStationTarget, 'baseUrl'>, token: string): Promise<{ authenticated: boolean; checkedAt: string }> {
-  const payload = await requestJSON<{ authenticated: boolean; checkedAt?: string }>(`${normalizeBaseUrl(target.baseUrl)}/api/admin/login`, {
+  const payload = await requestJSON<{ authenticated: boolean; checkedAt?: string }>(`/manager/session/${registeredTarget(target).id}`, {
     method: 'POST',
-    credentials: 'include',
+    credentials: 'same-origin',
     headers: {
       'Content-Type': 'application/json'
     },
@@ -179,8 +193,8 @@ export async function fetchAdminSession(target: MemStationTarget): Promise<Admin
     };
   }
   try {
-    const payload = await requestJSON<{ authenticated: boolean; error?: string; checkedAt?: string }>(`${normalizeBaseUrl(target.baseUrl)}/api/admin/session`, {
-      credentials: 'include',
+    const payload = await requestJSON<{ authenticated: boolean; error?: string; checkedAt?: string }>(`/manager/session/${registeredTarget(target).id}`, {
+      credentials: 'same-origin',
       method: 'GET'
     });
     return {
@@ -200,9 +214,9 @@ export async function fetchAdminSession(target: MemStationTarget): Promise<Admin
 }
 
 export function logoutAdmin(target: Pick<MemStationTarget, 'baseUrl'>): Promise<{ authenticated: boolean }> {
-  return requestJSON<{ authenticated: boolean }>(`${normalizeBaseUrl(target.baseUrl)}/api/admin/logout`, {
-    method: 'POST',
-    credentials: 'include'
+  return requestJSON<{ authenticated: boolean }>(`/manager/session/${registeredTarget(target).id}`, {
+    method: 'DELETE',
+    credentials: 'same-origin'
   });
 }
 
@@ -346,8 +360,8 @@ export function fetchMemoryPreview(
 }
 
 export function fetchHealth(target: Pick<MemStationTarget, 'baseUrl'>, path: '/health/live' | '/health/ready'): Promise<HealthPayload> {
-  return requestJSON<HealthPayload>(`${normalizeBaseUrl(target.baseUrl)}${path}`, {
-    credentials: 'omit'
+  return requestJSON<HealthPayload>(managerTargetURL(target, path), {
+    credentials: 'same-origin'
   });
 }
 
@@ -559,11 +573,12 @@ export function fetchUserSources(target: MemStationTarget, userId: string): Prom
 export async function createUserAPIKey(
   target: MemStationTarget,
   userId: string,
-  name: string
+  name: string,
+  options?: { agent_id?: string; capabilities?: string[]; expires_at?: string }
 ): Promise<{ record: APIKeyRecord; api_key: string }> {
   return adminRequest(target, `/api/admin/users/${encodeURIComponent(userId)}/api-keys`, {
     method: 'POST',
-    body: JSON.stringify({ name })
+    body: JSON.stringify({ name, ...options })
   });
 }
 
@@ -718,9 +733,9 @@ export async function requestGatewayExchange(options: GatewayRequestOptions): Pr
     rawEvents: []
   };
 
-  const response = await fetch(`${normalizeBaseUrl(target.baseUrl)}${gatewayPath(protocol)}`, {
+  const response = await fetch(managerTargetURL(target, gatewayPath(protocol)), {
     method: 'POST',
-    credentials: 'omit',
+    credentials: 'same-origin',
     headers,
     body: JSON.stringify(body)
   });
@@ -746,9 +761,9 @@ export async function requestGatewayExchange(options: GatewayRequestOptions): Pr
 }
 
 export function requestGatewayRaw(options: RawGatewayRequestOptions): Promise<Response> {
-  return fetch(`${normalizeBaseUrl(options.target.baseUrl)}${gatewayPath(options.protocol)}`, {
+  return fetch(managerTargetURL(options.target, gatewayPath(options.protocol)), {
     method: 'POST',
-    credentials: 'omit',
+    credentials: 'same-origin',
     headers: buildRawGatewayHeaders(options),
     body: JSON.stringify(options.body)
   });
@@ -1361,6 +1376,7 @@ function normalizeSearchMemoryItem(payload: Record<string, unknown>) {
   const item = normalizeMemoryDocument(payload);
   return {
     id: item.id,
+    user_id: item.user_id,
     type: item.type,
     content: item.content,
     score: Number(item.score ?? 0),
@@ -1511,16 +1527,12 @@ function asStringArray(value: unknown): string[] {
 }
 
 function absoluteUrl(value: string | undefined, baseUrl?: string): string | undefined {
-  if (!value) {
-    return undefined;
-  }
-  if (/^https?:\/\//i.test(value)) {
-    return value;
-  }
-  if (!baseUrl) {
-    return value;
-  }
-  return `${normalizeBaseUrl(baseUrl)}${value.startsWith('/') ? value : `/${value}`}`;
+  if (!value || !baseUrl) return value;
+  const base = normalizeBaseUrl(baseUrl);
+  const relative = value.startsWith(base + '/') ? value.slice(base.length) : value;
+  if (relative.startsWith('/api/admin/')) return managerTargetURL({ baseUrl }, relative);
+  if (/^https?:\/\//.test(value) || value.startsWith('data:')) return value;
+  return `${base}${value.startsWith('/') ? value : `/${value}`}`;
 }
 
 function openAIToolCalls(raw: unknown): ToolCall[] {
@@ -2076,4 +2088,43 @@ export function fetchEntityAliases(target: MemStationTarget, userId: string, gen
 }
 export function putEntityAlias(target: MemStationTarget, alias: Omit<EntityAlias, 'id'>): Promise<EntityAlias> {
  return adminRequest(target, `/api/admin/memory/entity-aliases?user_id=${encodeURIComponent(alias.user_id)}`, { method: 'PUT', body: JSON.stringify(alias) });
+}
+
+function agentPath(userId: string, agentId?: string): string {
+  const base = `/api/admin/users/${encodeURIComponent(userId)}/agents`;
+  return agentId ? `${base}/${encodeURIComponent(agentId)}` : base;
+}
+
+export function fetchAgents(target: MemStationTarget, userId: string, options: { q?: string; status?: string; after?: string } = {}, signal?: AbortSignal): Promise<CursorPage<AgentRecord>> {
+  const query = new URLSearchParams({ limit: '50', ...options });
+  return adminRequest(target, `${agentPath(userId)}?${query}`, { signal, cache: 'no-store' });
+}
+export function fetchAgentDetail(target: MemStationTarget, userId: string, agentId: string, signal?: AbortSignal): Promise<AgentDetail> {
+  return adminRequest(target, agentPath(userId, agentId), { signal, cache: 'no-store' });
+}
+export function createAgent(target: MemStationTarget, userId: string, name: string, capabilities: string[]): Promise<AgentRecord> {
+  return adminRequest(target, agentPath(userId), { method: 'POST', body: JSON.stringify({ name, capabilities }) });
+}
+export function updateAgent(target: MemStationTarget, userId: string, agent: AgentRecord, name: string, status: AgentRecord['status']): Promise<AgentRecord> {
+  return adminRequest(target, agentPath(userId, agent.id), { method: 'PUT', body: JSON.stringify({ name, status, expected_revision: agent.revision }) });
+}
+export function updateAgentGrant(target: MemStationTarget, userId: string, grant: AgentGrant, capabilities: string[]): Promise<AgentGrant> {
+  return adminRequest(target, `${agentPath(userId, grant.agent_id)}/grant`, { method: 'PUT', body: JSON.stringify({ capabilities, expected_revision: grant.revision }) });
+}
+export function fetchAgentCredentials(target: MemStationTarget, userId: string, agentId: string, after = '', signal?: AbortSignal): Promise<CursorPage<AgentCredential>> {
+  return adminRequest(target, `${agentPath(userId, agentId)}/api-keys?${new URLSearchParams({ limit: '50', after })}`, { signal, cache: 'no-store' });
+}
+
+export function updateWorkspace(target: MemStationTarget, workspace: WorkspaceRecord, name: string, capabilities: string[]): Promise<WorkspaceRecord> {
+  return adminRequest(target, `/api/admin/workspaces/${encodeURIComponent(workspace.id)}`, {
+    method: 'PUT', body: JSON.stringify({ user_id: workspace.user_id, name, capabilities, expected_policy_version: workspace.policy_version })
+  });
+}
+
+export function writeWorkspaceMemory<T>(target: MemStationTarget, workspace: WorkspaceRecord, path: string, method: 'POST' | 'PUT' | 'DELETE', body: Record<string, unknown>): Promise<T> {
+  return adminRequest(target, `/api/admin/workspaces/${encodeURIComponent(workspace.id)}/memory/${path}?${new URLSearchParams({ user_id: workspace.user_id })}`, { method, body: JSON.stringify(body) });
+}
+
+export function browseWorkspaces(target: MemStationTarget, query: string, after = ''): Promise<import('#lib/types.ts').WorkspacePage> {
+  return adminRequest(target, `/api/admin/workspaces?${new URLSearchParams({ q: query, after, limit: '30' })}`);
 }

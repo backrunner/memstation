@@ -1,6 +1,8 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import MetadataRow from '#lib/components/MetadataRow.svelte';
+  import { workspaceEntryURL } from '#lib/scope/navigation.ts';
   import Button from '#lib/components/Button.svelte';
   import { onDestroy, onMount } from 'svelte';
   import { createPageStore } from '#lib/stores/page.ts';
@@ -19,6 +21,7 @@
   import CodeBlock from '#lib/components/CodeBlock.svelte';
   import ConfirmActionDialog from '#lib/components/ConfirmActionDialog.svelte';
   import PageHeader from '#lib/components/PageHeader.svelte';
+  import SelectField from '#lib/components/SelectField.svelte';
   import StatusBadge from '#lib/components/StatusBadge.svelte';
   import SwitchField from '#lib/components/SwitchField.svelte';
   import TextInputField from '#lib/components/TextInputField.svelte';
@@ -37,6 +40,9 @@
 
   type UserDetailDraft = {
     newKeyName: string;
+    keyAgent?: string;
+    keyAccess?: string;
+    keyLifetime?: string;
     chatModel: string;
     summaryModel: string;
     analysisModel: string;
@@ -58,6 +64,10 @@
   let sources: UserSourcesPayload | null = null;
   let createdKey = '';
   let newKeyName = '';
+  let keyAgent = '';
+  let keyAccess = 'agent';
+  let keyLifetime = '30';
+  let detailRequest = 0;
   let chatModel = '';
   let summaryModel = '';
   let analysisModel = '';
@@ -90,6 +100,7 @@
   $: userDetailDraftKey = buildSessionDraftKey('users.detail', $selectedTarget?.id, $page.params.id);
   $: if (routeKey !== lastTargetKey && !$targetState.session.checking) {
     lastTargetKey = routeKey;
+    resetScope();
     void loadDetail();
   }
   $: currentDraft = captureDraft();
@@ -118,9 +129,22 @@
     writeSessionDraft(activeDraftKey, userDetailDraftVersion, snapshot);
   });
 
+  function resetScope(): void {
+    createdKey = '';
+    keyAgent = '';
+    keyAccess = 'agent';
+    keyLifetime = '30';
+    creatingKey = false;
+    detail = null;
+    sources = null;
+  }
+
   function emptyDraft(): UserDetailDraft {
     return {
       newKeyName: '',
+      keyAgent: '',
+      keyAccess: 'agent',
+      keyLifetime: '30',
       chatModel: '',
       summaryModel: '',
       analysisModel: '',
@@ -134,6 +158,9 @@
   function captureDraft(): UserDetailDraft {
     return {
       newKeyName,
+      keyAgent,
+      keyAccess,
+      keyLifetime,
       chatModel,
       summaryModel,
       analysisModel,
@@ -147,6 +174,9 @@
   function baselineDraft(): UserDetailDraft {
     return {
       newKeyName: '',
+      keyAgent: '',
+      keyAccess: 'agent',
+      keyLifetime: '30',
       chatModel: String(detail?.settings?.chat_model ?? ''),
       summaryModel: String(detail?.settings?.summary_model ?? ''),
       analysisModel: String(detail?.settings?.analysis_model ?? ''),
@@ -162,6 +192,9 @@
       return;
     }
     newKeyName = draft.newKeyName ?? '';
+    keyAgent = draft.keyAgent ?? '';
+    keyAccess = draft.keyAccess ?? 'agent';
+    keyLifetime = draft.keyLifetime ?? '30';
     chatModel = draft.chatModel ?? chatModel;
     summaryModel = draft.summaryModel ?? summaryModel;
     analysisModel = draft.analysisModel ?? analysisModel;
@@ -207,6 +240,7 @@
   }
 
   async function syncLatestRebuild(): Promise<void> {
+    const scope = routeKey;
     clearRebuildPoll();
     if (!$selectedTarget || !$page.params.id) {
       latestRebuild = null;
@@ -218,13 +252,16 @@
       return;
     }
     try {
-      latestRebuild = await fetchMemoryRebuildDetail($selectedTarget, $page.params.id, candidate.generation_id);
+      const result = await fetchMemoryRebuildDetail($selectedTarget, $page.params.id, candidate.generation_id);
+      if (scope !== routeKey) return;
+      latestRebuild = result;
       if (latestRebuild.item.status === 'queued' || latestRebuild.item.status === 'running') {
         rebuildPollTimer = setTimeout(() => {
           void syncLatestRebuild();
         }, 1500);
       }
     } catch {
+      if (scope !== routeKey) return;
       latestRebuild = {
         item: candidate,
         sources: []
@@ -233,6 +270,8 @@
   }
 
   async function loadDetail(): Promise<void> {
+    const request = ++detailRequest;
+    const scope = routeKey;
     if (!$selectedTarget || !$targetState.session.authenticated || !$page.params.id) {
       loading = false;
       draftReady = false;
@@ -242,7 +281,10 @@
     error = '';
     success = '';
     try {
-      [detail, sources] = await Promise.all([fetchUserDetail($selectedTarget, $page.params.id), fetchUserSources($selectedTarget, $page.params.id)]);
+      const [nextDetail, nextSources] = await Promise.all([fetchUserDetail($selectedTarget, $page.params.id), fetchUserSources($selectedTarget, $page.params.id)]);
+      if (request !== detailRequest || scope !== routeKey) return;
+      detail = nextDetail;
+      sources = nextSources;
       rebuildRequired = false;
       if (sources?.active_generation && detail?.settings?.embedding_model) {
         rebuildRequired = String(detail.settings.embedding_model ?? '') !== sources.active_generation.embedding_model;
@@ -256,9 +298,9 @@
       draftReady = true;
       await syncLatestRebuild();
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Failed to load user detail';
+      if (request === detailRequest && scope === routeKey) error = cause instanceof Error ? cause.message : 'Failed to load user detail';
     } finally {
-      loading = false;
+      if (request === detailRequest && scope === routeKey) loading = false;
     }
   }
 
@@ -305,23 +347,30 @@
     if (!$selectedTarget || !$page.params.id) {
       return;
     }
+    const scope = routeKey;
     creatingKey = true;
     error = '';
     success = '';
     createdKey = '';
     try {
-      const payload = await createUserAPIKey($selectedTarget, $page.params.id, newKeyName.trim() || 'manager-created');
+      const options = detail?.identity_mode === 'personal_only' ? {
+        ...(keyAgent ? { agent_id: keyAgent } : {}),
+        ...(keyAccess === 'read' ? { capabilities: ['memory.read'] } : {}),
+        ...(keyLifetime !== 'never' ? { expires_at: new Date(Date.now() + Number(keyLifetime) * 86400000).toISOString() } : {})
+      } : undefined;
+      const payload = await createUserAPIKey($selectedTarget, $page.params.id, newKeyName.trim() || 'manager-created', options);
+      if (scope !== routeKey) return;
       createdKey = payload.api_key;
       newKeyName = '';
       if (activeDraftKey) {
         writeSessionDraft(activeDraftKey, userDetailDraftVersion, captureDraft());
       }
       await loadDetail();
-      success = 'API key created. The raw key is shown once below.';
+      if (scope === routeKey) success = 'API key created. The raw key is shown once below.';
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Failed to create API key';
+      if (scope === routeKey) error = cause instanceof Error ? cause.message : 'Failed to create API key';
     } finally {
-      creatingKey = false;
+      if (scope === routeKey) creatingKey = false;
     }
   }
 
@@ -419,7 +468,7 @@
       item.category ?? '',
       item.updated_at ? formatDateTime(item.updated_at) : ''
     ].filter(Boolean);
-    return parts.join(' · ');
+    return parts.join(', ');
   }
 
   function conversationStatusTone(status: string): 'brand' | 'success' | 'warning' | 'danger' | 'muted' {
@@ -445,7 +494,11 @@
     eyebrow="User"
     title={$page.params.id}
     description="API keys, settings, and memory generation state for this user."
-  />
+  >
+    <svelte:fragment slot="actions">
+      {#if detail?.identity_mode === 'personal_only'}<a class="btn-secondary" href={`/users/${encodeURIComponent($page.params.id ?? '')}/agents`}>Manage agents</a>{/if}
+    </svelte:fragment>
+  </PageHeader>
 
   {#if !$targetState.session.authenticated}
     <div class="notice-card">Connect this target to inspect user detail pages.</div>
@@ -542,9 +595,17 @@
           <div class="page-header">
             <div>
               <h2 class="section-title">API Keys</h2>
-              <p class="panel-meta">Creation and revocation are audited.</p>
+              <p class="panel-meta">Creation and revocation are audited. Agent permissions can further restrict each key.</p>
             </div>
           </div>
+          {#if detail.identity_mode === 'personal_only'}
+            <p class="helper-text">Agents share this account’s Personal memory. Separate workspaces and private memory are not available yet.</p>
+            <div class="form-grid two-up" style="margin-block: 12px;">
+              <SelectField label="Agent" bind:value={keyAgent} items={[{ value: '', label: 'Legacy agent' }, ...(detail.agents ?? []).filter((agent) => !agent.legacy && agent.status === 'active').map((agent) => ({ value: agent.id, label: agent.name }))]} />
+              <SelectField label="Key permissions" bind:value={keyAccess} items={[{ value: 'agent', label: 'Current agent permissions' }, { value: 'read', label: 'Read memory only' }]} />
+              <SelectField label="Expires after" bind:value={keyLifetime} items={[{ value: '7', label: '7 days' }, { value: '30', label: '30 days' }, { value: '90', label: '90 days' }, { value: 'never', label: 'Never' }]} />
+            </div>
+          {/if}
           <div class="inline-group" style="align-items: end; margin-bottom: 14px;">
             <div style="flex: 1; min-width: 0;">
               <TextInputField label="New Key Label" bind:value={newKeyName} placeholder="build-bot or local playground" />
@@ -563,9 +624,11 @@
                       <strong>{apiKey.name}</strong>
                       <div class="subtle-text">{apiKey.prefix}</div>
                     </div>
-                    <StatusBadge tone={apiKey.revoked_at ? 'danger' : 'success'} label={apiKey.revoked_at ? 'Revoked' : 'Active'} />
+                    <span class="subtle-text">{apiKey.revoked_at ? 'Revoked' : apiKey.expires_at && Date.parse(apiKey.expires_at) <= Date.now() ? 'Expired' : 'Active'}</span>
                   </div>
-                  <div class="helper-text">Created {new Date(apiKey.created_at).toLocaleString()}</div>
+                  {#if apiKey.agent_id}<MetadataRow items={[apiKey.agent_name ?? 'Agent', 'Personal workspace']} />{/if}
+                  {#if apiKey.capabilities}<div class="helper-text">Permissions: {apiKey.capabilities.length ? apiKey.capabilities.join(', ') : 'None'}</div>{/if}
+                  <MetadataRow items={[`Created ${new Date(apiKey.created_at).toLocaleString()}`, apiKey.expires_at && `Expires ${new Date(apiKey.expires_at).toLocaleString()}`]} />
                   {#if !apiKey.revoked_at}
                     <div class="inline-group" style="justify-content: flex-end; margin-top: 12px;">
                       <Button class="btn-danger is-quiet" type="button" onclick={() => (revokeCandidateId = apiKey.id)}>Revoke key</Button>
@@ -599,7 +662,7 @@
               {/if}
             </div>
             {#if sources?.active_generation}
-              <div class="helper-text">Embedding v{sources.active_generation.embedding_version} · {sources.active_generation.embedding_model}</div>
+              <MetadataRow items={[`Embedding v${sources.active_generation.embedding_version}`, sources.active_generation.embedding_model]} />
             {/if}
           </div>
         </div>
@@ -610,7 +673,7 @@
               <StatusBadge tone={generationTone(latestRebuild.item)} label={latestRebuild.item.status} />
             </div>
             <div class="helper-text">{latestRebuild.item.generation_id}</div>
-            <div class="helper-text" style="margin-top: 6px;">{rebuildProgressLabel} · {latestRebuild.item.embedding_count} embeddings</div>
+            <MetadataRow items={[rebuildProgressLabel, `${latestRebuild.item.embedding_count} embeddings`]} />
             {#if rebuildFailedSources > 0}
               <div class="field-error" style="margin-top: 6px;">{rebuildFailedSources} retained source{rebuildFailedSources === 1 ? '' : 's'} failed during replay.</div>
             {/if}
@@ -633,7 +696,7 @@
                 <div class="inline-group" style="justify-content: space-between; margin-bottom: 10px;">
                   <div>
                     <strong>{generation.scope}</strong>
-                    <div class="subtle-text">{generation.processed_count}/{generation.source_count} snapshots · {generation.embedding_count} embeddings</div>
+                    <MetadataRow items={[`${generation.processed_count}/${generation.source_count} snapshots`, `${generation.embedding_count} embeddings`]} />
                   </div>
                   <StatusBadge tone={generationTone(generation)} label={generation.is_active ? 'active' : generation.status} />
                 </div>
@@ -649,17 +712,17 @@
             <div>
               <h2 class="section-title">Recent Sessions</h2>
             </div>
-            <a class="btn-ghost" href={`/memory?user_id=${detail.user.id}`}>Open memory workspace</a>
+            <a class="btn-ghost" href={workspaceEntryURL($selectedTarget?.id, `/memory?user_id=${encodeURIComponent(detail.user.id)}`)}>Open memory workspace</a>
           </div>
           {#if detail.conversations.length === 0}
             <div class="empty-state">No recent sessions are available for this user yet.</div>
           {:else}
             <div class="session-list">
               {#each detail.conversations as conversation}
-                <a class="session-row" href={`/conversations/${conversation.conversation_id}?user_id=${detail.user.id}`}>
+                <a class="session-row" href={workspaceEntryURL($selectedTarget?.id, `/conversations/${encodeURIComponent(conversation.conversation_id)}?user_id=${encodeURIComponent(detail.user.id)}`)}>
                   <div class="session-row-main">
                     <strong>{conversation.conversation_id}</strong>
-                    <div class="subtle-text">{conversation.protocol} · {conversation.mode}</div>
+                    <MetadataRow items={[conversation.protocol, conversation.mode]} />
                   </div>
                   <div class="session-row-side">
                     <span class="session-provider">{conversation.provider}</span>
@@ -677,7 +740,7 @@
             <div>
               <h2 class="section-title">Stable Memory Slots</h2>
             </div>
-            <a class="btn-ghost" href={`/memory/keys?user_id=${detail.user.id}`}>Manage key memories</a>
+            <a class="btn-ghost" href={workspaceEntryURL($selectedTarget?.id, `/memory/keys?user_id=${encodeURIComponent(detail.user.id)}`)}>Manage key memories</a>
           </div>
           {#if detail.key_memories.length === 0}
             <div class="empty-state">This user does not have any key memories yet.</div>

@@ -413,7 +413,7 @@
                 <div class="keymem-value">{keyMemory.value}</div>
               {/if}
               <div class="keymem-actions">
-                <a class="btn-ghost btn-sm" href={memoryDetailHref('keys', keyMemory.id, activeUserId)}>Open</a>
+                <a class="btn-ghost btn-sm" href={memoryDetailHref('keys', keyMemory.id, activeUserId ?? keyMemory.user_id, $selectedTarget?.id)}>Open</a>
                 {#if editingId === keyMemory.id}
                   <Button class="btn-ghost btn-sm" type="button" onclick={cancelEdit}>Cancel</Button>
                   <Button class="btn-primary btn-sm" type="button" disabled={saving} onclick={() => saveEdit(keyMemory)}>
@@ -479,7 +479,7 @@
   open={Boolean(deleteCandidate)}
   title="Delete key memory?"
   description="This permanently removes the key memory from active recall and memory tools."
-  subject={deleteCandidate ? `${deleteCandidate.key} · ${deleteCandidate.id}` : ''}
+  subject={deleteCandidate ? `${deleteCandidate.key}, ${deleteCandidate.id}` : ''}
   confirmLabel="Delete key memory"
   busy={Boolean(deletingId)}
   on:cancel={() => (deleteCandidate = null)}

@@ -114,11 +114,12 @@ test('target manager accepts URI tokens without storing them with targets', asyn
   expect(savedTargets).not.toContain(adminToken);
   expect(savedTargets).not.toContain(adminTokenHash);
 
-  const session = await page.evaluate(async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/api/admin/session`, { credentials: 'include' });
+  const session = await page.evaluate(async () => {
+    const response = await fetch('/manager/session/fixture-target');
     return (await response.json()) as { authenticated: boolean };
-  }, fixtureBaseUrl);
+  });
   expect(session.authenticated).toBe(true);
+  expect((await page.context().cookies()).some((cookie) => cookie.name === 'memstation_admin_session')).toBe(false);
 });
 
 test('connect page requires an admin token before saving the first target', async ({ page }) => {
@@ -136,9 +137,55 @@ test('connect page requires an admin token before saving the first target', asyn
   expect(savedTargets ?? '').not.toContain('No Token Target');
 });
 
+test('manager connection keeps target cookies on the server and uses only same-origin requests', async ({ page, browser }) => {
+  const origins = new Set<string>();
+  page.on('request', (request) => { if (['fetch', 'xhr'].includes(request.resourceType())) origins.add(new URL(request.url()).origin); });
+  await expectRouteHealthy(page, '/users', /^Users$/i);
+  await expectRouteHealthy(page, '/memory', /^Memory workspace$/i);
+  expect([...origins]).toEqual([new URL(page.url()).origin]);
+  const cookies = await page.context().cookies();
+  expect(cookies.find((cookie) => cookie.name === 'memstation_manager_session')).toMatchObject({ httpOnly: true, sameSite: 'Strict' });
+  expect(cookies.some((cookie) => cookie.name === 'memstation_admin_session')).toBe(false);
+  const stranger = await browser.newContext();
+  try {
+    const response = await stranger.request.get(`${new URL(page.url()).origin}/manager/api/targets/fixture-target/api/admin/users`);
+    expect(response.status()).toBe(401);
+  } finally { await stranger.close(); }
+  const rejected = await page.request.post('/manager/session/fixture-target', { headers: { origin: 'https://unrelated.example' }, data: { token: adminToken } });
+  expect(rejected.status()).toBe(403);
+  expect((await page.request.get('/manager/api/targets/unregistered/api/admin/users')).status()).toBe(404);
+  expect((await page.request.get('/manager/api/targets/fixture-target/__test/reset')).status()).toBe(404);
+});
+
+test('manager connection preserves failed drafts and keeps a second target independent', async ({ page }) => {
+  await page.getByRole('button', { name: 'Manage targets' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Target connections' });
+  await dialog.getByRole('button', { name: 'New target' }).click();
+  await dialog.getByLabel('Connection URI or base URL').fill('http://169.254.169.254');
+  await dialog.getByLabel('Label', { exact: true }).fill('Retained draft');
+  await dialog.getByLabel('Admin token').fill('wrong');
+  await dialog.getByRole('button', { name: 'Save target' }).click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText('This endpoint is not enabled in this Manager. Select an available service.')).toBeVisible();
+  await expect(dialog.getByLabel('Label', { exact: true })).toHaveValue('Retained draft');
+  await expect(dialog.getByLabel('Admin token')).toHaveValue('');
+  const second = `http://127.0.0.1:${process.env.MEMSTATION_E2E_SECOND_TARGET_PORT || Number(process.env.MEMSTATION_E2E_TARGET_PORT || '18080') + 1}`;
+  await dialog.getByLabel('Connection URI or base URL').fill(second);
+  await dialog.getByLabel('Admin token').fill(adminToken);
+  await dialog.getByRole('button', { name: 'Save target' }).click();
+  await expect(dialog).toBeHidden();
+  const origin = new URL(page.url()).origin;
+  expect((await page.request.get('/manager/api/targets/second-target/api/admin/users')).ok()).toBe(true);
+  expect((await page.request.delete('/manager/session/fixture-target', { headers: { origin } })).ok()).toBe(true);
+  expect((await page.request.get('/manager/api/targets/fixture-target/api/admin/users')).status()).toBe(401);
+  expect((await page.request.get('/manager/api/targets/second-target/api/admin/users')).ok()).toBe(true);
+  await page.getByRole('button', { name: 'Manage targets' }).click();
+  await expect(dialog.getByLabel('Admin token')).toHaveValue('');
+});
+
 test('target manager removes saved targets from the row context menu after confirmation', async ({ page }) => {
   const removableTargetLabel = 'Removable Target';
-  const removableTargetUrl = 'http://127.0.0.1:18081';
+  const removableTargetUrl = `http://127.0.0.1:${process.env.MEMSTATION_E2E_SECOND_TARGET_PORT || Number(process.env.MEMSTATION_E2E_TARGET_PORT || '18080') + 1}`;
 
   await page.getByRole('button', { name: 'Manage targets' }).click();
   const targetDialog = page.getByRole('dialog', { name: 'Target connections' });
@@ -235,6 +282,9 @@ test('summary, impression, and fact corrections persist with audit history', asy
 
   const summaryCard = page.locator('.summary-card').filter({ hasText: 'summary-1' }).first();
   await summaryCard.getByRole('link', { name: 'Open' }).click();
+  await expect(page).toHaveURL(/\/w\/personal\/memory\/summary\/summary-1/);
+  await page.getByRole('link', { name: 'Review history and metadata', exact: true }).click();
+  await expect(page).toHaveURL(/manager_target=fixture-target/);
 
   await expect(page.getByRole('heading', { name: /^summary-1$/i })).toBeVisible();
   const contentField = page.locator('textarea').first();
@@ -504,7 +554,7 @@ test('admin editing drafts survive route changes across providers, users, and ke
 
   await page.goto('/memory/keys');
   await expect(page.getByRole('heading', { name: /^Key Memories$/i })).toBeVisible();
-  await page.getByLabel('Filter').fill('validation');
+  await page.getByRole('textbox', { name: 'Filter', exact: true }).fill('validation');
   await page.getByRole('button', { name: 'New key memory', exact: true }).click();
   await page.getByPlaceholder('preferred_name or recent_conversation').fill('draft_slot');
   await page.getByPlaceholder('profile, workflow, system').fill('workflow');
@@ -512,7 +562,7 @@ test('admin editing drafts survive route changes across providers, users, and ke
 
   await page.goto('/dashboard');
   await page.goto('/memory/keys');
-  await expect(page.getByLabel('Filter')).toHaveValue('validation');
+  await expect(page.getByRole('textbox', { name: 'Filter', exact: true })).toHaveValue('validation');
   await page.getByRole('button', { name: 'New key memory', exact: true }).click();
   await expect(page.getByPlaceholder('preferred_name or recent_conversation')).toHaveValue('draft_slot');
   await expect(page.getByPlaceholder('profile, workflow, system')).toHaveValue('workflow');
@@ -524,12 +574,12 @@ test('conversation detail renders multimodal tool payloads from raw messages and
   await expect(page.getByRole('heading', { name: /^conv-mm-tool-1$/i })).toBeVisible();
 
   await page.getByRole('button', { name: 'Tool calls (1)' }).click();
-  await expect(page.getByText('Tool input media · tool_input.attachments[0]')).toBeVisible();
+  await expect(page.getByText('Tool input media, tool_input.attachments[0]')).toBeVisible();
   await expect(page.getByAltText('diagram-tool.png').first()).toBeVisible();
   await expect(page.getByText('tool-brief.pdf').first()).toBeVisible();
 
   await page.getByRole('button', { name: 'Tool results (1)' }).click();
-  await expect(page.getByText('Tool output media · tool_output.content[1]')).toBeVisible();
+  await expect(page.getByText('Tool output media, tool_output.content[1]')).toBeVisible();
   await expect(page.getByText('audio transcript says Alice approved the exception').first()).toBeVisible();
   await expect(page.getByText('inspection-report.pdf').first()).toBeVisible();
 
@@ -658,10 +708,14 @@ test('memory workspaces connect ranked recall, memory detail, and source convers
   await expect(summaryResult).toBeVisible();
   await expect(summaryResult.getByText('Matched keywords')).toBeVisible();
   await summaryResult.getByRole('link', { name: 'Open' }).click();
+  await expect(page).toHaveURL(/\/w\/personal\/memory\/summary\/summary-1/);
+  await page.getByRole('link', { name: 'Review history and metadata', exact: true }).click();
 
   await expect(page.getByRole('heading', { name: /^summary-1$/i })).toBeVisible();
   await expect(page.getByText('memory_document_create').first()).toBeVisible();
   await page.getByRole('link', { name: 'Open source conversation' }).click();
+  await expect(page).toHaveURL(/\/w\/personal\/conversations\/conv-seed-1/);
+  await page.getByRole('link', { name: 'Processing and rebuild controls', exact: true }).click();
 
   await expect(page.getByRole('heading', { name: /^conv-seed-1$/i })).toBeVisible();
   await page.getByRole('button', { name: 'Requeue analysis' }).click();
@@ -806,6 +860,8 @@ test('audit filters keep typing focus and ignore responses from older filter val
   const firstRequest = page.waitForRequest((request) => request.url().includes('/api/admin/audit?') && new URL(request.url()).searchParams.get('action') === 'old');
   await input.fill('old');
   await firstRequest;
+  await expect(page.getByRole('status')).toHaveText('Loading audit events…');
+  await expect(page.getByText('No audit events match the current filter.', { exact: true })).toHaveCount(0);
   await expect(input).toBeFocused();
   await input.fill('new');
   await expect(page.getByRole('button', { name: 'new', exact: true })).toBeVisible();
@@ -844,15 +900,17 @@ test('pending task confirmation cannot be dismissed or submitted twice', async (
   await expect(dialog).toHaveCount(0);
 });
 
-test('primary admin routes fit desktop and narrow screens without page overflow', async ({ page }) => {
-  const routes = ['/audit', '/settings/system', '/settings/models', '/settings/providers', '/operations/tasks', '/memory/keys', '/users', '/conversations'];
+test('primary admin routes fit desktop and narrow screens without page overflow', async ({ page }, testInfo) => {
+  const routes = ['/dashboard', '/audit', '/settings/system', '/settings/models', '/settings/providers', '/operations/tasks', '/operations/health', '/memory/keys', '/users', '/users/admin', '/conversations', '/statistics/tokens'];
   for (const width of [1440, 1024, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
     for (const route of routes) {
       await page.goto(route);
       await expect(page.locator('.page-title')).toBeVisible();
+      if (route === '/audit') await expect(page.getByRole('button', { name: 'memory_document_create', exact: true })).toBeVisible();
       await expect(page.locator('.error-state')).toHaveCount(0);
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), { message: `${route} at ${width}px` }).toBe(true);
+      if (width === 1440 || width === 390) await page.screenshot({ path: testInfo.outputPath(`ui-${route.slice(1).replaceAll('/', '-')}-${width}.png`), fullPage: true, animations: 'disabled' });
     }
   }
 });
@@ -1035,9 +1093,9 @@ test('memory detail prioritizes editing and relation links preserve user scope o
   await expect(details.getByText('Node', { exact: true })).toBeVisible();
   const related = page.locator('.relation-node-link').first();
   await expect(related).toHaveAttribute('href', /user_id=admin/);
-  const destination = await related.getAttribute('href');
+  await expect(related).toHaveAttribute('href', /\/t\/fixture-target\/open\/memory\//);
   await related.click();
-  await expect(page).toHaveURL(new RegExp(destination!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$'));
+  await expect(page).toHaveURL(/\/t\/fixture-target\/w\/personal\/memory\//);
   await expect(page.locator('.error-state')).toHaveCount(0);
 });
 
@@ -1080,15 +1138,15 @@ test('entity alias candidates require confirmation and can be revoked after relo
   await page.getByLabel('Alias', {exact:true}).fill('记忆站');
   await page.getByLabel('Mapping reason').fill('Confirmed project nickname from the operator');
   await page.getByRole('button', {name:'Save candidate'}).click();
-  await expect(page.getByText('work · candidate', {exact:true})).toBeVisible();
+  await expect(page.locator('.metadata-row').filter({ hasText: 'work' }).getByText('candidate', { exact: true })).toBeVisible();
   await page.getByRole('button', {name:'Confirm mapping',exact:true}).click();
   await page.getByRole('alertdialog').getByRole('button', {name:'Confirm',exact:true}).click();
-  await expect(page.getByText('work · confirmed', {exact:true})).toBeVisible();
+  await expect(page.locator('.metadata-row').filter({ hasText: 'work' }).getByText('confirmed', { exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByText('work · confirmed', {exact:true})).toBeVisible();
+  await expect(page.locator('.metadata-row').filter({ hasText: 'work' }).getByText('confirmed', { exact: true })).toBeVisible();
   await page.getByRole('button', {name:'Revoke mapping'}).click();
   await page.getByRole('alertdialog').getByRole('button', {name:'Revoke',exact:true}).click();
-  await expect(page.getByText('work · revoked', {exact:true})).toBeVisible();
+  await expect(page.locator('.metadata-row').filter({ hasText: 'work' }).getByText('revoked', { exact: true })).toBeVisible();
   await expect(page.locator('.error-state')).toHaveCount(0);
 });
 
@@ -1146,4 +1204,726 @@ test('shared controls preserve drafts, keyboard focus, and compact mobile layout
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await trigger.click();
   await expect(input).toBeHidden();
+});
+
+
+test('agent credential permissions and mobile scope stay explicit', async ({ page }, testInfo) => {
+  await page.goto('/users/admin');
+  await expect(page.getByText('Agents share this account’s Personal memory.', { exact: false })).toBeVisible();
+  await chooseBitsSelectOption(page, 'Agent', 'Coding agent');
+  await chooseBitsSelectOption(page, 'Key permissions', 'Read memory only');
+  await chooseBitsSelectOption(page, 'Expires after', '7 days');
+  await page.getByLabel('New Key Label').fill('Scoped reader');
+  const issued = page.waitForRequest((request) => request.method() === 'POST' && request.url().endsWith('/users/admin/api-keys'));
+  const issuedResponse = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().endsWith('/users/admin/api-keys'));
+  await page.getByRole('button', { name: 'Create API Key', exact: true }).click();
+  const body = (await issued).postDataJSON();
+  expect(body.agent_id).toBe('coding-agent');
+  expect(body.capabilities).toEqual(['memory.read']);
+  expect(Date.parse(body.expires_at) - Date.now()).toBeGreaterThan(6 * 86400000);
+  await expect(page.getByText('Coding agent Personal workspace')).toBeVisible();
+  await expect(page.getByText('Permissions: memory.read', { exact: true })).toBeVisible();
+  const raw = (await (await issuedResponse).json()).api_key;
+  const leaked = await page.evaluate((secret) => [localStorage, sessionStorage].some((storage) => Object.values(storage).some((value) => String(value).includes(secret))), raw);
+  expect(leaked).toBe(false);
+  await page.screenshot({ path: testInfo.outputPath('agent-credentials.png'), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.reload();
+  await expect(page.getByText('Coding agent Personal workspace')).toBeVisible();
+  await expect(page.getByText(raw, { exact: true })).toHaveCount(0);
+});
+
+test('agent management lifecycle and credential ceilings', async ({ page }, testInfo) => {
+  await page.goto('/users/admin');
+  await page.getByRole('link', { name: 'Manage agents' }).click();
+  await page.getByRole('button', { name: 'Create agent', exact: true }).click();
+  const create = page.getByRole('dialog');
+  await create.getByLabel('Agent name', { exact: true }).fill('Group assistant');
+  await create.getByRole('button', { name: 'Create agent', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Group assistant', exact: true })).toBeVisible();
+  await page.getByLabel('Agent name', { exact: true }).fill('Project assistant');
+  await page.getByRole('button', { name: 'Save name' }).click();
+  await expect(page.getByRole('heading', { name: 'Project assistant', exact: true })).toBeVisible();
+  await page.getByRole('checkbox', { name: /^Call models/ }).uncheck();
+  await page.getByRole('button', { name: 'Save permissions' }).click();
+  await expect(page.getByText('Permissions saved.', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Issue credential', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Credential name').fill('Laptop reader');
+  await expect(dialog.getByRole('checkbox', { name: /^Call models/ })).toBeDisabled();
+  await dialog.getByRole('checkbox', { name: /^Read files/ }).uncheck();
+  const response = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith('/users/admin/api-keys'));
+  await dialog.getByRole('button', { name: 'Issue credential', exact: true }).click();
+  const issued = await response;
+  expect(issued.request().postDataJSON().capabilities).toEqual(['memory.read']);
+  const raw = (await issued.json()).api_key;
+  await expect(page.getByRole('region', { name: 'New API key' })).toBeVisible();
+  expect(await page.evaluate((secret) => [localStorage, sessionStorage].some((s) => Object.values(s).some((v) => String(v).includes(secret))), raw)).toBe(false);
+  await page.getByRole('button', { name: 'Hide key' }).click();
+  await expect(page.getByText(raw, { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('agent-access.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Disable agent', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Disable agent', exact: true }).click();
+  await expect(page.getByText('Agent disabled and all its credentials revoked.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Issue credential', exact: true })).toBeDisabled();
+  await expect(page.locator('.credential-row')).toContainText('Revoked');
+  await expect(page.locator('.credential-row')).toContainText('Effective: No operational access');
+  await page.getByRole('button', { name: 'Enable agent', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Enable agent', exact: true }).click();
+  await expect(page.getByText('Agent enabled. Issue a new credential to reconnect it.')).toBeVisible();
+  await expect(page.locator('.credential-row')).toContainText('Revoked');
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Project assistant', exact: true })).toBeVisible();
+  await expect(page.getByText(raw, { exact: true })).toHaveCount(0);
+  await page.setViewportSize({ width: 320, height: 568 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('button', { name: 'Issue credential', exact: true }).click();
+  await page.setViewportSize({ width: 320, height: 390 });
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+});
+
+test('agent management preserves edits on revision conflict', async ({ page }) => {
+  await page.goto('/users/admin/agents/coding-agent');
+  await expect(page.getByRole('heading', { name: 'Coding agent', exact: true })).toBeVisible();
+  await page.getByRole('checkbox', { name: /^Edit memory/ }).check();
+  const changed = await page.request.put('/manager/api/targets/fixture-target/api/admin/users/admin/agents/coding-agent/grant', { headers: { origin: new URL(page.url()).origin }, data: { capabilities: ['memory.read'], expected_revision: 1 } });
+  expect(changed.ok()).toBe(true);
+  await page.getByRole('button', { name: 'Save permissions' }).click();
+  await expect(page.getByText('Your changes are still in the form.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: /^Edit memory/ })).toBeChecked();
+  await expect(page.getByRole('button', { name: 'Save permissions' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Discard edits and reload' }).click();
+  await expect(page.getByRole('checkbox', { name: /^Edit memory/ })).not.toBeChecked();
+  await expect(page.getByText('Currently effective: Read memory.')).toBeVisible();
+});
+
+test('agent management search pagination and stale scope responses', async ({ page }) => {
+  const records = Array.from({ length: 105 }, (_, i) => ({ id: `agent-${String(i).padStart(3, '0')}`, name: `Worker ${i}`, status: 'active', legacy: false }));
+  await page.route('**/manager/api/targets/fixture-target/api/admin/users/admin/agents?*', async (route) => {
+    const url = new URL(route.request().url());
+    const query = url.searchParams.get('q') ?? '';
+    const matches = records.filter((item) => item.id > (url.searchParams.get('after') ?? '') && item.name.includes(query));
+    const items = matches.slice(0, 50);
+    await route.fulfill({ json: { items, next_cursor: matches.length > 50 ? items.at(-1)!.id : '' } });
+  });
+  await page.goto('/users/admin/agents');
+  await expect(page.locator('.agent-row')).toHaveCount(50);
+  await page.getByRole('button', { name: 'Load more agents' }).click();
+  await expect(page.locator('.agent-row')).toHaveCount(100);
+  await page.getByRole('button', { name: 'Load more agents' }).click();
+  await expect(page.locator('.agent-row')).toHaveCount(105);
+  await page.getByLabel('Search agents').fill('Worker 104');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await expect(page.locator('.agent-row')).toHaveCount(1);
+  await expect(page.locator('.agent-row')).toContainText('Worker 104');
+  await page.unroute('**/manager/api/targets/fixture-target/api/admin/users/admin/agents?*');
+  // Hold an old identity response across client-side route changes.
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/manager/api/targets/fixture-target/api/admin/users/admin/agents/coding-agent', async (route) => {
+    const response = await route.fetch();
+    await held;
+    await route.fulfill({ response }).catch(() => {});
+  });
+  await page.goto('/users/admin/agents/coding-agent');
+  await page.getByRole('link', { name: 'All agents', exact: true }).click();
+  await page.locator('.agent-row').filter({ hasText: 'Legacy agent' }).click();
+  await expect(page.getByRole('heading', { name: 'Legacy agent', exact: true })).toBeVisible();
+  release();
+  await expect(page.getByRole('heading', { name: 'Coding agent', exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Legacy agent');
+});
+
+
+test('manager connection keeps preferences when disconnect fails and supports retry', async ({ page }) => {
+  await page.route('**/manager/session/fixture-target', async (route) => {
+    if (route.request().method() === 'DELETE') await route.fulfill({ status: 503, json: { message: 'Session storage unavailable' } });
+    else await route.continue();
+  });
+  await page.getByRole('button', { name: 'Disconnect targets', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Some connections could not be disconnected');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('memstation.manager.targets') ?? '[]').length)).toBe(1);
+  await page.unroute('**/manager/session/fixture-target');
+  await page.getByRole('button', { name: 'Disconnect targets', exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('memstation.manager.targets') ?? '[]').length)).toBe(0);
+});
+
+
+test('workspace management saves policy and keeps agent navigation scoped', async ({ page }, testInfo) => {
+  await resetFixture(page); await configureTarget(page); await login(page);
+  await page.goto('/t/fixture-target/workspaces');
+  await expect(page.getByRole('heading', { name: 'Workspaces', exact: true })).toBeVisible();
+  await page.getByLabel('Owner ID', { exact: true }).fill('admin');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await expect(page).toHaveURL(/user_id=admin/);
+  await expect(page.getByRole('link', { name: /Bob notes/ })).toHaveCount(0);
+  await page.getByRole('link', { name: /Personal.*Owner: admin/ }).click();
+  await page.getByLabel('Workspace name').fill('Shared personal notes');
+  await page.getByRole('checkbox', { name: /^Read memory/ }).uncheck();
+  await page.getByRole('button', { name: 'Save workspace', exact: true }).click();
+  await expect(page.getByText('Workspace saved.', { exact: false })).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: testInfo.outputPath('workspace-settings.png'), fullPage: true });
+  await page.getByRole('link', { name: 'Agents with access', exact: true }).click();
+  await page.getByRole('link', { name: /Coding agent/ }).click();
+  await expect(page).toHaveURL(/\/t\/fixture-target\/w\/personal\/access\/coding-agent$/);
+  await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Coding agent');
+  await page.getByRole('link', { name: 'All agents', exact: true }).click();
+  await expect(page).toHaveURL(/\/t\/fixture-target\/w\/personal\/access$/);
+  await page.getByRole('link', { name: 'Workspace settings', exact: true }).click();
+  await expect(page.getByLabel('Workspace name')).toHaveValue('Shared personal notes');
+  await expect(page.getByRole('checkbox', { name: /^Read memory/ })).not.toBeChecked();
+});
+
+test('workspace management preserves draft through conflicts and scope changes', async ({ page }) => {
+  await resetFixture(page); await configureTarget(page); await login(page);
+  await page.goto('/t/fixture-target/w/personal/settings');
+  await page.getByLabel('Workspace name').fill('Local draft');
+  const changed = await page.request.put('/manager/api/targets/fixture-target/api/admin/workspaces/personal', {
+    headers: { origin: new URL(page.url()).origin }, data: { user_id: 'admin', name: 'Remote edit', capabilities: ['memory.read'], expected_policy_version: 1 }
+  });
+  expect(changed.ok()).toBeTruthy();
+  await page.getByRole('button', { name: 'Save workspace', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Your draft is preserved');
+  await expect(page.getByLabel('Workspace name')).toHaveValue('Local draft');
+  await expect(page.getByRole('button', { name: 'Use draft against this version' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Load current version' }).click();
+  await expect(page.getByRole('heading', { name: 'Remote edit', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Workspace name')).toHaveValue('Local draft');
+  await page.getByRole('button', { name: 'Use draft against this version' }).click();
+  await page.getByRole('button', { name: 'Save workspace', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Local draft', exact: true })).toBeVisible();
+  await page.getByLabel('Workspace name').fill('Retained local draft');
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('link', { name: 'All workspaces', exact: true }).click();
+  await page.getByRole('link', { name: /Bob notes/ }).click();
+  await expect(page.getByLabel('Workspace name')).toHaveValue('Bob notes');
+  await page.goBack();
+  await page.getByRole('link', { name: /Local draft.*Owner: admin/ }).click();
+  await expect(page.getByLabel('Workspace name')).toHaveValue('Retained local draft');
+  await page.getByRole('button', { name: 'Discard draft' }).click();
+  await expect(page.getByLabel('Workspace name')).toHaveValue('Local draft');
+});
+
+test('workspace management deep links select the named service and reject missing scopes', async ({ page }) => {
+  await resetFixture(page); await configureTarget(page); await login(page);
+  const secondBase = `http://127.0.0.1:${process.env.MEMSTATION_E2E_SECOND_TARGET_PORT || String(Number(process.env.MEMSTATION_E2E_TARGET_PORT || '18080') + 1)}`;
+  await page.request.post(`${secondBase}/__test/reset`);
+  const connected = await page.request.post('/manager/session/second-target', { headers: { origin: new URL(page.url()).origin }, data: { token: adminToken } });
+  expect(connected.ok()).toBeTruthy();
+  await page.request.put('/manager/api/targets/second-target/api/admin/workspaces/personal', { headers: { origin: new URL(page.url()).origin }, data: { user_id: 'admin', name: 'Second service notes', capabilities: ['memory.read'], expected_policy_version: 1 } });
+  await page.goto('/t/second-target/w/personal/settings');
+  await expect(page.getByLabel('Workspace name')).toHaveValue('Second service notes');
+  await expect(page.getByRole('combobox', { name: 'Switch target' })).toContainText(new URL(secondBase).host);
+  await page.goto('/t/fixture-target/w/personal/settings');
+  await expect(page.getByLabel('Workspace name')).toHaveValue('Personal');
+  await page.goto('/t/fixture-target/w/missing/settings');
+  await expect(page.getByRole('alert')).toContainText('no longer exists');
+  await expect(page.getByLabel('Workspace name')).toHaveCount(0);
+  await page.goto('/t/not-registered/workspaces');
+  await expect(page.getByText('This service is not registered in Manager.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Workspaces', exact: true })).toHaveCount(0);
+});
+
+test('workspace management ignores late scope responses', async ({ page }) => {
+  await resetFixture(page); await configureTarget(page); await login(page);
+  await page.goto('/t/fixture-target/workspaces');
+  let release: (() => void) | undefined;
+  let started: (() => void) | undefined;
+  const pending = new Promise<void>((resolve) => { started = resolve; });
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/t/fixture-target/w/personal/settings/__data.json*', async (route) => {
+    const response = await route.fetch(); started?.(); await held; await route.fulfill({ response });
+  });
+  await page.getByRole('link', { name: /Personal.*Owner: admin/ }).click({ noWaitAfter: true });
+  await pending;
+  await page.getByRole('link', { name: /Bob notes/ }).click();
+  await expect(page.getByLabel('Workspace name')).toHaveValue('Bob notes');
+  release?.();
+  await page.waitForLoadState('networkidle');
+  await expect(page.getByLabel('Workspace name')).toHaveValue('Bob notes');
+});
+
+test('workspace management browses memory and conversations without leaving scope', async ({ page }, testInfo) => {
+  const base = '/t/fixture-target/w/personal';
+  await page.goto(`${base}/memory`);
+  await expect(page.getByRole('heading', { name: 'Memory documents', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Retained conversation segment.*segment-browse/ })).toBeVisible();
+  await page.getByLabel('Filter documents').fill('Gateway smoke');
+  await page.locator('.field').filter({ hasText: 'Document type' }).locator('.select-trigger').click();
+  await page.getByRole('option', { name: 'fact', exact: true }).click();
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(page).toHaveURL(/kind=fact/);
+  await page.reload();
+  await expect(page.getByLabel('Filter documents')).toHaveValue('Gateway smoke');
+  await page.getByRole('link', { name: /Gateway smoke coverage.*fact/ }).click();
+  await expect(page).toHaveURL(/\/w\/personal\/memory\/fact\/fact-1/);
+  await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /supports.*summary-1/ })).toHaveAttribute('href', /\/w\/personal\/memory\/summary\/summary-1/);
+  await page.getByRole('link', { name: 'Open source conversation', exact: true }).click();
+  await expect(page).toHaveURL(/\/w\/personal\/conversations\/conv-seed-1/);
+  await expect(page.getByRole('region', { name: 'Conversation messages' })).toBeVisible();
+  await page.getByRole('link', { name: /summary.*MemStation launch tracks/ }).click();
+  await expect(page).toHaveURL(/\/w\/personal\/memory\/summary\/summary-1/);
+  await page.locator('.workspace-tabs').getByRole('link', { name: 'Conversations', exact: true }).click();
+  await page.getByLabel('Filter conversations').fill('conv-seed-2');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(page.getByRole('link', { name: /conv-seed-1.*messages/ })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /conv-seed-2.*messages/ })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('workspace-conversations.png'), fullPage: true });
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 640 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+    expect((await page.getByLabel('Filter conversations').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await page.locator('.workspace-tabs').getByRole('link', { name: 'Memory documents', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Memory documents', exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+    await page.screenshot({ path: testInfo.outputPath(`workspace-memory-${width}.png`), fullPage: true });
+    await page.locator('.workspace-tabs').getByRole('link', { name: 'Conversations', exact: true }).click();
+    await expect(page.getByLabel('Filter conversations')).toBeVisible();
+  }
+});
+
+test('workspace management rejects foreign records and mismatched browse links', async ({ page }) => {
+  for (const path of ['/memory/summary/summary-1', '/conversations/conv-seed-1']) {
+    await page.goto(`/t/fixture-target/w/personal-bob${path}`);
+    await expect(page.getByRole('alert')).toContainText('unavailable in this workspace');
+    await expect(page.getByText('MemStation launch tracks gateway rollout, memory verification, and admin observability.', { exact: true })).toHaveCount(0);
+  }
+  await page.goto('/t/fixture-target/w/personal/memory?user_id=bob');
+  await expect(page.getByRole('alert')).toContainText('does not match');
+  await page.goto('/t/fixture-target/w/personal-bob/memory');
+  await expect(page.getByText('No memory documents match this view.')).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await page.goto('/t/fixture-target/w/missing/conversations');
+  await expect(page.getByRole('alert')).toContainText('no longer exists');
+  await expect(page.getByText('No conversations match this view.')).toHaveCount(0);
+});
+
+test('workspace management browser reads ignore a late previous workspace', async ({ page }) => {
+  await page.goto('/t/fixture-target/w/personal/settings');
+  let release: (() => void) | undefined;
+  let started: (() => void) | undefined;
+  const pending = new Promise<void>(resolve => { started = resolve; });
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/t/fixture-target/w/personal/memory/__data.json*', async route => {
+    const response = await route.fetch(); started?.(); await held; await route.fulfill({ response });
+  });
+  await page.locator('.workspace-tabs').getByRole('link', { name: 'Memory documents', exact: true }).click({ noWaitAfter: true });
+  await pending;
+  await page.getByRole('link', { name: 'All workspaces', exact: true }).click();
+  await page.getByRole('link', { name: /Bob notes/ }).click();
+  await page.locator('.workspace-tabs').getByRole('link', { name: 'Memory documents', exact: true }).click();
+  await expect(page.getByText('No memory documents match this view.')).toBeVisible();
+  release?.();
+  await page.waitForLoadState('networkidle');
+  await expect(page.getByText('No memory documents match this view.')).toBeVisible();
+  await expect(page.getByRole('link', { name: /summary.*MemStation launch/ })).toHaveCount(0);
+});
+
+
+test('workspace management edits memory with conflict review and restores scoped drafts', async ({ page }, testInfo) => {
+  const route = '/t/fixture-target/w/personal/memory/summary/summary-1';
+  await page.goto(route);
+  await page.getByRole('button', { name: 'Edit memory', exact: true }).click();
+  await page.getByLabel('Memory content', { exact: true }).fill('My local revision');
+  const api = '/manager/api/targets/fixture-target/api/admin/workspaces/personal/memory/documents/summary/summary-1';
+  const original = await (await page.request.get(api)).json();
+  const remote = await page.request.put(api, { headers: { origin: new URL(page.url()).origin }, data: { content: 'Another editor revision', expected_updated_at: original.updated_at, generation_id: original.generation_id } });
+  expect(remote.status()).toBe(200);
+  await page.getByRole('button', { name: 'Save memory', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Your draft is preserved');
+  await expect(page.getByRole('button', { name: 'Use draft against this version' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Load current version' }).click();
+  await expect(page.getByText('Another editor revision', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Memory content', { exact: true })).toHaveValue('My local revision');
+  await page.getByRole('button', { name: 'Use draft against this version' }).click();
+  await page.getByRole('button', { name: 'Save memory', exact: true }).click();
+  await expect(page.getByText('Memory saved.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Edit memory', exact: true }).click();
+  await page.getByLabel('Memory content', { exact: true }).fill('A retained draft');
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('link', { name: 'All workspace memory documents', exact: true }).click();
+  await page.getByRole('link', { name: /My local revision.*summary-1/ }).click();
+  await expect(page.getByLabel('Memory content', { exact: true })).toHaveValue('A retained draft');
+  await page.reload();
+  await expect(page.getByLabel('Memory content', { exact: true })).toHaveValue('A retained draft');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  await page.screenshot({ path: testInfo.outputPath('workspace-memory-editor.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Discard draft' }).click();
+  await expect(page.getByText('My local revision', { exact: true })).toBeVisible();
+});
+
+test('workspace management key memory create update stale delete and mobile controls', async ({ page }, testInfo) => {
+  const base = '/t/fixture-target/w/personal';
+  await page.goto(base + '/keys');
+  await page.getByRole('link', { name: 'New key memory', exact: true }).click();
+  await page.getByLabel('Key', { exact: true }).fill('project.instructions');
+  await page.getByLabel('Value', { exact: true }).fill('Keep all workspace scopes explicit');
+  await page.getByLabel('Category', { exact: true }).fill('project');
+  await page.getByRole('button', { name: 'Create key memory', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'project.instructions', exact: true })).toBeVisible();
+  const detailURL = page.url();
+  const id = new URL(detailURL).pathname.split('/').at(-1);
+  await page.getByLabel('Category', { exact: true }).fill('');
+  await page.getByRole('button', { name: 'Save memory', exact: true }).click();
+  await expect(page.getByText('Memory saved.', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Category', { exact: true })).toHaveValue('');
+  for (const size of [{ width: 320, height: 640 }, { width: 844, height: 390 }]) {
+    await page.setViewportSize(size);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+    expect((await page.getByLabel('Category', { exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await page.getByRole('button', { name: 'Save memory', exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath(`workspace-key-editor-${size.width}.png`), fullPage: false });
+  }
+  const api = `/manager/api/targets/fixture-target/api/admin/workspaces/personal/memory/keys/${id}`;
+  const current = await (await page.request.get(api)).json();
+  expect((await page.request.put(api, { headers: { origin: new URL(page.url()).origin }, data: { value: 'Remote protected value', category: '', review_status: 'approved', expected_updated_at: current.updated_at } })).ok()).toBeTruthy();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Delete key memory', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('changed');
+  expect((await page.request.get(api)).ok()).toBeTruthy();
+  await page.getByRole('button', { name: 'Load current version' }).click();
+  await expect(page.getByLabel('Value', { exact: true })).toHaveValue('Remote protected value');
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Delete key memory', exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`${base}/keys$`));
+  expect((await page.request.get(api)).status()).toBe(404);
+});
+
+
+test('workspace management paginates all memory and searches historical snapshots', async ({ page }, testInfo) => {
+  await page.context().request.post(`${fixtureBaseUrl}/__test/browse-seed`);
+  const base = '/t/fixture-target/w/personal';
+  await page.goto(`${base}/memory?q=Paginated&kind=summary`);
+  await expect(page.locator('.record-row')).toHaveCount(30);
+  const firstIDs = await page.locator('.record-row').allTextContents();
+  await page.getByRole('link', { name: 'Next documents', exact: true }).click();
+  await expect(page).toHaveURL(/after=/);
+  await expect(page.locator('.record-row')).toHaveCount(30);
+  expect((await page.locator('.record-row').allTextContents()).some(item => firstIDs.includes(item))).toBeFalsy();
+  await page.getByLabel('Filter documents').fill('Unique old archive');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(page).not.toHaveURL(/after=/);
+  await expect(page.getByRole('link', { name: /Unique old archive evidence.*old-filter-record/ })).toBeVisible();
+  await page.goto(`${base}/memory/search?q=Gateway&kind=fact&known_at=2099-01-01T00%3A00%3A00Z`);
+  await expect(page.getByText('Historical fact snapshots are read only.', { exact: false })).toBeVisible();
+  await expect(page.locator('.search-result')).not.toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Edit memory|Save changes/ })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Open current record' }).first()).toHaveAttribute('href', /\/w\/personal\/memory\/fact\//);
+  await page.reload();
+  await expect(page.getByLabel('Known by the system at')).toHaveValue('2099-01-01T00:00:00Z');
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 640 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+    expect((await page.getByLabel('Search memory', { exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await page.screenshot({ path: testInfo.outputPath(`workspace-history-${width}.png`), fullPage: true });
+  }
+  await page.getByRole('button', { name: 'Switch workspace: Personal' }).click();
+  await page.getByLabel('Find a workspace').fill('Bob');
+  await page.getByRole('dialog').getByRole('button', { name: 'Search', exact: true }).click();
+  await page.getByRole('dialog').getByRole('link', { name: /Bob notes/ }).click();
+  await expect(page).toHaveURL(/\/w\/personal-bob\/memory\/search\?/);
+  await expect(page).toHaveURL(/known_at=/);
+  await expect(page).not.toHaveURL(/generation_id=|after=/);
+  await expect(page.getByText('No memories match these filters.')).toBeVisible();
+});
+
+test('workspace management picker respects dirty editors', async ({ page }) => {
+  const base = '/t/fixture-target/w/personal';
+  await page.goto(`${base}/memory/summary/summary-1?generation_id=generation-fixture`);
+  await page.getByRole('button', { name: 'Edit memory', exact: true }).click();
+  await page.getByLabel('Memory content').fill('Draft belongs only to Personal');
+  await page.getByRole('button', { name: 'Switch workspace: Personal' }).click();
+  await Promise.all([page.waitForEvent('dialog').then(dialog => dialog.dismiss()), page.getByRole('dialog').getByRole('link', { name: /Bob notes/ }).click()]);
+  await expect(page).toHaveURL(/\/w\/personal\/memory\/summary/);
+  await Promise.all([page.waitForEvent('dialog').then(dialog => dialog.accept()), page.getByRole('dialog').getByRole('link', { name: /Bob notes/ }).click()]);
+  await expect(page).toHaveURL(/\/w\/personal-bob\/memory$/);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.goto(`${base}/memory/summary/summary-1`);
+  await expect(page.getByLabel('Memory content')).toHaveValue('Draft belongs only to Personal');
+});
+
+
+test('workspace management picker ignores a closed request after reopening', async ({ page }) => {
+  await page.goto('/t/fixture-target/w/personal/memory');
+  let release: (() => void) | undefined;
+  let started: (() => void) | undefined;
+  const pending = new Promise<void>(resolve => { started = resolve; });
+  const held = new Promise<void>(resolve => { release = resolve; });
+  let first = true;
+  await page.route('**/manager/api/targets/fixture-target/api/admin/workspaces?*', async route => {
+    if (!first) { await route.continue(); return; }
+    first = false;
+    const response = await route.fetch(); started?.(); await held; await route.fulfill({ response });
+  });
+  await page.getByRole('button', { name: 'Switch workspace: Personal' }).click();
+  await pending;
+  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Switch workspace: Personal' }).click();
+  await expect(page.getByRole('dialog').getByRole('link', { name: /Personal Owner/ })).toBeVisible();
+  await page.getByLabel('Find a workspace').fill('Bob');
+  await page.getByRole('dialog').getByRole('button', { name: 'Search', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('link', { name: /Personal Owner/ })).toHaveCount(0);
+  release?.();
+  await page.waitForLoadState('networkidle');
+  await expect(page.getByRole('dialog').getByRole('link', { name: /Personal Owner/ })).toHaveCount(0);
+  await expect(page.getByRole('dialog').getByRole('link', { name: /Bob notes/ })).toBeVisible();
+  await page.getByLabel('Find a workspace').fill('Personal');
+  await page.getByRole('dialog').getByRole('button', { name: 'Search', exact: true }).click();
+  await page.getByRole('dialog').getByRole('link', { name: /Personal Owner/ }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+
+test('shared controls collapsible preserves native form fields, keyboard access and validation', async ({ page }, testInfo) => {
+  const path = '/t/fixture-target/w/personal/memory/search?q=Gateway&kind=fact&known_at=2099-01-01T00%3A00%3A00Z';
+  await page.goto(path);
+  const trigger = page.getByRole('button', { name: 'Filters (2)', exact: true });
+  const known = page.getByLabel('Known by the system at');
+  const maximum = page.getByLabel('Maximum results');
+  const content = page.locator('.disclosure-content');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await expect(known).toBeHidden();
+  await expect(content).toHaveAttribute('inert', '');
+  expect(await page.locator('form').evaluate(form => Object.fromEntries(new FormData(form as HTMLFormElement)))).toMatchObject({ known_at: '2099-01-01T00:00:00Z', kind: 'fact', top_n: '10' });
+  const controls = await trigger.getAttribute('aria-controls');
+  expect(controls).toBeTruthy();
+  expect(await content.getAttribute('id')).toBe(controls);
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  await expect(known).toBeVisible();
+  expect(await content.evaluate(element => getComputedStyle(element).overflow)).toBe('hidden');
+  await maximum.fill('7');
+  await known.fill('2098-06-01T00:00:00Z');
+  await trigger.focus();
+  await page.keyboard.press('Space');
+  await expect(known).toBeHidden();
+  await page.keyboard.press('Tab');
+  expect(await page.evaluate(() => document.activeElement?.closest('.disclosure-content') === null)).toBeTruthy();
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await expect(page).toHaveURL(/top_n=7/);
+  await expect(page).toHaveURL(/known_at=2098-06-01/);
+  await page.reload();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await trigger.click();
+  await expect(maximum).toHaveValue('7');
+  await expect(known).toHaveValue('2098-06-01T00:00:00Z');
+  await maximum.fill('0');
+  await trigger.click();
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  await expect(maximum).toBeFocused();
+  expect(await maximum.evaluate(field => (field as HTMLInputElement).validity.rangeUnderflow)).toBeTruthy();
+  await maximum.fill('7');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await trigger.click();
+  await expect(known).toBeHidden();
+  expect(await content.evaluate(element => getComputedStyle(element).animationName)).toBe('none');
+  for (const width of [1440, 320, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+    if (width <= 390) expect((await trigger.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await page.screenshot({ path: testInfo.outputPath(`disclosure-filter-closed-${width}.png`), fullPage: true, animations: 'disabled' });
+    await trigger.click();
+    await expect(known).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath(`disclosure-filter-open-${width}.png`), fullPage: true, animations: 'disabled' });
+    await trigger.click();
+  }
+});
+
+test('shared controls collapsible unifies workspace, agent and task details', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const [path, title, field] of [
+    ['/t/fixture-target/w/personal/settings', 'Workspace details', 'Policy version'],
+    ['/users/admin/agents/coding-agent', 'Identity details', 'Actor ID']
+  ]) {
+    await page.goto(path);
+    const disclosure = page.locator('.disclosure').filter({ has: page.getByRole('button', { name: title, exact: true }) });
+    const trigger = disclosure.getByRole('button', { name: title, exact: true });
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await trigger.focus();
+    await page.keyboard.press('Enter');
+    await expect(disclosure.getByText(field, { exact: true })).toBeVisible();
+    expect((await trigger.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+    await page.screenshot({ path: testInfo.outputPath(`disclosure-${title.replaceAll(' ', '-')}.png`), fullPage: true, animations: 'disabled' });
+    expect(await page.locator('details').count()).toBe(0);
+  }
+  await page.goto('/operations/tasks');
+  const panel = page.locator('.disclosure').filter({ has: page.getByRole('button', { name: 'Publish manual task', exact: true }) });
+  const toggle = panel.getByRole('button', { name: 'Publish manual task', exact: true });
+  await toggle.click();
+  await panel.getByLabel('Conversation ID', { exact: true }).fill('preserved-task-draft');
+  await toggle.click();
+  await expect(panel.getByLabel('Conversation ID', { exact: true })).toBeHidden();
+  await toggle.click();
+  await expect(panel.getByLabel('Conversation ID', { exact: true })).toHaveValue('preserved-task-draft');
+  await page.screenshot({ path: testInfo.outputPath('disclosure-task-panel.png'), fullPage: true, animations: 'disabled' });
+});
+
+
+test('workspace management paginates conversations and key memories across the full scope', async ({ page }, testInfo) => {
+  await page.context().request.post(`${fixtureBaseUrl}/__test/record-pages`);
+  const base = '/t/fixture-target/w/personal';
+  for (const [section, label, next, old] of [
+    ['conversations', 'Filter conversations', 'Next conversations', 'old-archive'],
+    ['keys', 'Filter key memories', 'Next key memories', 'Unique old archive key']
+  ]) {
+    await page.goto(`${base}/${section}?q=page-`);
+    await expect(page.locator('.record-row')).toHaveCount(30);
+    const first = await page.locator('.record-row').allTextContents();
+    await page.getByRole('link', { name: next, exact: true }).click();
+    await expect(page).toHaveURL(/after=/);
+    await expect(page.locator('.record-row')).toHaveCount(30);
+    expect((await page.locator('.record-row').allTextContents()).some(item => first.includes(item))).toBeFalsy();
+    await page.reload();
+    await expect(page.getByLabel(label)).toHaveValue('page-');
+    await page.getByLabel(label).fill('old-archive');
+    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await expect(page).not.toHaveURL(/after=/);
+    await expect(page.locator('.record-row')).toHaveCount(1);
+    await expect(page.locator('.record-row')).toContainText(old);
+    await page.goto(`${base}/${section}?q=page-&after=broken`);
+    await expect(page.getByRole('alert')).toContainText('Invalid filters');
+    await expect(page.getByLabel(label)).toHaveValue('page-');
+    await page.getByRole('link', { name: 'First page', exact: true }).click();
+    await expect(page.locator('.record-row')).toHaveCount(30);
+    for (const width of [1440,320,390]) {
+      await page.setViewportSize({ width, height: 844 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+      expect((await page.getByRole('link', { name: next, exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      await page.screenshot({ path: testInfo.outputPath(`pagination-${section}-${width}.png`), fullPage: true, animations: 'disabled' });
+    }
+    await page.getByRole('link', { name: next, exact: true }).click();
+    await page.getByRole('button', { name: 'Switch workspace: Personal' }).click();
+    await page.getByLabel('Find a workspace').fill('Bob');
+    await page.getByRole('dialog').getByRole('button', { name: 'Search', exact: true }).click();
+    await page.getByRole('dialog').getByRole('link', { name: /Bob notes/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/w/personal-bob/${section}\\?q=page-`));
+    await expect(page).not.toHaveURL(/after=/);
+    await expect(page.locator('.record-row')).toHaveCount(0);
+  }
+});
+
+test('workspace management navigation resolves owners and keeps service and section scope', async ({ page }) => {
+  await page.goto('/t/fixture-target/open/memory/keys');
+  await expect(page).toHaveURL(/workspaces\?open=/);
+  await expect(page.getByText('Choose the Personal workspace to browse.', { exact: false })).toBeVisible();
+  await page.getByRole('link', { name: /Personal Owner: admin/ }).click();
+  await expect(page).toHaveURL('/t/fixture-target/w/personal/keys');
+  await page.goto('/t/fixture-target/open/conversations/conv-seed-1?user_id=admin');
+  await expect(page).toHaveURL('/t/fixture-target/w/personal/conversations/conv-seed-1');
+  await expect(page.getByRole('heading', { name: 'Conversation', exact: true })).toBeVisible();
+  await page.goto('/t/fixture-target/open/memory/facts/fact-1?user_id=admin&generation_id=generation-fixture');
+  await expect(page).toHaveURL(/\/w\/personal\/memory\/fact\/fact-1\?generation_id=generation-fixture$/);
+  await page.goto('/t/fixture-target/open/memory/keys/key-1?user_id=bob');
+  await expect(page).toHaveURL('/t/fixture-target/w/personal-bob/keys/key-1');
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByText('prefers concise status updates', { exact: true })).toHaveCount(0);
+  await page.goto('/t/fixture-target/open/memory?user_id=missing');
+  await expect(page.getByText('No Personal workspace is available for this owner.', { exact: true })).toBeVisible();
+  await page.goto('/t/fixture-target/w/personal-bob/keys');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const nav = page.getByRole('navigation', { name: 'Primary navigation', exact: true });
+  await expect(nav.getByRole('link', { name: 'Memory', exact: true })).toHaveAttribute('href', '/t/fixture-target/w/personal-bob/memory');
+  await expect(nav.getByRole('link', { name: 'Conversations', exact: true })).toHaveAttribute('href', '/t/fixture-target/w/personal-bob/conversations');
+  await expect(nav.getByRole('link', { name: 'Key memories', exact: true })).toHaveAttribute('aria-current', 'page');
+  await expect(nav.getByRole('link', { name: 'Workspaces', exact: true })).not.toHaveAttribute('aria-current', 'page');
+  await page.goto('/users/admin');
+  await page.getByRole('link', { name: 'Manage key memories', exact: true }).click();
+  await expect(page).toHaveURL('/t/fixture-target/w/personal/keys');
+  const secondBase = `http://127.0.0.1:${process.env.MEMSTATION_E2E_SECOND_TARGET_PORT || String(Number(process.env.MEMSTATION_E2E_TARGET_PORT || '18080') + 1)}`;
+  await page.request.post(`${secondBase}/__test/reset`);
+  const connected = await page.request.post('/manager/session/second-target', { headers: { origin: new URL(page.url()).origin }, data: { token: adminToken } });
+  expect(connected.ok()).toBeTruthy();
+  const review = page.waitForResponse(response => response.url().includes('/manager/api/targets/second-target/api/admin/memory/keys/key-1'));
+  await page.goto('/memory/keys/key-1?user_id=admin&manager_target=second-target');
+  expect((await review).ok()).toBeTruthy();
+  await expect(page.getByRole('combobox', { name: 'Switch target' })).toContainText(new URL(secondBase).host);
+  await page.goto('/memory/keys/key-1?user_id=admin&manager_target=missing');
+  await expect(page.getByText('This service is not registered in Manager.')).toBeVisible();
+});
+
+
+test('workspace management picker anchors search, restores focus and preserves the current record', async ({ page }, testInfo) => {
+  const path = '/t/fixture-target/w/personal/memory/summary/summary-1?generation_id=generation-fixture';
+  await page.goto(path);
+  const trigger = page.getByRole('button', { name: 'Switch workspace: Personal', exact: true });
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  const picker = page.getByRole('dialog', { name: 'Switch workspace', exact: true });
+  await expect(picker.getByLabel('Find a workspace')).toBeFocused();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('.dialog-overlay')).toHaveCount(0);
+  await expect(picker.getByRole('link', { name: /Personal Owner: admin/ })).toHaveAttribute('aria-current', 'true');
+  await page.keyboard.press('Escape');
+  await expect(picker).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await trigger.click();
+  await picker.getByRole('link', { name: /Personal Owner: admin/ }).click();
+  await expect(picker).toHaveCount(0);
+  await expect(page).toHaveURL(path);
+  for (const [width, height] of [[1440, 900], [390, 640], [320, 480]]) {
+    await page.setViewportSize({ width, height });
+    await trigger.click();
+    await expect(picker.getByRole('link', { name: /Bob notes/ })).toBeVisible();
+    const box = (await picker.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(height + 1);
+    const input = (await picker.getByLabel('Find a workspace').boundingBox())!;
+    const search = (await picker.getByRole('button', { name: 'Search', exact: true }).boundingBox())!;
+    expect(Math.abs(input.y + input.height - search.y - search.height)).toBeLessThanOrEqual(1);
+    if (width < 400) expect(input.height).toBeGreaterThanOrEqual(44);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+    await page.screenshot({ path: testInfo.outputPath(`workspace-picker-${width}.png`), fullPage: true });
+    await page.keyboard.press('Escape');
+  }
+  await page.goto('/t/fixture-target/w/personal/keys?q=preference');
+  await expect(page.locator('.key-filter .input')).toBeVisible();
+  const apply = (await page.getByRole('button', { name: 'Apply', exact: true }).boundingBox())!;
+  const create = (await page.getByRole('link', { name: 'New key memory', exact: true }).boundingBox())!;
+  expect(Math.abs(apply.y - create.y)).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: testInfo.outputPath('workspace-key-toolbar-320.png'), fullPage: true });
+});
+
+test('workspace management picker recovers errors and wraps long workspace names', async ({ page }, testInfo) => {
+  await page.goto('/t/fixture-target/w/personal/memory');
+  let fail = true;
+  await page.route('**/manager/api/targets/fixture-target/api/admin/workspaces?*', async route => {
+    if (fail) { fail = false; await route.fulfill({ status: 503, json: { error: 'Workspace directory is temporarily unavailable.' } }); return; }
+    const response = await route.fetch();
+    const data = await response.json();
+    data.items = data.items.map((item: {id: string; name: string}) => item.id === 'personal-bob' ? { ...item, name: 'A very long workspace name for research and engineering notes with uninterruptedidentifier01234567890123456789' } : item);
+    await route.fulfill({ response, json: data });
+  });
+  await page.setViewportSize({ width: 320, height: 480 });
+  await page.getByRole('button', { name: 'Switch workspace: Personal', exact: true }).click();
+  const picker = page.getByRole('dialog', { name: 'Switch workspace', exact: true });
+  await expect(picker.getByRole('alert')).toBeVisible();
+  await picker.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(picker.getByRole('link', { name: /A very long workspace name/ })).toBeVisible();
+  expect(await picker.evaluate(element => element.scrollWidth <= element.clientWidth)).toBeTruthy();
+  await page.screenshot({ path: testInfo.outputPath('workspace-picker-retry-long-name-320.png'), fullPage: true });
+  await picker.getByRole('link', { name: /A very long workspace name/ }).click();
+  await expect(page).toHaveURL('/t/fixture-target/w/personal-bob/memory');
+});
+
+
+test('workspace management related Key Memory opens its scoped editor without a generation', async ({ page }) => {
+  const base = '/t/fixture-target/w/personal';
+  await page.goto(base + '/memory/summary/summary-1?generation_id=generation-admin-active');
+  const link = page.getByRole('link', { name: /context.*key_memory.*key-1/ });
+  await expect(link).toHaveAttribute('href', base + '/keys/key-1');
+  await link.click();
+  await expect(page).toHaveURL(base + '/keys/key-1');
+  await expect(page.getByRole('heading', { name: 'rollout_owner', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Value', { exact: true })).toHaveValue('ops-team');
+  await expect(page.getByRole('button', { name: 'Save memory', exact: true })).toBeDisabled();
 });

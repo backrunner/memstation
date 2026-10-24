@@ -1,6 +1,7 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+  import { selectedTarget } from '#lib/stores/targets.ts';
   import { memoryDetailHref, memoryRouteKindFromDocumentType } from '#lib/memory/routes.ts';
   import type { RelatedMemory } from '#lib/types.ts';
 
@@ -30,7 +31,7 @@
           <div class="relation-node">
             <span class="helper-text">{relation.document_type ?? 'Memory node'}</span>
             {#if kind && relation.document_id}
-              <a class="relation-node-link mono" tabindex="0" href={memoryDetailHref(kind, relation.document_id, userId)}>{id}</a>
+              <a class="relation-node-link mono" tabindex="0" href={memoryDetailHref(kind, relation.document_id, userId, $selectedTarget?.id)}>{id}</a>
             {:else}
               <strong class="mono">{id}</strong>
             {/if}

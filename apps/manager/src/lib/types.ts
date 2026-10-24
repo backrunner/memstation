@@ -250,6 +250,7 @@ export interface MemoryLineage {
 
 export interface MemorySummaryRecord {
   id: string;
+  user_id?: string;
   summary: string;
   topicLabel?: string | null;
 }
@@ -261,6 +262,7 @@ export interface ImpressionRecord {
 
 export interface FactRecord {
   id: string;
+  user_id?: string;
   content: string;
 }
 
@@ -285,6 +287,7 @@ export interface KeyMemoryRecord {
 
 export interface SearchMemoryItem {
   id: string;
+  user_id?: string;
   type: string;
   content: string;
   score: number;
@@ -540,6 +543,11 @@ export interface SystemRuntimeConfig {
 }
 
 export interface APIKeyRecord {
+  agent_id?: string;
+  agent_name?: string;
+  default_workspace_id?: string;
+  capabilities?: string[];
+  expires_at?: string;
   id: string;
   user_id: string;
   name: string;
@@ -561,6 +569,8 @@ export interface UserSummary {
 }
 
 export interface UserDetailPayload {
+  identity_mode?: "personal_only";
+  agents?: { id: string; name: string; status: string; legacy: boolean }[];
   user: {
     id: string;
     name: string;
@@ -642,3 +652,47 @@ export interface CacheStatusPayload {
     components?: Record<string, { status: string; error?: string }>;
   };
 }
+
+export interface AgentRecord {
+  id: string;
+  user_id: string;
+  actor_id: string;
+  name: string;
+  status: 'active' | 'disabled';
+  default_workspace_id: string;
+  revision: number;
+  legacy: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentGrant {
+  user_id: string;
+  workspace_id: string;
+  agent_id: string;
+  capabilities: string[];
+  revision: number;
+}
+
+export interface AgentDetail {
+  agent: AgentRecord;
+  grant: AgentGrant;
+  workspace: { id: string; name: string; status: string; capabilities: string[]; policy_version: number };
+  effective_capabilities: string[];
+}
+
+export interface AgentCredential extends APIKeyRecord { effective_capabilities: string[] }
+export interface CursorPage<T> { items: T[]; next_cursor: string }
+
+export interface WorkspaceRecord {
+  id: string;
+  user_id: string;
+  name: string;
+  kind: string;
+  status: string;
+  capabilities: string[];
+  policy_version: number;
+  created_at: string;
+  updated_at: string;
+}
+export interface WorkspacePage extends CursorPage<WorkspaceRecord> { workspace_mode: 'personal_only' }

@@ -211,7 +211,7 @@
           seen.add(key);
           entries.push({
             key,
-            label: `${kind === 'input' ? 'Tool input media' : 'Tool output media'} · ${path}`,
+            label: `${kind === 'input' ? 'Tool input media' : 'Tool output media'}, ${path}`,
             block
           });
         }
@@ -308,7 +308,7 @@
   {/if}
 
   {#if message.toolCalls?.length}
-    <CollapsibleSection title="Tool calls ({message.toolCalls.length})">
+    <CollapsibleSection title="Tool calls" count={message.toolCalls.length}>
         <div class="toolbar" style="margin-top: 10px;">
           {#each message.toolCalls as toolCall}
             <div class="debug-block">
@@ -354,7 +354,7 @@
   {/if}
 
   {#if message.toolResults?.length}
-    <CollapsibleSection title="Tool results ({message.toolResults.length})">
+    <CollapsibleSection title="Tool results" count={message.toolResults.length}>
         <div class="toolbar" style="margin-top: 10px;">
           {#each message.toolResults as toolResult}
             <div class="debug-block">
