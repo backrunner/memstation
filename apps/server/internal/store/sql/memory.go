@@ -395,6 +395,9 @@ func (r *InMemoryMemoryRepository) StoreDocument(ctx context.Context, doc domain
 		return domain.ErrAccessDenied
 	}
 	if existed {
+		if stringMetadataValue(doc.Metadata, "extraction_method") == "llm" && existing.Metadata["manually_edited"] == true {
+			return domain.ErrAccessConflict
+		}
 		if shouldKeepExistingSnapshot(existing.Metadata, doc.Metadata) {
 			return nil
 		}
@@ -738,6 +741,7 @@ func (r *InMemoryMemoryRepository) updateDocument(ctx context.Context, userID, i
 	doc.TimeTier = domain.ClassifyTimeTier(now, now)
 	doc.UpdatedAt = now
 	doc.Metadata = cloneMetadata(doc.Metadata)
+	doc.Metadata["manually_edited"] = true
 	r.documents[key(userID, id)] = doc
 	if kind == domain.MemoryTypeFact {
 		r.captureFactHistoryLocked(userID)

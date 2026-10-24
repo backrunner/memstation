@@ -15,6 +15,50 @@ import (
 	"github.com/google/uuid"
 )
 
+func TestLLMReplayPreservesManualCorrections(t *testing.T) {
+	runLLMReplayEdits(t, NewInMemoryMemoryRepository())
+}
+
+func TestPostgresLLMReplayPreservesManualCorrections(t *testing.T) {
+	url := os.Getenv("MEMSTATION_TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("database not configured")
+	}
+	db, err := sql.Open("pgx", url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	runLLMReplayEdits(t, NewPostgresMemoryRepository(db))
+}
+
+func runLLMReplayEdits(t *testing.T, repo ports.MemoryRepository) {
+	t.Helper()
+	ctx := context.Background()
+	owner := "manual-replay-" + uuid.NewString()
+	for _, kind := range []domain.MemoryType{domain.MemoryTypeSummary, domain.MemoryTypeFact, domain.MemoryTypeImpression, domain.MemoryTypeTask} {
+		original := domain.MemoryDocument{ID: uuid.NewString(), UserID: owner, Type: kind, Content: "model output", Metadata: map[string]any{"extraction_method": "llm"}}
+		if err := repo.StoreDocument(ctx, original); err != nil {
+			t.Fatal(err)
+		}
+		stored, err := repo.GetDocument(ctx, owner, original.ID, kind)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = repo.(ports.ConditionalMemoryRepository).UpdateDocumentConditional(ctx, owner, stored.ID, kind, "human correction", domain.MemoryWriteCondition{UpdatedAt: stored.UpdatedAt, GenerationID: stored.GenerationID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.StoreDocument(ctx, original); !errors.Is(err, domain.ErrAccessConflict) {
+			t.Fatal("model replay was allowed to replace an edited document", kind, err)
+		}
+		current, err := repo.GetDocument(ctx, owner, stored.ID, kind)
+		if err != nil || current.Content != "human correction" {
+			t.Fatal(kind, current, err)
+		}
+	}
+}
+
 func TestSummaryCheckpoints(t *testing.T) {
 	runSummaryCheckpoints(t, NewInMemoryMemoryRepository(), nil)
 }

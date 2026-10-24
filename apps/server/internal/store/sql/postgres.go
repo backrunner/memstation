@@ -699,6 +699,18 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 	if err = ensureMemoryWorkspaceTx(ctx, tx, doc.UserID); err != nil {
 		return err
 	}
+	if stringValue(doc.Metadata, "extraction_method") == "llm" {
+		var revision int64
+		err := tx.QueryRowContext(ctx, `SELECT embedding_revision FROM memory_nodes WHERE user_id=$1 AND id=$2`, doc.UserID, doc.NodeID).Scan(&revision)
+		if err != nil && !errors.Is(err, sqlpkg.ErrNoRows) {
+			return err
+		}
+		// Explicit edits change the revision under the same identity lock.
+		// A cached model result cannot overwrite that body or its embedding.
+		if revision > 0 {
+			return domain.ErrAccessConflict
+		}
+	}
 	if doc.Type == domain.MemoryTypeSummary && doc.Metadata["_llm_summary_checkpoint"] != nil {
 		var metadata []byte
 		err := tx.QueryRowContext(ctx, `SELECT metadata FROM memory_summaries WHERE user_id=$1 AND id=$2`, doc.UserID, doc.ID).Scan(&metadata)
