@@ -900,20 +900,22 @@ test('pending task confirmation cannot be dismissed or submitted twice', async (
   await expect(dialog).toHaveCount(0);
 });
 
-test('primary admin routes fit desktop and narrow screens without page overflow', async ({ page }, testInfo) => {
-  const routes = ['/dashboard', '/audit', '/settings/system', '/settings/models', '/settings/providers', '/operations/tasks', '/operations/health', '/memory/keys', '/users', '/users/admin', '/conversations', '/statistics/tokens'];
-  for (const width of [1440, 1024, 768, 390, 320]) {
+for (const width of [1440, 1024, 768, 390, 320]) {
+  test(`primary admin routes fit ${width}px screens without page overflow`, async ({ page }, testInfo) => {
+    const routes = ['/dashboard', '/audit', '/settings/system', '/settings/models', '/settings/providers', '/operations/tasks', '/operations/health', '/memory/keys', '/users', '/users/admin', '/conversations', '/statistics/tokens'];
     await page.setViewportSize({ width, height: 1000 });
     for (const route of routes) {
-      await page.goto(route);
-      await expect(page.locator('.page-title')).toBeVisible();
-      if (route === '/audit') await expect(page.getByRole('button', { name: 'memory_document_create', exact: true })).toBeVisible();
-      await expect(page.locator('.error-state')).toHaveCount(0);
-      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), { message: `${route} at ${width}px` }).toBe(true);
-      if (width === 1440 || width === 390) await page.screenshot({ path: testInfo.outputPath(`ui-${route.slice(1).replaceAll('/', '-')}-${width}.png`), fullPage: true, animations: 'disabled' });
+      await test.step(`${route} at ${width}px`, async () => {
+        await page.goto(route);
+        await expect(page.locator('.page-title')).toBeVisible();
+        if (route === '/audit') await expect(page.getByRole('button', { name: 'memory_document_create', exact: true })).toBeVisible();
+        await expect(page.locator('.error-state')).toHaveCount(0);
+        await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), { message: `${route} at ${width}px` }).toBe(true);
+        if (width === 1440 || width === 390) await page.screenshot({ path: testInfo.outputPath(`ui-${route.slice(1).replaceAll('/', '-')}-${width}.png`), fullPage: true, animations: 'disabled' });
+      });
     }
-  }
-});
+  });
+}
 
 test('dashboard range redraws its chart and section breadcrumbs resolve', async ({ page }) => {
   const canvas = page.locator('.chart-surface canvas').first();
@@ -1265,10 +1267,11 @@ test('agent management lifecycle and credential ceilings', async ({ page }, test
   await page.getByRole('button', { name: 'Disable agent', exact: true }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Disable agent', exact: true }).click();
   await expect(page.getByText('Agent disabled and all its credentials revoked.')).toBeVisible();
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Issue credential', exact: true })).toBeDisabled();
   await expect(page.locator('.credential-row')).toContainText('Revoked');
   await expect(page.locator('.credential-row')).toContainText('Effective: No operational access');
-  await page.getByRole('button', { name: 'Enable agent', exact: true }).click();
+  await page.getByRole('main').getByRole('button', { name: 'Enable agent', exact: true }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Enable agent', exact: true }).click();
   await expect(page.getByText('Agent enabled. Issue a new credential to reconnect it.')).toBeVisible();
   await expect(page.locator('.credential-row')).toContainText('Revoked');

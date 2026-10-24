@@ -15,6 +15,8 @@
 | Key 上下文超过最近 100 条窗口后被误认为不存在 | Worker 与预览按允许键逐项读取，不依赖任意列表窗口。 |
 | LLM 重放会覆盖人工修正的事实及普通记忆正文 | 在数据库身份锁内拒绝覆盖已有人工作业版本的节点，内存仓库标记对应修改；摘要、事实、画像、任务的内存／真实 PostgreSQL 回归先失败后通过。 |
 | 新增事实元数据在历史快照中被嵌套，来源字段无法读取 | 更新快照触发器并修正旧快照元数据形状，保留历史内容及时间；真实 PostgreSQL 用例先复现再通过。 |
+| Linux WebKit 的页面布局回归超过整项 45 秒 | 保留五档视口和全部页面断言，每档视口独立测试并记录每个路由 step；不提高全局超时或增加自动重试。 |
+| Agent 重新启用按钮与退出中的确认框按钮重名 | 等待禁用确认框退出，再定位主内容中的启用按钮。 |
 | 重建检查点读取没有显式 generation | 内部检查点与已存摘要读取携带目标 generation，保持隔离重建的读取边界。 |
 
 人工修正后的原代次重放会报告冲突，保留现有正文和向量；需要重新生成时使用隔离 generation 检查并显式激活，不自动撤销人工修改。
@@ -25,7 +27,7 @@
 
 - 完整 `go test ./...` 使用独立 PostgreSQL 数据库；相关服务、Worker、SQL 和 gRPC 包使用真实 PostgreSQL 再跑 `-race`。
 - Go format、lint；四种模型出站接口的 Token／JSON 契约；生成代码一致性。
-- Manager lint／类型检查、31 项单测（含独立 Redis DB 的真实会话共享用例）、production build；完整 Chromium／WebKit E2E 共 100 项通过。
+- Manager lint／类型检查、31 项单测（含独立 Redis DB 的真实会话共享用例）、production build；完整 Chromium／WebKit E2E 初次 100 项通过；视口分项后完整回归 108 项通过。
 - 四项新迁移 Atlas lint、dry-run，全部 21 项迁移在空 PostgreSQL 库实际重放。
 - Worker 恢复 smoke 与 256 会话演练、backup/restore dry-run。
 - Server 覆盖率 73.4%，Manager 覆盖率 44.10%，均满足现有阈值。
