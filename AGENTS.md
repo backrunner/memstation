@@ -470,10 +470,13 @@ v1.0 默认目标：
 - 不使用“紫色 + 默认深色”的泛化 AI 控制台风格
 - 字体建议：`IBM Plex Sans` 或 `Geist`，代码字体 `JetBrains Mono`
 - 组件风格强调监控、数据密度、运维信息可读性
+- 禁止用圆点字符拼接 UI 文本；并列元数据使用 `MetadataRow` 的独立文本项与留白，说明使用自然语句。避免用另一种分隔符机械替代所有圆点；不增加装饰性图标、标签或卡片。
+- 交互动线优先就地完成：搜索与提交对齐、当前项不重复导航，切换上下文保留适用栏目和筛选；离开有未保存内容的页面先保护草稿。工作区服务器搜索使用基于 Bits UI Popover 的 `WorkspacePicker`，普通表单选择仍统一使用 `SelectField`。
 - 避免装饰性状态灯、渐变、发光、悬浮位移动效及重复胶囊标签；常规状态和元数据用文字呈现，填色提示用于失败、重试、历史事实等需要注意的状态
 - 各端优先展示搜索、结果和主要操作，次要筛选按需展开并保留所选条件；不重复展示导航已有入口、无操作意义的正常状态或原始记录
 - 同类按钮、输入框、表单和记录列表使用共享尺寸与间距；普通记录用分隔线组织，避免卡片层层嵌套。高频编辑内容优先，运行元数据和原始 JSON 按需展开；关系视图必须有可读标识与真实跳转入口
 - 折叠区域统一使用基于 Bits UI 的 `CollapsibleSection`；选择器统一使用 `SelectField`，输入使用 `TextInputField` / `TextareaField`，普通操作按钮使用基于 Bits UI Button 的 `Button`。有对应 Bits UI primitive 时优先复用，禁止各页面重复实现折叠、Select 或原始表单控件；保持紧凑布局、键盘可用、草稿保留及 reduced-motion 支持。
+- 筛选工具栏通过 `FilterToolbar` 复用 `CollapsibleSection`，禁止页面自行使用原生 `details/summary` 或重复展开样式。收起后必须保留表单值，隐藏区域校验失败时自动展开并定位；设计及属性见 `docs/manager-components.md`
 - 移动端主要控件保持至少 44px 触控高度，文本输入避免 iOS 聚焦缩放；短屏弹窗可滚动，保存操作不得遮住最后一组字段，横向栏目切换应露出当前项
 
 ---
@@ -629,11 +632,19 @@ v1.x 后续路线：
 
 ---
 
-## 14. 当前实现状态（as of 2026-10-23）
+## 14. 当前实现状态（as of 2026-10-24）
 
 本节用于重启时快速恢复上下文；如后续实现进度发生变化，必须同步更新本节，而不能只改代码不改状态。
 
 ### 14.1 已完成
+
+- 2026-10-24 提交前累积复核：修复 Gateway metadata 复用污染、可信 Owner 归一化晚于配置读取，Manager IPv6 特殊地址压缩／补零判定，以及关联 Key Memory 错走普通文档路径；新增回归先复现再修复。Go 全量／相关 race／格式／lint／生成一致性／契约、Manager 31 项单测／98 项完整 E2E 及关系跳转 8 项复测／生产构建、Atlas 17 项重放与本批 4 项 lint、coverage、Worker recovery、备份 dry-run、真实 PostgreSQL dump/restore 31 表计数和 Go／Redis 生产 Manager 联调通过。当前仍仅 Personal，验证与限制见 [累积复核记录](docs/plans/workspace-agents/review-2026-10-24.md)。
+
+- 2026-10-24 Manager UI 整理：工作区切换改为就地展开的 Bits UI Popover，统一箭头／焦点／搜索／当前项，显式展示 owner，重复选择当前空间保持详情和代次；切换其他空间保留栏目／通用筛选和既有草稿保护。新增 MetadataRow，清理 Manager 所有圆点拼接文本，调整 Key Memory 搜索及主操作对齐，修正审计加载态空结果误提示。Manager lint／类型检查／生产构建、98 项完整 E2E 及审计修正后 3 项复测通过，29 项单测通过，1 项独立 Redis 测试跳过；桌面和移动布局已核对。仍仅开放 Personal。实现和验证见 [UI 整理记录](docs/plans/workspace-agents/manager-ui-refinement-2026-10-24.md)。
+
+- 2026-10-24 会话／Key Memory 分页与导航：新增工作区游标分页和数据库范围内子串筛选，Manager 每页 30 条，去除最近 100 条窗口；会话统计仅聚合当前页，不逐条读取正文。主导航、用户页、Dashboard 和记录链接进入明确 Target／Workspace，未知 owner 不回退 admin，多空间先选择；高级审计／重建保留可达且固定服务的兼容入口。Go 全量／相关 PostgreSQL race／format／lint、Manager 30 项单测／lint／生产构建和真实 Go／PostgreSQL／Redis 联调通过；完整浏览器回归 93 项通过，审计参数冲突修复后 7 项相关复测通过，320／390px WebKit 布局已核对。仍仅开放 Personal；实现与验证见 [分页与导航记录](docs/plans/workspace-agents/workspace-pagination-2026-10-24.md)。
+
+- 2026-10-24 通用折叠组件统一：升级 CollapsibleSection 的标题／图标／计数、展开状态、边框与焦点、动画裁切和移动尺寸，样式归入组件；三处原生详情／筛选与所有现有折叠区域统一复用，补齐隐藏表单字段校验时自动展开与聚焦。Manager lint／类型检查、26 项单测及生产构建通过；90 项浏览器回归中 1 项旧选择器歧义修正后，相关 5 项复测通过，桌面及 320／390px 截图已核对。实现与验证边界见 [Manager 组件规范](docs/manager-components.md)。
 
 - 2026-10-23 共享控件与依赖升级：所有折叠区域统一为 Bits UI `CollapsibleSection`；所有 Select（含 target、provider route 与统计筛选）统一为 `SelectField`，普通按钮统一 `Button`，输入与聊天编辑器使用共享 Input / Textarea。统一表单桌面 36px、移动端至少 44px 触控、焦点、草稿保留与 reduced-motion；SvelteKit 3 / adapter-node 6、Bits UI 2.20.2、Vitest 5、Node 26.12.1、Go 1.27.3 等完成迁移，TypeScript 固定 6.0.3。Manager lint/check、15 项单测、production build、Chromium 36 + WebKit 12 项 E2E、Go 全量及隔离 PostgreSQL 集成、format/lint、重复生成一致性、Atlas lint/dry-run、恢复 smoke 与备份 dry-run通过；版本、兼容性例外及验证边界见 `docs/ui-dependencies-2026-10-23.md`。
 
@@ -703,7 +714,7 @@ v1.x 后续路线：
 - backup/restore 实际演练仍要求运行环境具备 Docker Compose 与镜像拉取能力；在无 Docker 环境下只能执行 dry-run 形态校验
 - 压测与覆盖率门禁已具备基线实现，但后续仍应随着功能扩展逐步提高阈值，而不是长期停留在当前数值
 - 2026-06-27 复核 GitHub nightly 最近失败点为 `actions/upload-artifact` 存储配额已满；worker recovery nightly drill 与 backup/restore nightly drill 本身均通过。workflow 已将诊断 artifact 上传改为 3 天保留与非阻塞，并在定时 nightly 中加入同提交覆盖检查，后续仍需定期清理远端 Actions artifact 存储。
-- 既有实现的剩余工作包括生产量级检索性能验证、外部 benchmark 与运维阈值持续收紧；2026-10-23 用户明确追加的 Workspace／多 Agent／Manager 扩展按 14.5 节计划推进，当前尚未实现
+- 既有实现的剩余工作包括生产量级检索性能验证、外部 benchmark 与运维阈值持续收紧；2026-10-23 用户明确追加的 Workspace／多 Agent／Manager 扩展按 14.5 节计划推进，已完成 Personal Agent 基础和管理流程，完整工作区隔离尚未实现
 
 ### 14.3 重启检查点
 
@@ -737,8 +748,17 @@ v1.x 后续路线：
 ### 14.5 工作区与多 Agent 扩展计划（2026-10-23）
 
 - 用户要求同时覆盖群聊机器人、代码／个人 Agent 工作区、多个 Agent 共用服务，以及完整 Manager UI 改良。
-- 完整计划入口为 [工作区与多 Agent 扩展计划](docs/plans/workspace-agents/README.md)，包含架构、接入契约、Manager 信息架构与交互、迁移、实施顺序和验收矩阵；当前为计划与设计稿，不能视为功能已完成。
+- 完整计划入口为 [工作区与多 Agent 扩展计划](docs/plans/workspace-agents/README.md)，包含架构、接入契约、Manager 信息架构与交互、迁移、实施顺序和验收矩阵；完整工作区功能仍未完成；2026-10-24 已开始 P1 基础实现，实际边界见下一条。
+- 2026-10-24 首批落地：默认个人 Workspace、Actor、Agent、WorkspaceGrant 和凭据迁移；完整认证主体、到期／撤销／能力交集、HTTP／gRPC／工具权限校验、Agent 会话命名空间与会话写入版本保护；现有用户页支持 Agent Key、权限上限和有效期。其他工作区、私有记忆、群聊事件、画像、Run 和 Manager BFF／完整导航仍待实施，不能把本批视为 P1–P6 完成。接入、迁移、测试边界见 [实现记录](docs/plans/workspace-agents/implementation-2026-10-24.md)。
+- 2026-10-24 Agent 管理落地：用户页新增 Manage agents，提供服务端搜索／状态筛选／分页、Agent 创建与名称编辑、Personal 授权编辑、凭据权限上限／有效权限展示、单次密钥签发、单项撤销和停用／启用；版本冲突保留输入，路由切换丢弃旧响应，移动端主操作前置。凭据入库事务再次锁定并校验授权，避免并发收紧权限时按旧上限签发。Go 全量／相关包 race／真实 PostgreSQL 用例、前后端 lint、Manager 15 项单测及 56 项浏览器回归通过；浏览器使用 fixture，完整工作区隔离和 Manager BFF 仍待实施；边界见 [Agent 管理记录](docs/plans/workspace-agents/agent-management-2026-10-24.md)。
+- 2026-10-24 会话与任务基础落地：Conversation 增加可信 workspace／creator Agent 字段，Message／Usage 继承父空间；迁移回填、复合外键和不可变归属阻止跨属主／跨空间改挂。结束状态与 outbox 同事务提交，重复请求不重置已处理事件，超时在事务内重检；旧快照不覆盖 Worker 状态。全部 Worker handler 校验 Personal 作用域，任务 ID 按 owner／workspace 隔离，修复 queued 后发布失败无法恢复及内存仓库 metadata 并发读取竞态。完整记忆／向量／blob／缓存／generation 隔离和事件窗口仍待实施，未开放其他工作区；迁移、验证与限制见 [会话作用域记录](docs/plans/workspace-agents/conversation-scope-2026-10-24.md)。
+- 2026-10-24 记忆边界落地：节点／向量增加 workspace 字段、复合外键与不可变归属；Memory service／repository 拒绝错误 owner／workspace，直接读取、关键词、历史事实、图关系和向量候选在 LIMIT 前过滤 Personal 范围。缓存使用 owner／workspace 身份并校验命中数据；记忆写入防止 ID 改挂，向量写入与 ready 状态同事务。修复真实 PostgreSQL 暴露的多类型／会话记忆列表 SQL 错误；全量 Go、相关 race、format／lint、生成一致性、16 项迁移重放／Atlas、备份 fixture 与 256 会话恢复演练通过。generation／source／blob／可见性／生命周期隔离及 Workspace UI 仍待实施，其他空间继续关闭；详见 [记忆作用域记录](docs/plans/workspace-agents/memory-scope-2026-10-24.md)。
+- 2026-10-24 生命周期基础落地：generation／source snapshot／source message／generation source／blob／message part／artifact 增加 workspace 与复合归属；重建 SQL 移至 store，快照、创建、计数、激活与回收按 Personal 串行校验。补齐完成后发布失败的重试、迟到激活不回滚新版、废弃代际的文档／向量／分段写入保护；新文件使用工作区路径，PostgreSQL 自动清理保留其他会话和快照引用。17 项迁移重放／Atlas、完整 Go／相关 race／format／lint／生成一致性、29 条备份 fixture 插入及 256 会话恢复演练通过；未开放其他 Workspace，内存 fallback 无跨仓库保留引用事务保证，Manager BFF／Workspace UI、可见性、SourceEvent／Subject／Run 与空间归档删除仍待实施。详见 [生命周期记录](docs/plans/workspace-agents/lifecycle-scope-2026-10-24.md)。
 - 保留 User 所有权边界，新增 Workspace、Actor、Agent、Run 与显式授权；主体归属、共享／私有记忆、事件去重、并发版本冲突和单空间重建必须贯穿所有 transport、存储与工具路径。
+- 2026-10-24 Manager 连接落地：P4 前置层已改为服务器 Target 登记、Redis AES-256-GCM 会话和同源 Admin／GraphQL／Gateway／文件转发；移除浏览器凭据 Map，保存失败保留非敏感草稿、切换和迟到 401 隔离、过期重连与移动短屏操作已覆盖。生产运行入口处理 origin、上传大小、请求超时和 Redis 关闭；真实 Go／Redis 联调验证重启、双实例共享、文件及 Redis 故障恢复。Go 本轮使用隔离内存仓库，未重跑 PostgreSQL／容器／远端 CI。完整 Workspace UI 和其他空间仍未开放，详见 [Manager 连接记录](docs/plans/workspace-agents/manager-sessions-2026-10-24.md)。
+- 2026-10-24 Workspace 管理入口：已有 Personal 目录／详情／名称和能力策略 REST、版本冲突与事务审计、真实代理工作区发现已实现；配置开发 Key 同样检查当前策略和 legacy Agent 状态。Manager 新增 `/t/:target/workspaces`、工作区 settings／access 路由及 server load，支持服务深链接、按范围保留草稿、冲突重载和 Agent 授权导航。隔离 PostgreSQL 迁移重放、并发／审计回滚／权限收紧、完整 Go 与 Manager 70 项 E2E、生产构建 + Go／PostgreSQL／Redis 联调及桌面／移动 WebKit 验证通过。其他类型工作区、完整 picker、记忆／对话等旧路径迁移、GraphQL／gRPC 新管理契约仍待实施。详见 [Workspace 管理记录](docs/plans/workspace-agents/workspace-management-2026-10-24.md)。
+- 2026-10-24 Workspace 浏览入口：新增 workspace 路径下的对话／文档列表、详情、关联记忆和来源 GET 契约，已有空间解析后绑定 Personal data scope，拒绝 owner 覆盖及跨空间记录／子集合读取。Manager 新增 memory／conversations server-load 路由、URL 筛选、范围内来源／关系跳转和移动栏目；最近 100 条浏览与全量检索明确区分。Go 全量及 PostgreSQL 相关 race、Manager 24 项单测／76 项 E2E 与最终布局专项 14 项、生产 Go／PostgreSQL／Redis 联调通过。记忆编辑、Key Memory、完整 picker／旧路径迁移和其他空间仍未开放到新视图，验证与下一步见 [Workspace 浏览记录](docs/plans/workspace-agents/workspace-browsing-2026-10-24.md)。
+- 2026-10-24 Workspace 记忆编辑：范围内文档正文修正与 Key Memory CRUD 已落地；以原始 updated_at 快照和显式 generation 做数据库条件写入，Key 创建／更新／删除共用锁，审计／embedding outbox 同事务，失败回滚。Manager 提供按 Target／Workspace／generation／记录隔离的标签页草稿、409 后加载当前内容与显式重试、分类清空和旧版本删除保护；修复 BFF DELETE 请求体长度。Go 全量／PostgreSQL 相关 race／format／lint、Manager 25 项单测／80 项 E2E／生产构建及真实 Go／PostgreSQL／Redis 和移动 WebKit 联调通过。完整 picker、检索／历史筛选、分页、旧路径迁移及其他空间仍待实施；详见 [记忆编辑记录](docs/plans/workspace-agents/workspace-memory-editing-2026-10-24.md)。
 - Manager 区分 Target／Workspace／账号与 Agent，遵守 11.2 节 server load／API routes 原则；旧 `.agents/plan/frontend-panel.md` 中“所有业务直连、禁止薄服务端转发”的冲突表述不再用于此次扩展。
 - 本次不引入 Organization、Billing、集群部署或外部 Agent 调度平台；现有 CI、benchmark 边界和完整 v1 交付要求保持有效。
 
@@ -774,3 +794,5 @@ v1.x 后续路线：
 - 先打通完整链路，再做局部优化
 - 先保证协议兼容与数据可靠，再追求高级智能行为
 - 所有“未来可扩展”都必须建立在“今天就能实现、今天就能测试、今天就能运维”的设计上
+
+- 2026-10-24 Workspace 检索与切换：文档列表新增数据库内容／ID 筛选和绑定 owner／workspace／generation／条件的游标分页，不再局限最近 100 条；同时间多类型排序稳定，软删除 Key 不再返回。范围内检索复用 MemoryEngine，支持活动时间与 Fact 双时间历史快照，历史正文只读并明确跳转当前记录。Manager 新增服务器搜索的工作区切换器，保留栏目／通用筛选、清除记录／游标／代次，维护草稿提醒与迟到响应边界；移动端折叠次要筛选并显示所选条件。Go 全量／PostgreSQL 相关 race／format／lint、Manager 27 项单测／84 项完整 E2E 加专项回归／生产构建和真实 Go／PostgreSQL／Redis 联调通过。会话与 Key Memory 列表分页、旧路由迁移、其他类型空间与 Subject／SourceEvent／Run 仍待实施；详见 [检索与切换记录](docs/plans/workspace-agents/workspace-search-2026-10-24.md)。

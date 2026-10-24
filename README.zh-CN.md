@@ -73,6 +73,8 @@ pnpm dev
 
 gRPC 地址为 **127.0.0.1:9090**。包含 Worker 的完整 Compose 启动方式见[开发栈说明](deploy/compose/DEVELOPMENT.md)。其中 reset 命令会删除所选项目的数据库和 Redis 卷，仅用于可丢弃的开发数据。Apple Container 和 Portless HTTPS 调试见[本地调试指南](docs/local-debugging.md)。
 
+Manager 通过同源接口连接服务器，会话加密存放于服务端。生产部署需要登记目标并配置 Redis 与会话密钥，详见 [Manager 连接配置](docs/manager-connections.md)。
+
 ## 接入 AI 客户端
 
 把 OpenAI 兼容客户端的 Base URL 设置为 `http://127.0.0.1:8080/v1`，填写 **MemStation API Key**。上游厂商密钥保留在 MemStation，模型名使用实例中已配置的值：
@@ -97,7 +99,7 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 
 ## 开发、评测与部署
 
-- **扩展计划：**[工作区与多 Agent](docs/plans/workspace-agents/README.md)，包含 Manager 设计、接入契约、迁移与验收标准；新增能力尚未实现。
+- **扩展计划：**[工作区与多 Agent](docs/plans/workspace-agents/README.md)，包含 Manager 设计、接入契约、迁移与验收标准；[Agent 身份与凭据基础](docs/plans/workspace-agents/implementation-2026-10-24.md)、[Agent 管理界面](docs/plans/workspace-agents/agent-management-2026-10-24.md)、[会话作用域／可靠结束](docs/plans/workspace-agents/conversation-scope-2026-10-24.md)、[记忆／向量／缓存作用域](docs/plans/workspace-agents/memory-scope-2026-10-24.md)及[重建／来源／文件生命周期](docs/plans/workspace-agents/lifecycle-scope-2026-10-24.md)已落地到共享个人空间，[Manager 服务端连接层](docs/manager-connections.md)与 [Personal 工作区目录、策略编辑和 Agent 作用域导航](docs/plans/workspace-agents/workspace-management-2026-10-24.md)以及[工作区记忆／对话浏览](docs/plans/workspace-agents/workspace-browsing-2026-10-24.md)、记忆编辑、范围内检索和[列表分页与导航](docs/plans/workspace-agents/workspace-pagination-2026-10-24.md)也已实现；高级审计／重建保留兼容入口，其他类型工作区与群聊摄取仍在实施。
 - **开发：**[本地调试](docs/local-debugging.md)、[工程规范](AGENTS.md)、[贡献指南](CONTRIBUTING.md)。
 - **测试：**[CI 门禁与故障说明](docs/ci.md)，Go 单元 / 集成 / 契约测试，Manager Vitest 和 Chromium / WebKit E2E。
 - **记忆评测：**[评测与数据集说明](apps/server/tests/eval/README.md)，原生 golden dataset 和外部 LOCOMO / LongMemEval adapter 输出检索明细、分数组成与回归样例。Benchmark 为本地 / 手动入口，不进入默认 CI / nightly 红线。

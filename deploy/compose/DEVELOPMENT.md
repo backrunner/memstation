@@ -14,7 +14,7 @@ Portless full-stack flow
 - `pnpm dev:manager:portless`: starts only the Portless manager proxy. Use this when a backend is already running at `MEMSTATION_MANAGER_DEV_PROXY_TARGET`, which defaults to `http://127.0.0.1:8080`.
 - `MEMSTATION_DEV_INFRA=0 pnpm dev:portless`: skips Docker infra startup and assumes PostgreSQL and Redis are already reachable through `DATABASE_URL` and `REDIS_URL`.
 - `MEMSTATION_SKIP_DEV_MIGRATE=1 pnpm dev:portless`: skips the migration step for quick restarts.
-- A `502 Bad Gateway` from `https://memstation-manager.localhost/api/...` usually means the manager proxy cannot reach the configured backend target.
+- A `502 Bad Gateway` from `https://memstation-manager.localhost/manager/api/targets/...` usually means the manager proxy cannot reach the configured backend target.
 
 Reset flow
 - `./scripts/dev/reset-compose-stack.sh`: tears down the current stack, removes Postgres and Redis volumes, recreates the baseline database, runs `memstation migrate`, runs `memstation seed`, and starts server, worker, scheduler, and manager.
@@ -24,7 +24,7 @@ Reset flow
 
 Local env file
 - The reset script stores local development secrets in `.env.memstation-dev`.
-- If `.env.memstation-dev` does not exist, the script generates a fresh admin token and master key automatically.
+- If `.env.memstation-dev` does not exist, the script generates a fresh admin token, master key, and Manager session encryption key automatically. Existing files receive a Manager key if the setting is absent.
 - You can override the path with `MEMSTATION_ENV_FILE=/path/to/file ./scripts/dev/reset-compose-stack.sh`.
 
 Services
@@ -33,6 +33,12 @@ Services
 - Compose manager: `http://127.0.0.1:4173`
 - PostgreSQL: `127.0.0.1:5432`
 - Redis: `127.0.0.1:6379`
+
+Manager sessions
+- The production Compose Manager requires `MEMSTATION_MANAGER_SESSION_KEY` (64 hexadecimal characters) in the environment file. For manual Compose startup, generate it once with `openssl rand -hex 32` and keep it across restarts; do not reuse the Go master key.
+- Manager connects to `http://memstation:8080` inside Compose. Select the registered **Local** service in the UI; the browser no longer needs to reach that address directly.
+- Redis DB 1 stores encrypted target sessions. Redis failure fails closed; development Vite without Manager Redis configuration uses memory and requires reconnecting after a restart.
+- For a reverse proxy, set Manager `ORIGIN` to the external HTTPS origin. See [Manager connection configuration](../../docs/manager-connections.md) for target registration, network policy, migration and cookie settings.
 
 Notes
 - `deploy/compose/docker-compose.yml` keeps local-development defaults only. Rotate secrets before sharing or deploying.

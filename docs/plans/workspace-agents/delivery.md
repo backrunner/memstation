@@ -1,6 +1,6 @@
 # 工作区与多 Agent 实施和验收
 
-状态：待实施。所有阶段的功能完成状态均为未完成。文档与原型验证见 [validation.md](validation.md)，不能替代下述门禁。
+状态：实施中（2026-10-24）。P1 的默认个人工作区／Actor／Agent／凭据、能力授权与会话写入保护已落地，并落地 Personal Agent 创建／权限编辑／凭据签发与撤销／停用管理 UI；新增会话／消息／用量归属、结束与 outbox 同事务、超时重检和 Worker 作用域；Personal 记忆节点／向量迁移、候选前置过滤、缓存边界与写入归属校验已落地；新增 Personal generation／source／media 迁移、并发重建与幂等计数、自动切换重试、迟到任务防重建和保留快照文件引用保护。P4 的服务器 Target 登记、加密会话、同源代理和连接 UI 已实现，已有 Personal 目录／策略管理、Target/Workspace 范围上下文及 settings/access 路由已实现；工作区 memory/conversations 列表、详情与来源 GET 链路已实现；文档正文修正、Key Memory CRUD、数据库条件写入／事务审计及 Manager 冲突草稿已实现，已有 Personal 切换器、记忆检索／历史筛选和文档游标分页已实现；会话／Key Memory 列表分页、主导航与旧记录入口解析已实现，高级审计／重建兼容视图的完整迁移仍待完成。P1 整体及 P2–P6 尚未完成。详见 [基础实现](implementation-2026-10-24.md)、[Agent 管理落地](agent-management-2026-10-24.md)、[会话和任务实现](conversation-scope-2026-10-24.md)、[记忆作用域实现](memory-scope-2026-10-24.md) 与 [生命周期实现](lifecycle-scope-2026-10-24.md)。Manager 连接记录见 [会话与部署实现](manager-sessions-2026-10-24.md)。工作区入口见 [Workspace 管理记录](workspace-management-2026-10-24.md)，浏览链路见 [记忆和对话浏览记录](workspace-browsing-2026-10-24.md)，修改链路见 [记忆编辑与 Key Memory](workspace-memory-editing-2026-10-24.md)。检索与导航见 [检索、历史查询与切换](workspace-search-2026-10-24.md)。文档与原型验证见 [validation.md](validation.md)，不能替代下述门禁。
 
 ## 1. 执行顺序
 
@@ -44,7 +44,7 @@ flowchart LR
 | 运维／评测 | `scripts/ops/`、`scripts/test/`、`apps/server/tests/eval/`：扩充作用域和并发用例、恢复清点、质量诊断 |
 | 文档 | AGENTS、README 中英文、架构、部署、接入、迁移与 API 示例保持状态一致 |
 
-现有工作区含未提交图记忆／Manager 改动，实施前必须建立准确基线并保留。不能通过 reset、全文件覆盖或重跑生成器后盲目接受 diff 丢掉既有修改。
+2026-10-24 实施基线为干净的 `f336c65`；图记忆、扩展计划和 Manager／工具链改动已经提交。实施仍需保留这些既有能力。不能通过 reset、全文件覆盖或重跑生成器后盲目接受 diff 丢掉既有修改。
 
 ## 3. 迁移和发布方案
 
@@ -167,6 +167,8 @@ rtk pnpm test:backup:dry-run
 | 老客户端不能传新 header | 凭据默认空间与兼容模式，不要求所有客户端立即升级 |
 | 模型误认人物或把转述当事实 | 来源结构化、候选验证、保守 fallback、人工修正；质量观察与权限测试分开 |
 | UI 范围切换晚到响应污染 | ScopeContext＋请求取消＋revision guard，U02 必须覆盖 |
+
+2026-10-24 后续进展：会话与 Key Memory 的工作区分页、主导航与旧记录入口解析已经落地，详见 [分页与导航记录](workspace-pagination-2026-10-24.md)。高级审计／重建兼容视图仍保留，不能把本批视为所有旧管理页已完成 server-load 迁移；其他类型 Workspace 继续关闭。
 
 ## 9. 发布完成清单
 

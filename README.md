@@ -58,7 +58,7 @@ flowchart LR
 
 The Go server is the business core, delivered as one binary with `serve`, `worker`,
 `scheduler`, `migrate` and `seed` roles. Manager is an independently deployed SvelteKit
-app. See the [capability reference](docs/architecture.md) for memory lifecycle,
+app. It keeps target sessions encrypted on the server and uses same-origin browser requests; see [Manager connections](docs/manager-connections.md) for runtime configuration. See the [capability reference](docs/architecture.md) for memory lifecycle,
 generation isolation, fact lineage and management interfaces.
 
 ## Quick start
@@ -116,7 +116,7 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 
 ## Develop, evaluate, deploy
 
-- **Planned expansion:** [workspaces and multiple agents](docs/plans/workspace-agents/README.md), including Manager design, integration contracts, migration and acceptance criteria. These additions are not implemented yet.
+- **Planned expansion:** [workspaces and multiple agents](docs/plans/workspace-agents/README.md), including Manager design, integration contracts, migration and acceptance criteria. The [Agent identity and credential foundation](docs/plans/workspace-agents/implementation-2026-10-24.md), [Agent management UI](docs/plans/workspace-agents/agent-management-2026-10-24.md), [conversation scope / durable finalization](docs/plans/workspace-agents/conversation-scope-2026-10-24.md), [memory / vector / cache scope](docs/plans/workspace-agents/memory-scope-2026-10-24.md), and [generation / source / media lifecycle](docs/plans/workspace-agents/lifecycle-scope-2026-10-24.md) are implemented for the shared Personal workspace. The [Manager server connection layer](docs/manager-connections.md) and [Personal workspace directory, policy editing and scoped Agent navigation](docs/plans/workspace-agents/workspace-management-2026-10-24.md) plus [workspace memory and conversation browsing](docs/plans/workspace-agents/workspace-browsing-2026-10-24.md), editing, scoped search, and [list pagination and navigation](docs/plans/workspace-agents/workspace-pagination-2026-10-24.md) are also implemented. Advanced audit/rebuild screens retain compatible entry points; other workspace kinds and group ingestion remain in progress.
 - **Development:** [local workflows](docs/local-debugging.md), [engineering specification](AGENTS.md), [contributing](CONTRIBUTING.md).
 - **Testing:** [CI checks and troubleshooting](docs/ci.md), Go unit/integration/contract tests, Manager Vitest and Chromium/WebKit E2E.
 - **Memory evaluation:** [runner and dataset guide](apps/server/tests/eval/README.md). Native golden data and external LOCOMO/LongMemEval adapters produce query details, score breakdowns and regression artifacts. Retrieval benchmarks are explicit local/manual runs, outside default CI/nightly gates.
