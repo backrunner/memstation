@@ -2,11 +2,13 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/ports"
+	"memstation/apps/server/internal/security"
 )
 
 type Relay struct {
@@ -31,8 +33,23 @@ func (r *Relay) Flush(ctx context.Context) error {
 		}
 		batchHadFailure := false
 		for _, event := range events {
+			var envelope taskScope
+			raw, marshalErr := json.Marshal(event.Payload)
+			if marshalErr != nil || json.Unmarshal(raw, &envelope) != nil || envelope.Version < 0 || envelope.Version > 1 || envelope.Version == 1 && envelope.WorkspaceID == "" {
+				publishErrs = append(publishErrs, domain.ErrAccessDenied)
+				batchHadFailure = true
+				continue
+			}
+			user, _ := event.Payload["user_id"].(string)
+			workspace, _ := event.Payload["workspace_id"].(string)
+			bound, scopeErr := security.WithPersonalDataScope(ctx, event.UserID, workspace)
+			if scopeErr != nil || user != event.UserID {
+				publishErrs = append(publishErrs, domain.ErrAccessDenied)
+				batchHadFailure = true
+				continue
+			}
 			task := mapOutboxToTask(event)
-			if err := r.publisher.Publish(ctx, task); err != nil {
+			if err := r.publisher.Publish(bound, task); err != nil {
 				r.logger.ErrorContext(ctx, "outbox publish failed", "event_id", event.ID, "error", err)
 				publishErrs = append(publishErrs, err)
 				batchHadFailure = true

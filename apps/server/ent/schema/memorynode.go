@@ -13,6 +13,7 @@ func (MemoryNode) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("generation_id").Default(""),
 		field.String("user_id"),
+		field.String("workspace_id").Immutable(),
 		field.String("node_type"),
 		field.String("entity_id"),
 		field.Float("importance").Default(1),
@@ -25,5 +26,5 @@ func (MemoryNode) Fields() []ent.Field {
 }
 
 func (MemoryNode) Indexes() []ent.Index {
-	return []ent.Index{index.Fields("user_id", "node_type", "entity_id").Unique()}
+	return []ent.Index{index.Fields("user_id", "node_type", "entity_id").Unique(), index.Fields("user_id", "workspace_id", "id").Unique(), index.Fields("user_id", "workspace_id", "node_type", "activity_at")}
 }

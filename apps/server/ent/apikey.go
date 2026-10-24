@@ -26,6 +26,12 @@ type APIKey struct {
 	UserID string `json:"user_id,omitempty"`
 	// Name holds the value of the "name" field.
 	Name string `json:"name,omitempty"`
+	// AgentID holds the value of the "agent_id" field.
+	AgentID string `json:"agent_id,omitempty"`
+	// DefaultWorkspaceID holds the value of the "default_workspace_id" field.
+	DefaultWorkspaceID string `json:"default_workspace_id,omitempty"`
+	// CapabilityCeiling holds the value of the "capability_ceiling" field.
+	CapabilityCeiling []string `json:"capability_ceiling,omitempty"`
 	// Prefix holds the value of the "prefix" field.
 	Prefix string `json:"prefix,omitempty"`
 	// Hash holds the value of the "hash" field.
@@ -48,11 +54,11 @@ func (*APIKey) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case apikey.FieldScopes:
+		case apikey.FieldCapabilityCeiling, apikey.FieldScopes:
 			values[i] = new([]byte)
 		case apikey.FieldID:
 			values[i] = new(sql.NullInt64)
-		case apikey.FieldUserID, apikey.FieldName, apikey.FieldPrefix, apikey.FieldHash:
+		case apikey.FieldUserID, apikey.FieldName, apikey.FieldAgentID, apikey.FieldDefaultWorkspaceID, apikey.FieldPrefix, apikey.FieldHash:
 			values[i] = new(sql.NullString)
 		case apikey.FieldCreatedAt, apikey.FieldUpdatedAt, apikey.FieldExpiresAt, apikey.FieldLastUsedAt, apikey.FieldRevokedAt, apikey.FieldDeletedAt:
 			values[i] = new(sql.NullTime)
@@ -100,6 +106,26 @@ func (_m *APIKey) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field name", values[i])
 			} else if value.Valid {
 				_m.Name = value.String
+			}
+		case apikey.FieldAgentID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field agent_id", values[i])
+			} else if value.Valid {
+				_m.AgentID = value.String
+			}
+		case apikey.FieldDefaultWorkspaceID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field default_workspace_id", values[i])
+			} else if value.Valid {
+				_m.DefaultWorkspaceID = value.String
+			}
+		case apikey.FieldCapabilityCeiling:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field capability_ceiling", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.CapabilityCeiling); err != nil {
+					return fmt.Errorf("unmarshal field capability_ceiling: %w", err)
+				}
 			}
 		case apikey.FieldPrefix:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -196,6 +222,15 @@ func (_m *APIKey) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("name=")
 	builder.WriteString(_m.Name)
+	builder.WriteString(", ")
+	builder.WriteString("agent_id=")
+	builder.WriteString(_m.AgentID)
+	builder.WriteString(", ")
+	builder.WriteString("default_workspace_id=")
+	builder.WriteString(_m.DefaultWorkspaceID)
+	builder.WriteString(", ")
+	builder.WriteString("capability_ceiling=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CapabilityCeiling))
 	builder.WriteString(", ")
 	builder.WriteString("prefix=")
 	builder.WriteString(_m.Prefix)

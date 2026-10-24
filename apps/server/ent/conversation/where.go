@@ -69,6 +69,21 @@ func UserID(v string) predicate.Conversation {
 	return predicate.Conversation(sql.FieldEQ(FieldUserID, v))
 }
 
+// WorkspaceID applies equality check predicate on the "workspace_id" field. It's identical to WorkspaceIDEQ.
+func WorkspaceID(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldEQ(FieldWorkspaceID, v))
+}
+
+// AgentID applies equality check predicate on the "agent_id" field. It's identical to AgentIDEQ.
+func AgentID(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldEQ(FieldAgentID, v))
+}
+
+// WriteRevision applies equality check predicate on the "write_revision" field. It's identical to WriteRevisionEQ.
+func WriteRevision(v int64) predicate.Conversation {
+	return predicate.Conversation(sql.FieldEQ(FieldWriteRevision, v))
+}
+
 // RequestFormat applies equality check predicate on the "request_format" field. It's identical to RequestFormatEQ.
 func RequestFormat(v string) predicate.Conversation {
 	return predicate.Conversation(sql.FieldEQ(FieldRequestFormat, v))
@@ -242,6 +257,176 @@ func UserIDEqualFold(v string) predicate.Conversation {
 // UserIDContainsFold applies the ContainsFold predicate on the "user_id" field.
 func UserIDContainsFold(v string) predicate.Conversation {
 	return predicate.Conversation(sql.FieldContainsFold(FieldUserID, v))
+}
+
+// WorkspaceIDEQ applies the EQ predicate on the "workspace_id" field.
+func WorkspaceIDEQ(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldEQ(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDNEQ applies the NEQ predicate on the "workspace_id" field.
+func WorkspaceIDNEQ(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldNEQ(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDIn applies the In predicate on the "workspace_id" field.
+func WorkspaceIDIn(vs ...string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldIn(FieldWorkspaceID, vs...))
+}
+
+// WorkspaceIDNotIn applies the NotIn predicate on the "workspace_id" field.
+func WorkspaceIDNotIn(vs ...string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldNotIn(FieldWorkspaceID, vs...))
+}
+
+// WorkspaceIDGT applies the GT predicate on the "workspace_id" field.
+func WorkspaceIDGT(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldGT(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDGTE applies the GTE predicate on the "workspace_id" field.
+func WorkspaceIDGTE(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldGTE(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDLT applies the LT predicate on the "workspace_id" field.
+func WorkspaceIDLT(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldLT(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDLTE applies the LTE predicate on the "workspace_id" field.
+func WorkspaceIDLTE(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldLTE(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDContains applies the Contains predicate on the "workspace_id" field.
+func WorkspaceIDContains(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldContains(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDHasPrefix applies the HasPrefix predicate on the "workspace_id" field.
+func WorkspaceIDHasPrefix(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldHasPrefix(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDHasSuffix applies the HasSuffix predicate on the "workspace_id" field.
+func WorkspaceIDHasSuffix(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldHasSuffix(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDEqualFold applies the EqualFold predicate on the "workspace_id" field.
+func WorkspaceIDEqualFold(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldEqualFold(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDContainsFold applies the ContainsFold predicate on the "workspace_id" field.
+func WorkspaceIDContainsFold(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldContainsFold(FieldWorkspaceID, v))
+}
+
+// AgentIDEQ applies the EQ predicate on the "agent_id" field.
+func AgentIDEQ(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldEQ(FieldAgentID, v))
+}
+
+// AgentIDNEQ applies the NEQ predicate on the "agent_id" field.
+func AgentIDNEQ(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldNEQ(FieldAgentID, v))
+}
+
+// AgentIDIn applies the In predicate on the "agent_id" field.
+func AgentIDIn(vs ...string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldIn(FieldAgentID, vs...))
+}
+
+// AgentIDNotIn applies the NotIn predicate on the "agent_id" field.
+func AgentIDNotIn(vs ...string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldNotIn(FieldAgentID, vs...))
+}
+
+// AgentIDGT applies the GT predicate on the "agent_id" field.
+func AgentIDGT(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldGT(FieldAgentID, v))
+}
+
+// AgentIDGTE applies the GTE predicate on the "agent_id" field.
+func AgentIDGTE(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldGTE(FieldAgentID, v))
+}
+
+// AgentIDLT applies the LT predicate on the "agent_id" field.
+func AgentIDLT(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldLT(FieldAgentID, v))
+}
+
+// AgentIDLTE applies the LTE predicate on the "agent_id" field.
+func AgentIDLTE(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldLTE(FieldAgentID, v))
+}
+
+// AgentIDContains applies the Contains predicate on the "agent_id" field.
+func AgentIDContains(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldContains(FieldAgentID, v))
+}
+
+// AgentIDHasPrefix applies the HasPrefix predicate on the "agent_id" field.
+func AgentIDHasPrefix(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldHasPrefix(FieldAgentID, v))
+}
+
+// AgentIDHasSuffix applies the HasSuffix predicate on the "agent_id" field.
+func AgentIDHasSuffix(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldHasSuffix(FieldAgentID, v))
+}
+
+// AgentIDEqualFold applies the EqualFold predicate on the "agent_id" field.
+func AgentIDEqualFold(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldEqualFold(FieldAgentID, v))
+}
+
+// AgentIDContainsFold applies the ContainsFold predicate on the "agent_id" field.
+func AgentIDContainsFold(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldContainsFold(FieldAgentID, v))
+}
+
+// WriteRevisionEQ applies the EQ predicate on the "write_revision" field.
+func WriteRevisionEQ(v int64) predicate.Conversation {
+	return predicate.Conversation(sql.FieldEQ(FieldWriteRevision, v))
+}
+
+// WriteRevisionNEQ applies the NEQ predicate on the "write_revision" field.
+func WriteRevisionNEQ(v int64) predicate.Conversation {
+	return predicate.Conversation(sql.FieldNEQ(FieldWriteRevision, v))
+}
+
+// WriteRevisionIn applies the In predicate on the "write_revision" field.
+func WriteRevisionIn(vs ...int64) predicate.Conversation {
+	return predicate.Conversation(sql.FieldIn(FieldWriteRevision, vs...))
+}
+
+// WriteRevisionNotIn applies the NotIn predicate on the "write_revision" field.
+func WriteRevisionNotIn(vs ...int64) predicate.Conversation {
+	return predicate.Conversation(sql.FieldNotIn(FieldWriteRevision, vs...))
+}
+
+// WriteRevisionGT applies the GT predicate on the "write_revision" field.
+func WriteRevisionGT(v int64) predicate.Conversation {
+	return predicate.Conversation(sql.FieldGT(FieldWriteRevision, v))
+}
+
+// WriteRevisionGTE applies the GTE predicate on the "write_revision" field.
+func WriteRevisionGTE(v int64) predicate.Conversation {
+	return predicate.Conversation(sql.FieldGTE(FieldWriteRevision, v))
+}
+
+// WriteRevisionLT applies the LT predicate on the "write_revision" field.
+func WriteRevisionLT(v int64) predicate.Conversation {
+	return predicate.Conversation(sql.FieldLT(FieldWriteRevision, v))
+}
+
+// WriteRevisionLTE applies the LTE predicate on the "write_revision" field.
+func WriteRevisionLTE(v int64) predicate.Conversation {
+	return predicate.Conversation(sql.FieldLTE(FieldWriteRevision, v))
 }
 
 // RequestFormatEQ applies the EQ predicate on the "request_format" field.

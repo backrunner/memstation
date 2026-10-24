@@ -2,6 +2,7 @@ package conversation
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -43,18 +44,24 @@ func (s *Service) PersistExchange(ctx context.Context, req domain.UnifiedRequest
 	if conversationID == "" {
 		conversationID = uuid.NewString()
 	}
-	existing, _ := s.repo.GetConversation(ctx, req.UserID, conversationID)
+	existing, err := s.repo.GetConversation(ctx, req.UserID, conversationID)
+	if err != nil && !errors.Is(err, domain.ErrConversationNotFound) {
+		return "", err
+	}
 	record := domain.ConversationRecord{
-		ConversationID: conversationID,
-		UserID:         req.UserID,
-		RequestFormat:  string(req.Protocol),
-		Provider:       req.Provider,
-		Mode:           req.Mode,
-		FinalizeStatus: domain.FinalizeStatusActive,
-		SummaryStatus:  domain.ProcessingStatusPending,
-		AnalysisStatus: domain.ProcessingStatusPending,
-		Messages:       append([]domain.UnifiedMessage{}, req.Messages...),
-		Response:       resp,
+		ExpectedRevision: req.ExpectedConversationRevision,
+		WorkspaceID:      req.WorkspaceID,
+		AgentID:          req.AgentID,
+		ConversationID:   conversationID,
+		UserID:           req.UserID,
+		RequestFormat:    string(req.Protocol),
+		Provider:         req.Provider,
+		Mode:             req.Mode,
+		FinalizeStatus:   domain.FinalizeStatusActive,
+		SummaryStatus:    domain.ProcessingStatusPending,
+		AnalysisStatus:   domain.ProcessingStatusPending,
+		Messages:         append([]domain.UnifiedMessage{}, req.Messages...),
+		Response:         resp,
 		Metadata: mergeMetadata(req.RequestMetadata, map[string]any{
 			"conversation_id":         conversationID,
 			"request_id":              req.RequestID,
@@ -105,60 +112,7 @@ func (s *Service) FinalizeIfNeeded(ctx context.Context, req domain.UnifiedReques
 	if !shouldFinalize {
 		return nil
 	}
-	current, err := s.repo.GetConversation(ctx, req.UserID, req.ConversationID)
-	if err == nil {
-		switch current.FinalizeStatus {
-		case domain.FinalizeStatusEnding, domain.FinalizeStatusEnded, domain.FinalizeStatusTimeout, domain.FinalizeStatusFailed:
-			return nil
-		}
-	}
-	if !req.PersistMemoryEnabled() && !req.SourceRetainEnabled(false) {
-		skipped := domain.ProcessingStatusSkipped
-		return s.repo.UpdateConversationState(ctx, domain.ConversationStateUpdate{
-			ConversationID: req.ConversationID,
-			UserID:         req.UserID,
-			FinalizeStatus: &targetStatus,
-			SummaryStatus:  &skipped,
-			AnalysisStatus: &skipped,
-			Metadata: map[string]any{
-				"finalize_reason":        reason,
-				"finalize_target":        string(targetStatus),
-				"memory_persist_enabled": false,
-				"source_retain_enabled":  req.SourceRetainEnabled(false),
-			},
-			UpdatedAt: time.Now().UTC(),
-		})
-	}
-	ending := domain.FinalizeStatusEnding
-	if err := s.repo.UpdateConversationState(ctx, domain.ConversationStateUpdate{
-		ConversationID: req.ConversationID,
-		UserID:         req.UserID,
-		FinalizeStatus: &ending,
-		Metadata: map[string]any{
-			"finalize_reason": reason,
-			"finalize_target": string(targetStatus),
-		},
-		UpdatedAt: time.Now().UTC(),
-	}); err != nil {
-		return err
-	}
-	return s.outbox.Enqueue(ctx, domain.OutboxEvent{
-		ID:            "conversation.finalize:" + req.ConversationID,
-		UserID:        req.UserID,
-		EventType:     "conversation.finalize",
-		AggregateType: "conversation",
-		AggregateID:   req.ConversationID,
-		Payload: map[string]any{
-			"conversation_id":        req.ConversationID,
-			"user_id":                req.UserID,
-			"finalize_reason":        reason,
-			"finalize_status":        string(targetStatus),
-			"memory_persist_enabled": req.PersistMemoryEnabled(),
-			"source_retain_enabled":  req.SourceRetainEnabled(false),
-		},
-		Status:      "pending",
-		AvailableAt: time.Now().UTC(),
-	})
+	return s.repo.RequestFinalization(ctx, domain.ConversationFinalization{UserID: req.UserID, WorkspaceID: req.WorkspaceID, ConversationID: req.ConversationID, Status: targetStatus, Reason: reason}, s.outbox)
 }
 
 func (s *Service) GetConversation(ctx context.Context, userID, conversationID string) (domain.ConversationRecord, error) {
@@ -178,57 +132,7 @@ func (s *Service) FinalizeTimedOut(ctx context.Context, before time.Time) error 
 		return err
 	}
 	for _, conversation := range conversations {
-		if !metadataBool(conversation.Metadata, "memory_persist_enabled", true) && !metadataBool(conversation.Metadata, "source_retain_enabled", false) {
-			targetStatus := domain.FinalizeStatusTimeout
-			skipped := domain.ProcessingStatusSkipped
-			if err := s.repo.UpdateConversationState(ctx, domain.ConversationStateUpdate{
-				ConversationID: conversation.ConversationID,
-				UserID:         conversation.UserID,
-				FinalizeStatus: &targetStatus,
-				SummaryStatus:  &skipped,
-				AnalysisStatus: &skipped,
-				Metadata: map[string]any{
-					"finalize_reason":        "timeout",
-					"finalize_target":        string(domain.FinalizeStatusTimeout),
-					"memory_persist_enabled": false,
-					"source_retain_enabled":  false,
-				},
-				UpdatedAt: time.Now().UTC(),
-			}); err != nil {
-				return err
-			}
-			continue
-		}
-		ending := domain.FinalizeStatusEnding
-		if err := s.repo.UpdateConversationState(ctx, domain.ConversationStateUpdate{
-			ConversationID: conversation.ConversationID,
-			UserID:         conversation.UserID,
-			FinalizeStatus: &ending,
-			Metadata: map[string]any{
-				"finalize_reason": "timeout",
-				"finalize_target": string(domain.FinalizeStatusTimeout),
-			},
-			UpdatedAt: time.Now().UTC(),
-		}); err != nil {
-			return err
-		}
-		if err := s.outbox.Enqueue(ctx, domain.OutboxEvent{
-			ID:            "conversation.finalize:" + conversation.ConversationID,
-			UserID:        conversation.UserID,
-			EventType:     "conversation.finalize",
-			AggregateType: "conversation",
-			AggregateID:   conversation.ConversationID,
-			Payload: map[string]any{
-				"conversation_id":        conversation.ConversationID,
-				"user_id":                conversation.UserID,
-				"finalize_reason":        "timeout",
-				"finalize_status":        string(domain.FinalizeStatusTimeout),
-				"memory_persist_enabled": metadataBool(conversation.Metadata, "memory_persist_enabled", true),
-				"source_retain_enabled":  metadataBool(conversation.Metadata, "source_retain_enabled", false),
-			},
-			Status:      "pending",
-			AvailableAt: time.Now().UTC(),
-		}); err != nil {
+		if err := s.repo.RequestFinalization(ctx, domain.ConversationFinalization{UserID: conversation.UserID, WorkspaceID: conversation.WorkspaceID, ConversationID: conversation.ConversationID, Status: domain.FinalizeStatusTimeout, Reason: "timeout", TimeoutBefore: &before}, s.outbox); err != nil {
 			return err
 		}
 	}
@@ -265,26 +169,4 @@ func mergeMetadata(existing, next map[string]any) map[string]any {
 		out[key] = value
 	}
 	return out
-}
-
-func metadataBool(metadata map[string]any, key string, fallback bool) bool {
-	if metadata == nil {
-		return fallback
-	}
-	value, ok := metadata[key]
-	if !ok || value == nil {
-		return fallback
-	}
-	switch typed := value.(type) {
-	case bool:
-		return typed
-	case string:
-		switch typed {
-		case "true":
-			return true
-		case "false":
-			return false
-		}
-	}
-	return fallback
 }

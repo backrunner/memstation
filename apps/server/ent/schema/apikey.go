@@ -12,6 +12,9 @@ func (APIKey) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("user_id"),
 		field.String("name"),
+field.String("agent_id"),
+field.String("default_workspace_id"),
+field.JSON("capability_ceiling", []string{}),
 		field.String("prefix"),
 		field.String("hash"),
 		field.JSON("scopes", []string{}).Optional(),

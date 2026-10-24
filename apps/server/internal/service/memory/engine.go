@@ -15,6 +15,7 @@ import (
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/observability"
 	"memstation/apps/server/internal/ports"
+	"memstation/apps/server/internal/security"
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
 )
 
@@ -166,6 +167,7 @@ func (e *Engine) Inject(ctx context.Context, req domain.UnifiedRequest) (domain.
 
 	query := lastUserMessage(req.Messages)
 	generalResult, err := e.Search(ctx, domain.SearchInput{
+		WorkspaceID:         req.WorkspaceID,
 		UserID:              req.UserID,
 		Query:               query,
 		TopN:                8,
@@ -177,6 +179,7 @@ func (e *Engine) Inject(ctx context.Context, req domain.UnifiedRequest) (domain.
 		return req, domain.InjectionResult{}, err
 	}
 	keyMemoryResult, err := e.Search(ctx, domain.SearchInput{
+		WorkspaceID:         req.WorkspaceID,
 		UserID:              req.UserID,
 		Query:               query,
 		TopN:                3,
@@ -342,6 +345,12 @@ func (e *Engine) SearchWithVariant(ctx context.Context, input domain.SearchInput
 }
 
 func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant SearchVariant) (DebugSearchResult, error) {
+	bound, err := security.WithPersonalDataScope(ctx, input.UserID, input.WorkspaceID)
+	if err != nil {
+		return DebugSearchResult{}, err
+	}
+	ctx = bound
+	input.WorkspaceID = domain.PersonalWorkspaceID(input.UserID)
 	ctx, span := observability.TraceSpan(ctx, "memory.search",
 		attribute.String("memory.user_id", input.UserID),
 		attribute.Int("memory.query_length", len(strings.TrimSpace(input.Query))),
@@ -398,6 +407,7 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 
 	if e.vectors != nil {
 		vectorResults, vectorErr := e.vectors.Search(ctx, domain.VectorSearchInput{
+			WorkspaceID:      input.WorkspaceID,
 			UserID:           input.UserID,
 			GenerationID:     input.GenerationID,
 			Query:            query,
@@ -406,6 +416,9 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 			EmbeddingVersion: embeddingVersion,
 			EmbeddingModel:   embeddingModel,
 		})
+		if errors.Is(vectorErr, domain.ErrAccessDenied) {
+			return DebugSearchResult{}, vectorErr
+		}
 		if vectorErr == nil {
 			for _, item := range vectorResults {
 				if item.Score > semanticScores[item.NodeID] {
@@ -465,7 +478,7 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 		relationConfig := e.RelationRecallConfig()
 		relationConfig.Mode = input.RelationMode
 		var relErr error
-		relations, relErr = e.repo.RecallRelations(ctx, domain.RelationQuery{UserID: input.UserID, GenerationID: input.GenerationID, NodeIDs: baseNodeIDs, MaxHops: relationConfig.MaxHops, MaxEdgesPerNode: relationConfig.MaxEdgesPerNode, MaxEdges: relationConfig.MaxEdges, MaxNodes: relationConfig.MaxNodes, Timeout: relationConfig.Timeout, Mode: input.RelationMode})
+		relations, relErr = e.repo.RecallRelations(ctx, domain.RelationQuery{UserID: input.UserID, WorkspaceID: input.WorkspaceID, GenerationID: input.GenerationID, NodeIDs: baseNodeIDs, MaxHops: relationConfig.MaxHops, MaxEdgesPerNode: relationConfig.MaxEdgesPerNode, MaxEdges: relationConfig.MaxEdges, MaxNodes: relationConfig.MaxNodes, Timeout: relationConfig.Timeout, Mode: input.RelationMode})
 		if relErr != nil {
 			if ctx.Err() != nil {
 				return DebugSearchResult{}, ctx.Err()
@@ -840,6 +853,12 @@ func matchesRequestedTypes(value domain.MemoryType, filters []domain.MemoryType)
 }
 
 func matchesSearchDocument(doc domain.MemoryDocument, input domain.SearchInput) bool {
+	if input.UserID != "" && doc.UserID != input.UserID {
+		return false
+	}
+	if doc.WorkspaceID != "" && doc.WorkspaceID != domain.PersonalWorkspaceID(input.UserID) {
+		return false
+	}
 	if !matchesRequestedTypes(doc.Type, input.MemoryTypes) {
 		return false
 	}

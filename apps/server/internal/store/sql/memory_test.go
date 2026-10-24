@@ -2,11 +2,62 @@ package sql
 
 import (
 	"context"
+	"reflect"
+	"sync"
 	"testing"
 	"time"
 
 	"memstation/apps/server/internal/domain"
 )
+
+func TestInMemoryDocumentReadsReturnIndependentMetadata(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	repo := NewInMemoryMemoryRepository()
+	doc := domain.MemoryDocument{
+		ID: "snapshot", NodeID: "snapshot-node", UserID: "owner", ConversationID: "conversation",
+		Type: domain.MemoryTypeSummary, Content: "A memory snapshot", Metadata: map[string]any{"source": "original"},
+	}
+	if err := repo.StoreDocument(ctx, doc); err != nil {
+		t.Fatal(err)
+	}
+	storedMetadata := cloneMetadata(repo.documents[key(doc.UserID, doc.ID)].Metadata)
+	readers := []func() ([]domain.MemoryDocument, error){
+		func() ([]domain.MemoryDocument, error) { return repo.ListDocuments(ctx, doc.UserID, nil, 10) },
+		func() ([]domain.MemoryDocument, error) {
+			return repo.ListDocumentsByNodeIDs(ctx, doc.UserID, []string{doc.NodeID})
+		},
+		func() ([]domain.MemoryDocument, error) {
+			return repo.ListDocumentsByConversation(ctx, doc.UserID, doc.ConversationID)
+		},
+		func() ([]domain.MemoryDocument, error) {
+			item, err := repo.GetDocument(ctx, doc.UserID, doc.ID, doc.Type)
+			return []domain.MemoryDocument{item}, err
+		},
+	}
+	var wg sync.WaitGroup
+	for i := range 32 {
+		wg.Go(func() {
+			for range 20 {
+				items, err := readers[i%len(readers)]()
+				if err != nil || len(items) != 1 {
+					t.Errorf("read snapshot: %v, count %d", err, len(items))
+					return
+				}
+				if items[0].Metadata["source"] != "original" {
+					t.Error("another reader changed stored metadata")
+					return
+				}
+				items[0].Metadata["source"] = "caller change"
+				delete(items[0].Metadata, "activity_at")
+			}
+		})
+	}
+	wg.Wait()
+	if !reflect.DeepEqual(repo.documents[key(doc.UserID, doc.ID)].Metadata, storedMetadata) {
+		t.Error("reading a document changed stored metadata")
+	}
+}
 
 func TestInMemoryMemoryRepositoryDeleteSegmentsByConversationUsesKeepSet(t *testing.T) {
 	t.Parallel()

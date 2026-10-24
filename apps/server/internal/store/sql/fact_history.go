@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"memstation/apps/server/internal/domain"
+	"memstation/apps/server/internal/security"
 )
 
 type factSnapshot struct {
@@ -21,7 +22,7 @@ type factSnapshot struct {
 func (r *InMemoryMemoryRepository) captureFactHistoryLocked(userID string) {
 	now := time.Now().UTC()
 	for _, doc := range r.documents {
-		if doc.UserID != userID || doc.Type != domain.MemoryTypeFact {
+		if doc.UserID != userID || !personalMemoryWorkspace(userID, doc.WorkspaceID) || doc.Type != domain.MemoryTypeFact {
 			continue
 		}
 
@@ -55,7 +56,11 @@ func (r *InMemoryMemoryRepository) captureFactHistoryLocked(userID string) {
 	}
 }
 
-func (r *InMemoryMemoryRepository) SearchFactsAt(_ context.Context, input domain.SearchInput) ([]domain.MemoryDocument, error) {
+func (r *InMemoryMemoryRepository) SearchFactsAt(ctx context.Context, input domain.SearchInput) ([]domain.MemoryDocument, error) {
+	if _, err := security.PersonalScope(ctx, input.UserID, input.WorkspaceID); err != nil {
+		return nil, err
+	}
+	input.WorkspaceID = domain.PersonalWorkspaceID(input.UserID)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := []domain.MemoryDocument{}
@@ -84,9 +89,13 @@ func (r *InMemoryMemoryRepository) SearchFactsAt(_ context.Context, input domain
 }
 
 func (r *PostgresMemoryRepository) SearchFactsAt(ctx context.Context, input domain.SearchInput) ([]domain.MemoryDocument, error) {
+	if _, err := security.PersonalScope(ctx, input.UserID, input.WorkspaceID); err != nil {
+		return nil, err
+	}
+	input.WorkspaceID = domain.PersonalWorkspaceID(input.UserID)
 	// KnownAt is deliberately independent of AsOf. Old knowledge must never be
 	// reconstructed from today's mutable supersession flags or content.
-	query := `SELECT document,recorded_at FROM memory_fact_history WHERE user_id=$1 AND generation_id=$2
+	query := `SELECT document,recorded_at FROM memory_fact_history WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=memory_fact_history.user_id AND scope_node.id=memory_fact_history.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND user_id=$1 AND generation_id=$2
  AND (($3::timestamptz IS NULL AND recorded_to IS NULL) OR (recorded_at<=$3 AND (recorded_to IS NULL OR recorded_to>$3)))
  AND ($4::timestamptz IS NULL OR (valid_from<=$4 AND (valid_to IS NULL OR valid_to>$4)))
  ORDER BY CASE WHEN $5='' THEN 0 WHEN position(lower($5) in lower(document->>'content'))>0 THEN 1 ELSE 0 END DESC,recorded_at DESC,id DESC LIMIT 512`
@@ -109,6 +118,7 @@ func (r *PostgresMemoryRepository) SearchFactsAt(ctx context.Context, input doma
 		if d.Metadata == nil {
 			d.Metadata = map[string]any{}
 		}
+		d.WorkspaceID = input.WorkspaceID
 		d.Metadata["recorded_at"] = recorded.Format(time.RFC3339Nano)
 		if domain.FactValidAt(d, input.AsOf) {
 			out = append(out, d)
@@ -156,7 +166,7 @@ func (r *HybridMemoryRepository) SearchFactsAt(ctx context.Context, input domain
 }
 
 func factTemporalNeighborsTx(ctx context.Context, tx *sql.Tx, doc domain.MemoryDocument) (string, string, *time.Time, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT f.id,COALESCE(f.valid_from,n.activity_at,f.created_at) FROM facts f JOIN memory_nodes n ON n.user_id=f.user_id AND n.id=f.node_id WHERE f.user_id=$1 AND f.generation_id=$2 AND f.lineage_group_id=$3 AND f.id<>$4 ORDER BY COALESCE(f.valid_from,n.activity_at,f.created_at),f.revision_seq`, doc.UserID, doc.GenerationID, factLineageGroupID(doc.UserID, doc), doc.ID)
+	rows, err := tx.QueryContext(ctx, `SELECT f.id,COALESCE(f.valid_from,n.activity_at,f.created_at) FROM facts f JOIN memory_nodes n ON n.user_id=f.user_id AND n.id=f.node_id WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=f.user_id AND scope_node.id=f.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND f.user_id=$1 AND f.generation_id=$2 AND f.lineage_group_id=$3 AND f.id<>$4 ORDER BY COALESCE(f.valid_from,n.activity_at,f.created_at),f.revision_seq`, doc.UserID, doc.GenerationID, factLineageGroupID(doc.UserID, doc), doc.ID)
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -183,7 +193,7 @@ func factTemporalNeighborsTx(ctx context.Context, tx *sql.Tx, doc domain.MemoryD
 func (r *InMemoryMemoryRepository) factTemporalNeighborsLocked(doc domain.MemoryDocument) (string, string, *time.Time) {
 	candidates := []domain.MemoryDocument{}
 	for _, d := range r.documents {
-		if d.ID != doc.ID && d.UserID == doc.UserID && d.GenerationID == doc.GenerationID && d.Type == domain.MemoryTypeFact && factLineageGroupIDFromMetadata(d.Metadata) == factLineageGroupIDFromMetadata(doc.Metadata) {
+		if d.ID != doc.ID && d.UserID == doc.UserID && personalMemoryWorkspace(doc.UserID, d.WorkspaceID) && d.GenerationID == doc.GenerationID && d.Type == domain.MemoryTypeFact && factLineageGroupIDFromMetadata(d.Metadata) == factLineageGroupIDFromMetadata(doc.Metadata) {
 			candidates = append(candidates, d)
 		}
 	}

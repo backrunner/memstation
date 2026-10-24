@@ -9,6 +9,7 @@ func (TokenUsage) Mixin() []ent.Mixin { return []ent.Mixin{TimeMixin{}} }
 func (TokenUsage) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("user_id"),
+ field.String("workspace_id").Immutable(),
 		field.String("conversation_id"),
 		field.String("provider").Optional(),
 		field.String("model").Optional(),

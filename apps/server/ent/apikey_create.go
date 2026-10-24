@@ -60,6 +60,24 @@ func (_c *APIKeyCreate) SetName(v string) *APIKeyCreate {
 	return _c
 }
 
+// SetAgentID sets the "agent_id" field.
+func (_c *APIKeyCreate) SetAgentID(v string) *APIKeyCreate {
+	_c.mutation.SetAgentID(v)
+	return _c
+}
+
+// SetDefaultWorkspaceID sets the "default_workspace_id" field.
+func (_c *APIKeyCreate) SetDefaultWorkspaceID(v string) *APIKeyCreate {
+	_c.mutation.SetDefaultWorkspaceID(v)
+	return _c
+}
+
+// SetCapabilityCeiling sets the "capability_ceiling" field.
+func (_c *APIKeyCreate) SetCapabilityCeiling(v []string) *APIKeyCreate {
+	_c.mutation.SetCapabilityCeiling(v)
+	return _c
+}
+
 // SetPrefix sets the "prefix" field.
 func (_c *APIKeyCreate) SetPrefix(v string) *APIKeyCreate {
 	_c.mutation.SetPrefix(v)
@@ -193,6 +211,15 @@ func (_c *APIKeyCreate) check() error {
 	if _, ok := _c.mutation.Name(); !ok {
 		return &ValidationError{Name: "name", err: errors.New(`ent: missing required field "APIKey.name"`)}
 	}
+	if _, ok := _c.mutation.AgentID(); !ok {
+		return &ValidationError{Name: "agent_id", err: errors.New(`ent: missing required field "APIKey.agent_id"`)}
+	}
+	if _, ok := _c.mutation.DefaultWorkspaceID(); !ok {
+		return &ValidationError{Name: "default_workspace_id", err: errors.New(`ent: missing required field "APIKey.default_workspace_id"`)}
+	}
+	if _, ok := _c.mutation.CapabilityCeiling(); !ok {
+		return &ValidationError{Name: "capability_ceiling", err: errors.New(`ent: missing required field "APIKey.capability_ceiling"`)}
+	}
 	if _, ok := _c.mutation.Prefix(); !ok {
 		return &ValidationError{Name: "prefix", err: errors.New(`ent: missing required field "APIKey.prefix"`)}
 	}
@@ -240,6 +267,18 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
 		_node.Name = value
+	}
+	if value, ok := _c.mutation.AgentID(); ok {
+		_spec.SetField(apikey.FieldAgentID, field.TypeString, value)
+		_node.AgentID = value
+	}
+	if value, ok := _c.mutation.DefaultWorkspaceID(); ok {
+		_spec.SetField(apikey.FieldDefaultWorkspaceID, field.TypeString, value)
+		_node.DefaultWorkspaceID = value
+	}
+	if value, ok := _c.mutation.CapabilityCeiling(); ok {
+		_spec.SetField(apikey.FieldCapabilityCeiling, field.TypeJSON, value)
+		_node.CapabilityCeiling = value
 	}
 	if value, ok := _c.mutation.Prefix(); ok {
 		_spec.SetField(apikey.FieldPrefix, field.TypeString, value)

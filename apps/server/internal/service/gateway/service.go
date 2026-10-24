@@ -2,11 +2,15 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 	"time"
+
+	"memstation/apps/server/internal/security"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
@@ -105,6 +109,12 @@ func (s *Service) ProxyStream(ctx context.Context, req domain.UnifiedRequest, em
 }
 
 func (s *Service) ResolveRequestDefaults(ctx context.Context, req domain.UnifiedRequest) (domain.UnifiedRequest, error) {
+	// Per-request decoration must not mutate metadata retained by an embedded
+	// caller or shared by concurrent Agent requests.
+	req.RequestMetadata = maps.Clone(req.RequestMetadata)
+	if access, ok := security.AccessFromContext(ctx); ok {
+		req.UserID, req.WorkspaceID, req.AgentID = access.UserID, access.WorkspaceID, access.AgentID
+	}
 	if req.RequestID == "" {
 		req.RequestID = uuid.NewString()
 	}
@@ -126,6 +136,55 @@ func (s *Service) prepareRequest(ctx context.Context, req domain.UnifiedRequest)
 		return domain.UnifiedRequest{}, domain.InjectionResult{}, err
 	}
 	req = resolvedReq
+	if access, ok := security.AccessFromContext(ctx); ok {
+		if err := security.RequireCapability(ctx, domain.CapabilityGateway); err != nil {
+			return domain.UnifiedRequest{}, domain.InjectionResult{}, err
+		}
+		req.UserID = access.UserID
+		req.WorkspaceID = access.WorkspaceID
+		req.AgentID = access.AgentID
+		for _, message := range req.Messages {
+			for _, block := range message.Blocks {
+				if block.BlobID != "" {
+					if err := security.RequireCapability(ctx, domain.CapabilityFilesRead); err != nil {
+						return domain.UnifiedRequest{}, domain.InjectionResult{}, err
+					}
+				}
+			}
+		}
+		if req.Mode == domain.ModeInject {
+			if err := security.RequireCapability(ctx, domain.CapabilityMemoryRead); err != nil {
+				return domain.UnifiedRequest{}, domain.InjectionResult{}, err
+			}
+		}
+		if !access.Allows(domain.CapabilityMemoryEdit) {
+			req.ToolWriteEnabled = false
+		}
+		if !access.Legacy {
+			session := req.SessionID
+			if session == "" {
+				session = req.ConversationID
+			}
+			if session == "" {
+				session = uuid.NewString()
+			}
+			req.SessionID = session
+			scope, _ := json.Marshal([]string{access.UserID, access.WorkspaceID, access.AgentID, session})
+			req.ConversationID = domain.AccessID("conversation", string(scope))
+			current, err := s.conversations.GetConversation(ctx, req.UserID, req.ConversationID)
+			if err != nil && !errors.Is(err, domain.ErrConversationNotFound) {
+				return domain.UnifiedRequest{}, domain.InjectionResult{}, err
+			}
+			revision := current.Revision
+			req.ExpectedConversationRevision = &revision
+		}
+		if req.RequestMetadata == nil {
+			req.RequestMetadata = map[string]any{}
+		}
+		req.RequestMetadata["agent_id"] = access.AgentID
+		req.RequestMetadata["credential_id"] = access.CredentialID
+		req.RequestMetadata["workspace_id"] = access.WorkspaceID
+	}
 
 	var injection domain.InjectionResult
 	if req.Mode == domain.ModeInject {
@@ -197,6 +256,9 @@ func (s *Service) completeRequest(ctx context.Context, req domain.UnifiedRequest
 	}
 
 	for round := 0; round < maxRounds; round++ {
+		if err := security.RequireCapability(ctx, domain.CapabilityGateway); err != nil {
+			return domain.UnifiedRequest{}, nil, err
+		}
 		response, err := adapter.Complete(ctx, currentReq)
 		if err != nil {
 			return domain.UnifiedRequest{}, nil, err

@@ -20,6 +20,7 @@ import (
 	"memstation/apps/server/internal/bootstrap"
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/ports"
+	"memstation/apps/server/internal/security"
 )
 
 type Service struct {
@@ -58,6 +59,10 @@ func (s *Service) Snapshot() bootstrap.MultimodalConfig {
 }
 
 func (s *Service) SaveUpload(ctx context.Context, userID, filename, mimeType string, body io.Reader, metadata map[string]any) (domain.BlobObject, error) {
+	workspace, scopeErr := security.PersonalScope(ctx, userID, "")
+	if scopeErr != nil {
+		return domain.BlobObject{}, scopeErr
+	}
 	cfg, blobs := s.runtime()
 	if s == nil || s.repo == nil || blobs == nil {
 		return domain.BlobObject{}, fmt.Errorf("multimodal storage is not configured")
@@ -88,6 +93,7 @@ func (s *Service) SaveUpload(ctx context.Context, userID, filename, mimeType str
 	blob := domain.BlobObject{
 		BlobID:           "blob:" + uuid.NewString(),
 		UserID:           userID,
+		WorkspaceID:      workspace,
 		SourceKind:       domain.BlobSourceKindUpload,
 		StorageBackend:   firstNonEmpty(strings.TrimSpace(cfg.StorageBackend), "local"),
 		MIMEType:         mimeType,
@@ -110,6 +116,10 @@ func (s *Service) SaveUpload(ctx context.Context, userID, filename, mimeType str
 }
 
 func (s *Service) GetBlob(ctx context.Context, userID, blobID string) (domain.BlobObject, error) {
+	_, scopeErr := security.PersonalScope(ctx, userID, "")
+	if scopeErr != nil {
+		return domain.BlobObject{}, scopeErr
+	}
 	if s == nil || s.repo == nil {
 		return domain.BlobObject{}, fmt.Errorf("multimodal storage is not configured")
 	}
@@ -117,10 +127,17 @@ func (s *Service) GetBlob(ctx context.Context, userID, blobID string) (domain.Bl
 }
 
 func (s *Service) OpenBlob(ctx context.Context, userID, blobID string) (domain.BlobObject, io.ReadCloser, error) {
+	_, scopeErr := security.PersonalScope(ctx, userID, "")
+	if scopeErr != nil {
+		return domain.BlobObject{}, nil, scopeErr
+	}
 	_, blobs := s.runtime()
 	blob, err := s.GetBlob(ctx, userID, blobID)
 	if err != nil {
 		return domain.BlobObject{}, nil, err
+	}
+	if blob.DeletedAt != nil {
+		return domain.BlobObject{}, nil, fmt.Errorf("blob not found")
 	}
 	if blobs == nil {
 		return domain.BlobObject{}, nil, fmt.Errorf("blob store is not configured")
@@ -133,6 +150,10 @@ func (s *Service) OpenBlob(ctx context.Context, userID, blobID string) (domain.B
 }
 
 func (s *Service) DeleteBlob(ctx context.Context, userID, blobID string) error {
+	_, scopeErr := security.PersonalScope(ctx, userID, "")
+	if scopeErr != nil {
+		return scopeErr
+	}
 	_, blobs := s.runtime()
 	if s == nil || s.repo == nil {
 		return nil
@@ -141,15 +162,22 @@ func (s *Service) DeleteBlob(ctx context.Context, userID, blobID string) error {
 	if err != nil {
 		return err
 	}
+	if err = s.repo.DeleteBlob(ctx, userID, blobID, time.Now().UTC()); err != nil {
+		return err
+	}
 	if blobs != nil {
 		if err := blobs.Delete(ctx, blob); err != nil {
 			return err
 		}
 	}
-	return s.repo.DeleteBlob(ctx, userID, blobID, time.Now().UTC())
+	return nil
 }
 
 func (s *Service) CleanupConversationBlobs(ctx context.Context, userID, conversationID string) error {
+	_, scopeErr := security.PersonalScope(ctx, userID, "")
+	if scopeErr != nil {
+		return scopeErr
+	}
 	if s == nil || s.repo == nil {
 		return nil
 	}
@@ -167,14 +195,33 @@ func (s *Service) CleanupConversationBlobs(ctx context.Context, userID, conversa
 			continue
 		}
 		seen[blobID] = struct{}{}
-		if err := s.DeleteBlob(ctx, userID, blobID); err != nil && !strings.Contains(strings.ToLower(err.Error()), "not found") {
+		marked, err := s.repo.MarkBlobForCleanup(ctx, userID, conversationID, blobID)
+		if err != nil {
 			return err
+		}
+		if !marked {
+			continue
+		}
+		blob, err := s.repo.GetBlob(ctx, userID, blobID)
+		if err != nil {
+			return err
+		}
+		_, blobs := s.runtime()
+		if blobs != nil {
+			if err = blobs.Delete(ctx, blob); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
 func (s *Service) MaterializeConversation(ctx context.Context, conversation domain.ConversationRecord) ([]domain.MessagePart, error) {
+	workspace, scopeErr := security.PersonalScope(ctx, conversation.UserID, conversation.WorkspaceID)
+	if scopeErr != nil {
+		return nil, scopeErr
+	}
+	conversation.WorkspaceID = workspace
 	if s == nil || s.repo == nil {
 		return nil, nil
 	}
@@ -186,6 +233,15 @@ func (s *Service) MaterializeConversation(ctx context.Context, conversation doma
 }
 
 func (s *Service) ExtractConversation(ctx context.Context, conversation domain.ConversationRecord, parts []domain.MessagePart) ([]domain.MessagePartArtifact, error) {
+	workspace, scopeErr := security.PersonalScope(ctx, conversation.UserID, conversation.WorkspaceID)
+	if scopeErr != nil {
+		return nil, scopeErr
+	}
+	conversation.WorkspaceID = workspace
+	parts, scopeErr = domain.NormalizeMessageParts(conversation.UserID, workspace, conversation.ConversationID, parts)
+	if scopeErr != nil {
+		return nil, scopeErr
+	}
 	if s == nil || s.repo == nil {
 		return nil, nil
 	}
@@ -213,6 +269,10 @@ func (s *Service) ExtractConversation(ctx context.Context, conversation domain.C
 }
 
 func (s *Service) ListMessageParts(ctx context.Context, userID, conversationID string) ([]domain.MessagePart, error) {
+	_, scopeErr := security.PersonalScope(ctx, userID, "")
+	if scopeErr != nil {
+		return nil, scopeErr
+	}
 	if s == nil || s.repo == nil {
 		return nil, nil
 	}
@@ -220,6 +280,10 @@ func (s *Service) ListMessageParts(ctx context.Context, userID, conversationID s
 }
 
 func (s *Service) ListPartArtifacts(ctx context.Context, userID, conversationID string) ([]domain.MessagePartArtifact, error) {
+	_, scopeErr := security.PersonalScope(ctx, userID, "")
+	if scopeErr != nil {
+		return nil, scopeErr
+	}
 	if s == nil || s.repo == nil {
 		return nil, nil
 	}
@@ -246,6 +310,7 @@ func MaterializeMessageParts(conversation domain.ConversationRecord) []domain.Me
 			part := domain.MessagePart{
 				PartID:         fmt.Sprintf("part:%s:%03d:%03d", conversation.ConversationID, sequenceNum, partIndex),
 				UserID:         conversation.UserID,
+				WorkspaceID:    conversation.WorkspaceID,
 				ConversationID: conversation.ConversationID,
 				SequenceNum:    sequenceNum,
 				PartIndex:      partIndex,
@@ -550,6 +615,7 @@ func (s *Service) extractPartArtifacts(ctx context.Context, userID, conversation
 		return domain.MessagePartArtifact{
 			ArtifactID:     fmt.Sprintf("artifact:%s:%s", part.PartID, kind),
 			UserID:         userID,
+			WorkspaceID:    part.WorkspaceID,
 			ConversationID: conversationID,
 			PartID:         part.PartID,
 			ArtifactType:   kind,

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"memstation/apps/server/internal/domain"
+	"memstation/apps/server/internal/security"
 
 	"github.com/google/uuid"
 )
@@ -64,16 +65,27 @@ func prepareEntityAlias(a domain.EntityAlias, existing []domain.EntityAlias) (do
 	return a, nil
 }
 
-func (r *InMemoryMemoryRepository) ListEntityAliases(_ context.Context, userID, generationID string) ([]domain.EntityAlias, error) {
+func (r *InMemoryMemoryRepository) ListEntityAliases(ctx context.Context, userID, generationID string) ([]domain.EntityAlias, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return nil, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return filterAliases(r.entityAliases, userID, generationID), nil
+	out := filterAliases(r.entityAliases, userID, generationID)
+	visible := out[:0]
+	for _, a := range out {
+		if r.nodeOutsidePersonalLocked(userID, a.TargetNodeID) || (a.SourceNodeID != "" && r.nodeOutsidePersonalLocked(userID, a.SourceNodeID)) {
+			continue
+		}
+		visible = append(visible, a)
+	}
+	return visible, nil
 }
 
 func filterAliases(all []domain.EntityAlias, userID, generationID string) []domain.EntityAlias {
 	out := []domain.EntityAlias{}
 	for _, a := range all {
-		if a.UserID == userID && a.GenerationID == generationID {
+		if a.UserID == userID && a.GenerationID == generationID && personalMemoryWorkspace(userID, a.WorkspaceID) {
 			out = append(out, a)
 		}
 	}
@@ -81,7 +93,11 @@ func filterAliases(all []domain.EntityAlias, userID, generationID string) []doma
 	return out
 }
 
-func (r *InMemoryMemoryRepository) PutEntityAlias(_ context.Context, a domain.EntityAlias) (domain.EntityAlias, error) {
+func (r *InMemoryMemoryRepository) PutEntityAlias(ctx context.Context, a domain.EntityAlias) (domain.EntityAlias, error) {
+	if _, err := security.PersonalScope(ctx, a.UserID, a.WorkspaceID); err != nil {
+		return domain.EntityAlias{}, err
+	}
+	a.WorkspaceID = domain.PersonalWorkspaceID(a.UserID)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	a.ID = "" // IDs are server-owned; identity is scoped alias plus target.
@@ -96,7 +112,7 @@ func (r *InMemoryMemoryRepository) PutEntityAlias(_ context.Context, a domain.En
 		}
 		found := false
 		for _, d := range r.documents {
-			if d.UserID == a.UserID && d.GenerationID == a.GenerationID && d.NodeID == nodeID && d.Type == domain.MemoryTypeEntity {
+			if d.UserID == a.UserID && personalMemoryWorkspace(a.UserID, d.WorkspaceID) && d.GenerationID == a.GenerationID && d.NodeID == nodeID && d.Type == domain.MemoryTypeEntity {
 				found = true
 			}
 		}
@@ -119,7 +135,7 @@ type aliasQueryer interface {
 }
 
 func listAliases(ctx context.Context, db aliasQueryer, userID, generationID string) ([]domain.EntityAlias, error) {
-	rows, err := db.QueryContext(ctx, `SELECT id,user_id,generation_id,scope,alias,COALESCE(source_node_id,''),target_node_id,status,reason,created_at,updated_at FROM entity_aliases WHERE user_id=$1 AND generation_id=$2 ORDER BY id`, userID, generationID)
+	rows, err := db.QueryContext(ctx, `SELECT id,user_id,generation_id,scope,alias,COALESCE(source_node_id,''),target_node_id,status,reason,created_at,updated_at FROM entity_aliases WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=entity_aliases.user_id AND scope_node.id=entity_aliases.target_node_id AND scope_node.workspace_id='personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND (source_node_id IS NULL OR EXISTS (SELECT 1 FROM memory_nodes scope_src WHERE scope_src.user_id=entity_aliases.user_id AND scope_src.id=entity_aliases.source_node_id AND scope_src.workspace_id='personal-' || encode(sha256(convert_to(scope_src.user_id,'UTF8')),'hex'))) AND user_id=$1 AND generation_id=$2 ORDER BY id`, userID, generationID)
 	if err != nil {
 		return nil, err
 	}
@@ -130,16 +146,24 @@ func listAliases(ctx context.Context, db aliasQueryer, userID, generationID stri
 		if err = rows.Scan(&a.ID, &a.UserID, &a.GenerationID, &a.Scope, &a.Alias, &a.SourceNodeID, &a.TargetNodeID, &a.Status, &a.Reason, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			return nil, err
 		}
+		a.WorkspaceID = domain.PersonalWorkspaceID(a.UserID)
 		out = append(out, a)
 	}
 	return out, rows.Err()
 }
 
 func (r *PostgresMemoryRepository) ListEntityAliases(ctx context.Context, userID, generationID string) ([]domain.EntityAlias, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return nil, err
+	}
 	return listAliases(ctx, r.db, userID, generationID)
 }
 
 func (r *PostgresMemoryRepository) PutEntityAlias(ctx context.Context, a domain.EntityAlias) (domain.EntityAlias, error) {
+	if _, err := security.PersonalScope(ctx, a.UserID, a.WorkspaceID); err != nil {
+		return domain.EntityAlias{}, err
+	}
+	a.WorkspaceID = domain.PersonalWorkspaceID(a.UserID)
 	a.ID = ""
 	if err := a.Validate(); err != nil {
 		return a, err
@@ -165,7 +189,7 @@ func (r *PostgresMemoryRepository) PutEntityAlias(ctx context.Context, a domain.
 			continue
 		}
 		var found string
-		if err = tx.QueryRowContext(ctx, `SELECT n.id FROM memory_nodes n JOIN memory_items i ON i.user_id=n.user_id AND i.node_id=n.id AND i.deleted_at IS NULL WHERE n.user_id=$1 AND n.generation_id=$2 AND n.id=$3 AND n.node_type='entity' FOR SHARE OF n`, a.UserID, a.GenerationID, nodeID).Scan(&found); err != nil {
+		if err = tx.QueryRowContext(ctx, `SELECT n.id FROM memory_nodes n JOIN memory_items i ON i.user_id=n.user_id AND i.node_id=n.id AND i.deleted_at IS NULL WHERE n.workspace_id = 'personal-' || encode(sha256(convert_to(n.user_id,'UTF8')),'hex') AND n.user_id =$1 AND n.generation_id=$2 AND n.id=$3 AND n.node_type='entity' FOR SHARE OF n`, a.UserID, a.GenerationID, nodeID).Scan(&found); err != nil {
 			return a, errors.New("entity endpoint not found in user generation")
 		}
 	}

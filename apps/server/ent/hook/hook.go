@@ -20,6 +20,30 @@ func (f APIKeyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, erro
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.APIKeyMutation", m)
 }
 
+// The ActorFunc type is an adapter to allow the use of ordinary
+// function as Actor mutator.
+type ActorFunc func(context.Context, *ent.ActorMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ActorFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ActorMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ActorMutation", m)
+}
+
+// The AgentFunc type is an adapter to allow the use of ordinary
+// function as Agent mutator.
+type AgentFunc func(context.Context, *ent.AgentMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AgentFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AgentMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AgentMutation", m)
+}
+
 // The AuditEventFunc type is an adapter to allow the use of ordinary
 // function as AuditEvent mutator.
 type AuditEventFunc func(context.Context, *ent.AuditEventMutation) (ent.Value, error)
@@ -210,6 +234,30 @@ func (f UserSettingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value,
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserSettingMutation", m)
+}
+
+// The WorkspaceFunc type is an adapter to allow the use of ordinary
+// function as Workspace mutator.
+type WorkspaceFunc func(context.Context, *ent.WorkspaceMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f WorkspaceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.WorkspaceMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkspaceMutation", m)
+}
+
+// The WorkspaceGrantFunc type is an adapter to allow the use of ordinary
+// function as WorkspaceGrant mutator.
+type WorkspaceGrantFunc func(context.Context, *ent.WorkspaceGrantMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f WorkspaceGrantFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.WorkspaceGrantMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkspaceGrantMutation", m)
 }
 
 // Condition is a hook condition function.

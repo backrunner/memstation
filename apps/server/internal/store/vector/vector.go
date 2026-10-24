@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -14,6 +16,8 @@ import (
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/ports"
 	"memstation/apps/server/internal/runtimeconfig"
+	"memstation/apps/server/internal/security"
+	"memstation/apps/server/internal/store/sql/memorygeneration"
 )
 
 const embeddingDimensions = 3
@@ -63,6 +67,11 @@ func (s *PGVectorStore) Backend() string {
 }
 
 func (s *PGVectorStore) Search(ctx context.Context, input domain.VectorSearchInput) ([]domain.VectorSearchResult, error) {
+	workspace, err := security.PersonalScope(ctx, input.UserID, input.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	input.WorkspaceID = workspace
 	if input.TopK <= 0 {
 		input.TopK = 10
 	}
@@ -83,8 +92,6 @@ func (s *PGVectorStore) Search(ctx context.Context, input domain.VectorSearchInp
 	if limit < 20 {
 		limit = 20
 	}
-	vectorArgPosition := 3
-	limitArgPosition := 4
 	filterClause := ""
 	vectorColumn := "e.vector"
 	vectorParameterCast := "vector"
@@ -93,24 +100,30 @@ func (s *PGVectorStore) Search(ctx context.Context, input domain.VectorSearchInp
 		vectorParameterCast = fmt.Sprintf("%s(%d)", vectorType, len(queryVector))
 		filterClause += fmt.Sprintf(" AND vector_dims(e.vector) = %d", len(queryVector))
 	}
-	args := []any{input.UserID, input.EmbeddingVersion}
+	args := []any{input.UserID, input.EmbeddingVersion, workspace}
 	if strings.TrimSpace(input.GenerationID) != "" {
-		filterClause += " AND (e.generation_id = $3 OR (e.generation_id = '' AND e.node_type = 'key_memory'))"
+		filterClause += " AND (e.generation_id = $4 OR (e.generation_id = '' AND e.node_type = 'key_memory'))"
 		args = append(args, input.GenerationID)
-		vectorArgPosition = 4
-		limitArgPosition = 5
 	}
 	if strings.TrimSpace(embeddingModel) != "" {
 		filterClause += fmt.Sprintf(" AND e.embedding_model = $%d", len(args)+1)
 		args = append(args, embeddingModel)
-		vectorArgPosition++
-		limitArgPosition++
 	}
+	if len(input.AllowedTypes) > 0 {
+		types := make([]string, 0, len(input.AllowedTypes))
+		for _, kind := range input.AllowedTypes {
+			args = append(args, string(kind))
+			types = append(types, fmt.Sprintf("$%d", len(args)))
+		}
+		filterClause += " AND e.node_type IN (" + strings.Join(types, ",") + ")"
+	}
+	vectorArgPosition := len(args) + 1
+	limitArgPosition := len(args) + 2
 	query := fmt.Sprintf(`
 	        SELECT e.node_id, e.node_type, 1 - (%s <=> $%d::%s) AS score
 	        FROM memory_embeddings e
-	        JOIN memory_nodes n ON n.id = e.node_id AND n.user_id = e.user_id AND n.embedding_status = 'ready'
-	        WHERE e.user_id = $1 AND e.embedding_version = $2%s
+	        JOIN memory_nodes n ON n.id = e.node_id AND n.user_id = e.user_id AND n.workspace_id=e.workspace_id AND n.embedding_status = 'ready' AND n.node_type=e.node_type AND n.generation_id=e.generation_id
+	        WHERE e.user_id = $1 AND e.embedding_version = $2 AND e.workspace_id=$3%s
 	        ORDER BY %s <=> $%d::%s ASC
 	        LIMIT $%d
 	    `, vectorColumn, vectorArgPosition, vectorParameterCast, filterClause, vectorColumn, vectorArgPosition, vectorParameterCast, limitArgPosition)
@@ -128,6 +141,7 @@ func (s *PGVectorStore) Search(ctx context.Context, input domain.VectorSearchInp
 			return nil, err
 		}
 		item.UserID = input.UserID
+		item.WorkspaceID = workspace
 		if !matchesAllowedType(item.NodeType, input.AllowedTypes) {
 			continue
 		}
@@ -151,6 +165,11 @@ func annVectorType(dimension int) (string, bool) {
 }
 
 func (s *PGVectorStore) Upsert(ctx context.Context, input domain.VectorUpsertRequest) error {
+	workspace, err := security.PersonalScope(ctx, input.UserID, input.WorkspaceID)
+	if err != nil {
+		return err
+	}
+	input.WorkspaceID = workspace
 	if input.EmbeddingVersion <= 0 {
 		input.EmbeddingVersion = 1
 	}
@@ -181,24 +200,59 @@ func (s *PGVectorStore) Upsert(ctx context.Context, input domain.VectorUpsertReq
 	if db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		s.items[input.UserID+"::"+input.GenerationID+"::"+input.NodeID+"::"+fmt.Sprintf("%d", input.EmbeddingVersion)] = input
+		identity, _ := json.Marshal([]string{input.UserID, workspace, input.NodeID, fmt.Sprintf("%d", input.EmbeddingVersion)})
+		s.items[string(identity)] = input
 		return nil
 	}
 
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var expectedGeneration string
+	if err = tx.QueryRowContext(ctx, `SELECT generation_id FROM memory_nodes WHERE id=$1 AND user_id=$2 AND workspace_id=$3`, input.NodeID, input.UserID, workspace).Scan(&expectedGeneration); errors.Is(err, sql.ErrNoRows) {
+		// Preserve scope denial for known hidden parents; missing nodes remain a no-op.
+		var exists bool
+		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM memory_nodes WHERE id=$1)`, input.NodeID).Scan(&exists); err != nil {
+			return err
+		}
+		if exists {
+			return domain.ErrAccessDenied
+		}
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if writable, err := memorygeneration.LockWritableGeneration(ctx, tx, input.UserID, workspace, expectedGeneration); err != nil || !writable {
+		return err
+	}
+	var owner, parentWorkspace, generation, kind, status string
+	var revision int64
+	err = tx.QueryRowContext(ctx, `SELECT user_id,workspace_id,generation_id,node_type,embedding_revision,embedding_status FROM memory_nodes WHERE id=$1 FOR UPDATE`, input.NodeID).Scan(&owner, &parentWorkspace, &generation, &kind, &revision, &status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil // A delayed task must not recreate a deleted node's embedding.
+	}
+	if err != nil {
+		return err
+	}
+	if owner != input.UserID || parentWorkspace != workspace || kind != input.NodeType || (input.GenerationID != "" && input.GenerationID != generation) {
+		return domain.ErrAccessDenied
+	}
+	if generation != expectedGeneration {
+		return errors.New("embedding parent generation changed; retry")
+	}
+	input.GenerationID = generation
+	if input.EmbeddingRevision > 0 && (revision != input.EmbeddingRevision || status != "pending") {
+		return nil
+	}
 	now := time.Now().UTC()
 	embeddingID := fmt.Sprintf("%s:%s:%d", input.UserID, input.NodeID, input.EmbeddingVersion)
 	insertPrefix := `INSERT INTO memory_embeddings (
 	            embedding_id, generation_id, user_id, node_id, node_type, embedding_version, embedding_model,
-	            content_hash, vector, created_at, updated_at
+	            content_hash, vector, created_at, updated_at, workspace_id
 	        ) `
-	valuesClause := `VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::vector,$10,$10)`
-	if input.EmbeddingRevision > 0 {
-		valuesClause = `SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9::vector,$10,$10
-			WHERE EXISTS (
-				SELECT 1 FROM memory_nodes
-				WHERE id = $4 AND user_id = $3 AND embedding_revision = $11 AND embedding_status = 'pending'
-			)`
-	}
+	valuesClause := `VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::vector,$10,$10,$11)`
 	query := insertPrefix + valuesClause + `
 	        ON CONFLICT (user_id, node_id, embedding_version) DO UPDATE SET
 	            generation_id = EXCLUDED.generation_id,
@@ -207,46 +261,35 @@ func (s *PGVectorStore) Upsert(ctx context.Context, input domain.VectorUpsertReq
             content_hash = EXCLUDED.content_hash,
             vector = EXCLUDED.vector,
 	            updated_at = EXCLUDED.updated_at`
-	args := []any{embeddingID, input.GenerationID, input.UserID, input.NodeID, input.NodeType, input.EmbeddingVersion, input.EmbeddingModel, input.ContentHash, vectorLiteral(input.Vector), now}
-	if input.EmbeddingRevision > 0 {
-		args = append(args, input.EmbeddingRevision)
-	}
-	result, err := db.ExecContext(ctx, query, args...)
+	args := []any{embeddingID, input.GenerationID, input.UserID, input.NodeID, input.NodeType, input.EmbeddingVersion, input.EmbeddingModel, input.ContentHash, vectorLiteral(input.Vector), now, workspace}
+	_, err = tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}
-	if input.EmbeddingRevision > 0 {
-		rows, rowsErr := result.RowsAffected()
-		if rowsErr != nil {
-			return rowsErr
-		}
-		if rows == 0 {
-			return nil
-		}
+	_, err = tx.ExecContext(ctx, `UPDATE memory_nodes SET embedding_status='ready',updated_at=$1 WHERE id=$2 AND user_id=$3 AND workspace_id=$4`, now, input.NodeID, input.UserID, workspace)
+	if err != nil {
+		return err
 	}
-	readyQuery := `UPDATE memory_nodes SET embedding_status = 'ready', updated_at = $1 WHERE id = $2 AND user_id = $3`
-	readyArgs := []any{now, input.NodeID, input.UserID}
-	if input.EmbeddingRevision > 0 {
-		readyQuery += ` AND embedding_revision = $4`
-		readyArgs = append(readyArgs, input.EmbeddingRevision)
-	}
-	_, err = db.ExecContext(ctx, readyQuery, readyArgs...)
-	return err
+	return tx.Commit()
 }
 
 func (s *PGVectorStore) DeleteByNode(ctx context.Context, userID, nodeID string) error {
+	workspace, err := security.PersonalScope(ctx, userID, "")
+	if err != nil {
+		return err
+	}
 	db := s.currentDB()
 	if db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		for key := range s.items {
-			if strings.Contains(key, "::"+nodeID+"::") && strings.HasPrefix(key, userID+"::") {
+		for key, item := range s.items {
+			if item.UserID == userID && item.WorkspaceID == workspace && item.NodeID == nodeID {
 				delete(s.items, key)
 			}
 		}
 		return nil
 	}
-	_, err := db.ExecContext(ctx, `DELETE FROM memory_embeddings WHERE user_id = $1 AND node_id = $2`, userID, nodeID)
+	_, err = db.ExecContext(ctx, `DELETE FROM memory_embeddings WHERE user_id = $1 AND node_id = $2 AND workspace_id=$3`, userID, nodeID, workspace)
 	return err
 }
 
@@ -364,7 +407,7 @@ func (s *PGVectorStore) searchInMemory(input domain.VectorSearchInput, queryVect
 
 	results := make([]domain.VectorSearchResult, 0)
 	for _, item := range s.items {
-		if item.UserID != input.UserID || item.EmbeddingVersion != input.EmbeddingVersion {
+		if item.UserID != input.UserID || item.WorkspaceID != input.WorkspaceID || item.EmbeddingVersion != input.EmbeddingVersion {
 			continue
 		}
 		if strings.TrimSpace(input.GenerationID) != "" && !matchesVectorGeneration(input.GenerationID, item.GenerationID, item.NodeType) {
@@ -377,10 +420,11 @@ func (s *PGVectorStore) searchInMemory(input domain.VectorSearchInput, queryVect
 			continue
 		}
 		results = append(results, domain.VectorSearchResult{
-			NodeID:   item.NodeID,
-			Score:    Similarity(queryVector, item.Vector),
-			UserID:   item.UserID,
-			NodeType: item.NodeType,
+			WorkspaceID: item.WorkspaceID,
+			NodeID:      item.NodeID,
+			Score:       Similarity(queryVector, item.Vector),
+			UserID:      item.UserID,
+			NodeType:    item.NodeType,
 		})
 	}
 	sort.Slice(results, func(i, j int) bool {

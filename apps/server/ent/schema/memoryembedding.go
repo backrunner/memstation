@@ -14,6 +14,7 @@ func (MemoryEmbedding) Fields() []ent.Field {
 		field.String("embedding_id").Unique(),
 		field.String("generation_id").Default(""),
 		field.String("user_id"),
+		field.String("workspace_id").Immutable(),
 		field.String("node_id"),
 		field.String("node_type"),
 		field.Int("embedding_version").Default(1),
@@ -24,5 +25,5 @@ func (MemoryEmbedding) Fields() []ent.Field {
 }
 
 func (MemoryEmbedding) Indexes() []ent.Index {
-	return []ent.Index{index.Fields("user_id", "node_id", "embedding_version").Unique()}
+	return []ent.Index{index.Fields("user_id", "node_id", "embedding_version").Unique(), index.Fields("user_id", "workspace_id", "generation_id", "embedding_version", "embedding_model")}
 }

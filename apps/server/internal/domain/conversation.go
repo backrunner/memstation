@@ -25,23 +25,39 @@ const (
 )
 
 type ConversationRecord struct {
-	ConversationID string                `json:"conversation_id"`
-	UserID         string                `json:"user_id"`
-	RequestFormat  string                `json:"request_format"`
-	Provider       Provider              `json:"provider"`
-	Mode           Mode                  `json:"mode"`
-	FinalizeStatus FinalizeStatus        `json:"finalize_status"`
-	SummaryStatus  ProcessingStatus      `json:"summary_status"`
-	AnalysisStatus ProcessingStatus      `json:"analysis_status"`
-	Messages       []UnifiedMessage      `json:"messages"`
-	Parts          []MessagePart         `json:"parts,omitempty"`
-	Artifacts      []MessagePartArtifact `json:"artifacts,omitempty"`
-	Segments       []ConversationSegment `json:"segments,omitempty"`
-	Response       *UnifiedResponse      `json:"response,omitempty"`
-	Usage          UsageRecord           `json:"usage"`
-	Metadata       map[string]any        `json:"metadata,omitempty"`
-	CreatedAt      time.Time             `json:"created_at"`
-	UpdatedAt      time.Time             `json:"updated_at"`
+	WorkspaceID      string                `json:"workspace_id"`
+	AgentID          string                `json:"agent_id"`
+	Revision         int64                 `json:"revision"`
+	ExpectedRevision *int64                `json:"-"`
+	ConversationID   string                `json:"conversation_id"`
+	UserID           string                `json:"user_id"`
+	RequestFormat    string                `json:"request_format"`
+	Provider         Provider              `json:"provider"`
+	Mode             Mode                  `json:"mode"`
+	FinalizeStatus   FinalizeStatus        `json:"finalize_status"`
+	SummaryStatus    ProcessingStatus      `json:"summary_status"`
+	AnalysisStatus   ProcessingStatus      `json:"analysis_status"`
+	Messages         []UnifiedMessage      `json:"messages"`
+	Parts            []MessagePart         `json:"parts,omitempty"`
+	Artifacts        []MessagePartArtifact `json:"artifacts,omitempty"`
+	Segments         []ConversationSegment `json:"segments,omitempty"`
+	Response         *UnifiedResponse      `json:"response,omitempty"`
+	Usage            UsageRecord           `json:"usage"`
+	Metadata         map[string]any        `json:"metadata,omitempty"`
+	CreatedAt        time.Time             `json:"created_at"`
+	UpdatedAt        time.Time             `json:"updated_at"`
+}
+
+// ConversationFinalization is a request to seal the stored conversation. The
+// store reads retention settings and identity from the locked parent row.
+type ConversationFinalization struct {
+	UserID         string
+	WorkspaceID    string
+	ConversationID string
+	Status         FinalizeStatus
+	Reason         string
+	// Recheck the scheduler's timeout cutoff under the same lock as finalization.
+	TimeoutBefore *time.Time
 }
 
 type ConversationSegment struct {

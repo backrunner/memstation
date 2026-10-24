@@ -31,6 +31,7 @@ type VectorStore interface {
 }
 
 type ConversationRepository interface {
+	RequestFinalization(ctx context.Context, input domain.ConversationFinalization, outbox OutboxRepository) error
 	PersistExchange(ctx context.Context, conversation domain.ConversationRecord) error
 	GetConversation(ctx context.Context, userID, conversationID string) (domain.ConversationRecord, error)
 	GetConversationInGeneration(ctx context.Context, userID, conversationID, generationID string) (domain.ConversationRecord, error)
@@ -45,6 +46,7 @@ type MediaRepository interface {
 	PutBlob(ctx context.Context, blob domain.BlobObject) error
 	GetBlob(ctx context.Context, userID, blobID string) (domain.BlobObject, error)
 	DeleteBlob(ctx context.Context, userID, blobID string, deletedAt time.Time) error
+	MarkBlobForCleanup(ctx context.Context, userID, conversationID, blobID string) (bool, error)
 	ReplaceMessageParts(ctx context.Context, userID, conversationID string, parts []domain.MessagePart) error
 	ListMessageParts(ctx context.Context, userID, conversationID string) ([]domain.MessagePart, error)
 	ReplacePartArtifacts(ctx context.Context, userID, conversationID string, artifacts []domain.MessagePartArtifact) error

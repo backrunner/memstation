@@ -99,6 +99,7 @@ func snapshotConversation(snapshot domain.MemorySourceSnapshot) domain.Conversat
 	return domain.ConversationRecord{
 		ConversationID: snapshot.ConversationID,
 		UserID:         snapshot.UserID,
+		WorkspaceID:    snapshot.WorkspaceID,
 		RequestFormat:  snapshot.RequestFormat,
 		Provider:       snapshot.Provider,
 		Mode:           snapshot.Mode,
@@ -133,5 +134,5 @@ func mergeMetadata(parts ...map[string]any) map[string]any {
 }
 
 func currentGenerationID(userID string) string {
-	return "gen:current:" + strings.TrimSpace(userID)
+	return "gen:current:" + userID
 }

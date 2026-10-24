@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"memstation/apps/server/internal/domain"
+	"memstation/apps/server/internal/security"
 	auditsvc "memstation/apps/server/internal/service/audit"
 	memoryservice "memstation/apps/server/internal/service/memory"
 )
@@ -110,6 +111,13 @@ func (r *ToolRuntime) Execute(ctx context.Context, req domain.UnifiedRequest, as
 }
 
 func (r *ToolRuntime) executeCall(ctx context.Context, req domain.UnifiedRequest, call domain.ToolCall) (map[string]any, error) {
+	capability := domain.CapabilityMemoryRead
+	if call.Name == "write_key_memory" {
+		capability = domain.CapabilityMemoryEdit
+	}
+	if err := security.RequireCapability(ctx, capability); err != nil {
+		return nil, err
+	}
 	arguments := objectValue(call.Arguments)
 	switch call.Name {
 	case "recall_memory":

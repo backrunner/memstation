@@ -24,6 +24,12 @@ type Conversation struct {
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID string `json:"user_id,omitempty"`
+	// WorkspaceID holds the value of the "workspace_id" field.
+	WorkspaceID string `json:"workspace_id,omitempty"`
+	// AgentID holds the value of the "agent_id" field.
+	AgentID string `json:"agent_id,omitempty"`
+	// WriteRevision holds the value of the "write_revision" field.
+	WriteRevision int64 `json:"write_revision,omitempty"`
 	// RequestFormat holds the value of the "request_format" field.
 	RequestFormat string `json:"request_format,omitempty"`
 	// UpstreamProvider holds the value of the "upstream_provider" field.
@@ -48,9 +54,9 @@ func (*Conversation) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case conversation.FieldMetadata:
 			values[i] = new([]byte)
-		case conversation.FieldID:
+		case conversation.FieldID, conversation.FieldWriteRevision:
 			values[i] = new(sql.NullInt64)
-		case conversation.FieldUserID, conversation.FieldRequestFormat, conversation.FieldUpstreamProvider, conversation.FieldMode, conversation.FieldFinalizeStatus, conversation.FieldSummaryStatus, conversation.FieldAnalysisStatus:
+		case conversation.FieldUserID, conversation.FieldWorkspaceID, conversation.FieldAgentID, conversation.FieldRequestFormat, conversation.FieldUpstreamProvider, conversation.FieldMode, conversation.FieldFinalizeStatus, conversation.FieldSummaryStatus, conversation.FieldAnalysisStatus:
 			values[i] = new(sql.NullString)
 		case conversation.FieldCreatedAt, conversation.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -92,6 +98,24 @@ func (_m *Conversation) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field user_id", values[i])
 			} else if value.Valid {
 				_m.UserID = value.String
+			}
+		case conversation.FieldWorkspaceID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field workspace_id", values[i])
+			} else if value.Valid {
+				_m.WorkspaceID = value.String
+			}
+		case conversation.FieldAgentID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field agent_id", values[i])
+			} else if value.Valid {
+				_m.AgentID = value.String
+			}
+		case conversation.FieldWriteRevision:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field write_revision", values[i])
+			} else if value.Valid {
+				_m.WriteRevision = value.Int64
 			}
 		case conversation.FieldRequestFormat:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -181,6 +205,15 @@ func (_m *Conversation) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("user_id=")
 	builder.WriteString(_m.UserID)
+	builder.WriteString(", ")
+	builder.WriteString("workspace_id=")
+	builder.WriteString(_m.WorkspaceID)
+	builder.WriteString(", ")
+	builder.WriteString("agent_id=")
+	builder.WriteString(_m.AgentID)
+	builder.WriteString(", ")
+	builder.WriteString("write_revision=")
+	builder.WriteString(fmt.Sprintf("%v", _m.WriteRevision))
 	builder.WriteString(", ")
 	builder.WriteString("request_format=")
 	builder.WriteString(_m.RequestFormat)

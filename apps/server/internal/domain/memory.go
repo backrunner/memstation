@@ -3,6 +3,7 @@ package domain
 import "time"
 
 type SearchInput struct {
+	WorkspaceID         string       `json:"workspace_id,omitempty"`
 	AsOf                *time.Time   `json:"as_of,omitempty"`
 	KnownAt             *time.Time   `json:"known_at,omitempty"`
 	RelationMode        string       `json:"relation_mode,omitempty"`
@@ -40,6 +41,7 @@ type MemoryLineageMeta struct {
 }
 
 type MemoryDocument struct {
+	WorkspaceID    string             `json:"workspace_id,omitempty"`
 	ID             string             `json:"id"`
 	NodeID         string             `json:"node_id"`
 	GenerationID   string             `json:"generation_id,omitempty"`
@@ -112,6 +114,7 @@ type EmbeddingResult struct {
 }
 
 type KeyMemory struct {
+	WorkspaceID     string         `json:"workspace_id,omitempty"`
 	ID              string         `json:"id"`
 	UserID          string         `json:"user_id"`
 	Key             string         `json:"key"`
@@ -131,15 +134,17 @@ type KeyMemory struct {
 }
 
 type KeyMemoryQuery struct {
-	UserID    string     `json:"user_id"`
-	Query     string     `json:"query,omitempty"`
-	TopK      int        `json:"top_k"`
-	TimeTiers []TimeTier `json:"time_tiers,omitempty"`
-	DateFrom  *time.Time `json:"date_from,omitempty"`
-	DateTo    *time.Time `json:"date_to,omitempty"`
+	WorkspaceID string     `json:"workspace_id,omitempty"`
+	UserID      string     `json:"user_id"`
+	Query       string     `json:"query,omitempty"`
+	TopK        int        `json:"top_k"`
+	TimeTiers   []TimeTier `json:"time_tiers,omitempty"`
+	DateFrom    *time.Time `json:"date_from,omitempty"`
+	DateTo      *time.Time `json:"date_to,omitempty"`
 }
 
 type MemoryRelation struct {
+	WorkspaceID  string         `json:"workspace_id,omitempty"`
 	ID           string         `json:"id"`
 	GenerationID string         `json:"generation_id,omitempty"`
 	UserID       string         `json:"user_id"`
@@ -158,6 +163,7 @@ type InjectionResult struct {
 }
 
 type VectorSearchInput struct {
+	WorkspaceID      string       `json:"workspace_id,omitempty"`
 	UserID           string       `json:"user_id"`
 	GenerationID     string       `json:"generation_id,omitempty"`
 	Query            string       `json:"query"`
@@ -168,10 +174,11 @@ type VectorSearchInput struct {
 }
 
 type VectorSearchResult struct {
-	NodeID   string  `json:"node_id"`
-	Score    float64 `json:"score"`
-	UserID   string  `json:"user_id"`
-	NodeType string  `json:"node_type"`
+	WorkspaceID string  `json:"workspace_id,omitempty"`
+	NodeID      string  `json:"node_id"`
+	Score       float64 `json:"score"`
+	UserID      string  `json:"user_id"`
+	NodeType    string  `json:"node_type"`
 }
 
 type RerankInput struct {
@@ -194,6 +201,7 @@ type RerankResult struct {
 }
 
 type VectorUpsertRequest struct {
+	WorkspaceID       string    `json:"workspace_id,omitempty"`
 	UserID            string    `json:"user_id"`
 	GenerationID      string    `json:"generation_id,omitempty"`
 	NodeID            string    `json:"node_id"`
@@ -218,6 +226,7 @@ const (
 )
 
 type MemoryGeneration struct {
+	WorkspaceID       string                 `json:"workspace_id,omitempty"`
 	GenerationID      string                 `json:"generation_id"`
 	UserID            string                 `json:"user_id"`
 	Status            MemoryGenerationStatus `json:"status"`
@@ -249,6 +258,7 @@ const (
 )
 
 type MemorySourceSnapshot struct {
+	WorkspaceID     string                `json:"workspace_id,omitempty"`
 	SnapshotID      string                `json:"snapshot_id"`
 	UserID          string                `json:"user_id"`
 	ConversationID  string                `json:"conversation_id"`
@@ -269,6 +279,7 @@ type MemorySourceSnapshot struct {
 }
 
 type MemoryGenerationSource struct {
+	WorkspaceID    string                       `json:"workspace_id,omitempty"`
 	ID             string                       `json:"id"`
 	GenerationID   string                       `json:"generation_id"`
 	UserID         string                       `json:"user_id"`
@@ -280,4 +291,19 @@ type MemoryGenerationSource struct {
 	CreatedAt      time.Time                    `json:"created_at"`
 	UpdatedAt      time.Time                    `json:"updated_at"`
 	ProcessedAt    *time.Time                   `json:"processed_at,omitempty"`
+}
+
+type CreateMemoryRebuildInput struct {
+	WorkspaceID            string `json:"workspace_id,omitempty"`
+	UserID                 string
+	Scope                  string
+	ConversationID         string
+	ActivateOnSuccess      bool
+	EmbeddingModelOverride string
+}
+
+type MemorySourceStats struct {
+	SnapshotCount        int        `json:"snapshot_count"`
+	LatestSnapshotAt     *time.Time `json:"latest_snapshot_at,omitempty"`
+	LatestSnapshotUserID string     `json:"latest_snapshot_user_id,omitempty"`
 }

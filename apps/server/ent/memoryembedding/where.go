@@ -79,6 +79,11 @@ func UserID(v string) predicate.MemoryEmbedding {
 	return predicate.MemoryEmbedding(sql.FieldEQ(FieldUserID, v))
 }
 
+// WorkspaceID applies equality check predicate on the "workspace_id" field. It's identical to WorkspaceIDEQ.
+func WorkspaceID(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldEQ(FieldWorkspaceID, v))
+}
+
 // NodeID applies equality check predicate on the "node_id" field. It's identical to NodeIDEQ.
 func NodeID(v string) predicate.MemoryEmbedding {
 	return predicate.MemoryEmbedding(sql.FieldEQ(FieldNodeID, v))
@@ -382,6 +387,71 @@ func UserIDEqualFold(v string) predicate.MemoryEmbedding {
 // UserIDContainsFold applies the ContainsFold predicate on the "user_id" field.
 func UserIDContainsFold(v string) predicate.MemoryEmbedding {
 	return predicate.MemoryEmbedding(sql.FieldContainsFold(FieldUserID, v))
+}
+
+// WorkspaceIDEQ applies the EQ predicate on the "workspace_id" field.
+func WorkspaceIDEQ(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldEQ(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDNEQ applies the NEQ predicate on the "workspace_id" field.
+func WorkspaceIDNEQ(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldNEQ(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDIn applies the In predicate on the "workspace_id" field.
+func WorkspaceIDIn(vs ...string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldIn(FieldWorkspaceID, vs...))
+}
+
+// WorkspaceIDNotIn applies the NotIn predicate on the "workspace_id" field.
+func WorkspaceIDNotIn(vs ...string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldNotIn(FieldWorkspaceID, vs...))
+}
+
+// WorkspaceIDGT applies the GT predicate on the "workspace_id" field.
+func WorkspaceIDGT(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldGT(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDGTE applies the GTE predicate on the "workspace_id" field.
+func WorkspaceIDGTE(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldGTE(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDLT applies the LT predicate on the "workspace_id" field.
+func WorkspaceIDLT(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldLT(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDLTE applies the LTE predicate on the "workspace_id" field.
+func WorkspaceIDLTE(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldLTE(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDContains applies the Contains predicate on the "workspace_id" field.
+func WorkspaceIDContains(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldContains(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDHasPrefix applies the HasPrefix predicate on the "workspace_id" field.
+func WorkspaceIDHasPrefix(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldHasPrefix(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDHasSuffix applies the HasSuffix predicate on the "workspace_id" field.
+func WorkspaceIDHasSuffix(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldHasSuffix(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDEqualFold applies the EqualFold predicate on the "workspace_id" field.
+func WorkspaceIDEqualFold(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldEqualFold(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDContainsFold applies the ContainsFold predicate on the "workspace_id" field.
+func WorkspaceIDContainsFold(v string) predicate.MemoryEmbedding {
+	return predicate.MemoryEmbedding(sql.FieldContainsFold(FieldWorkspaceID, v))
 }
 
 // NodeIDEQ applies the EQ predicate on the "node_id" field.

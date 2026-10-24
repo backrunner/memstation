@@ -2,9 +2,12 @@ package memory
 
 import (
 	"context"
+	"errors"
 	"math"
 	"sort"
 	"strings"
+
+	"memstation/apps/server/internal/security"
 
 	"memstation/apps/server/internal/domain"
 )
@@ -156,6 +159,9 @@ func (e *Engine) addEntitySeeds(ctx context.Context, input domain.SearchInput, s
 }
 
 func (s *Service) ListEntityAliases(ctx context.Context, u, g string) ([]domain.EntityAlias, error) {
+	if _, err := security.PersonalScope(ctx, u, ""); err != nil {
+		return nil, err
+	}
 	resolved, err := s.resolveGenerationID(ctx, u, g)
 	if err != nil {
 		return nil, err
@@ -164,6 +170,9 @@ func (s *Service) ListEntityAliases(ctx context.Context, u, g string) ([]domain.
 }
 
 func (s *Service) PutEntityAlias(ctx context.Context, a domain.EntityAlias) (domain.EntityAlias, error) {
+	if _, err := security.PersonalScope(ctx, a.UserID, a.WorkspaceID); err != nil {
+		return a, err
+	}
 	g, err := s.resolveGenerationID(ctx, a.UserID, a.GenerationID)
 	if err != nil {
 		return a, err
@@ -187,7 +196,10 @@ func (e *Engine) searchHistoricalFacts(ctx context.Context, input domain.SearchI
 	}
 	scores := map[string]float64{}
 	if e.vectors != nil && input.KnownAt == nil && strings.TrimSpace(input.Query) != "" {
-		vs, vectorErr := e.vectors.Search(ctx, domain.VectorSearchInput{UserID: input.UserID, GenerationID: input.GenerationID, Query: input.Query, TopK: 100, EmbeddingVersion: embeddingVersion, EmbeddingModel: embeddingModel, AllowedTypes: []domain.MemoryType{domain.MemoryTypeFact}})
+		vs, vectorErr := e.vectors.Search(ctx, domain.VectorSearchInput{UserID: input.UserID, WorkspaceID: input.WorkspaceID, GenerationID: input.GenerationID, Query: input.Query, TopK: 100, EmbeddingVersion: embeddingVersion, EmbeddingModel: embeddingModel, AllowedTypes: []domain.MemoryType{domain.MemoryTypeFact}})
+		if errors.Is(vectorErr, domain.ErrAccessDenied) {
+			return DebugSearchResult{}, vectorErr
+		}
 		if vectorErr == nil {
 			for _, v := range vs {
 				scores[v.NodeID] = v.Score

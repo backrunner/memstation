@@ -100,6 +100,9 @@ func (c *updateCaptureConn) QueryContext(_ context.Context, query string, args [
 	c.driver.queryArgs = values
 	c.driver.queryCount++
 	rows := append([][]any(nil), c.driver.rows...)
+	if strings.Contains(query, "SELECT id,user_id,workspace_id,node_type,entity_id FROM memory_nodes") {
+		rows = nil
+	}
 	c.driver.mu.Unlock()
 	return &updateCaptureRows{rows: rows}, nil
 }
@@ -205,23 +208,23 @@ func TestPostgresMemoryRepositoryUpdateDocumentUpdatesNodeState(t *testing.T) {
 	if driver.commitCount != 1 {
 		t.Fatalf("expected one transaction commit, got %d", driver.commitCount)
 	}
-	if len(driver.execQueries) != 3 {
-		t.Fatalf("expected document, node, and outbox writes, got %d", len(driver.execQueries))
+	if len(driver.execQueries) != 5 {
+		t.Fatalf("expected identity locks, document, node, and outbox writes, got %d", len(driver.execQueries))
 	}
-	if !strings.Contains(driver.execQueries[1], "UPDATE memory_nodes") {
-		t.Fatalf("expected node update query, got %q", driver.execQueries[1])
+	if !strings.Contains(driver.execQueries[3], "UPDATE memory_nodes") {
+		t.Fatalf("expected node update query, got %q", driver.execQueries[3])
 	}
-	if len(driver.execArgs[1]) != 6 {
-		t.Fatalf("expected node update args, got %#v", driver.execArgs[1])
+	if len(driver.execArgs[3]) != 6 {
+		t.Fatalf("expected node update args, got %#v", driver.execArgs[3])
 	}
-	if _, ok := driver.execArgs[1][0].(time.Time); !ok {
-		t.Fatalf("expected activity_at time arg, got %#v", driver.execArgs[1][0])
+	if _, ok := driver.execArgs[3][0].(time.Time); !ok {
+		t.Fatalf("expected activity_at time arg, got %#v", driver.execArgs[3][0])
 	}
-	if driver.execArgs[1][1] != "active" {
-		t.Fatalf("expected active time tier, got %#v", driver.execArgs[1][1])
+	if driver.execArgs[3][1] != "active" {
+		t.Fatalf("expected active time tier, got %#v", driver.execArgs[3][1])
 	}
-	if !strings.Contains(driver.execQueries[2], "INSERT INTO outbox_events") {
-		t.Fatalf("expected transactional embedding outbox write, got %q", driver.execQueries[2])
+	if !strings.Contains(driver.execQueries[4], "INSERT INTO outbox_events") {
+		t.Fatalf("expected transactional embedding outbox write, got %q", driver.execQueries[4])
 	}
 }
 
@@ -270,17 +273,17 @@ func TestPostgresMemoryRepositoryUpdateGenericDocumentUsesMemoryItems(t *testing
 
 	driver.mu.Lock()
 	defer driver.mu.Unlock()
-	if len(driver.execQueries) != 3 {
-		t.Fatalf("expected document, node, and outbox writes, got %d", len(driver.execQueries))
+	if len(driver.execQueries) != 5 {
+		t.Fatalf("expected identity locks, document, node, and outbox writes, got %d", len(driver.execQueries))
 	}
-	if !strings.Contains(driver.execQueries[0], "UPDATE memory_items") {
-		t.Fatalf("expected memory_items update query, got %q", driver.execQueries[0])
+	if !strings.Contains(driver.execQueries[2], "UPDATE memory_items") {
+		t.Fatalf("expected memory_items update query, got %q", driver.execQueries[2])
 	}
-	if len(driver.execArgs[0]) != 5 || driver.execArgs[0][4] != "task" {
-		t.Fatalf("expected generic update args to include item type, got %#v", driver.execArgs[0])
+	if len(driver.execArgs[2]) != 5 || driver.execArgs[2][4] != "task" {
+		t.Fatalf("expected generic update args to include item type, got %#v", driver.execArgs[2])
 	}
-	if !strings.Contains(driver.execQueries[2], "INSERT INTO outbox_events") {
-		t.Fatalf("expected transactional embedding outbox write, got %q", driver.execQueries[2])
+	if !strings.Contains(driver.execQueries[4], "INSERT INTO outbox_events") {
+		t.Fatalf("expected transactional embedding outbox write, got %q", driver.execQueries[4])
 	}
 }
 
@@ -366,11 +369,17 @@ func TestPostgresMemoryRepositoryStoreDocumentDerivesStableNodeID(t *testing.T) 
 	if len(driver.execArgs) < 2 {
 		t.Fatalf("expected memory node and item writes, got %d exec calls", len(driver.execArgs))
 	}
-	if got := driver.execArgs[0][0]; got != expectedNodeID {
-		t.Fatalf("expected stable memory_nodes id %q, got %#v", expectedNodeID, got)
+	foundNode, foundItem := false, false
+	for i, query := range driver.execQueries {
+		if strings.Contains(query, "INSERT INTO memory_nodes") && driver.execArgs[i][0] == expectedNodeID {
+			foundNode = true
+		}
+		if strings.Contains(query, "INSERT INTO memory_items") && driver.execArgs[i][4] == expectedNodeID {
+			foundItem = true
+		}
 	}
-	if got := driver.execArgs[1][4]; got != expectedNodeID {
-		t.Fatalf("expected memory_items node_id %q, got %#v", expectedNodeID, got)
+	if !foundNode || !foundItem {
+		t.Fatal("memory node/item writes did not use the stable node ID")
 	}
 }
 

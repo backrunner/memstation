@@ -14,6 +14,10 @@ type Tx struct {
 	config
 	// APIKey is the client for interacting with the APIKey builders.
 	APIKey *APIKeyClient
+	// Actor is the client for interacting with the Actor builders.
+	Actor *ActorClient
+	// Agent is the client for interacting with the Agent builders.
+	Agent *AgentClient
 	// AuditEvent is the client for interacting with the AuditEvent builders.
 	AuditEvent *AuditEventClient
 	// Conversation is the client for interacting with the Conversation builders.
@@ -46,6 +50,10 @@ type Tx struct {
 	User *UserClient
 	// UserSetting is the client for interacting with the UserSetting builders.
 	UserSetting *UserSettingClient
+	// Workspace is the client for interacting with the Workspace builders.
+	Workspace *WorkspaceClient
+	// WorkspaceGrant is the client for interacting with the WorkspaceGrant builders.
+	WorkspaceGrant *WorkspaceGrantClient
 
 	// lazily loaded.
 	client     *Client
@@ -178,6 +186,8 @@ func (tx *Tx) Client() *Client {
 
 func (tx *Tx) init() {
 	tx.APIKey = NewAPIKeyClient(tx.config)
+	tx.Actor = NewActorClient(tx.config)
+	tx.Agent = NewAgentClient(tx.config)
 	tx.AuditEvent = NewAuditEventClient(tx.config)
 	tx.Conversation = NewConversationClient(tx.config)
 	tx.Fact = NewFactClient(tx.config)
@@ -194,6 +204,8 @@ func (tx *Tx) init() {
 	tx.TokenUsage = NewTokenUsageClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 	tx.UserSetting = NewUserSettingClient(tx.config)
+	tx.Workspace = NewWorkspaceClient(tx.config)
+	tx.WorkspaceGrant = NewWorkspaceGrantClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.

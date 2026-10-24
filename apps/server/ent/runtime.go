@@ -3,6 +3,8 @@
 package ent
 
 import (
+	"memstation/apps/server/ent/actor"
+	"memstation/apps/server/ent/agent"
 	"memstation/apps/server/ent/apikey"
 	"memstation/apps/server/ent/auditevent"
 	"memstation/apps/server/ent/conversation"
@@ -21,6 +23,8 @@ import (
 	"memstation/apps/server/ent/tokenusage"
 	"memstation/apps/server/ent/user"
 	"memstation/apps/server/ent/usersetting"
+	"memstation/apps/server/ent/workspace"
+	"memstation/apps/server/ent/workspacegrant"
 	"time"
 )
 
@@ -43,6 +47,56 @@ func init() {
 	apikey.DefaultUpdatedAt = apikeyDescUpdatedAt.Default.(func() time.Time)
 	// apikey.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	apikey.UpdateDefaultUpdatedAt = apikeyDescUpdatedAt.UpdateDefault.(func() time.Time)
+	actorMixin := schema.Actor{}.Mixin()
+	actorMixinFields0 := actorMixin[0].Fields()
+	_ = actorMixinFields0
+	actorFields := schema.Actor{}.Fields()
+	_ = actorFields
+	// actorDescCreatedAt is the schema descriptor for created_at field.
+	actorDescCreatedAt := actorMixinFields0[0].Descriptor()
+	// actor.DefaultCreatedAt holds the default value on creation for the created_at field.
+	actor.DefaultCreatedAt = actorDescCreatedAt.Default.(func() time.Time)
+	// actorDescUpdatedAt is the schema descriptor for updated_at field.
+	actorDescUpdatedAt := actorMixinFields0[1].Descriptor()
+	// actor.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	actor.DefaultUpdatedAt = actorDescUpdatedAt.Default.(func() time.Time)
+	// actor.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	actor.UpdateDefaultUpdatedAt = actorDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// actorDescStatus is the schema descriptor for status field.
+	actorDescStatus := actorFields[4].Descriptor()
+	// actor.DefaultStatus holds the default value on creation for the status field.
+	actor.DefaultStatus = actorDescStatus.Default.(string)
+	// actorDescRevision is the schema descriptor for revision field.
+	actorDescRevision := actorFields[5].Descriptor()
+	// actor.DefaultRevision holds the default value on creation for the revision field.
+	actor.DefaultRevision = actorDescRevision.Default.(int64)
+	agentMixin := schema.Agent{}.Mixin()
+	agentMixinFields0 := agentMixin[0].Fields()
+	_ = agentMixinFields0
+	agentFields := schema.Agent{}.Fields()
+	_ = agentFields
+	// agentDescCreatedAt is the schema descriptor for created_at field.
+	agentDescCreatedAt := agentMixinFields0[0].Descriptor()
+	// agent.DefaultCreatedAt holds the default value on creation for the created_at field.
+	agent.DefaultCreatedAt = agentDescCreatedAt.Default.(func() time.Time)
+	// agentDescUpdatedAt is the schema descriptor for updated_at field.
+	agentDescUpdatedAt := agentMixinFields0[1].Descriptor()
+	// agent.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	agent.DefaultUpdatedAt = agentDescUpdatedAt.Default.(func() time.Time)
+	// agent.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	agent.UpdateDefaultUpdatedAt = agentDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// agentDescStatus is the schema descriptor for status field.
+	agentDescStatus := agentFields[4].Descriptor()
+	// agent.DefaultStatus holds the default value on creation for the status field.
+	agent.DefaultStatus = agentDescStatus.Default.(string)
+	// agentDescRevision is the schema descriptor for revision field.
+	agentDescRevision := agentFields[6].Descriptor()
+	// agent.DefaultRevision holds the default value on creation for the revision field.
+	agent.DefaultRevision = agentDescRevision.Default.(int64)
+	// agentDescLegacy is the schema descriptor for legacy field.
+	agentDescLegacy := agentFields[7].Descriptor()
+	// agent.DefaultLegacy holds the default value on creation for the legacy field.
+	agent.DefaultLegacy = agentDescLegacy.Default.(bool)
 	auditeventMixin := schema.AuditEvent{}.Mixin()
 	auditeventMixinFields0 := auditeventMixin[0].Fields()
 	_ = auditeventMixinFields0
@@ -73,20 +127,24 @@ func init() {
 	conversation.DefaultUpdatedAt = conversationDescUpdatedAt.Default.(func() time.Time)
 	// conversation.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	conversation.UpdateDefaultUpdatedAt = conversationDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// conversationDescWriteRevision is the schema descriptor for write_revision field.
+	conversationDescWriteRevision := conversationFields[3].Descriptor()
+	// conversation.DefaultWriteRevision holds the default value on creation for the write_revision field.
+	conversation.DefaultWriteRevision = conversationDescWriteRevision.Default.(int64)
 	// conversationDescMode is the schema descriptor for mode field.
-	conversationDescMode := conversationFields[3].Descriptor()
+	conversationDescMode := conversationFields[6].Descriptor()
 	// conversation.DefaultMode holds the default value on creation for the mode field.
 	conversation.DefaultMode = conversationDescMode.Default.(string)
 	// conversationDescFinalizeStatus is the schema descriptor for finalize_status field.
-	conversationDescFinalizeStatus := conversationFields[4].Descriptor()
+	conversationDescFinalizeStatus := conversationFields[7].Descriptor()
 	// conversation.DefaultFinalizeStatus holds the default value on creation for the finalize_status field.
 	conversation.DefaultFinalizeStatus = conversationDescFinalizeStatus.Default.(string)
 	// conversationDescSummaryStatus is the schema descriptor for summary_status field.
-	conversationDescSummaryStatus := conversationFields[5].Descriptor()
+	conversationDescSummaryStatus := conversationFields[8].Descriptor()
 	// conversation.DefaultSummaryStatus holds the default value on creation for the summary_status field.
 	conversation.DefaultSummaryStatus = conversationDescSummaryStatus.Default.(string)
 	// conversationDescAnalysisStatus is the schema descriptor for analysis_status field.
-	conversationDescAnalysisStatus := conversationFields[6].Descriptor()
+	conversationDescAnalysisStatus := conversationFields[9].Descriptor()
 	// conversation.DefaultAnalysisStatus holds the default value on creation for the analysis_status field.
 	conversation.DefaultAnalysisStatus = conversationDescAnalysisStatus.Default.(string)
 	factMixin := schema.Fact{}.Mixin()
@@ -178,7 +236,7 @@ func init() {
 	// memoryembedding.DefaultGenerationID holds the default value on creation for the generation_id field.
 	memoryembedding.DefaultGenerationID = memoryembeddingDescGenerationID.Default.(string)
 	// memoryembeddingDescEmbeddingVersion is the schema descriptor for embedding_version field.
-	memoryembeddingDescEmbeddingVersion := memoryembeddingFields[5].Descriptor()
+	memoryembeddingDescEmbeddingVersion := memoryembeddingFields[6].Descriptor()
 	// memoryembedding.DefaultEmbeddingVersion holds the default value on creation for the embedding_version field.
 	memoryembedding.DefaultEmbeddingVersion = memoryembeddingDescEmbeddingVersion.Default.(int)
 	memoryitemMixin := schema.MemoryItem{}.Mixin()
@@ -259,23 +317,23 @@ func init() {
 	// memorynode.DefaultGenerationID holds the default value on creation for the generation_id field.
 	memorynode.DefaultGenerationID = memorynodeDescGenerationID.Default.(string)
 	// memorynodeDescImportance is the schema descriptor for importance field.
-	memorynodeDescImportance := memorynodeFields[4].Descriptor()
+	memorynodeDescImportance := memorynodeFields[5].Descriptor()
 	// memorynode.DefaultImportance holds the default value on creation for the importance field.
 	memorynode.DefaultImportance = memorynodeDescImportance.Default.(float64)
 	// memorynodeDescDecayFactor is the schema descriptor for decay_factor field.
-	memorynodeDescDecayFactor := memorynodeFields[5].Descriptor()
+	memorynodeDescDecayFactor := memorynodeFields[6].Descriptor()
 	// memorynode.DefaultDecayFactor holds the default value on creation for the decay_factor field.
 	memorynode.DefaultDecayFactor = memorynodeDescDecayFactor.Default.(float64)
 	// memorynodeDescTimeTier is the schema descriptor for time_tier field.
-	memorynodeDescTimeTier := memorynodeFields[7].Descriptor()
+	memorynodeDescTimeTier := memorynodeFields[8].Descriptor()
 	// memorynode.DefaultTimeTier holds the default value on creation for the time_tier field.
 	memorynode.DefaultTimeTier = memorynodeDescTimeTier.Default.(string)
 	// memorynodeDescEmbeddingStatus is the schema descriptor for embedding_status field.
-	memorynodeDescEmbeddingStatus := memorynodeFields[8].Descriptor()
+	memorynodeDescEmbeddingStatus := memorynodeFields[9].Descriptor()
 	// memorynode.DefaultEmbeddingStatus holds the default value on creation for the embedding_status field.
 	memorynode.DefaultEmbeddingStatus = memorynodeDescEmbeddingStatus.Default.(string)
 	// memorynodeDescEmbeddingRevision is the schema descriptor for embedding_revision field.
-	memorynodeDescEmbeddingRevision := memorynodeFields[9].Descriptor()
+	memorynodeDescEmbeddingRevision := memorynodeFields[10].Descriptor()
 	// memorynode.DefaultEmbeddingRevision holds the default value on creation for the embedding_revision field.
 	memorynode.DefaultEmbeddingRevision = memorynodeDescEmbeddingRevision.Default.(int64)
 	// memorynode.EmbeddingRevisionValidator is a validator for the "embedding_revision" field. It is called by the builders before save.
@@ -360,7 +418,7 @@ func init() {
 	// message.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	message.UpdateDefaultUpdatedAt = messageDescUpdatedAt.UpdateDefault.(func() time.Time)
 	// messageDescSequenceNum is the schema descriptor for sequence_num field.
-	messageDescSequenceNum := messageFields[8].Descriptor()
+	messageDescSequenceNum := messageFields[9].Descriptor()
 	// message.DefaultSequenceNum holds the default value on creation for the sequence_num field.
 	message.DefaultSequenceNum = messageDescSequenceNum.Default.(int)
 	outboxeventMixin := schema.OutboxEvent{}.Mixin()
@@ -402,19 +460,19 @@ func init() {
 	// tokenusage.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	tokenusage.UpdateDefaultUpdatedAt = tokenusageDescUpdatedAt.UpdateDefault.(func() time.Time)
 	// tokenusageDescInputTokens is the schema descriptor for input_tokens field.
-	tokenusageDescInputTokens := tokenusageFields[4].Descriptor()
+	tokenusageDescInputTokens := tokenusageFields[5].Descriptor()
 	// tokenusage.DefaultInputTokens holds the default value on creation for the input_tokens field.
 	tokenusage.DefaultInputTokens = tokenusageDescInputTokens.Default.(int)
 	// tokenusageDescOutputTokens is the schema descriptor for output_tokens field.
-	tokenusageDescOutputTokens := tokenusageFields[5].Descriptor()
+	tokenusageDescOutputTokens := tokenusageFields[6].Descriptor()
 	// tokenusage.DefaultOutputTokens holds the default value on creation for the output_tokens field.
 	tokenusage.DefaultOutputTokens = tokenusageDescOutputTokens.Default.(int)
 	// tokenusageDescTotalTokens is the schema descriptor for total_tokens field.
-	tokenusageDescTotalTokens := tokenusageFields[6].Descriptor()
+	tokenusageDescTotalTokens := tokenusageFields[7].Descriptor()
 	// tokenusage.DefaultTotalTokens holds the default value on creation for the total_tokens field.
 	tokenusage.DefaultTotalTokens = tokenusageDescTotalTokens.Default.(int)
 	// tokenusageDescCost is the schema descriptor for cost field.
-	tokenusageDescCost := tokenusageFields[7].Descriptor()
+	tokenusageDescCost := tokenusageFields[8].Descriptor()
 	// tokenusage.DefaultCost holds the default value on creation for the cost field.
 	tokenusage.DefaultCost = tokenusageDescCost.Default.(float64)
 	userMixin := schema.User{}.Mixin()
@@ -467,4 +525,50 @@ func init() {
 	usersettingDescMaxInjectionTokens := usersettingFields[9].Descriptor()
 	// usersetting.DefaultMaxInjectionTokens holds the default value on creation for the max_injection_tokens field.
 	usersetting.DefaultMaxInjectionTokens = usersettingDescMaxInjectionTokens.Default.(int)
+	workspaceMixin := schema.Workspace{}.Mixin()
+	workspaceMixinFields0 := workspaceMixin[0].Fields()
+	_ = workspaceMixinFields0
+	workspaceFields := schema.Workspace{}.Fields()
+	_ = workspaceFields
+	// workspaceDescCreatedAt is the schema descriptor for created_at field.
+	workspaceDescCreatedAt := workspaceMixinFields0[0].Descriptor()
+	// workspace.DefaultCreatedAt holds the default value on creation for the created_at field.
+	workspace.DefaultCreatedAt = workspaceDescCreatedAt.Default.(func() time.Time)
+	// workspaceDescUpdatedAt is the schema descriptor for updated_at field.
+	workspaceDescUpdatedAt := workspaceMixinFields0[1].Descriptor()
+	// workspace.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	workspace.DefaultUpdatedAt = workspaceDescUpdatedAt.Default.(func() time.Time)
+	// workspace.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	workspace.UpdateDefaultUpdatedAt = workspaceDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// workspaceDescKind is the schema descriptor for kind field.
+	workspaceDescKind := workspaceFields[3].Descriptor()
+	// workspace.DefaultKind holds the default value on creation for the kind field.
+	workspace.DefaultKind = workspaceDescKind.Default.(string)
+	// workspaceDescStatus is the schema descriptor for status field.
+	workspaceDescStatus := workspaceFields[4].Descriptor()
+	// workspace.DefaultStatus holds the default value on creation for the status field.
+	workspace.DefaultStatus = workspaceDescStatus.Default.(string)
+	// workspaceDescPolicyVersion is the schema descriptor for policy_version field.
+	workspaceDescPolicyVersion := workspaceFields[5].Descriptor()
+	// workspace.DefaultPolicyVersion holds the default value on creation for the policy_version field.
+	workspace.DefaultPolicyVersion = workspaceDescPolicyVersion.Default.(int64)
+	workspacegrantMixin := schema.WorkspaceGrant{}.Mixin()
+	workspacegrantMixinFields0 := workspacegrantMixin[0].Fields()
+	_ = workspacegrantMixinFields0
+	workspacegrantFields := schema.WorkspaceGrant{}.Fields()
+	_ = workspacegrantFields
+	// workspacegrantDescCreatedAt is the schema descriptor for created_at field.
+	workspacegrantDescCreatedAt := workspacegrantMixinFields0[0].Descriptor()
+	// workspacegrant.DefaultCreatedAt holds the default value on creation for the created_at field.
+	workspacegrant.DefaultCreatedAt = workspacegrantDescCreatedAt.Default.(func() time.Time)
+	// workspacegrantDescUpdatedAt is the schema descriptor for updated_at field.
+	workspacegrantDescUpdatedAt := workspacegrantMixinFields0[1].Descriptor()
+	// workspacegrant.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	workspacegrant.DefaultUpdatedAt = workspacegrantDescUpdatedAt.Default.(func() time.Time)
+	// workspacegrant.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	workspacegrant.UpdateDefaultUpdatedAt = workspacegrantDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// workspacegrantDescRevision is the schema descriptor for revision field.
+	workspacegrantDescRevision := workspacegrantFields[5].Descriptor()
+	// workspacegrant.DefaultRevision holds the default value on creation for the revision field.
+	workspacegrant.DefaultRevision = workspacegrantDescRevision.Default.(int64)
 }

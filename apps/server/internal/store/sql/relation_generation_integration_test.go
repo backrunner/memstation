@@ -24,6 +24,9 @@ func TestPostgresRelationGenerationIsolation(t *testing.T) {
 	defer db.Close()
 	ctx := context.Background()
 	const userID = "relation-generation-integration"
+	if _, err = db.ExecContext(ctx, `INSERT INTO workspaces(id,user_id,name,capabilities) VALUES ('personal-' || encode(sha256(convert_to($1,'UTF8')),'hex'),$1,'Fixture','[]') ON CONFLICT DO NOTHING`, userID); err != nil {
+		t.Fatal(err)
+	}
 	cleanup := func() {
 		_, _ = db.ExecContext(ctx, `DELETE FROM memory_relations WHERE user_id=$1`, userID)
 		_, _ = db.ExecContext(ctx, `DELETE FROM memory_nodes WHERE user_id=$1`, userID)
@@ -35,7 +38,7 @@ func TestPostgresRelationGenerationIsolation(t *testing.T) {
 		if generation == "" {
 			kind = "key_memory"
 		}
-		if _, err = db.ExecContext(ctx, `INSERT INTO memory_nodes (id,generation_id,user_id,node_type,entity_id,embedding_status) VALUES ($1,$2,$3,$4,$1,'ready')`, id, generation, userID, kind); err != nil {
+		if _, err = db.ExecContext(ctx, `INSERT INTO memory_nodes (workspace_id, id,generation_id,user_id,node_type,entity_id,embedding_status) VALUES ('personal-' || encode(sha256(convert_to($3,'UTF8')),'hex'),$1,$2,$3,$4,$1,'ready')`, id, generation, userID, kind); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -99,8 +102,11 @@ func TestPostgresRelationGenerationBackfillPreservesLegacyEdges(t *testing.T) {
 	}
 	defer func() { _ = tx.Rollback() }()
 	const userID = "relation-backfill-integration"
+	if _, err = tx.ExecContext(ctx, `INSERT INTO workspaces(id,user_id,name,capabilities) VALUES ('personal-' || encode(sha256(convert_to($1,'UTF8')),'hex'),$1,'Fixture','[]') ON CONFLICT DO NOTHING`, userID); err != nil {
+		t.Fatal(err)
+	}
 	for id, generation := range map[string]string{"rb-a": "g1", "rb-b": "g1", "rb-other": "g2", "rb-key": "", "rb-key2": ""} {
-		if _, err = tx.ExecContext(ctx, `INSERT INTO memory_nodes (id,generation_id,user_id,node_type,entity_id) VALUES ($1,$2,$3,'fact',$1)`, id, generation, userID); err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO memory_nodes (workspace_id, id,generation_id,user_id,node_type,entity_id) VALUES ('personal-' || encode(sha256(convert_to($3,'UTF8')),'hex'),$1,$2,$3,'fact',$1)`, id, generation, userID); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -5,9 +5,58 @@ import (
 	"errors"
 	"testing"
 
+	miniredis "github.com/alicebob/miniredis/v2"
+	"github.com/hibiken/asynq"
+
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/store/sql"
 )
+
+func TestRelayRetryAfterEnqueueKeepsOneScopedTask(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	redis := miniredis.RunT(t)
+	options := asynq.RedisClientOpt{Addr: redis.Addr()}
+	client := asynq.NewClient(options)
+	t.Cleanup(func() { _ = client.Close() })
+	inspector := asynq.NewInspector(options)
+	t.Cleanup(func() { _ = inspector.Close() })
+	publisher := NewPublisher(nilLogger(), client)
+	outbox := sql.NewInMemoryOutboxRepository()
+	event := domain.OutboxEvent{
+		ID: "conversation.finalize:retry", UserID: "owner", EventType: TypeConversationFinalize, AggregateID: "retry",
+		Payload: map[string]any{"user_id": "owner", "conversation_id": "retry"},
+	}
+	if err := outbox.Enqueue(ctx, event); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a relay crash after Redis accepted the task but before the SQL
+	// event was marked processed. The next relay must accept the same task ID.
+	if err := publisher.Publish(ctx, mapOutboxToTask(event)); err != nil {
+		t.Fatal(err)
+	}
+	if err := NewRelay(nilLogger(), outbox, publisher).Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	pending, err := outbox.Pending(ctx, 10)
+	if err != nil || len(pending) != 0 {
+		t.Fatalf("relay did not complete replay: %v, %d pending", err, len(pending))
+	}
+	info, err := inspector.GetQueueInfo(QueueCritical)
+	if err != nil || info.Pending != 1 {
+		t.Fatalf("replay duplicated the queued task: %+v, %v", info, err)
+	}
+	// Identical external IDs in a different owner's scope are distinct jobs.
+	event.UserID = "other-owner"
+	event.Payload = map[string]any{"user_id": event.UserID, "conversation_id": "retry"}
+	if err := publisher.Publish(ctx, mapOutboxToTask(event)); err != nil {
+		t.Fatal(err)
+	}
+	info, err = inspector.GetQueueInfo(QueueCritical)
+	if err != nil || info.Pending != 2 {
+		t.Fatalf("scope collision suppressed a different owner's task: %+v, %v", info, err)
+	}
+}
 
 func TestPublisherReturnsUnavailableWhenQueueIsDisabled(t *testing.T) {
 	t.Parallel()

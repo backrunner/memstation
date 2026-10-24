@@ -90,6 +90,8 @@ func NewRouter(deps Dependencies) http.Handler {
 	router.Group(func(r chi.Router) {
 		r.Use(proxyAuthMiddleware(deps.Auth, deps.RateLimiter))
 		r.Get("/v1/models", modelsHandler(deps.Models))
+		r.Get("/api/v1/identity", identityHandler)
+		r.Get("/api/v1/workspaces", workspaceDiscovery(deps.APIKeys))
 		r.Post("/v1/chat/completions", chatHandler(deps.Gateway))
 		r.Post("/v1/responses", responsesHandler(deps.Gateway))
 		r.Post("/v1/messages", anthropicHandler(deps.Gateway))
@@ -108,6 +110,8 @@ func NewRouter(deps Dependencies) http.Handler {
 		r.Method(http.MethodGet, "/graphql/playground", graphql.Playground())
 		r.Method(http.MethodPost, "/graphql", graphql.Handler(deps.GraphQL))
 		r.Get("/api/admin/overview", adminOverviewHandler(deps.Admin))
+		registerIdentityRoutes(r, deps.APIKeys)
+		registerWorkspaceReadRoutes(r, deps)
 		r.Get("/api/admin/users", adminUsersHandler(deps.Admin))
 		r.Get("/api/admin/users/{id}", adminUserDetailHandler(deps.Admin))
 		r.Get("/api/admin/users/{id}/sources", adminUserSourcesHandler(deps.Generations))
@@ -164,16 +168,25 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 func proxyAuthMiddleware(auth security.Authenticator, limiter *security.RateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			userID, err := auth.AuthenticateAPIKey(r.Context(), r)
+			ctx, err := auth.AuthenticateRequest(r.Context(), r)
 			if err != nil {
-				writeError(w, http.StatusUnauthorized, "unauthorized", err.Error())
+				if errors.Is(err, domain.ErrAccessDenied) {
+					writeError(w, http.StatusForbidden, "access_denied", "workspace access denied")
+				} else {
+					writeError(w, http.StatusUnauthorized, "unauthorized", "invalid api key")
+				}
+				return
+			}
+			userID := security.UserIDFromContext(ctx)
+			if err := security.RequireCapability(ctx, proxyCapability(r)); proxyCapability(r) != "" && err != nil {
+				writeError(w, http.StatusForbidden, "access_denied", "capability required")
 				return
 			}
 			if limiter != nil && !limiter.Allow(security.RateLimitKey(userID, r)) {
 				writeError(w, http.StatusTooManyRequests, "rate_limited", "proxy rate limit exceeded")
 				return
 			}
-			next.ServeHTTP(w, r.WithContext(security.WithUserID(r.Context(), userID)))
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
@@ -347,7 +360,7 @@ func chatHandler(service *gatewayservice.Service) http.HandlerFunc {
 					_ = streamWriter.Error(err)
 					return
 				}
-				writeError(w, http.StatusBadGateway, "provider_error", err.Error())
+				writeGatewayError(w, err)
 				return
 			}
 			if err := streamWriter.Close(*response); err != nil {
@@ -357,7 +370,7 @@ func chatHandler(service *gatewayservice.Service) http.HandlerFunc {
 		}
 		response, _, err := service.Proxy(r.Context(), unified)
 		if err != nil {
-			writeError(w, http.StatusBadGateway, "provider_error", err.Error())
+			writeGatewayError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, protocol.FormatChatCompletion(*response))
@@ -392,7 +405,7 @@ func responsesHandler(service *gatewayservice.Service) http.HandlerFunc {
 					_ = streamWriter.Error(err)
 					return
 				}
-				writeError(w, http.StatusBadGateway, "provider_error", err.Error())
+				writeGatewayError(w, err)
 				return
 			}
 			if err := streamWriter.Close(*response); err != nil {
@@ -402,7 +415,7 @@ func responsesHandler(service *gatewayservice.Service) http.HandlerFunc {
 		}
 		response, _, err := service.Proxy(r.Context(), unified)
 		if err != nil {
-			writeError(w, http.StatusBadGateway, "provider_error", err.Error())
+			writeGatewayError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, protocol.FormatResponses(*response))
@@ -437,7 +450,7 @@ func anthropicHandler(service *gatewayservice.Service) http.HandlerFunc {
 					_ = streamWriter.Error(err)
 					return
 				}
-				writeError(w, http.StatusBadGateway, "provider_error", err.Error())
+				writeGatewayError(w, err)
 				return
 			}
 			if err := streamWriter.Close(*response); err != nil {
@@ -447,7 +460,7 @@ func anthropicHandler(service *gatewayservice.Service) http.HandlerFunc {
 		}
 		response, _, err := service.Proxy(r.Context(), unified)
 		if err != nil {
-			writeError(w, http.StatusBadGateway, "provider_error", err.Error())
+			writeGatewayError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, protocol.FormatAnthropic(*response))
@@ -802,19 +815,16 @@ func adminUserSettingsHandler(settings *settingsservice.Service, publisher ports
 }
 
 func adminUserAPIKeyCreateHandler(service *apikeyservice.Service, audit *auditsvc.Service) http.HandlerFunc {
-	type requestBody struct {
-		Name string `json:"name"`
-	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		var body requestBody
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		var body apikeyservice.CreateOptions
+		if !decodeIdentity(w, r, &body) {
 			return
 		}
 		userID := chi.URLParam(r, "id")
-		record, rawKey, err := service.Create(r.Context(), userID, defaultString(body.Name, "manager-created"))
+		body.Name = defaultString(body.Name, "manager-created")
+		record, rawKey, err := service.CreateWithOptions(r.Context(), userID, body)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "api_key_failed", err.Error())
+			identityError(w, err)
 			return
 		}
 		recordAdminAudit(r, audit, "create_api_key", "api_key", record.ID, map[string]any{
@@ -822,6 +832,7 @@ func adminUserAPIKeyCreateHandler(service *apikeyservice.Service, audit *auditsv
 			"name":    record.Name,
 			"prefix":  record.Prefix,
 		})
+		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, http.StatusOK, map[string]any{
 			"record":  record,
 			"api_key": rawKey,
@@ -832,8 +843,8 @@ func adminUserAPIKeyCreateHandler(service *apikeyservice.Service, audit *auditsv
 func adminUserAPIKeyRevokeHandler(service *apikeyservice.Service, audit *auditsvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		keyID := chi.URLParam(r, "keyID")
-		if err := service.Revoke(r.Context(), keyID); err != nil {
-			writeError(w, http.StatusInternalServerError, "api_key_failed", err.Error())
+		if err := service.RevokeForUser(r.Context(), chi.URLParam(r, "id"), keyID); err != nil {
+			identityError(w, err)
 			return
 		}
 		recordAdminAudit(r, audit, "revoke_api_key", "api_key", keyID, map[string]any{

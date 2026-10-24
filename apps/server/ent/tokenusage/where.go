@@ -69,6 +69,11 @@ func UserID(v string) predicate.TokenUsage {
 	return predicate.TokenUsage(sql.FieldEQ(FieldUserID, v))
 }
 
+// WorkspaceID applies equality check predicate on the "workspace_id" field. It's identical to WorkspaceIDEQ.
+func WorkspaceID(v string) predicate.TokenUsage {
+	return predicate.TokenUsage(sql.FieldEQ(FieldWorkspaceID, v))
+}
+
 // ConversationID applies equality check predicate on the "conversation_id" field. It's identical to ConversationIDEQ.
 func ConversationID(v string) predicate.TokenUsage {
 	return predicate.TokenUsage(sql.FieldEQ(FieldConversationID, v))
@@ -247,6 +252,71 @@ func UserIDEqualFold(v string) predicate.TokenUsage {
 // UserIDContainsFold applies the ContainsFold predicate on the "user_id" field.
 func UserIDContainsFold(v string) predicate.TokenUsage {
 	return predicate.TokenUsage(sql.FieldContainsFold(FieldUserID, v))
+}
+
+// WorkspaceIDEQ applies the EQ predicate on the "workspace_id" field.
+func WorkspaceIDEQ(v string) predicate.TokenUsage {
+	return predicate.TokenUsage(sql.FieldEQ(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDNEQ applies the NEQ predicate on the "workspace_id" field.
+func WorkspaceIDNEQ(v string) predicate.TokenUsage {
+	return predicate.TokenUsage(sql.FieldNEQ(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDIn applies the In predicate on the "workspace_id" field.
+func WorkspaceIDIn(vs ...string) predicate.TokenUsage {
+	return predicate.TokenUsage(sql.FieldIn(FieldWorkspaceID, vs...))
+}
+
+// WorkspaceIDNotIn applies the NotIn predicate on the "workspace_id" field.
+func WorkspaceIDNotIn(vs ...string) predicate.TokenUsage {
+	return predicate.TokenUsage(sql.FieldNotIn(FieldWorkspaceID, vs...))
+}
+
+// WorkspaceIDGT applies the GT predicate on the "workspace_id" field.
+func WorkspaceIDGT(v string) predicate.TokenUsage {
+	return predicate.TokenUsage(sql.FieldGT(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDGTE applies the GTE predicate on the "workspace_id" field.
+func WorkspaceIDGTE(v string) predicate.TokenUsage {
+	return predicate.TokenUsage(sql.FieldGTE(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDLT applies the LT predicate on the "workspace_id" field.
+func WorkspaceIDLT(v string) predicate.TokenUsage {
+	return predicate.TokenUsage(sql.FieldLT(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDLTE applies the LTE predicate on the "workspace_id" field.
+func WorkspaceIDLTE(v string) predicate.TokenUsage {
+	return predicate.TokenUsage(sql.FieldLTE(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDContains applies the Contains predicate on the "workspace_id" field.
+func WorkspaceIDContains(v string) predicate.TokenUsage {
+	return predicate.TokenUsage(sql.FieldContains(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDHasPrefix applies the HasPrefix predicate on the "workspace_id" field.
+func WorkspaceIDHasPrefix(v string) predicate.TokenUsage {
+	return predicate.TokenUsage(sql.FieldHasPrefix(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDHasSuffix applies the HasSuffix predicate on the "workspace_id" field.
+func WorkspaceIDHasSuffix(v string) predicate.TokenUsage {
+	return predicate.TokenUsage(sql.FieldHasSuffix(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDEqualFold applies the EqualFold predicate on the "workspace_id" field.
+func WorkspaceIDEqualFold(v string) predicate.TokenUsage {
+	return predicate.TokenUsage(sql.FieldEqualFold(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDContainsFold applies the ContainsFold predicate on the "workspace_id" field.
+func WorkspaceIDContainsFold(v string) predicate.TokenUsage {
+	return predicate.TokenUsage(sql.FieldContainsFold(FieldWorkspaceID, v))
 }
 
 // ConversationIDEQ applies the EQ predicate on the "conversation_id" field.

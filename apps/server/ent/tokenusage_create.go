@@ -54,6 +54,12 @@ func (_c *TokenUsageCreate) SetUserID(v string) *TokenUsageCreate {
 	return _c
 }
 
+// SetWorkspaceID sets the "workspace_id" field.
+func (_c *TokenUsageCreate) SetWorkspaceID(v string) *TokenUsageCreate {
+	_c.mutation.SetWorkspaceID(v)
+	return _c
+}
+
 // SetConversationID sets the "conversation_id" field.
 func (_c *TokenUsageCreate) SetConversationID(v string) *TokenUsageCreate {
 	_c.mutation.SetConversationID(v)
@@ -216,6 +222,9 @@ func (_c *TokenUsageCreate) check() error {
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "TokenUsage.user_id"`)}
 	}
+	if _, ok := _c.mutation.WorkspaceID(); !ok {
+		return &ValidationError{Name: "workspace_id", err: errors.New(`ent: missing required field "TokenUsage.workspace_id"`)}
+	}
 	if _, ok := _c.mutation.ConversationID(); !ok {
 		return &ValidationError{Name: "conversation_id", err: errors.New(`ent: missing required field "TokenUsage.conversation_id"`)}
 	}
@@ -268,6 +277,10 @@ func (_c *TokenUsageCreate) createSpec() (*TokenUsage, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UserID(); ok {
 		_spec.SetField(tokenusage.FieldUserID, field.TypeString, value)
 		_node.UserID = value
+	}
+	if value, ok := _c.mutation.WorkspaceID(); ok {
+		_spec.SetField(tokenusage.FieldWorkspaceID, field.TypeString, value)
+		_node.WorkspaceID = value
 	}
 	if value, ok := _c.mutation.ConversationID(); ok {
 		_spec.SetField(tokenusage.FieldConversationID, field.TypeString, value)

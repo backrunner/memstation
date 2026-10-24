@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"memstation/apps/server/ent/actor"
+	"memstation/apps/server/ent/agent"
 	"memstation/apps/server/ent/apikey"
 	"memstation/apps/server/ent/auditevent"
 	"memstation/apps/server/ent/conversation"
@@ -23,6 +25,8 @@ import (
 	"memstation/apps/server/ent/tokenusage"
 	"memstation/apps/server/ent/user"
 	"memstation/apps/server/ent/usersetting"
+	"memstation/apps/server/ent/workspace"
+	"memstation/apps/server/ent/workspacegrant"
 	"reflect"
 	"sync"
 
@@ -90,6 +94,8 @@ func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			apikey.Table:          apikey.ValidColumn,
+			actor.Table:           actor.ValidColumn,
+			agent.Table:           agent.ValidColumn,
 			auditevent.Table:      auditevent.ValidColumn,
 			conversation.Table:    conversation.ValidColumn,
 			fact.Table:            fact.ValidColumn,
@@ -106,6 +112,8 @@ func checkColumn(t, c string) error {
 			tokenusage.Table:      tokenusage.ValidColumn,
 			user.Table:            user.ValidColumn,
 			usersetting.Table:     usersetting.ValidColumn,
+			workspace.Table:       workspace.ValidColumn,
+			workspacegrant.Table:  workspacegrant.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

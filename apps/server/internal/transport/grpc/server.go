@@ -2,9 +2,12 @@ package grpctransport
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
+
+	"memstation/apps/server/internal/domain"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -125,9 +128,25 @@ func authUnaryInterceptor(auth security.Authenticator, limiter *security.RateLim
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		switch {
 		case isProxyMethod(info.FullMethod):
-			userID, token, err := authenticateProxyMetadata(ctx, auth)
+			md, _ := metadata.FromIncomingContext(ctx)
+			token := firstCredential(md, "authorization", "x-api-key")
+			if strings.HasPrefix(strings.ToLower(token), "bearer ") {
+				token = strings.TrimSpace(token[7:])
+			}
+			var err error
+			ctx, err = auth.AuthenticateContext(ctx, token, firstCredential(md, "x-memstation-workspace"))
+			if len(md.Get("x-memstation-workspace")) > 1 {
+				err = domain.ErrAccessDenied
+			}
 			if err != nil {
-				return nil, status.Error(codes.Unauthenticated, err.Error())
+				if errors.Is(err, domain.ErrAccessDenied) {
+					return nil, status.Error(codes.PermissionDenied, "workspace access denied")
+				}
+				return nil, status.Error(codes.Unauthenticated, "invalid api key")
+			}
+			userID := security.UserIDFromContext(ctx)
+			if err := security.RequireCapability(ctx, grpcProxyCapability(info.FullMethod)); err != nil {
+				return nil, status.Error(codes.PermissionDenied, "capability required")
 			}
 			if limiter != nil && !limiter.Allow(security.RateLimitKeyFromToken(userID, token, info.FullMethod)) {
 				return nil, status.Error(codes.ResourceExhausted, "proxy rate limit exceeded")
@@ -153,19 +172,6 @@ func isAdminMethod(method string) bool {
 	return ok
 }
 
-func authenticateProxyMetadata(ctx context.Context, auth security.Authenticator) (string, string, error) {
-	md, _ := metadata.FromIncomingContext(ctx)
-	token := firstCredential(md, "authorization", "x-api-key")
-	if strings.HasPrefix(strings.ToLower(token), "bearer ") {
-		token = strings.TrimSpace(token[7:])
-	}
-	userID, err := auth.AuthenticateAPIKeyToken(ctx, token)
-	if err != nil {
-		return "", "", err
-	}
-	return userID, token, nil
-}
-
 func authenticateAdminMetadata(ctx context.Context, auth security.Authenticator) bool {
 	md, _ := metadata.FromIncomingContext(ctx)
 	token := firstCredential(md, "authorization", "x-admin-token")
@@ -186,4 +192,15 @@ func firstCredential(md metadata.MD, keys ...string) string {
 		}
 	}
 	return ""
+}
+
+func grpcProxyCapability(method string) string {
+	switch method {
+	case pb.GatewayService_Complete_FullMethodName, pb.GatewayService_ListModels_FullMethodName:
+		return domain.CapabilityGateway
+	case pb.MemoryService_UpsertKeyMemory_FullMethodName, pb.MemoryService_DeleteKeyMemory_FullMethodName:
+		return domain.CapabilityMemoryEdit
+	default:
+		return domain.CapabilityMemoryRead
+	}
 }

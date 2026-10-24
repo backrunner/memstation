@@ -21,6 +21,8 @@ const (
 	FieldGenerationID = "generation_id"
 	// FieldUserID holds the string denoting the user_id field in the database.
 	FieldUserID = "user_id"
+	// FieldWorkspaceID holds the string denoting the workspace_id field in the database.
+	FieldWorkspaceID = "workspace_id"
 	// FieldNodeType holds the string denoting the node_type field in the database.
 	FieldNodeType = "node_type"
 	// FieldEntityID holds the string denoting the entity_id field in the database.
@@ -48,6 +50,7 @@ var Columns = []string{
 	FieldUpdatedAt,
 	FieldGenerationID,
 	FieldUserID,
+	FieldWorkspaceID,
 	FieldNodeType,
 	FieldEntityID,
 	FieldImportance,
@@ -117,6 +120,11 @@ func ByGenerationID(opts ...sql.OrderTermOption) OrderOption {
 // ByUserID orders the results by the user_id field.
 func ByUserID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUserID, opts...).ToFunc()
+}
+
+// ByWorkspaceID orders the results by the workspace_id field.
+func ByWorkspaceID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorkspaceID, opts...).ToFunc()
 }
 
 // ByNodeType orders the results by the node_type field.

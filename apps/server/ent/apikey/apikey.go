@@ -21,6 +21,12 @@ const (
 	FieldUserID = "user_id"
 	// FieldName holds the string denoting the name field in the database.
 	FieldName = "name"
+	// FieldAgentID holds the string denoting the agent_id field in the database.
+	FieldAgentID = "agent_id"
+	// FieldDefaultWorkspaceID holds the string denoting the default_workspace_id field in the database.
+	FieldDefaultWorkspaceID = "default_workspace_id"
+	// FieldCapabilityCeiling holds the string denoting the capability_ceiling field in the database.
+	FieldCapabilityCeiling = "capability_ceiling"
 	// FieldPrefix holds the string denoting the prefix field in the database.
 	FieldPrefix = "prefix"
 	// FieldHash holds the string denoting the hash field in the database.
@@ -46,6 +52,9 @@ var Columns = []string{
 	FieldUpdatedAt,
 	FieldUserID,
 	FieldName,
+	FieldAgentID,
+	FieldDefaultWorkspaceID,
+	FieldCapabilityCeiling,
 	FieldPrefix,
 	FieldHash,
 	FieldScopes,
@@ -100,6 +109,16 @@ func ByUserID(opts ...sql.OrderTermOption) OrderOption {
 // ByName orders the results by the name field.
 func ByName(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldName, opts...).ToFunc()
+}
+
+// ByAgentID orders the results by the agent_id field.
+func ByAgentID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAgentID, opts...).ToFunc()
+}
+
+// ByDefaultWorkspaceID orders the results by the default_workspace_id field.
+func ByDefaultWorkspaceID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDefaultWorkspaceID, opts...).ToFunc()
 }
 
 // ByPrefix orders the results by the prefix field.

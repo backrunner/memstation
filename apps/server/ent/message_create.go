@@ -54,6 +54,12 @@ func (_c *MessageCreate) SetUserID(v string) *MessageCreate {
 	return _c
 }
 
+// SetWorkspaceID sets the "workspace_id" field.
+func (_c *MessageCreate) SetWorkspaceID(v string) *MessageCreate {
+	_c.mutation.SetWorkspaceID(v)
+	return _c
+}
+
 // SetConversationID sets the "conversation_id" field.
 func (_c *MessageCreate) SetConversationID(v string) *MessageCreate {
 	_c.mutation.SetConversationID(v)
@@ -178,6 +184,9 @@ func (_c *MessageCreate) check() error {
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "Message.user_id"`)}
 	}
+	if _, ok := _c.mutation.WorkspaceID(); !ok {
+		return &ValidationError{Name: "workspace_id", err: errors.New(`ent: missing required field "Message.workspace_id"`)}
+	}
 	if _, ok := _c.mutation.ConversationID(); !ok {
 		return &ValidationError{Name: "conversation_id", err: errors.New(`ent: missing required field "Message.conversation_id"`)}
 	}
@@ -224,6 +233,10 @@ func (_c *MessageCreate) createSpec() (*Message, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UserID(); ok {
 		_spec.SetField(message.FieldUserID, field.TypeString, value)
 		_node.UserID = value
+	}
+	if value, ok := _c.mutation.WorkspaceID(); ok {
+		_spec.SetField(message.FieldWorkspaceID, field.TypeString, value)
+		_node.WorkspaceID = value
 	}
 	if value, ok := _c.mutation.ConversationID(); ok {
 		_spec.SetField(message.FieldConversationID, field.TypeString, value)

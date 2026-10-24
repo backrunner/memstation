@@ -33,20 +33,7 @@ type Service struct {
 	generations   *memorygenservice.Service
 }
 
-type ConversationListItem struct {
-	ConversationID string         `json:"conversation_id"`
-	UserID         string         `json:"user_id"`
-	Provider       string         `json:"provider"`
-	Protocol       string         `json:"protocol"`
-	Mode           string         `json:"mode"`
-	FinalizeStatus string         `json:"finalize_status"`
-	SummaryStatus  string         `json:"summary_status"`
-	AnalysisStatus string         `json:"analysis_status"`
-	MessageCount   int            `json:"message_count"`
-	TotalTokens    int            `json:"total_tokens"`
-	UpdatedAt      time.Time      `json:"updated_at"`
-	Metadata       map[string]any `json:"metadata,omitempty"`
-}
+type ConversationListItem = domain.ConversationListItem
 
 type ConversationMemory struct {
 	ConversationID string                  `json:"conversation_id"`
@@ -81,6 +68,8 @@ type UserSummary struct {
 }
 
 type UserDetail struct {
+	IdentityMode  string                 `json:"identity_mode,omitempty"`
+	Agents        []domain.Agent         `json:"agents,omitempty"`
 	User          userservice.Record     `json:"user"`
 	Settings      map[string]any         `json:"settings"`
 	APIKeys       []apikeyservice.Record `json:"api_keys"`
@@ -356,7 +345,7 @@ func (s *Service) ListUsers(ctx context.Context) ([]UserSummary, error) {
 			return nil, err
 		}
 		for _, apiKey := range apiKeys {
-			if apiKey.RevokedAt == nil {
+			if apiKey.RevokedAt == nil && (apiKey.ExpiresAt == nil || apiKey.ExpiresAt.After(time.Now())) {
 				keysByUser[apiKey.UserID]++
 			}
 		}
@@ -432,8 +421,14 @@ func (s *Service) UserDetail(ctx context.Context, userID string) (UserDetail, er
 		}
 	}
 
+	agents := []domain.Agent{}
 	apiKeys := []apikeyservice.Record{}
 	if s.apiKeys != nil {
+		agentItems, err := s.apiKeys.Identities().List(ctx, userID, "", 100)
+		if err != nil {
+			return UserDetail{}, err
+		}
+		agents = agentItems
 		records, err := s.apiKeys.List(ctx)
 		if err != nil {
 			return UserDetail{}, err
@@ -481,6 +476,8 @@ func (s *Service) UserDetail(ctx context.Context, userID string) (UserDetail, er
 	}
 
 	return UserDetail{
+		IdentityMode:  "personal_only",
+		Agents:        agents,
 		User:          user,
 		Settings:      settings,
 		APIKeys:       apiKeys,

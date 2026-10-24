@@ -199,10 +199,13 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	audit := auditsvc.NewService(dbHandle)
 	users := userservice.NewService(dbHandle)
 	apiKeys := apikeyservice.NewService(dbHandle)
+	apiKeys.SetFallbackAudit(audit.Record)
 
 	var conversationRepo ports.ConversationRepository = sqlstore.NewHybridConversationRepository(dbHandle)
 	var mediaRepo ports.MediaRepository = sqlstore.NewHybridMediaRepository(dbHandle)
-	var memoryRepo ports.MemoryRepository = sqlstore.NewHybridMemoryRepository(dbHandle)
+	hybridMemory := sqlstore.NewHybridMemoryRepository(dbHandle)
+	hybridMemory.SetFallbackAudit(audit.Record)
+	var memoryRepo ports.MemoryRepository = hybridMemory
 	var outboxRepo ports.OutboxRepository = sqlstore.NewHybridOutboxRepository(dbHandle)
 	blobStore, err := blobstore.NewStore(cfg.Multimodal)
 	if err != nil {
@@ -277,12 +280,11 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	analysis := analysisservice.NewService()
 	sessionManager := security.NewAdminSessionManager(cfg.MasterKey, 8*time.Hour)
 	auth := security.Authenticator{
-		AdminToken:     cfg.AdminToken,
-		DevAPIKey:      cfg.DevAPIKey,
-		SessionManager: sessionManager,
-		LookupAPIKey: func(ctx context.Context, prefix, hash string) (string, error) {
-			return apiKeys.LookupUserByHash(ctx, prefix, hash)
-		},
+		AdminToken:                 cfg.AdminToken,
+		DevAPIKey:                  cfg.DevAPIKey,
+		SessionManager:             sessionManager,
+		LookupPrincipal:            apiKeys.LookupPrincipalByHash,
+		LookupDevelopmentPrincipal: apiKeys.DevelopmentPrincipal,
 	}
 	rateLimiter := security.NewRateLimiter(float64(cfg.RateLimitRPS), cfg.RateLimitBurst)
 

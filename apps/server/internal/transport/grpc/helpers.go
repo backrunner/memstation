@@ -2,6 +2,7 @@ package grpctransport
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
@@ -24,6 +25,12 @@ func mapError(err error) error {
 		return err
 	}
 
+	if errors.Is(err, domain.ErrAccessDenied) {
+		return status.Error(codes.PermissionDenied, "access denied")
+	}
+	if errors.Is(err, domain.ErrAccessConflict) {
+		return status.Error(codes.Aborted, "revision conflict")
+	}
 	lowered := strings.ToLower(err.Error())
 	switch {
 	case strings.Contains(lowered, "not found"):

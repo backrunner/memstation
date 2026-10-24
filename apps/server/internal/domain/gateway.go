@@ -205,27 +205,30 @@ type UnifiedMessage struct {
 }
 
 type UnifiedRequest struct {
-	RequestID          string           `json:"request_id"`
-	ConversationID     string           `json:"conversation_id,omitempty"`
-	SessionID          string           `json:"session_id,omitempty"`
-	UserID             string           `json:"user_id,omitempty"`
-	Protocol           Protocol         `json:"protocol"`
-	Provider           Provider         `json:"provider"`
-	Mode               Mode             `json:"mode"`
-	Model              string           `json:"model,omitempty"`
-	Stream             bool             `json:"stream"`
-	EndConversation    bool             `json:"end_conversation"`
-	InjectContext      bool             `json:"inject_context"`
-	InjectTools        bool             `json:"inject_tools"`
-	ToolWriteEnabled   bool             `json:"tool_write_enabled"`
-	MaxInjectionTokens int              `json:"max_injection_tokens,omitempty"`
-	MemoryPersist      *bool            `json:"memory_persist,omitempty"`
-	SourceRetain       *bool            `json:"source_retain,omitempty"`
-	Messages           []UnifiedMessage `json:"messages,omitempty"`
-	Tools              []ToolDefinition `json:"tools,omitempty"`
-	ProviderMetadata   map[string]any   `json:"provider_metadata,omitempty"`
-	RequestMetadata    map[string]any   `json:"request_metadata,omitempty"`
-	ReceivedAt         time.Time        `json:"received_at"`
+	ExpectedConversationRevision *int64           `json:"-"`
+	WorkspaceID                  string           `json:"-"`
+	AgentID                      string           `json:"-"`
+	RequestID                    string           `json:"request_id"`
+	ConversationID               string           `json:"conversation_id,omitempty"`
+	SessionID                    string           `json:"session_id,omitempty"`
+	UserID                       string           `json:"user_id,omitempty"`
+	Protocol                     Protocol         `json:"protocol"`
+	Provider                     Provider         `json:"provider"`
+	Mode                         Mode             `json:"mode"`
+	Model                        string           `json:"model,omitempty"`
+	Stream                       bool             `json:"stream"`
+	EndConversation              bool             `json:"end_conversation"`
+	InjectContext                bool             `json:"inject_context"`
+	InjectTools                  bool             `json:"inject_tools"`
+	ToolWriteEnabled             bool             `json:"tool_write_enabled"`
+	MaxInjectionTokens           int              `json:"max_injection_tokens,omitempty"`
+	MemoryPersist                *bool            `json:"memory_persist,omitempty"`
+	SourceRetain                 *bool            `json:"source_retain,omitempty"`
+	Messages                     []UnifiedMessage `json:"messages,omitempty"`
+	Tools                        []ToolDefinition `json:"tools,omitempty"`
+	ProviderMetadata             map[string]any   `json:"provider_metadata,omitempty"`
+	RequestMetadata              map[string]any   `json:"request_metadata,omitempty"`
+	ReceivedAt                   time.Time        `json:"received_at"`
 }
 
 func (r UnifiedRequest) PersistMemoryEnabled() bool {

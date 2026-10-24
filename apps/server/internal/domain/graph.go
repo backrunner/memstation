@@ -9,6 +9,7 @@ import (
 
 // RelationQuery budgets apply while fetching adjacency lists, before hydration.
 type RelationQuery struct {
+	WorkspaceID     string `json:"workspace_id,omitempty"`
 	UserID          string
 	GenerationID    string
 	NodeIDs         []string
@@ -115,6 +116,7 @@ type RecallPath struct {
 // EntityAlias resolves names or joins two entities without rewriting either
 // entity's source records. Revoking the mapping restores the original graph.
 type EntityAlias struct {
+	WorkspaceID  string    `json:"workspace_id,omitempty"`
 	ID           string    `json:"id"`
 	UserID       string    `json:"user_id"`
 	GenerationID string    `json:"generation_id"`

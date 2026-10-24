@@ -17,6 +17,10 @@ var errGenerationSourceSuperseded = errors.New("memory generation source has bee
 
 func handleMemoryRebuildConversation(logger *slog.Logger, services Services) func(context.Context, *asynq.Task) error {
 	return func(ctx context.Context, task *asynq.Task) error {
+		ctx, scopeErr := bindTaskScope(ctx, task, services)
+		if scopeErr != nil {
+			return scopeErr
+		}
 		if services.Generations == nil {
 			return errors.New("memory generation service is not configured")
 		}
@@ -27,6 +31,12 @@ func handleMemoryRebuildConversation(logger *slog.Logger, services Services) fun
 		generation, err := services.Generations.GetGeneration(ctx, payload.UserID, payload.GenerationID)
 		if err != nil {
 			return err
+		}
+		if generation.Status == domain.MemoryGenerationStatusDiscarded || generation.Status == domain.MemoryGenerationStatusActivated {
+			return nil
+		}
+		if generation.Status == domain.MemoryGenerationStatusCompleted {
+			return completeRebuildSource(ctx, services, payload, 0)
 		}
 		snapshot, ok, err := services.Generations.GetSourceSnapshot(ctx, payload.UserID, payload.SnapshotID)
 		if err != nil {
@@ -39,8 +49,7 @@ func handleMemoryRebuildConversation(logger *slog.Logger, services Services) fun
 			return err
 		} else if !current {
 			logger.InfoContext(ctx, "memory rebuild conversation skipped because a newer snapshot is already queued", "generation_id", payload.GenerationID, "snapshot_id", payload.SnapshotID)
-			_, _, err = services.Generations.MarkGenerationSourceCompleted(ctx, payload.UserID, payload.GenerationID, payload.SnapshotID, 0)
-			return err
+			return completeRebuildSource(ctx, services, payload, 0)
 		}
 		if err := services.Generations.MarkGenerationSourceRunning(ctx, payload.UserID, payload.GenerationID, payload.SnapshotID); err != nil {
 			return err
@@ -49,37 +58,37 @@ func handleMemoryRebuildConversation(logger *slog.Logger, services Services) fun
 		embeddingCount, err := rebuildSnapshotIntoGeneration(ctx, services, generation, snapshot)
 		if errors.Is(err, errGenerationSourceSuperseded) {
 			logger.InfoContext(ctx, "memory rebuild conversation stopped because a newer snapshot superseded it", "generation_id", payload.GenerationID, "snapshot_id", payload.SnapshotID)
-			_, _, markErr := services.Generations.MarkGenerationSourceCompleted(ctx, payload.UserID, payload.GenerationID, payload.SnapshotID, 0)
-			if markErr != nil {
-				return markErr
-			}
-			return nil
+			return completeRebuildSource(ctx, services, payload, 0)
 		}
 		if err != nil {
 			_, _ = services.Generations.MarkGenerationSourceFailed(ctx, payload.UserID, payload.GenerationID, payload.SnapshotID, err.Error())
 			return err
 		}
-		_, ready, err := services.Generations.MarkGenerationSourceCompleted(ctx, payload.UserID, payload.GenerationID, payload.SnapshotID, embeddingCount)
-		if err != nil {
-			return err
-		}
-		if ready && services.Publisher != nil {
-			return services.Publisher.Publish(ctx, domain.TaskMessage{
-				Type:      TypeMemoryRebuildActivate,
-				Queue:     QueueDefault,
-				UniqueKey: TypeMemoryRebuildActivate + ":" + payload.GenerationID,
-				Payload: map[string]any{
-					"user_id":       payload.UserID,
-					"generation_id": payload.GenerationID,
-				},
-			})
-		}
-		return nil
+		return completeRebuildSource(ctx, services, payload, embeddingCount)
 	}
+}
+
+func completeRebuildSource(ctx context.Context, services Services, payload MemoryRebuildConversationPayload, embeddingCount int) error {
+	_, ready, err := services.Generations.MarkGenerationSourceCompleted(ctx, payload.UserID, payload.GenerationID, payload.SnapshotID, embeddingCount)
+	if err != nil {
+		return err
+	}
+	if ready && services.Publisher != nil {
+		return services.Publisher.Publish(ctx, domain.TaskMessage{
+			Type: TypeMemoryRebuildActivate, Queue: QueueDefault,
+			UniqueKey: TypeMemoryRebuildActivate + ":" + payload.GenerationID,
+			Payload:   map[string]any{"user_id": payload.UserID, "workspace_id": domain.PersonalWorkspaceID(payload.UserID), "generation_id": payload.GenerationID},
+		})
+	}
+	return nil
 }
 
 func handleMemoryRebuildActivate(logger *slog.Logger, services Services) func(context.Context, *asynq.Task) error {
 	return func(ctx context.Context, task *asynq.Task) error {
+		ctx, scopeErr := bindTaskScope(ctx, task, services)
+		if scopeErr != nil {
+			return scopeErr
+		}
 		if services.Generations == nil {
 			return errors.New("memory generation service is not configured")
 		}
@@ -87,11 +96,11 @@ func handleMemoryRebuildActivate(logger *slog.Logger, services Services) func(co
 		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 			return err
 		}
-		generation, err := services.Generations.ActivateGeneration(ctx, payload.UserID, payload.GenerationID)
+		generation, err := services.Generations.ActivateCompletedGeneration(ctx, payload.UserID, payload.GenerationID)
 		if err != nil {
 			return err
 		}
-		logger.InfoContext(ctx, "memory rebuild generation activated", "generation_id", generation.GenerationID, "user_id", generation.UserID)
+		logger.InfoContext(ctx, "memory rebuild activation processed", "generation_id", generation.GenerationID, "user_id", generation.UserID, "status", generation.Status)
 		return nil
 	}
 }

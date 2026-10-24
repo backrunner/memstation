@@ -24,13 +24,16 @@ func TestPGVectorStoreEmbeddingRevisionCAS(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	const userID = "vector-cas-user"
+	if _, err = db.ExecContext(ctx, `INSERT INTO workspaces(id,user_id,name,capabilities) VALUES ('personal-' || encode(sha256(convert_to($1,'UTF8')),'hex'),$1,'Fixture','[]') ON CONFLICT DO NOTHING`, userID); err != nil {
+		t.Fatal(err)
+	}
 	const nodeID = "vector-cas-node"
 	if _, err = db.ExecContext(ctx, `DELETE FROM memory_nodes WHERE user_id = $1 AND id = $2`, userID, nodeID); err != nil {
 		t.Fatalf("clean node: %v", err)
 	}
 	if _, err = db.ExecContext(ctx, `
-		INSERT INTO memory_nodes (id, generation_id, user_id, node_type, entity_id, embedding_status, embedding_revision)
-		VALUES ($1, 'gen-cas', $2, 'fact', 'fact-cas', 'pending', 2)
+		INSERT INTO memory_nodes (workspace_id, id, generation_id, user_id, node_type, entity_id, embedding_status, embedding_revision)
+		VALUES ('personal-' || encode(sha256(convert_to($2,'UTF8')),'hex'),$1, 'gen-cas', $2, 'fact', 'fact-cas', 'pending', 2)
 	`, nodeID, userID); err != nil {
 		t.Fatalf("insert node: %v", err)
 	}

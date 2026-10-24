@@ -9,6 +9,12 @@ import (
 // APIKey is the predicate function for apikey builders.
 type APIKey func(*sql.Selector)
 
+// Actor is the predicate function for actor builders.
+type Actor func(*sql.Selector)
+
+// Agent is the predicate function for agent builders.
+type Agent func(*sql.Selector)
+
 // AuditEvent is the predicate function for auditevent builders.
 type AuditEvent func(*sql.Selector)
 
@@ -56,3 +62,9 @@ type User func(*sql.Selector)
 
 // UserSetting is the predicate function for usersetting builders.
 type UserSetting func(*sql.Selector)
+
+// Workspace is the predicate function for workspace builders.
+type Workspace func(*sql.Selector)
+
+// WorkspaceGrant is the predicate function for workspacegrant builders.
+type WorkspaceGrant func(*sql.Selector)

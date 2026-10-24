@@ -19,6 +19,12 @@ const (
 	FieldUpdatedAt = "updated_at"
 	// FieldUserID holds the string denoting the user_id field in the database.
 	FieldUserID = "user_id"
+	// FieldWorkspaceID holds the string denoting the workspace_id field in the database.
+	FieldWorkspaceID = "workspace_id"
+	// FieldAgentID holds the string denoting the agent_id field in the database.
+	FieldAgentID = "agent_id"
+	// FieldWriteRevision holds the string denoting the write_revision field in the database.
+	FieldWriteRevision = "write_revision"
 	// FieldRequestFormat holds the string denoting the request_format field in the database.
 	FieldRequestFormat = "request_format"
 	// FieldUpstreamProvider holds the string denoting the upstream_provider field in the database.
@@ -43,6 +49,9 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldUpdatedAt,
 	FieldUserID,
+	FieldWorkspaceID,
+	FieldAgentID,
+	FieldWriteRevision,
 	FieldRequestFormat,
 	FieldUpstreamProvider,
 	FieldMode,
@@ -69,6 +78,8 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultWriteRevision holds the default value on creation for the "write_revision" field.
+	DefaultWriteRevision int64
 	// DefaultMode holds the default value on creation for the "mode" field.
 	DefaultMode string
 	// DefaultFinalizeStatus holds the default value on creation for the "finalize_status" field.
@@ -100,6 +111,21 @@ func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUserID orders the results by the user_id field.
 func ByUserID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUserID, opts...).ToFunc()
+}
+
+// ByWorkspaceID orders the results by the workspace_id field.
+func ByWorkspaceID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorkspaceID, opts...).ToFunc()
+}
+
+// ByAgentID orders the results by the agent_id field.
+func ByAgentID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAgentID, opts...).ToFunc()
+}
+
+// ByWriteRevision orders the results by the write_revision field.
+func ByWriteRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWriteRevision, opts...).ToFunc()
 }
 
 // ByRequestFormat orders the results by the request_format field.

@@ -320,6 +320,11 @@ func seedRecoveryFixtures(ctx context.Context, conversations *sqlstore.InMemoryC
 }
 
 func recoveryTask(task domain.TaskMessage) (*asynq.Task, error) {
+	var err error
+	task, err = prepareScopedTask(context.Background(), task)
+	if err != nil {
+		return nil, err
+	}
 	raw, err := json.Marshal(task.Payload)
 	if err != nil {
 		return nil, err

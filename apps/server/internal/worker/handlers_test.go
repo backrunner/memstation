@@ -702,7 +702,8 @@ func TestKeyMemoryReconcileHandlerEnforcesWhitelistAndAudits(t *testing.T) {
 	}
 
 	denied := handleKeyMemoryReconcile(nilLogger(), Services{
-		Memories: memories,
+		Conversations: conversationsFromRecords(t, "user-1", "conv-1"),
+		Memories:      memories,
 	})
 	if err := denied(ctx, newTask(t, TypeKeyMemoryReconcile, map[string]any{
 		"user_id":         "user-1",
@@ -712,7 +713,8 @@ func TestKeyMemoryReconcileHandlerEnforcesWhitelistAndAudits(t *testing.T) {
 	}
 
 	allowed := handleKeyMemoryReconcile(nilLogger(), Services{
-		Memories: memories,
+		Conversations: conversationsFromRecords(t, "user-1", "conv-1"),
+		Memories:      memories,
 		AllowedKeyMemoryKeys: map[string]struct{}{
 			"recent_conversation": {},
 		},
@@ -799,7 +801,8 @@ func TestKeyMemoryReconcileHandlerScopesRelationsToRequestedGeneration(t *testin
 	}
 
 	handler := handleKeyMemoryReconcile(nilLogger(), Services{
-		Memories: memories,
+		Conversations: conversationsFromRecords(t, "user-1", "conv-1"),
+		Memories:      memories,
 		AllowedKeyMemoryKeys: map[string]struct{}{
 			"recent_conversation": {},
 		},

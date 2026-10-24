@@ -15,6 +15,9 @@ var (
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "user_id", Type: field.TypeString},
 		{Name: "name", Type: field.TypeString},
+		{Name: "agent_id", Type: field.TypeString},
+		{Name: "default_workspace_id", Type: field.TypeString},
+		{Name: "capability_ceiling", Type: field.TypeJSON},
 		{Name: "prefix", Type: field.TypeString},
 		{Name: "hash", Type: field.TypeString},
 		{Name: "scopes", Type: field.TypeJSON, Nullable: true},
@@ -28,6 +31,61 @@ var (
 		Name:       "api_keys",
 		Columns:    APIKeysColumns,
 		PrimaryKey: []*schema.Column{APIKeysColumns[0]},
+	}
+	// ActorsColumns holds the columns for the "actors" table.
+	ActorsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "kind", Type: field.TypeString},
+		{Name: "display_name", Type: field.TypeString},
+		{Name: "status", Type: field.TypeString, Default: "active"},
+		{Name: "revision", Type: field.TypeInt64, Default: 1},
+	}
+	// ActorsTable holds the schema information for the "actors" table.
+	ActorsTable = &schema.Table{
+		Name:       "actors",
+		Columns:    ActorsColumns,
+		PrimaryKey: []*schema.Column{ActorsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "actor_user_id_id",
+				Unique:  true,
+				Columns: []*schema.Column{ActorsColumns[3], ActorsColumns[0]},
+			},
+		},
+	}
+	// AgentsColumns holds the columns for the "agents" table.
+	AgentsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "actor_id", Type: field.TypeString},
+		{Name: "name", Type: field.TypeString},
+		{Name: "status", Type: field.TypeString, Default: "active"},
+		{Name: "default_workspace_id", Type: field.TypeString},
+		{Name: "revision", Type: field.TypeInt64, Default: 1},
+		{Name: "legacy", Type: field.TypeBool, Default: false},
+	}
+	// AgentsTable holds the schema information for the "agents" table.
+	AgentsTable = &schema.Table{
+		Name:       "agents",
+		Columns:    AgentsColumns,
+		PrimaryKey: []*schema.Column{AgentsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "agent_user_id_id",
+				Unique:  true,
+				Columns: []*schema.Column{AgentsColumns[3], AgentsColumns[0]},
+			},
+			{
+				Name:    "agent_user_id_actor_id",
+				Unique:  true,
+				Columns: []*schema.Column{AgentsColumns[3], AgentsColumns[4]},
+			},
+		},
 	}
 	// AuditEventsColumns holds the columns for the "audit_events" table.
 	AuditEventsColumns = []*schema.Column{
@@ -53,6 +111,9 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "agent_id", Type: field.TypeString},
+		{Name: "write_revision", Type: field.TypeInt64, Default: 0},
 		{Name: "request_format", Type: field.TypeString},
 		{Name: "upstream_provider", Type: field.TypeString, Nullable: true},
 		{Name: "mode", Type: field.TypeString, Default: "transparent"},
@@ -66,6 +127,18 @@ var (
 		Name:       "conversations",
 		Columns:    ConversationsColumns,
 		PrimaryKey: []*schema.Column{ConversationsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "conversation_user_id_workspace_id_id",
+				Unique:  true,
+				Columns: []*schema.Column{ConversationsColumns[3], ConversationsColumns[4], ConversationsColumns[0]},
+			},
+			{
+				Name:    "conversation_user_id_workspace_id_updated_at",
+				Unique:  false,
+				Columns: []*schema.Column{ConversationsColumns[3], ConversationsColumns[4], ConversationsColumns[2]},
+			},
+		},
 	}
 	// FactsColumns holds the columns for the "facts" table.
 	FactsColumns = []*schema.Column{
@@ -145,6 +218,7 @@ var (
 		{Name: "embedding_id", Type: field.TypeString, Unique: true},
 		{Name: "generation_id", Type: field.TypeString, Default: ""},
 		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
 		{Name: "node_id", Type: field.TypeString},
 		{Name: "node_type", Type: field.TypeString},
 		{Name: "embedding_version", Type: field.TypeInt, Default: 1},
@@ -161,7 +235,12 @@ var (
 			{
 				Name:    "memoryembedding_user_id_node_id_embedding_version",
 				Unique:  true,
-				Columns: []*schema.Column{MemoryEmbeddingsColumns[5], MemoryEmbeddingsColumns[6], MemoryEmbeddingsColumns[8]},
+				Columns: []*schema.Column{MemoryEmbeddingsColumns[5], MemoryEmbeddingsColumns[7], MemoryEmbeddingsColumns[9]},
+			},
+			{
+				Name:    "memoryembedding_user_id_workspace_id_generation_id_embedding_version_embedding_model",
+				Unique:  false,
+				Columns: []*schema.Column{MemoryEmbeddingsColumns[5], MemoryEmbeddingsColumns[6], MemoryEmbeddingsColumns[4], MemoryEmbeddingsColumns[9], MemoryEmbeddingsColumns[10]},
 			},
 		},
 	}
@@ -214,6 +293,7 @@ var (
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "generation_id", Type: field.TypeString, Default: ""},
 		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
 		{Name: "node_type", Type: field.TypeString},
 		{Name: "entity_id", Type: field.TypeString},
 		{Name: "importance", Type: field.TypeFloat64, Default: 1},
@@ -232,7 +312,17 @@ var (
 			{
 				Name:    "memorynode_user_id_node_type_entity_id",
 				Unique:  true,
-				Columns: []*schema.Column{MemoryNodesColumns[4], MemoryNodesColumns[5], MemoryNodesColumns[6]},
+				Columns: []*schema.Column{MemoryNodesColumns[4], MemoryNodesColumns[6], MemoryNodesColumns[7]},
+			},
+			{
+				Name:    "memorynode_user_id_workspace_id_id",
+				Unique:  true,
+				Columns: []*schema.Column{MemoryNodesColumns[4], MemoryNodesColumns[5], MemoryNodesColumns[0]},
+			},
+			{
+				Name:    "memorynode_user_id_workspace_id_node_type_activity_at",
+				Unique:  false,
+				Columns: []*schema.Column{MemoryNodesColumns[4], MemoryNodesColumns[5], MemoryNodesColumns[6], MemoryNodesColumns[10]},
 			},
 		},
 	}
@@ -300,6 +390,7 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
 		{Name: "conversation_id", Type: field.TypeString},
 		{Name: "role", Type: field.TypeString},
 		{Name: "content_blocks", Type: field.TypeJSON, Nullable: true},
@@ -342,6 +433,7 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
 		{Name: "conversation_id", Type: field.TypeString},
 		{Name: "provider", Type: field.TypeString, Nullable: true},
 		{Name: "model", Type: field.TypeString, Nullable: true},
@@ -393,9 +485,60 @@ var (
 		Columns:    UserSettingsColumns,
 		PrimaryKey: []*schema.Column{UserSettingsColumns[0]},
 	}
+	// WorkspacesColumns holds the columns for the "workspaces" table.
+	WorkspacesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "name", Type: field.TypeString},
+		{Name: "kind", Type: field.TypeString, Default: "personal"},
+		{Name: "status", Type: field.TypeString, Default: "active"},
+		{Name: "policy_version", Type: field.TypeInt64, Default: 1},
+		{Name: "capabilities", Type: field.TypeJSON},
+	}
+	// WorkspacesTable holds the schema information for the "workspaces" table.
+	WorkspacesTable = &schema.Table{
+		Name:       "workspaces",
+		Columns:    WorkspacesColumns,
+		PrimaryKey: []*schema.Column{WorkspacesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "workspace_user_id_id",
+				Unique:  true,
+				Columns: []*schema.Column{WorkspacesColumns[3], WorkspacesColumns[0]},
+			},
+		},
+	}
+	// WorkspaceGrantsColumns holds the columns for the "workspace_grants" table.
+	WorkspaceGrantsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "agent_id", Type: field.TypeString},
+		{Name: "capabilities", Type: field.TypeJSON},
+		{Name: "revision", Type: field.TypeInt64, Default: 1},
+	}
+	// WorkspaceGrantsTable holds the schema information for the "workspace_grants" table.
+	WorkspaceGrantsTable = &schema.Table{
+		Name:       "workspace_grants",
+		Columns:    WorkspaceGrantsColumns,
+		PrimaryKey: []*schema.Column{WorkspaceGrantsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "workspacegrant_user_id_workspace_id_agent_id",
+				Unique:  true,
+				Columns: []*schema.Column{WorkspaceGrantsColumns[3], WorkspaceGrantsColumns[4], WorkspaceGrantsColumns[5]},
+			},
+		},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		APIKeysTable,
+		ActorsTable,
+		AgentsTable,
 		AuditEventsTable,
 		ConversationsTable,
 		FactsTable,
@@ -412,6 +555,8 @@ var (
 		TokenUsagesTable,
 		UsersTable,
 		UserSettingsTable,
+		WorkspacesTable,
+		WorkspaceGrantsTable,
 	}
 )
 

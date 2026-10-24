@@ -74,6 +74,16 @@ func Name(v string) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldName, v))
 }
 
+// AgentID applies equality check predicate on the "agent_id" field. It's identical to AgentIDEQ.
+func AgentID(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldAgentID, v))
+}
+
+// DefaultWorkspaceID applies equality check predicate on the "default_workspace_id" field. It's identical to DefaultWorkspaceIDEQ.
+func DefaultWorkspaceID(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldDefaultWorkspaceID, v))
+}
+
 // Prefix applies equality check predicate on the "prefix" field. It's identical to PrefixEQ.
 func Prefix(v string) predicate.APIKey {
 	return predicate.APIKey(sql.FieldEQ(FieldPrefix, v))
@@ -312,6 +322,136 @@ func NameEqualFold(v string) predicate.APIKey {
 // NameContainsFold applies the ContainsFold predicate on the "name" field.
 func NameContainsFold(v string) predicate.APIKey {
 	return predicate.APIKey(sql.FieldContainsFold(FieldName, v))
+}
+
+// AgentIDEQ applies the EQ predicate on the "agent_id" field.
+func AgentIDEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldAgentID, v))
+}
+
+// AgentIDNEQ applies the NEQ predicate on the "agent_id" field.
+func AgentIDNEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldAgentID, v))
+}
+
+// AgentIDIn applies the In predicate on the "agent_id" field.
+func AgentIDIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldAgentID, vs...))
+}
+
+// AgentIDNotIn applies the NotIn predicate on the "agent_id" field.
+func AgentIDNotIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldAgentID, vs...))
+}
+
+// AgentIDGT applies the GT predicate on the "agent_id" field.
+func AgentIDGT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldAgentID, v))
+}
+
+// AgentIDGTE applies the GTE predicate on the "agent_id" field.
+func AgentIDGTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldAgentID, v))
+}
+
+// AgentIDLT applies the LT predicate on the "agent_id" field.
+func AgentIDLT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldAgentID, v))
+}
+
+// AgentIDLTE applies the LTE predicate on the "agent_id" field.
+func AgentIDLTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldAgentID, v))
+}
+
+// AgentIDContains applies the Contains predicate on the "agent_id" field.
+func AgentIDContains(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContains(FieldAgentID, v))
+}
+
+// AgentIDHasPrefix applies the HasPrefix predicate on the "agent_id" field.
+func AgentIDHasPrefix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasPrefix(FieldAgentID, v))
+}
+
+// AgentIDHasSuffix applies the HasSuffix predicate on the "agent_id" field.
+func AgentIDHasSuffix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasSuffix(FieldAgentID, v))
+}
+
+// AgentIDEqualFold applies the EqualFold predicate on the "agent_id" field.
+func AgentIDEqualFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEqualFold(FieldAgentID, v))
+}
+
+// AgentIDContainsFold applies the ContainsFold predicate on the "agent_id" field.
+func AgentIDContainsFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContainsFold(FieldAgentID, v))
+}
+
+// DefaultWorkspaceIDEQ applies the EQ predicate on the "default_workspace_id" field.
+func DefaultWorkspaceIDEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEQ(FieldDefaultWorkspaceID, v))
+}
+
+// DefaultWorkspaceIDNEQ applies the NEQ predicate on the "default_workspace_id" field.
+func DefaultWorkspaceIDNEQ(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNEQ(FieldDefaultWorkspaceID, v))
+}
+
+// DefaultWorkspaceIDIn applies the In predicate on the "default_workspace_id" field.
+func DefaultWorkspaceIDIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldIn(FieldDefaultWorkspaceID, vs...))
+}
+
+// DefaultWorkspaceIDNotIn applies the NotIn predicate on the "default_workspace_id" field.
+func DefaultWorkspaceIDNotIn(vs ...string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldNotIn(FieldDefaultWorkspaceID, vs...))
+}
+
+// DefaultWorkspaceIDGT applies the GT predicate on the "default_workspace_id" field.
+func DefaultWorkspaceIDGT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGT(FieldDefaultWorkspaceID, v))
+}
+
+// DefaultWorkspaceIDGTE applies the GTE predicate on the "default_workspace_id" field.
+func DefaultWorkspaceIDGTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldGTE(FieldDefaultWorkspaceID, v))
+}
+
+// DefaultWorkspaceIDLT applies the LT predicate on the "default_workspace_id" field.
+func DefaultWorkspaceIDLT(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLT(FieldDefaultWorkspaceID, v))
+}
+
+// DefaultWorkspaceIDLTE applies the LTE predicate on the "default_workspace_id" field.
+func DefaultWorkspaceIDLTE(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldLTE(FieldDefaultWorkspaceID, v))
+}
+
+// DefaultWorkspaceIDContains applies the Contains predicate on the "default_workspace_id" field.
+func DefaultWorkspaceIDContains(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContains(FieldDefaultWorkspaceID, v))
+}
+
+// DefaultWorkspaceIDHasPrefix applies the HasPrefix predicate on the "default_workspace_id" field.
+func DefaultWorkspaceIDHasPrefix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasPrefix(FieldDefaultWorkspaceID, v))
+}
+
+// DefaultWorkspaceIDHasSuffix applies the HasSuffix predicate on the "default_workspace_id" field.
+func DefaultWorkspaceIDHasSuffix(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldHasSuffix(FieldDefaultWorkspaceID, v))
+}
+
+// DefaultWorkspaceIDEqualFold applies the EqualFold predicate on the "default_workspace_id" field.
+func DefaultWorkspaceIDEqualFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldEqualFold(FieldDefaultWorkspaceID, v))
+}
+
+// DefaultWorkspaceIDContainsFold applies the ContainsFold predicate on the "default_workspace_id" field.
+func DefaultWorkspaceIDContainsFold(v string) predicate.APIKey {
+	return predicate.APIKey(sql.FieldContainsFold(FieldDefaultWorkspaceID, v))
 }
 
 // PrefixEQ applies the EQ predicate on the "prefix" field.

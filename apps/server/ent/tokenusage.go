@@ -23,6 +23,8 @@ type TokenUsage struct {
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID string `json:"user_id,omitempty"`
+	// WorkspaceID holds the value of the "workspace_id" field.
+	WorkspaceID string `json:"workspace_id,omitempty"`
 	// ConversationID holds the value of the "conversation_id" field.
 	ConversationID string `json:"conversation_id,omitempty"`
 	// Provider holds the value of the "provider" field.
@@ -49,7 +51,7 @@ func (*TokenUsage) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullFloat64)
 		case tokenusage.FieldID, tokenusage.FieldInputTokens, tokenusage.FieldOutputTokens, tokenusage.FieldTotalTokens:
 			values[i] = new(sql.NullInt64)
-		case tokenusage.FieldUserID, tokenusage.FieldConversationID, tokenusage.FieldProvider, tokenusage.FieldModel:
+		case tokenusage.FieldUserID, tokenusage.FieldWorkspaceID, tokenusage.FieldConversationID, tokenusage.FieldProvider, tokenusage.FieldModel:
 			values[i] = new(sql.NullString)
 		case tokenusage.FieldCreatedAt, tokenusage.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -91,6 +93,12 @@ func (_m *TokenUsage) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field user_id", values[i])
 			} else if value.Valid {
 				_m.UserID = value.String
+			}
+		case tokenusage.FieldWorkspaceID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field workspace_id", values[i])
+			} else if value.Valid {
+				_m.WorkspaceID = value.String
 			}
 		case tokenusage.FieldConversationID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -178,6 +186,9 @@ func (_m *TokenUsage) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("user_id=")
 	builder.WriteString(_m.UserID)
+	builder.WriteString(", ")
+	builder.WriteString("workspace_id=")
+	builder.WriteString(_m.WorkspaceID)
 	builder.WriteString(", ")
 	builder.WriteString("conversation_id=")
 	builder.WriteString(_m.ConversationID)

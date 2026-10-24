@@ -25,6 +25,9 @@ func TestDiscardGenerationDeletesInactiveGraphData(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	const userID = "generation-discard-user"
+	if _, err = db.ExecContext(ctx, `INSERT INTO workspaces(id,user_id,name,capabilities) VALUES ('personal-' || encode(sha256(convert_to($1,'UTF8')),'hex'),$1,'Fixture','[]') ON CONFLICT DO NOTHING`, userID); err != nil {
+		t.Fatal(err)
+	}
 	const generationID = "generation-discard-candidate"
 	const nodeID = "generation-discard-node"
 	cleanup := func() {
@@ -36,16 +39,16 @@ func TestDiscardGenerationDeletesInactiveGraphData(t *testing.T) {
 	now := time.Now().UTC()
 	if _, err = db.ExecContext(ctx, `
 		INSERT INTO memory_generations (
-			generation_id, user_id, status, scope, is_active, structure_version, embedding_version,
+			generation_id, workspace_id, user_id, status, scope, is_active, structure_version, embedding_version,
 			embedding_model, activate_on_success, source_count, processed_count, embedding_count,
 			failure_count, metadata, created_at, updated_at
-		) VALUES ($1,$2,'completed','conversation',FALSE,1,2,'integration-test',FALSE,1,1,1,0,'{}',$3,$3)
+		) VALUES ($1,'personal-' || encode(sha256(convert_to($2::text,'UTF8')),'hex'),$2,'completed','conversation',FALSE,1,2,'integration-test',FALSE,1,1,1,0,'{}',$3,$3)
 	`, generationID, userID, now); err != nil {
 		t.Fatalf("insert generation: %v", err)
 	}
 	if _, err = db.ExecContext(ctx, `
-		INSERT INTO memory_nodes (id, generation_id, user_id, node_type, entity_id, embedding_status)
-		VALUES ($1,$2,$3,'fact','fact-discard','ready')
+		INSERT INTO memory_nodes (workspace_id, id, generation_id, user_id, node_type, entity_id, embedding_status)
+		VALUES ('personal-' || encode(sha256(convert_to($3,'UTF8')),'hex'),$1,$2,$3,'fact','fact-discard','ready')
 	`, nodeID, generationID, userID); err != nil {
 		t.Fatalf("insert node: %v", err)
 	}
@@ -56,8 +59,8 @@ func TestDiscardGenerationDeletesInactiveGraphData(t *testing.T) {
 		t.Fatalf("insert fact: %v", err)
 	}
 	if _, err = db.ExecContext(ctx, `
-		INSERT INTO memory_embeddings (embedding_id, generation_id, user_id, node_id, node_type, embedding_version, embedding_model, content_hash, vector)
-		VALUES ('embedding-discard',$1,$2,$3,'fact',2,'integration-test','hash','[1,0,0]')
+		INSERT INTO memory_embeddings (workspace_id, embedding_id, generation_id, user_id, node_id, node_type, embedding_version, embedding_model, content_hash, vector)
+		VALUES ('personal-' || encode(sha256(convert_to($2,'UTF8')),'hex'),'embedding-discard',$1,$2,$3,'fact',2,'integration-test','hash','[1,0,0]')
 	`, generationID, userID, nodeID); err != nil {
 		t.Fatalf("insert embedding: %v", err)
 	}

@@ -25,6 +25,8 @@ type MemoryNode struct {
 	GenerationID string `json:"generation_id,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID string `json:"user_id,omitempty"`
+	// WorkspaceID holds the value of the "workspace_id" field.
+	WorkspaceID string `json:"workspace_id,omitempty"`
 	// NodeType holds the value of the "node_type" field.
 	NodeType string `json:"node_type,omitempty"`
 	// EntityID holds the value of the "entity_id" field.
@@ -53,7 +55,7 @@ func (*MemoryNode) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullFloat64)
 		case memorynode.FieldID, memorynode.FieldEmbeddingRevision:
 			values[i] = new(sql.NullInt64)
-		case memorynode.FieldGenerationID, memorynode.FieldUserID, memorynode.FieldNodeType, memorynode.FieldEntityID, memorynode.FieldTimeTier, memorynode.FieldEmbeddingStatus:
+		case memorynode.FieldGenerationID, memorynode.FieldUserID, memorynode.FieldWorkspaceID, memorynode.FieldNodeType, memorynode.FieldEntityID, memorynode.FieldTimeTier, memorynode.FieldEmbeddingStatus:
 			values[i] = new(sql.NullString)
 		case memorynode.FieldCreatedAt, memorynode.FieldUpdatedAt, memorynode.FieldActivityAt:
 			values[i] = new(sql.NullTime)
@@ -101,6 +103,12 @@ func (_m *MemoryNode) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field user_id", values[i])
 			} else if value.Valid {
 				_m.UserID = value.String
+			}
+		case memorynode.FieldWorkspaceID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field workspace_id", values[i])
+			} else if value.Valid {
+				_m.WorkspaceID = value.String
 			}
 		case memorynode.FieldNodeType:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -197,6 +205,9 @@ func (_m *MemoryNode) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("user_id=")
 	builder.WriteString(_m.UserID)
+	builder.WriteString(", ")
+	builder.WriteString("workspace_id=")
+	builder.WriteString(_m.WorkspaceID)
 	builder.WriteString(", ")
 	builder.WriteString("node_type=")
 	builder.WriteString(_m.NodeType)

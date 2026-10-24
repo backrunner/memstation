@@ -54,6 +54,32 @@ func (_c *ConversationCreate) SetUserID(v string) *ConversationCreate {
 	return _c
 }
 
+// SetWorkspaceID sets the "workspace_id" field.
+func (_c *ConversationCreate) SetWorkspaceID(v string) *ConversationCreate {
+	_c.mutation.SetWorkspaceID(v)
+	return _c
+}
+
+// SetAgentID sets the "agent_id" field.
+func (_c *ConversationCreate) SetAgentID(v string) *ConversationCreate {
+	_c.mutation.SetAgentID(v)
+	return _c
+}
+
+// SetWriteRevision sets the "write_revision" field.
+func (_c *ConversationCreate) SetWriteRevision(v int64) *ConversationCreate {
+	_c.mutation.SetWriteRevision(v)
+	return _c
+}
+
+// SetNillableWriteRevision sets the "write_revision" field if the given value is not nil.
+func (_c *ConversationCreate) SetNillableWriteRevision(v *int64) *ConversationCreate {
+	if v != nil {
+		_c.SetWriteRevision(*v)
+	}
+	return _c
+}
+
 // SetRequestFormat sets the "request_format" field.
 func (_c *ConversationCreate) SetRequestFormat(v string) *ConversationCreate {
 	_c.mutation.SetRequestFormat(v)
@@ -179,6 +205,10 @@ func (_c *ConversationCreate) defaults() {
 		v := conversation.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.WriteRevision(); !ok {
+		v := conversation.DefaultWriteRevision
+		_c.mutation.SetWriteRevision(v)
+	}
 	if _, ok := _c.mutation.Mode(); !ok {
 		v := conversation.DefaultMode
 		_c.mutation.SetMode(v)
@@ -207,6 +237,15 @@ func (_c *ConversationCreate) check() error {
 	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "Conversation.user_id"`)}
+	}
+	if _, ok := _c.mutation.WorkspaceID(); !ok {
+		return &ValidationError{Name: "workspace_id", err: errors.New(`ent: missing required field "Conversation.workspace_id"`)}
+	}
+	if _, ok := _c.mutation.AgentID(); !ok {
+		return &ValidationError{Name: "agent_id", err: errors.New(`ent: missing required field "Conversation.agent_id"`)}
+	}
+	if _, ok := _c.mutation.WriteRevision(); !ok {
+		return &ValidationError{Name: "write_revision", err: errors.New(`ent: missing required field "Conversation.write_revision"`)}
 	}
 	if _, ok := _c.mutation.RequestFormat(); !ok {
 		return &ValidationError{Name: "request_format", err: errors.New(`ent: missing required field "Conversation.request_format"`)}
@@ -260,6 +299,18 @@ func (_c *ConversationCreate) createSpec() (*Conversation, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.UserID(); ok {
 		_spec.SetField(conversation.FieldUserID, field.TypeString, value)
 		_node.UserID = value
+	}
+	if value, ok := _c.mutation.WorkspaceID(); ok {
+		_spec.SetField(conversation.FieldWorkspaceID, field.TypeString, value)
+		_node.WorkspaceID = value
+	}
+	if value, ok := _c.mutation.AgentID(); ok {
+		_spec.SetField(conversation.FieldAgentID, field.TypeString, value)
+		_node.AgentID = value
+	}
+	if value, ok := _c.mutation.WriteRevision(); ok {
+		_spec.SetField(conversation.FieldWriteRevision, field.TypeInt64, value)
+		_node.WriteRevision = value
 	}
 	if value, ok := _c.mutation.RequestFormat(); ok {
 		_spec.SetField(conversation.FieldRequestFormat, field.TypeString, value)

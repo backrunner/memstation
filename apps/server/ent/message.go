@@ -24,6 +24,8 @@ type Message struct {
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID string `json:"user_id,omitempty"`
+	// WorkspaceID holds the value of the "workspace_id" field.
+	WorkspaceID string `json:"workspace_id,omitempty"`
 	// ConversationID holds the value of the "conversation_id" field.
 	ConversationID string `json:"conversation_id,omitempty"`
 	// Role holds the value of the "role" field.
@@ -52,7 +54,7 @@ func (*Message) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case message.FieldID, message.FieldSequenceNum:
 			values[i] = new(sql.NullInt64)
-		case message.FieldUserID, message.FieldConversationID, message.FieldRole, message.FieldTextContent:
+		case message.FieldUserID, message.FieldWorkspaceID, message.FieldConversationID, message.FieldRole, message.FieldTextContent:
 			values[i] = new(sql.NullString)
 		case message.FieldCreatedAt, message.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -94,6 +96,12 @@ func (_m *Message) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field user_id", values[i])
 			} else if value.Valid {
 				_m.UserID = value.String
+			}
+		case message.FieldWorkspaceID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field workspace_id", values[i])
+			} else if value.Valid {
+				_m.WorkspaceID = value.String
 			}
 		case message.FieldConversationID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -195,6 +203,9 @@ func (_m *Message) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("user_id=")
 	builder.WriteString(_m.UserID)
+	builder.WriteString(", ")
+	builder.WriteString("workspace_id=")
+	builder.WriteString(_m.WorkspaceID)
 	builder.WriteString(", ")
 	builder.WriteString("conversation_id=")
 	builder.WriteString(_m.ConversationID)

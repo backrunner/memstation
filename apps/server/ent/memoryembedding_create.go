@@ -74,6 +74,12 @@ func (_c *MemoryEmbeddingCreate) SetUserID(v string) *MemoryEmbeddingCreate {
 	return _c
 }
 
+// SetWorkspaceID sets the "workspace_id" field.
+func (_c *MemoryEmbeddingCreate) SetWorkspaceID(v string) *MemoryEmbeddingCreate {
+	_c.mutation.SetWorkspaceID(v)
+	return _c
+}
+
 // SetNodeID sets the "node_id" field.
 func (_c *MemoryEmbeddingCreate) SetNodeID(v string) *MemoryEmbeddingCreate {
 	_c.mutation.SetNodeID(v)
@@ -188,6 +194,9 @@ func (_c *MemoryEmbeddingCreate) check() error {
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "MemoryEmbedding.user_id"`)}
 	}
+	if _, ok := _c.mutation.WorkspaceID(); !ok {
+		return &ValidationError{Name: "workspace_id", err: errors.New(`ent: missing required field "MemoryEmbedding.workspace_id"`)}
+	}
 	if _, ok := _c.mutation.NodeID(); !ok {
 		return &ValidationError{Name: "node_id", err: errors.New(`ent: missing required field "MemoryEmbedding.node_id"`)}
 	}
@@ -248,6 +257,10 @@ func (_c *MemoryEmbeddingCreate) createSpec() (*MemoryEmbedding, *sqlgraph.Creat
 	if value, ok := _c.mutation.UserID(); ok {
 		_spec.SetField(memoryembedding.FieldUserID, field.TypeString, value)
 		_node.UserID = value
+	}
+	if value, ok := _c.mutation.WorkspaceID(); ok {
+		_spec.SetField(memoryembedding.FieldWorkspaceID, field.TypeString, value)
+		_node.WorkspaceID = value
 	}
 	if value, ok := _c.mutation.NodeID(); ok {
 		_spec.SetField(memoryembedding.FieldNodeID, field.TypeString, value)

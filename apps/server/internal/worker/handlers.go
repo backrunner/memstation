@@ -59,6 +59,10 @@ func NewServeMux(logger *slog.Logger, services Services) *asynq.ServeMux {
 
 func handleConversationFinalize(logger *slog.Logger, services Services) func(context.Context, *asynq.Task) error {
 	return func(ctx context.Context, task *asynq.Task) error {
+		ctx, scopeErr := bindTaskScope(ctx, task, services)
+		if scopeErr != nil {
+			return scopeErr
+		}
 		payload := map[string]any{}
 		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 			return err
@@ -141,7 +145,7 @@ func handleConversationFinalize(logger *slog.Logger, services Services) func(con
 		}); err != nil {
 			return err
 		}
-		if conversation.SummaryStatus == domain.ProcessingStatusCompleted || conversation.SummaryStatus == domain.ProcessingStatusRunning || conversation.SummaryStatus == domain.ProcessingStatusQueued {
+		if conversation.SummaryStatus == domain.ProcessingStatusCompleted || conversation.SummaryStatus == domain.ProcessingStatusRunning {
 			return nil
 		}
 		nextType := TypeSummaryGenerate
@@ -201,6 +205,10 @@ func captureRetainedSourceSnapshot(ctx context.Context, services Services, conve
 
 func handleMediaExtract(logger *slog.Logger, services Services) func(context.Context, *asynq.Task) error {
 	return func(ctx context.Context, task *asynq.Task) error {
+		ctx, scopeErr := bindTaskScope(ctx, task, services)
+		if scopeErr != nil {
+			return scopeErr
+		}
 		var payload MediaExtractPayload
 		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 			return err
@@ -280,6 +288,10 @@ func handleMediaExtract(logger *slog.Logger, services Services) func(context.Con
 
 func handleSummaryGenerate(logger *slog.Logger, services Services) func(context.Context, *asynq.Task) error {
 	return func(ctx context.Context, task *asynq.Task) error {
+		ctx, scopeErr := bindTaskScope(ctx, task, services)
+		if scopeErr != nil {
+			return scopeErr
+		}
 		var payload SummaryPayload
 		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 			return err
@@ -445,6 +457,10 @@ func handleSummaryGenerate(logger *slog.Logger, services Services) func(context.
 
 func handleEmbeddingGenerate(logger *slog.Logger, services Services) func(context.Context, *asynq.Task) error {
 	return func(ctx context.Context, task *asynq.Task) error {
+		ctx, scopeErr := bindTaskScope(ctx, task, services)
+		if scopeErr != nil {
+			return scopeErr
+		}
 		var payload EmbeddingPayload
 		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 			return err
@@ -492,6 +508,10 @@ func handleEmbeddingGenerate(logger *slog.Logger, services Services) func(contex
 
 func handleEmbeddingDelete(_ *slog.Logger, services Services) func(context.Context, *asynq.Task) error {
 	return func(ctx context.Context, task *asynq.Task) error {
+		ctx, scopeErr := bindTaskScope(ctx, task, services)
+		if scopeErr != nil {
+			return scopeErr
+		}
 		var payload EmbeddingDeletePayload
 		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 			return err
@@ -505,6 +525,10 @@ func handleEmbeddingDelete(_ *slog.Logger, services Services) func(context.Conte
 
 func handleKeyMemoryGraphSync(_ *slog.Logger, services Services) func(context.Context, *asynq.Task) error {
 	return func(ctx context.Context, task *asynq.Task) error {
+		ctx, scopeErr := bindTaskScope(ctx, task, services)
+		if scopeErr != nil {
+			return scopeErr
+		}
 		var payload KeyMemoryGraphSyncPayload
 		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 			return err
@@ -518,6 +542,10 @@ func handleKeyMemoryGraphSync(_ *slog.Logger, services Services) func(context.Co
 
 func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.Context, *asynq.Task) error {
 	return func(ctx context.Context, task *asynq.Task) error {
+		ctx, scopeErr := bindTaskScope(ctx, task, services)
+		if scopeErr != nil {
+			return scopeErr
+		}
 		var payload AnalysisPayload
 		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 			return err
@@ -811,6 +839,10 @@ func mergeUniqueStrings(groups ...[]string) []string {
 
 func handleKeyMemoryReconcile(logger *slog.Logger, services Services) func(context.Context, *asynq.Task) error {
 	return func(ctx context.Context, task *asynq.Task) error {
+		ctx, scopeErr := bindTaskScope(ctx, task, services)
+		if scopeErr != nil {
+			return scopeErr
+		}
 		var payload KeyMemoryReconcilePayload
 		if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 			return err

@@ -2,6 +2,7 @@ package sql
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -14,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"memstation/apps/server/internal/domain"
+	"memstation/apps/server/internal/security"
 	conversationservice "memstation/apps/server/internal/service/conversation"
 )
 
@@ -30,31 +32,37 @@ func NewInMemoryConversationRepository() *InMemoryConversationRepository {
 	}
 }
 
-func (r *InMemoryConversationRepository) PersistExchange(_ context.Context, conversation domain.ConversationRecord) error {
+func (r *InMemoryConversationRepository) PersistExchange(ctx context.Context, conversation domain.ConversationRecord) error {
+	var err error
+	conversation, err = normalizeConversationScope(ctx, conversation)
+	if err != nil {
+		return err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	for _, stored := range r.conversations {
+		if stored.ConversationID == conversation.ConversationID && stored.UserID != conversation.UserID {
+			return domain.ErrAccessDenied
+		}
+	}
 	existing, ok := r.conversations[key(conversation.UserID, conversation.ConversationID)]
+	if conversation.ExpectedRevision != nil && existing.Revision != *conversation.ExpectedRevision {
+		return domain.ErrAccessConflict
+	}
+	if ok && (existing.WorkspaceID != conversation.WorkspaceID || existing.AgentID != conversation.AgentID) {
+		return domain.ErrAccessDenied
+	}
+	conversation.Revision = existing.Revision + 1
+	conversation.ExpectedRevision = nil
+
 	if ok {
 		if conversation.CreatedAt.IsZero() {
 			conversation.CreatedAt = existing.CreatedAt
 		}
-		if conversation.FinalizeStatus == "" {
-			conversation.FinalizeStatus = existing.FinalizeStatus
-		}
-		if conversation.SummaryStatus == "" {
-			conversation.SummaryStatus = existing.SummaryStatus
-		}
-		if conversation.AnalysisStatus == "" {
-			conversation.AnalysisStatus = existing.AnalysisStatus
-		}
-		if conversation.Metadata == nil {
-			conversation.Metadata = map[string]any{}
-		}
-		for metaKey, metaValue := range existing.Metadata {
-			if _, exists := conversation.Metadata[metaKey]; !exists {
-				conversation.Metadata[metaKey] = metaValue
-			}
-		}
+		conversation.FinalizeStatus = existing.FinalizeStatus
+		conversation.SummaryStatus = existing.SummaryStatus
+		conversation.AnalysisStatus = existing.AnalysisStatus
+		conversation.Metadata = mergeConversationWriteMetadata(existing.Metadata, conversation.Metadata, existing.FinalizeStatus)
 	}
 	if conversation.Metadata == nil {
 		conversation.Metadata = map[string]any{}
@@ -93,16 +101,20 @@ func (r *InMemoryConversationRepository) PersistExchange(_ context.Context, conv
 	return nil
 }
 
-func (r *InMemoryConversationRepository) GetConversation(_ context.Context, userID, conversationID string) (domain.ConversationRecord, error) {
-	return r.GetConversationInGeneration(context.Background(), userID, conversationID, "")
+func (r *InMemoryConversationRepository) GetConversation(ctx context.Context, userID, conversationID string) (domain.ConversationRecord, error) {
+	return r.GetConversationInGeneration(ctx, userID, conversationID, "")
 }
 
-func (r *InMemoryConversationRepository) GetConversationInGeneration(_ context.Context, userID, conversationID, generationID string) (domain.ConversationRecord, error) {
+func (r *InMemoryConversationRepository) GetConversationInGeneration(ctx context.Context, userID, conversationID, generationID string) (domain.ConversationRecord, error) {
+	workspace, err := security.PersonalScope(ctx, userID, "")
+	if err != nil {
+		return domain.ConversationRecord{}, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	conversation, ok := r.conversations[key(userID, conversationID)]
-	if !ok {
-		return domain.ConversationRecord{}, errors.New("conversation not found")
+	if !ok || conversation.WorkspaceID != workspace {
+		return domain.ConversationRecord{}, domain.ErrConversationNotFound
 	}
 	resolvedGenerationID := strings.TrimSpace(generationID)
 	if resolvedGenerationID == "" {
@@ -121,12 +133,16 @@ func (r *InMemoryConversationRepository) GetConversationInGeneration(_ context.C
 	return conversation, nil
 }
 
-func (r *InMemoryConversationRepository) ListConversations(_ context.Context, userID string) ([]domain.ConversationRecord, error) {
+func (r *InMemoryConversationRepository) ListConversations(ctx context.Context, userID string) ([]domain.ConversationRecord, error) {
+	workspace, err := security.PersonalScope(ctx, userID, "")
+	if err != nil {
+		return nil, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make([]domain.ConversationRecord, 0)
 	for _, conversation := range r.conversations {
-		if conversation.UserID == userID {
+		if conversation.UserID == userID && conversation.WorkspaceID == workspace {
 			out = append(out, conversation)
 		}
 	}
@@ -139,7 +155,7 @@ func (r *InMemoryConversationRepository) ListTimedOutConversations(_ context.Con
 	defer r.mu.RUnlock()
 	out := make([]domain.ConversationRecord, 0)
 	for _, conversation := range r.conversations {
-		if conversation.FinalizeStatus == domain.FinalizeStatusActive && conversation.UpdatedAt.Before(before) {
+		if conversation.FinalizeStatus == domain.FinalizeStatusActive && conversation.WorkspaceID == domain.PersonalWorkspaceID(conversation.UserID) && conversation.UpdatedAt.Before(before) {
 			out = append(out, conversation)
 		}
 	}
@@ -150,7 +166,15 @@ func (r *InMemoryConversationRepository) ListTimedOutConversations(_ context.Con
 	return out, nil
 }
 
-func (r *InMemoryConversationRepository) ReplaceSegments(_ context.Context, userID, conversationID string, segments []domain.ConversationSegment) error {
+func (r *InMemoryConversationRepository) ReplaceSegments(ctx context.Context, userID, conversationID string, segments []domain.ConversationSegment) error {
+	if _, err := r.GetConversation(ctx, userID, conversationID); err != nil {
+		return err
+	}
+	for _, segment := range segments {
+		if segment.UserID != userID || segment.ConversationID != conversationID {
+			return domain.ErrAccessDenied
+		}
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	targetGenerationID := currentGenerationID(userID)
@@ -158,6 +182,11 @@ func (r *InMemoryConversationRepository) ReplaceSegments(_ context.Context, user
 		targetGenerationID = strings.TrimSpace(segments[0].GenerationID)
 	} else if conversation, ok := r.conversations[key(userID, conversationID)]; ok {
 		targetGenerationID = conversationSegmentGeneration(userID, conversation.Metadata)
+	}
+	for _, segment := range segments {
+		if segment.GenerationID != "" && segment.GenerationID != targetGenerationID {
+			return domain.ErrAccessDenied
+		}
 	}
 
 	next := make([]domain.ConversationSegment, 0, len(r.segments[key(userID, conversationID)])+len(segments))
@@ -190,45 +219,52 @@ func (r *InMemoryConversationRepository) ReplaceSegments(_ context.Context, user
 }
 
 func (r *InMemoryConversationRepository) FinalizeConversation(ctx context.Context, input domain.ConversationFinalizeInput) error {
-	conversation, err := r.GetConversation(ctx, input.UserID, input.ConversationID)
-	if err != nil {
-		return err
-	}
-	conversation.FinalizeStatus = input.Status
-	if conversation.Metadata == nil {
-		conversation.Metadata = map[string]any{}
-	}
-	conversation.Metadata["finalize_reason"] = input.Reason
-	return r.PersistExchange(ctx, conversation)
+	return r.UpdateConversationState(ctx, domain.ConversationStateUpdate{UserID: input.UserID, ConversationID: input.ConversationID, FinalizeStatus: &input.Status, Metadata: map[string]any{"finalize_reason": input.Reason}})
 }
 
 func (r *InMemoryConversationRepository) UpdateConversationState(ctx context.Context, input domain.ConversationStateUpdate) error {
-	conversation, err := r.GetConversation(ctx, input.UserID, input.ConversationID)
+	workspace, err := security.PersonalScope(ctx, input.UserID, "")
 	if err != nil {
 		return err
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	c, ok := r.conversations[key(input.UserID, input.ConversationID)]
+	if !ok || c.WorkspaceID != workspace {
+		return domain.ErrConversationNotFound
+	}
+	if err = authorizeConversationWriter(ctx, c); err != nil {
+		return err
+	}
+	r.conversations[key(input.UserID, input.ConversationID)] = applyConversationState(c, input)
+	return nil
+}
+
+func applyConversationState(c domain.ConversationRecord, input domain.ConversationStateUpdate) domain.ConversationRecord {
 	if input.FinalizeStatus != nil {
-		conversation.FinalizeStatus = *input.FinalizeStatus
+		c.FinalizeStatus = *input.FinalizeStatus
 	}
 	if input.SummaryStatus != nil {
-		conversation.SummaryStatus = *input.SummaryStatus
+		c.SummaryStatus = *input.SummaryStatus
 	}
 	if input.AnalysisStatus != nil {
-		conversation.AnalysisStatus = *input.AnalysisStatus
+		c.AnalysisStatus = *input.AnalysisStatus
 	}
-	if conversation.Metadata == nil {
-		conversation.Metadata = map[string]any{}
+	metadata := conversationScopeMetadata(c, c.Metadata)
+	for k, v := range input.Metadata {
+		metadata[k] = v
 	}
-	for key, value := range input.Metadata {
-		conversation.Metadata[key] = value
+	c.Metadata = conversationScopeMetadata(c, metadata)
+	c.UpdatedAt = input.UpdatedAt
+	if c.UpdatedAt.IsZero() {
+		c.UpdatedAt = time.Now().UTC()
 	}
-	if !input.UpdatedAt.IsZero() {
-		conversation.UpdatedAt = input.UpdatedAt
-	}
-	return r.PersistExchange(ctx, conversation)
+	return c
 }
 
 type InMemoryMemoryRepository struct {
+	editAudits       []domain.AuditEvent
+	fallbackAudit    func(context.Context, domain.AuditEvent)
 	factHistory      []factSnapshot
 	factHistoryHeads map[string]int
 	entityAliases    []domain.EntityAlias
@@ -247,7 +283,11 @@ func NewInMemoryMemoryRepository() *InMemoryMemoryRepository {
 	}
 }
 
-func (r *InMemoryMemoryRepository) Search(_ context.Context, input domain.SearchInput) (domain.SearchResult, error) {
+func (r *InMemoryMemoryRepository) Search(ctx context.Context, input domain.SearchInput) (domain.SearchResult, error) {
+	if _, err := security.PersonalScope(ctx, input.UserID, input.WorkspaceID); err != nil {
+		return domain.SearchResult{}, err
+	}
+	input.WorkspaceID = domain.PersonalWorkspaceID(input.UserID)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	query := strings.ToLower(strings.TrimSpace(input.Query))
@@ -296,7 +336,11 @@ func (r *InMemoryMemoryRepository) Search(_ context.Context, input domain.Search
 	return domain.SearchResult{Memories: docs, Total: len(docs), QueryEmbeddingTokens: len(query) / 4}, nil
 }
 
-func (r *InMemoryMemoryRepository) StoreDocument(_ context.Context, doc domain.MemoryDocument) error {
+func (r *InMemoryMemoryRepository) StoreDocument(ctx context.Context, doc domain.MemoryDocument) error {
+	if _, err := security.PersonalScope(ctx, doc.UserID, doc.WorkspaceID); err != nil {
+		return err
+	}
+	doc.WorkspaceID = domain.PersonalWorkspaceID(doc.UserID)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := time.Now().UTC()
@@ -342,8 +386,14 @@ func (r *InMemoryMemoryRepository) StoreDocument(_ context.Context, doc domain.M
 	if doc.NodeID == "" {
 		doc.NodeID = defaultMemoryNodeID(doc.UserID, doc.Type, doc.ID)
 	}
+	if r.nodeOutsidePersonalLocked(doc.UserID, doc.NodeID) {
+		return domain.ErrAccessDenied
+	}
 	documentKey := key(doc.UserID, doc.ID)
 	existing, existed := r.documents[documentKey]
+	if existed && (!personalMemoryWorkspace(doc.UserID, existing.WorkspaceID) || existing.UserID != doc.UserID || existing.NodeID != doc.NodeID || existing.Type != doc.Type) {
+		return domain.ErrAccessDenied
+	}
 	if existed {
 		if shouldKeepExistingSnapshot(existing.Metadata, doc.Metadata) {
 			return nil
@@ -393,12 +443,15 @@ func (r *InMemoryMemoryRepository) StoreDocument(_ context.Context, doc domain.M
 	return nil
 }
 
-func (r *InMemoryMemoryRepository) DeleteDocument(_ context.Context, userID, id string, kind domain.MemoryType) error {
+func (r *InMemoryMemoryRepository) DeleteDocument(ctx context.Context, userID, id string, kind domain.MemoryType) error {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	doc, ok := r.documents[key(userID, id)]
-	if !ok || doc.Type != kind {
+	if !ok || doc.Type != kind || !personalMemoryWorkspace(userID, doc.WorkspaceID) {
 		return nil
 	}
 	delete(r.documents, key(userID, id))
@@ -416,11 +469,17 @@ func (r *InMemoryMemoryRepository) DeleteDocument(_ context.Context, userID, id 
 	return nil
 }
 
-func (r *InMemoryMemoryRepository) DeleteSegmentsByConversation(_ context.Context, userID, conversationID string, keepIDs []string) ([]string, error) {
-	return r.DeleteSegmentsByConversationInGeneration(context.Background(), userID, "", conversationID, keepIDs)
+func (r *InMemoryMemoryRepository) DeleteSegmentsByConversation(ctx context.Context, userID, conversationID string, keepIDs []string) ([]string, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return nil, err
+	}
+	return r.DeleteSegmentsByConversationInGeneration(ctx, userID, "", conversationID, keepIDs)
 }
 
-func (r *InMemoryMemoryRepository) DeleteSegmentsByConversationInGeneration(_ context.Context, userID, generationID, conversationID string, keepIDs []string) ([]string, error) {
+func (r *InMemoryMemoryRepository) DeleteSegmentsByConversationInGeneration(ctx context.Context, userID, generationID, conversationID string, keepIDs []string) ([]string, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return nil, err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -473,11 +532,17 @@ func (r *InMemoryMemoryRepository) DeleteSegmentsByConversationInGeneration(_ co
 	return deletedNodeIDs, nil
 }
 
-func (r *InMemoryMemoryRepository) GetDocument(_ context.Context, userID, id string, kind domain.MemoryType) (domain.MemoryDocument, error) {
-	return r.GetDocumentInGeneration(context.Background(), userID, "", id, kind)
+func (r *InMemoryMemoryRepository) GetDocument(ctx context.Context, userID, id string, kind domain.MemoryType) (domain.MemoryDocument, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return domain.MemoryDocument{}, err
+	}
+	return r.GetDocumentInGeneration(ctx, userID, "", id, kind)
 }
 
-func (r *InMemoryMemoryRepository) GetDocumentInGeneration(_ context.Context, userID, generationID, id string, kind domain.MemoryType) (domain.MemoryDocument, error) {
+func (r *InMemoryMemoryRepository) GetDocumentInGeneration(ctx context.Context, userID, generationID, id string, kind domain.MemoryType) (domain.MemoryDocument, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return domain.MemoryDocument{}, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	doc, ok := r.documents[key(userID, id)]
@@ -487,11 +552,17 @@ func (r *InMemoryMemoryRepository) GetDocumentInGeneration(_ context.Context, us
 	return attachDocumentRuntimeMetadata(doc), nil
 }
 
-func (r *InMemoryMemoryRepository) ListDocuments(_ context.Context, userID string, memoryTypes []domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
-	return r.ListDocumentsInGeneration(context.Background(), userID, "", memoryTypes, limit)
+func (r *InMemoryMemoryRepository) ListDocuments(ctx context.Context, userID string, memoryTypes []domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return nil, err
+	}
+	return r.ListDocumentsInGeneration(ctx, userID, "", memoryTypes, limit)
 }
 
-func (r *InMemoryMemoryRepository) ListDocumentsInGeneration(_ context.Context, userID, generationID string, memoryTypes []domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
+func (r *InMemoryMemoryRepository) ListDocumentsInGeneration(ctx context.Context, userID, generationID string, memoryTypes []domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return nil, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make([]domain.MemoryDocument, 0)
@@ -514,11 +585,17 @@ func (r *InMemoryMemoryRepository) ListDocumentsInGeneration(_ context.Context, 
 	return out, nil
 }
 
-func (r *InMemoryMemoryRepository) ListDocumentsByNodeIDs(_ context.Context, userID string, nodeIDs []string) ([]domain.MemoryDocument, error) {
-	return r.ListDocumentsByNodeIDsInGeneration(context.Background(), userID, "", nodeIDs)
+func (r *InMemoryMemoryRepository) ListDocumentsByNodeIDs(ctx context.Context, userID string, nodeIDs []string) ([]domain.MemoryDocument, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return nil, err
+	}
+	return r.ListDocumentsByNodeIDsInGeneration(ctx, userID, "", nodeIDs)
 }
 
-func (r *InMemoryMemoryRepository) ListDocumentsByNodeIDsInGeneration(_ context.Context, userID, generationID string, nodeIDs []string) ([]domain.MemoryDocument, error) {
+func (r *InMemoryMemoryRepository) ListDocumentsByNodeIDsInGeneration(ctx context.Context, userID, generationID string, nodeIDs []string) ([]domain.MemoryDocument, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return nil, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if len(nodeIDs) == 0 {
@@ -544,7 +621,10 @@ func (r *InMemoryMemoryRepository) ListDocumentsByNodeIDsInGeneration(_ context.
 	return out, nil
 }
 
-func (r *InMemoryMemoryRepository) SearchKeywordMatches(_ context.Context, userID, generationID, query string, limit int) ([]domain.KeywordMatch, error) {
+func (r *InMemoryMemoryRepository) SearchKeywordMatches(ctx context.Context, userID, generationID, query string, limit int) ([]domain.KeywordMatch, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return nil, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -588,15 +668,24 @@ func (r *InMemoryMemoryRepository) SearchKeywordMatches(_ context.Context, userI
 	return matches, nil
 }
 
-func (r *InMemoryMemoryRepository) ListDocumentsByConversation(_ context.Context, userID, conversationID string) ([]domain.MemoryDocument, error) {
-	return r.ListDocumentsByConversationInGeneration(context.Background(), userID, "", conversationID)
+func (r *InMemoryMemoryRepository) ListDocumentsByConversation(ctx context.Context, userID, conversationID string) ([]domain.MemoryDocument, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return nil, err
+	}
+	return r.ListDocumentsByConversationInGeneration(ctx, userID, "", conversationID)
 }
 
-func (r *InMemoryMemoryRepository) ListDocumentsByConversationInGeneration(_ context.Context, userID, generationID, conversationID string) ([]domain.MemoryDocument, error) {
-	return r.ListConversationDocumentsInGeneration(context.Background(), userID, generationID, conversationID, false)
+func (r *InMemoryMemoryRepository) ListDocumentsByConversationInGeneration(ctx context.Context, userID, generationID, conversationID string) ([]domain.MemoryDocument, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return nil, err
+	}
+	return r.ListConversationDocumentsInGeneration(ctx, userID, generationID, conversationID, false)
 }
 
-func (r *InMemoryMemoryRepository) ListConversationDocumentsInGeneration(_ context.Context, userID, generationID, conversationID string, includeSegments bool) ([]domain.MemoryDocument, error) {
+func (r *InMemoryMemoryRepository) ListConversationDocumentsInGeneration(ctx context.Context, userID, generationID, conversationID string, includeSegments bool) ([]domain.MemoryDocument, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return nil, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make([]domain.MemoryDocument, 0)
@@ -616,14 +705,31 @@ func (r *InMemoryMemoryRepository) ListConversationDocumentsInGeneration(_ conte
 	return out, nil
 }
 
-func (r *InMemoryMemoryRepository) UpdateDocument(_ context.Context, userID, id string, kind domain.MemoryType, content string) (domain.MemoryDocument, error) {
+func (r *InMemoryMemoryRepository) UpdateDocument(ctx context.Context, userID, id string, kind domain.MemoryType, content string) (domain.MemoryDocument, error) {
+	return r.updateDocument(ctx, userID, id, kind, content, nil)
+}
+
+func (r *InMemoryMemoryRepository) UpdateDocumentConditional(ctx context.Context, userID, id string, kind domain.MemoryType, content string, condition domain.MemoryWriteCondition) (domain.MemoryDocument, error) {
+	return r.updateDocument(ctx, userID, id, kind, content, &condition)
+}
+
+func (r *InMemoryMemoryRepository) updateDocument(ctx context.Context, userID, id string, kind domain.MemoryType, content string, condition *domain.MemoryWriteCondition) (domain.MemoryDocument, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return domain.MemoryDocument{}, err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	doc, ok := r.documents[key(userID, id)]
-	if !ok || doc.Type != kind {
-		return domain.MemoryDocument{}, errors.New("memory document not found")
+	if !ok || doc.Type != kind || !personalMemoryWorkspace(userID, doc.WorkspaceID) {
+		return domain.MemoryDocument{}, domain.ErrAccessNotFound
+	}
+	if condition != nil && (!condition.UpdatedAt.Equal(doc.UpdatedAt) || condition.GenerationID != doc.GenerationID || kind == domain.MemoryTypeSegment || (kind == domain.MemoryTypeFact && (doc.Metadata["is_superseded"] == true || stringMetadataValue(doc.Metadata, "superseded_by_id") != ""))) {
+		return domain.MemoryDocument{}, domain.ErrAccessConflict
 	}
 	now := time.Now().UTC()
+	if !now.After(doc.UpdatedAt) {
+		now = doc.UpdatedAt.Add(time.Microsecond)
+	}
 	doc.Content = content
 	doc.ActivityAt = now
 	doc.TimeTier = domain.ClassifyTimeTier(now, now)
@@ -633,10 +739,14 @@ func (r *InMemoryMemoryRepository) UpdateDocument(_ context.Context, userID, id 
 	if kind == domain.MemoryTypeFact {
 		r.captureFactHistoryLocked(userID)
 	}
+	r.editAudit(ctx, userID, "update_memory_document", string(kind), id, condition)
 	return attachDocumentRuntimeMetadata(doc), nil
 }
 
-func (r *InMemoryMemoryRepository) ListFactLineage(_ context.Context, userID, generationID, factID string) (domain.FactLineage, error) {
+func (r *InMemoryMemoryRepository) ListFactLineage(ctx context.Context, userID, generationID, factID string) (domain.FactLineage, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return domain.FactLineage{}, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	doc, ok := r.documents[key(userID, factID)]
@@ -659,7 +769,10 @@ func (r *InMemoryMemoryRepository) ListFactLineage(_ context.Context, userID, ge
 	return r.factLineageByGroupLocked(userID, generationID, lineageGroupID), nil
 }
 
-func (r *InMemoryMemoryRepository) ListFactLineageByKey(_ context.Context, userID, generationID, factKey string) (domain.FactLineage, error) {
+func (r *InMemoryMemoryRepository) ListFactLineageByKey(ctx context.Context, userID, generationID, factKey string) (domain.FactLineage, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return domain.FactLineage{}, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	lineageGroupID := strings.TrimSpace(factKey)
@@ -687,12 +800,15 @@ func (r *InMemoryMemoryRepository) factLineageByGroupLocked(userID, generationID
 	return lineage
 }
 
-func (r *InMemoryMemoryRepository) ListKeyMemories(_ context.Context, userID string, limit int) ([]domain.KeyMemory, error) {
+func (r *InMemoryMemoryRepository) ListKeyMemories(ctx context.Context, userID string, limit int) ([]domain.KeyMemory, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return nil, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make([]domain.KeyMemory, 0)
 	for _, km := range r.keyMemories {
-		if km.UserID == userID {
+		if km.UserID == userID && personalMemoryWorkspace(userID, km.WorkspaceID) {
 			km.Importance = domain.ClampImportance(km.Importance)
 			km.DecayFactor = domain.ClampDecayFactor(km.DecayFactor)
 			km.ActivityAt = domain.DeriveActivityAt(km.ActivityAt, km.UpdatedAt, km.CreatedAt)
@@ -708,40 +824,53 @@ func (r *InMemoryMemoryRepository) ListKeyMemories(_ context.Context, userID str
 	return out, nil
 }
 
-func (r *InMemoryMemoryRepository) GetKeyMemory(_ context.Context, userID, memoryKey string) (domain.KeyMemory, bool, error) {
+func (r *InMemoryMemoryRepository) GetKeyMemory(ctx context.Context, userID, memoryKey string) (domain.KeyMemory, bool, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return domain.KeyMemory{}, false, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	km, ok := r.keyMemories[key(userID, strings.TrimSpace(memoryKey))]
-	if !ok {
+	if !ok || !personalMemoryWorkspace(userID, km.WorkspaceID) {
 		return domain.KeyMemory{}, false, nil
 	}
 	return hydrateKeyMemory(km), true, nil
 }
 
-func (r *InMemoryMemoryRepository) GetKeyMemoryByID(_ context.Context, userID, id string) (domain.KeyMemory, bool, error) {
+func (r *InMemoryMemoryRepository) GetKeyMemoryByID(ctx context.Context, userID, id string) (domain.KeyMemory, bool, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return domain.KeyMemory{}, false, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, km := range r.keyMemories {
-		if km.UserID == userID && km.ID == strings.TrimSpace(id) {
+		if km.UserID == userID && personalMemoryWorkspace(userID, km.WorkspaceID) && km.ID == strings.TrimSpace(id) {
 			return hydrateKeyMemory(km), true, nil
 		}
 	}
 	return domain.KeyMemory{}, false, nil
 }
 
-func (r *InMemoryMemoryRepository) CountKeyMemories(_ context.Context, userID string) (int, error) {
+func (r *InMemoryMemoryRepository) CountKeyMemories(ctx context.Context, userID string) (int, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return 0, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	count := 0
 	for _, km := range r.keyMemories {
-		if km.UserID == userID {
+		if km.UserID == userID && personalMemoryWorkspace(userID, km.WorkspaceID) {
 			count++
 		}
 	}
 	return count, nil
 }
 
-func (r *InMemoryMemoryRepository) SearchKeyMemories(_ context.Context, input domain.KeyMemoryQuery) ([]domain.KeyMemory, error) {
+func (r *InMemoryMemoryRepository) SearchKeyMemories(ctx context.Context, input domain.KeyMemoryQuery) ([]domain.KeyMemory, error) {
+	if _, err := security.PersonalScope(ctx, input.UserID, input.WorkspaceID); err != nil {
+		return nil, err
+	}
+	input.WorkspaceID = domain.PersonalWorkspaceID(input.UserID)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if input.TopK <= 0 {
@@ -751,7 +880,7 @@ func (r *InMemoryMemoryRepository) SearchKeyMemories(_ context.Context, input do
 	now := time.Now().UTC()
 	out := make([]domain.KeyMemory, 0)
 	for _, km := range r.keyMemories {
-		if km.UserID != input.UserID {
+		if km.UserID != input.UserID || !personalMemoryWorkspace(input.UserID, km.WorkspaceID) {
 			continue
 		}
 		km.ActivityAt = domain.DeriveActivityAt(km.ActivityAt, km.UpdatedAt, km.CreatedAt)
@@ -795,11 +924,38 @@ func hydrateKeyMemory(km domain.KeyMemory) domain.KeyMemory {
 	return km
 }
 
-func (r *InMemoryMemoryRepository) UpsertKeyMemory(_ context.Context, km domain.KeyMemory) error {
+func (r *InMemoryMemoryRepository) UpsertKeyMemory(ctx context.Context, km domain.KeyMemory) error {
+	return r.upsertKeyMemory(ctx, km, nil)
+}
+
+func (r *InMemoryMemoryRepository) UpsertKeyMemoryConditional(ctx context.Context, km domain.KeyMemory, condition domain.MemoryWriteCondition) error {
+	return r.upsertKeyMemory(ctx, km, &condition)
+}
+
+func (r *InMemoryMemoryRepository) upsertKeyMemory(ctx context.Context, km domain.KeyMemory, condition *domain.MemoryWriteCondition) error {
+	if _, err := security.PersonalScope(ctx, km.UserID, km.WorkspaceID); err != nil {
+		return err
+	}
+	km.WorkspaceID = domain.PersonalWorkspaceID(km.UserID)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := time.Now().UTC()
 	existing, existed := r.keyMemories[key(km.UserID, km.Key)]
+	if existed && !personalMemoryWorkspace(km.UserID, existing.WorkspaceID) {
+		return domain.ErrAccessDenied
+	}
+	if condition != nil {
+		if condition.Create {
+			if existed {
+				return domain.ErrAccessConflict
+			}
+		} else if !existed || condition.ID != existing.ID || !condition.UpdatedAt.Equal(existing.UpdatedAt) {
+			return domain.ErrAccessConflict
+		}
+	}
+	if existed && !now.After(existing.UpdatedAt) {
+		now = existing.UpdatedAt.Add(time.Microsecond)
+	}
 	existingNodeID := stringMetadataValue(existing.Metadata, "node_id")
 	if existed {
 		if km.ID == "" || km.ID != existing.ID {
@@ -820,7 +976,7 @@ func (r *InMemoryMemoryRepository) UpsertKeyMemory(_ context.Context, km domain.
 		if existingNodeID != "" {
 			km.Metadata["node_id"] = existingNodeID
 		}
-		if km.Category == "" {
+		if km.Category == "" && condition == nil {
 			km.Category = existing.Category
 		}
 		if km.Source == "" {
@@ -856,7 +1012,6 @@ func (r *InMemoryMemoryRepository) UpsertKeyMemory(_ context.Context, km domain.
 	}
 	km.Metadata["activity_at"] = km.ActivityAt.Format(time.RFC3339)
 	km.Metadata["time_tier"] = km.TimeTier
-	r.keyMemories[key(km.UserID, km.Key)] = km
 	nodeID := ""
 	if typed, ok := km.Metadata["node_id"].(string); ok {
 		nodeID = typed
@@ -870,6 +1025,9 @@ func (r *InMemoryMemoryRepository) UpsertKeyMemory(_ context.Context, km domain.
 			km.Metadata = map[string]any{}
 		}
 	}
+	if r.nodeOutsidePersonalLocked(km.UserID, nodeID) {
+		return domain.ErrAccessDenied
+	}
 	km.Metadata["node_id"] = nodeID
 	if existed {
 		delete(r.documents, key(km.UserID, existing.ID))
@@ -882,6 +1040,7 @@ func (r *InMemoryMemoryRepository) UpsertKeyMemory(_ context.Context, km domain.
 		ID:          km.ID,
 		NodeID:      nodeID,
 		UserID:      km.UserID,
+		WorkspaceID: km.WorkspaceID,
 		Type:        domain.MemoryTypeKeyMemory,
 		Content:     km.Key + ": " + km.Value,
 		Importance:  km.Importance,
@@ -901,13 +1060,38 @@ func (r *InMemoryMemoryRepository) UpsertKeyMemory(_ context.Context, km domain.
 		UpdatedAt: km.UpdatedAt,
 	}
 	r.syncTemporalRelationsLocked(km.UserID, "", nodeID, km.ActivityAt)
+	if condition != nil {
+		action := "update_key_memory"
+		if condition.Create {
+			action = "create_key_memory"
+		}
+		r.editAudit(ctx, km.UserID, action, "key_memory", km.ID, condition)
+	}
 	return nil
 }
 
-func (r *InMemoryMemoryRepository) DeleteKeyMemory(_ context.Context, userID, memoryKey string) error {
+func (r *InMemoryMemoryRepository) DeleteKeyMemory(ctx context.Context, userID, memoryKey string) error {
+	return r.deleteKeyMemory(ctx, userID, memoryKey, nil)
+}
+
+func (r *InMemoryMemoryRepository) DeleteKeyMemoryConditional(ctx context.Context, userID, memoryKey string, condition domain.MemoryWriteCondition) error {
+	return r.deleteKeyMemory(ctx, userID, memoryKey, &condition)
+}
+
+func (r *InMemoryMemoryRepository) deleteKeyMemory(ctx context.Context, userID, memoryKey string, condition *domain.MemoryWriteCondition) error {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if km, ok := r.keyMemories[key(userID, memoryKey)]; ok {
+	km, ok := r.keyMemories[key(userID, memoryKey)]
+	if condition != nil && (!ok || condition.ID != km.ID || !condition.UpdatedAt.Equal(km.UpdatedAt)) {
+		return domain.ErrAccessConflict
+	}
+	if ok {
+		if !personalMemoryWorkspace(userID, km.WorkspaceID) {
+			return nil
+		}
 		nodeID := stringMetadataValue(km.Metadata, "node_id")
 		delete(r.documents, key(userID, km.ID))
 		if nodeID != "" {
@@ -915,6 +1099,7 @@ func (r *InMemoryMemoryRepository) DeleteKeyMemory(_ context.Context, userID, me
 		}
 	}
 	delete(r.keyMemories, key(userID, memoryKey))
+	r.editAudit(ctx, userID, "delete_key_memory", "key_memory", km.ID, condition)
 	return nil
 }
 
@@ -929,8 +1114,11 @@ func (r *InMemoryMemoryRepository) removeRelationsForNodeLocked(userID, nodeID s
 	r.relations = filtered
 }
 
-func (r *InMemoryMemoryRepository) LinkDocuments(_ context.Context, relation domain.MemoryRelation) error {
-	relation.UserID = strings.TrimSpace(relation.UserID)
+func (r *InMemoryMemoryRepository) LinkDocuments(ctx context.Context, relation domain.MemoryRelation) error {
+	if _, err := security.PersonalScope(ctx, relation.UserID, relation.WorkspaceID); err != nil {
+		return err
+	}
+	relation.WorkspaceID = domain.PersonalWorkspaceID(relation.UserID)
 	relation.SrcNodeID = strings.TrimSpace(relation.SrcNodeID)
 	relation.DstNodeID = strings.TrimSpace(relation.DstNodeID)
 	relation.RelationType = strings.TrimSpace(relation.RelationType)
@@ -947,9 +1135,9 @@ func (r *InMemoryMemoryRepository) LinkDocuments(_ context.Context, relation dom
 	defer r.mu.Unlock()
 	var srcGeneration, dstGeneration string
 	for _, doc := range r.documents {
-		if doc.UserID != relation.UserID {
+		if doc.UserID != relation.UserID || !personalMemoryWorkspace(doc.UserID, doc.WorkspaceID) {
 			if doc.NodeID == relation.SrcNodeID || doc.NodeID == relation.DstNodeID {
-				return errors.New("memory relation crosses user boundary")
+				return domain.ErrAccessDenied
 			}
 			continue
 		}
@@ -1004,12 +1192,15 @@ func resolveRelationGeneration(requested, src, dst string) (string, error) {
 	return resolved, nil
 }
 
-func (r *InMemoryMemoryRepository) DeleteRelationsByTarget(_ context.Context, userID, targetNodeID, relationType string) error {
+func (r *InMemoryMemoryRepository) DeleteRelationsByTarget(ctx context.Context, userID, targetNodeID, relationType string) error {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	filtered := r.relations[:0]
 	for _, relation := range r.relations {
-		if relation.UserID == userID && relation.DstNodeID == targetNodeID && relation.RelationType == relationType {
+		if relation.UserID == userID && !r.nodeOutsidePersonalLocked(userID, targetNodeID) && relation.DstNodeID == targetNodeID && relation.RelationType == relationType {
 			continue
 		}
 		filtered = append(filtered, relation)
@@ -1018,7 +1209,10 @@ func (r *InMemoryMemoryRepository) DeleteRelationsByTarget(_ context.Context, us
 	return nil
 }
 
-func (r *InMemoryMemoryRepository) ListRelations(_ context.Context, userID, generationID string, nodeIDs []string, depth int) ([]domain.MemoryRelation, error) {
+func (r *InMemoryMemoryRepository) ListRelations(ctx context.Context, userID, generationID string, nodeIDs []string, depth int) ([]domain.MemoryRelation, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return nil, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if len(nodeIDs) == 0 {
@@ -1027,7 +1221,7 @@ func (r *InMemoryMemoryRepository) ListRelations(_ context.Context, userID, gene
 	nodeGenerations := make(map[string]string)
 	if strings.TrimSpace(generationID) != "" {
 		for _, doc := range r.documents {
-			if doc.UserID == userID {
+			if doc.UserID == userID && personalMemoryWorkspace(userID, doc.WorkspaceID) {
 				nodeGenerations[doc.NodeID] = doc.GenerationID
 			}
 		}
@@ -1047,7 +1241,7 @@ func (r *InMemoryMemoryRepository) ListRelations(_ context.Context, userID, gene
 	for hop := 0; hop < limitDepth; hop++ {
 		nextFrontier := map[string]struct{}{}
 		for _, relation := range r.relations {
-			if relation.UserID != userID {
+			if relation.UserID != userID || !personalMemoryWorkspace(userID, relation.WorkspaceID) || r.nodeOutsidePersonalLocked(userID, relation.SrcNodeID) || r.nodeOutsidePersonalLocked(userID, relation.DstNodeID) {
 				continue
 			}
 			if !matchesGenerationValue(userID, generationID, relation.GenerationID, false) {
@@ -1064,6 +1258,7 @@ func (r *InMemoryMemoryRepository) ListRelations(_ context.Context, userID, gene
 			if _, seen := visitedRelations[relation.ID]; seen {
 				continue
 			}
+			relation.WorkspaceID = domain.PersonalWorkspaceID(relation.UserID)
 			collected = append(collected, relation)
 			visitedRelations[relation.ID] = struct{}{}
 			if isTemporalRelationType(relation.RelationType) {
@@ -1077,9 +1272,18 @@ func (r *InMemoryMemoryRepository) ListRelations(_ context.Context, userID, gene
 	return collected, nil
 }
 
-func (r *InMemoryMemoryRepository) ReplaceEvidences(_ context.Context, userID, nodeID string, evidences []domain.MemoryEvidence) error {
+func (r *InMemoryMemoryRepository) ReplaceEvidences(ctx context.Context, userID, nodeID string, evidences []domain.MemoryEvidence) error {
+	if err := validateEvidenceIdentity(userID, nodeID, evidences); err != nil {
+		return err
+	}
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.nodeOutsidePersonalLocked(userID, nodeID) {
+		return domain.ErrAccessDenied
+	}
 	if strings.TrimSpace(userID) == "" || strings.TrimSpace(nodeID) == "" {
 		return nil
 	}
@@ -1107,9 +1311,18 @@ func (r *InMemoryMemoryRepository) ReplaceEvidences(_ context.Context, userID, n
 	return nil
 }
 
-func (r *InMemoryMemoryRepository) MergeEvidences(_ context.Context, userID, nodeID string, evidences []domain.MemoryEvidence) error {
+func (r *InMemoryMemoryRepository) MergeEvidences(ctx context.Context, userID, nodeID string, evidences []domain.MemoryEvidence) error {
+	if err := validateEvidenceIdentity(userID, nodeID, evidences); err != nil {
+		return err
+	}
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.nodeOutsidePersonalLocked(userID, nodeID) {
+		return domain.ErrAccessDenied
+	}
 	if strings.TrimSpace(userID) == "" || strings.TrimSpace(nodeID) == "" {
 		return nil
 	}
@@ -1146,9 +1359,15 @@ func (r *InMemoryMemoryRepository) MergeEvidences(_ context.Context, userID, nod
 	return nil
 }
 
-func (r *InMemoryMemoryRepository) ListEvidences(_ context.Context, userID, nodeID string) ([]domain.MemoryEvidence, error) {
+func (r *InMemoryMemoryRepository) ListEvidences(ctx context.Context, userID, nodeID string) ([]domain.MemoryEvidence, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return nil, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	if r.nodeOutsidePersonalLocked(userID, nodeID) {
+		return nil, nil
+	}
 	items := append([]domain.MemoryEvidence(nil), r.evidences[key(userID, nodeID)]...)
 	sort.Slice(items, func(i, j int) bool {
 		if items[i].SequenceNum == items[j].SequenceNum {
@@ -1162,7 +1381,10 @@ func (r *InMemoryMemoryRepository) ListEvidences(_ context.Context, userID, node
 	return items, nil
 }
 
-func (r *InMemoryMemoryRepository) ListEvidencesByNodeIDs(_ context.Context, userID string, nodeIDs []string) ([]domain.MemoryEvidence, error) {
+func (r *InMemoryMemoryRepository) ListEvidencesByNodeIDs(ctx context.Context, userID string, nodeIDs []string) ([]domain.MemoryEvidence, error) {
+	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+		return nil, err
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if len(nodeIDs) == 0 {
@@ -1181,6 +1403,9 @@ func (r *InMemoryMemoryRepository) ListEvidencesByNodeIDs(_ context.Context, use
 	}
 	items := make([]domain.MemoryEvidence, 0)
 	for nodeID := range allowed {
+		if r.nodeOutsidePersonalLocked(userID, nodeID) {
+			continue
+		}
 		items = append(items, r.evidences[key(userID, nodeID)]...)
 	}
 	sort.Slice(items, func(i, j int) bool {
@@ -1253,7 +1478,7 @@ func (r *InMemoryMemoryRepository) syncFactSupersedesLocked(doc domain.MemoryDoc
 			return errors.New("fact supersession cycle detected")
 		}
 		candidate, ok := r.documents[key(doc.UserID, supersededID)]
-		if !ok || candidate.Type != domain.MemoryTypeFact || candidate.GenerationID != doc.GenerationID {
+		if !ok || !personalMemoryWorkspace(doc.UserID, candidate.WorkspaceID) || candidate.Type != domain.MemoryTypeFact || candidate.GenerationID != doc.GenerationID {
 			return fmt.Errorf("fact supersession target %q not found in generation %q", supersededID, doc.GenerationID)
 		}
 		if lineageGroupID != "" && factLineageGroupIDFromMetadata(candidate.Metadata) != lineageGroupID {
@@ -1289,7 +1514,7 @@ func (r *InMemoryMemoryRepository) syncFactSupersedesLocked(doc domain.MemoryDoc
 		return nil
 	}
 	for _, candidate := range r.documents {
-		if candidate.UserID != doc.UserID || candidate.Type != domain.MemoryTypeFact {
+		if candidate.UserID != doc.UserID || !personalMemoryWorkspace(doc.UserID, candidate.WorkspaceID) || candidate.Type != domain.MemoryTypeFact {
 			continue
 		}
 		if candidate.GenerationID != doc.GenerationID {
@@ -1380,7 +1605,7 @@ func (r *InMemoryMemoryRepository) resolveFactNodeIDLocked(userID, generationID,
 		return ""
 	}
 	doc, ok := r.documents[key(userID, factID)]
-	if !ok || doc.Type != domain.MemoryTypeFact {
+	if !ok || !personalMemoryWorkspace(userID, doc.WorkspaceID) || doc.Type != domain.MemoryTypeFact {
 		return ""
 	}
 	if doc.GenerationID != generationID || factLineageGroupIDFromMetadata(doc.Metadata) != lineageGroupID {
@@ -1409,7 +1634,7 @@ func (r *InMemoryMemoryRepository) factSupersessionWouldCycleLocked(userID, gene
 		}
 		seen[current] = struct{}{}
 		doc, ok := r.documents[key(userID, current)]
-		if !ok || doc.Type != domain.MemoryTypeFact || doc.GenerationID != generationID {
+		if !ok || !personalMemoryWorkspace(userID, doc.WorkspaceID) || doc.Type != domain.MemoryTypeFact || doc.GenerationID != generationID {
 			return false
 		}
 		current = stringMetadataValue(doc.Metadata, "superseded_by_id")
@@ -1422,14 +1647,14 @@ func (r *InMemoryMemoryRepository) nextFactRevisionSeqLocked(doc domain.MemoryDo
 	if lineageGroupID == "" {
 		return 1
 	}
-	if existing, ok := r.documents[key(doc.UserID, doc.ID)]; ok {
+	if existing, ok := r.documents[key(doc.UserID, doc.ID)]; ok && personalMemoryWorkspace(doc.UserID, existing.WorkspaceID) {
 		if seq := factLineageRevisionSeqFromMetadata(existing.Metadata); seq > 0 {
 			return seq
 		}
 	}
 	maxSeq := 0
 	for _, candidate := range r.documents {
-		if candidate.UserID != doc.UserID || candidate.GenerationID != doc.GenerationID || candidate.Type != domain.MemoryTypeFact {
+		if candidate.UserID != doc.UserID || !personalMemoryWorkspace(doc.UserID, candidate.WorkspaceID) || candidate.GenerationID != doc.GenerationID || candidate.Type != domain.MemoryTypeFact {
 			continue
 		}
 		if factLineageGroupIDFromMetadata(candidate.Metadata) != lineageGroupID {
@@ -1453,7 +1678,7 @@ func (r *InMemoryMemoryRepository) currentFactLineageHeadIDsLocked(doc domain.Me
 	}
 	heads := make([]head, 0)
 	for _, candidate := range r.documents {
-		if candidate.UserID != doc.UserID || candidate.GenerationID != doc.GenerationID || candidate.Type != domain.MemoryTypeFact || candidate.ID == doc.ID {
+		if candidate.UserID != doc.UserID || !personalMemoryWorkspace(doc.UserID, candidate.WorkspaceID) || candidate.GenerationID != doc.GenerationID || candidate.Type != domain.MemoryTypeFact || candidate.ID == doc.ID {
 			continue
 		}
 		if factLineageGroupIDFromMetadata(candidate.Metadata) != lineageGroupID {
@@ -1677,7 +1902,8 @@ func (r *InMemoryOutboxRepository) MarkProcessed(_ context.Context, id string) e
 }
 
 func key(parts ...string) string {
-	return strings.Join(parts, "::")
+	encoded, _ := json.Marshal(parts)
+	return string(encoded)
 }
 
 func keyMemoryNodeID(userID, memoryKey string) string {
@@ -1709,6 +1935,9 @@ func matchesMemoryType(value domain.MemoryType, filters []domain.MemoryType) boo
 }
 
 func matchesDocumentGeneration(userID, requestedGenerationID string, doc domain.MemoryDocument) bool {
+	if doc.UserID != userID || !personalMemoryWorkspace(userID, doc.WorkspaceID) {
+		return false
+	}
 	if doc.Type == domain.MemoryTypeKeyMemory {
 		return true
 	}
@@ -1731,7 +1960,7 @@ func matchesGenerationValue(userID, requestedGenerationID, actualGenerationID st
 }
 
 func currentGenerationID(userID string) string {
-	return "gen:current:" + strings.TrimSpace(userID)
+	return "gen:current:" + userID
 }
 
 func conversationSegmentGeneration(userID string, metadata map[string]any) string {

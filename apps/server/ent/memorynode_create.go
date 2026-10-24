@@ -68,6 +68,12 @@ func (_c *MemoryNodeCreate) SetUserID(v string) *MemoryNodeCreate {
 	return _c
 }
 
+// SetWorkspaceID sets the "workspace_id" field.
+func (_c *MemoryNodeCreate) SetWorkspaceID(v string) *MemoryNodeCreate {
+	_c.mutation.SetWorkspaceID(v)
+	return _c
+}
+
 // SetNodeType sets the "node_type" field.
 func (_c *MemoryNodeCreate) SetNodeType(v string) *MemoryNodeCreate {
 	_c.mutation.SetNodeType(v)
@@ -247,6 +253,9 @@ func (_c *MemoryNodeCreate) check() error {
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "MemoryNode.user_id"`)}
 	}
+	if _, ok := _c.mutation.WorkspaceID(); !ok {
+		return &ValidationError{Name: "workspace_id", err: errors.New(`ent: missing required field "MemoryNode.workspace_id"`)}
+	}
 	if _, ok := _c.mutation.NodeType(); !ok {
 		return &ValidationError{Name: "node_type", err: errors.New(`ent: missing required field "MemoryNode.node_type"`)}
 	}
@@ -314,6 +323,10 @@ func (_c *MemoryNodeCreate) createSpec() (*MemoryNode, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UserID(); ok {
 		_spec.SetField(memorynode.FieldUserID, field.TypeString, value)
 		_node.UserID = value
+	}
+	if value, ok := _c.mutation.WorkspaceID(); ok {
+		_spec.SetField(memorynode.FieldWorkspaceID, field.TypeString, value)
+		_node.WorkspaceID = value
 	}
 	if value, ok := _c.mutation.NodeType(); ok {
 		_spec.SetField(memorynode.FieldNodeType, field.TypeString, value)

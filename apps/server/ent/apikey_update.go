@@ -63,6 +63,46 @@ func (_u *APIKeyUpdate) SetNillableName(v *string) *APIKeyUpdate {
 	return _u
 }
 
+// SetAgentID sets the "agent_id" field.
+func (_u *APIKeyUpdate) SetAgentID(v string) *APIKeyUpdate {
+	_u.mutation.SetAgentID(v)
+	return _u
+}
+
+// SetNillableAgentID sets the "agent_id" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableAgentID(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetAgentID(*v)
+	}
+	return _u
+}
+
+// SetDefaultWorkspaceID sets the "default_workspace_id" field.
+func (_u *APIKeyUpdate) SetDefaultWorkspaceID(v string) *APIKeyUpdate {
+	_u.mutation.SetDefaultWorkspaceID(v)
+	return _u
+}
+
+// SetNillableDefaultWorkspaceID sets the "default_workspace_id" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableDefaultWorkspaceID(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetDefaultWorkspaceID(*v)
+	}
+	return _u
+}
+
+// SetCapabilityCeiling sets the "capability_ceiling" field.
+func (_u *APIKeyUpdate) SetCapabilityCeiling(v []string) *APIKeyUpdate {
+	_u.mutation.SetCapabilityCeiling(v)
+	return _u
+}
+
+// AppendCapabilityCeiling appends value to the "capability_ceiling" field.
+func (_u *APIKeyUpdate) AppendCapabilityCeiling(v []string) *APIKeyUpdate {
+	_u.mutation.AppendCapabilityCeiling(v)
+	return _u
+}
+
 // SetPrefix sets the "prefix" field.
 func (_u *APIKeyUpdate) SetPrefix(v string) *APIKeyUpdate {
 	_u.mutation.SetPrefix(v)
@@ -248,6 +288,20 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.AgentID(); ok {
+		_spec.SetField(apikey.FieldAgentID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DefaultWorkspaceID(); ok {
+		_spec.SetField(apikey.FieldDefaultWorkspaceID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CapabilityCeiling(); ok {
+		_spec.SetField(apikey.FieldCapabilityCeiling, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedCapabilityCeiling(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, apikey.FieldCapabilityCeiling, value)
+		})
+	}
 	if value, ok := _u.mutation.Prefix(); ok {
 		_spec.SetField(apikey.FieldPrefix, field.TypeString, value)
 	}
@@ -340,6 +394,46 @@ func (_u *APIKeyUpdateOne) SetNillableName(v *string) *APIKeyUpdateOne {
 	if v != nil {
 		_u.SetName(*v)
 	}
+	return _u
+}
+
+// SetAgentID sets the "agent_id" field.
+func (_u *APIKeyUpdateOne) SetAgentID(v string) *APIKeyUpdateOne {
+	_u.mutation.SetAgentID(v)
+	return _u
+}
+
+// SetNillableAgentID sets the "agent_id" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableAgentID(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetAgentID(*v)
+	}
+	return _u
+}
+
+// SetDefaultWorkspaceID sets the "default_workspace_id" field.
+func (_u *APIKeyUpdateOne) SetDefaultWorkspaceID(v string) *APIKeyUpdateOne {
+	_u.mutation.SetDefaultWorkspaceID(v)
+	return _u
+}
+
+// SetNillableDefaultWorkspaceID sets the "default_workspace_id" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableDefaultWorkspaceID(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetDefaultWorkspaceID(*v)
+	}
+	return _u
+}
+
+// SetCapabilityCeiling sets the "capability_ceiling" field.
+func (_u *APIKeyUpdateOne) SetCapabilityCeiling(v []string) *APIKeyUpdateOne {
+	_u.mutation.SetCapabilityCeiling(v)
+	return _u
+}
+
+// AppendCapabilityCeiling appends value to the "capability_ceiling" field.
+func (_u *APIKeyUpdateOne) AppendCapabilityCeiling(v []string) *APIKeyUpdateOne {
+	_u.mutation.AppendCapabilityCeiling(v)
 	return _u
 }
 
@@ -557,6 +651,20 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(apikey.FieldName, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.AgentID(); ok {
+		_spec.SetField(apikey.FieldAgentID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DefaultWorkspaceID(); ok {
+		_spec.SetField(apikey.FieldDefaultWorkspaceID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CapabilityCeiling(); ok {
+		_spec.SetField(apikey.FieldCapabilityCeiling, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedCapabilityCeiling(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, apikey.FieldCapabilityCeiling, value)
+		})
 	}
 	if value, ok := _u.mutation.Prefix(); ok {
 		_spec.SetField(apikey.FieldPrefix, field.TypeString, value)

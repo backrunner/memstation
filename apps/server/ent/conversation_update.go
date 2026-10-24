@@ -48,6 +48,27 @@ func (_u *ConversationUpdate) SetNillableUserID(v *string) *ConversationUpdate {
 	return _u
 }
 
+// SetWriteRevision sets the "write_revision" field.
+func (_u *ConversationUpdate) SetWriteRevision(v int64) *ConversationUpdate {
+	_u.mutation.ResetWriteRevision()
+	_u.mutation.SetWriteRevision(v)
+	return _u
+}
+
+// SetNillableWriteRevision sets the "write_revision" field if the given value is not nil.
+func (_u *ConversationUpdate) SetNillableWriteRevision(v *int64) *ConversationUpdate {
+	if v != nil {
+		_u.SetWriteRevision(*v)
+	}
+	return _u
+}
+
+// AddWriteRevision adds value to the "write_revision" field.
+func (_u *ConversationUpdate) AddWriteRevision(v int64) *ConversationUpdate {
+	_u.mutation.AddWriteRevision(v)
+	return _u
+}
+
 // SetRequestFormat sets the "request_format" field.
 func (_u *ConversationUpdate) SetRequestFormat(v string) *ConversationUpdate {
 	_u.mutation.SetRequestFormat(v)
@@ -206,6 +227,12 @@ func (_u *ConversationUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(conversation.FieldUserID, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.WriteRevision(); ok {
+		_spec.SetField(conversation.FieldWriteRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedWriteRevision(); ok {
+		_spec.AddField(conversation.FieldWriteRevision, field.TypeInt64, value)
+	}
 	if value, ok := _u.mutation.RequestFormat(); ok {
 		_spec.SetField(conversation.FieldRequestFormat, field.TypeString, value)
 	}
@@ -270,6 +297,27 @@ func (_u *ConversationUpdateOne) SetNillableUserID(v *string) *ConversationUpdat
 	if v != nil {
 		_u.SetUserID(*v)
 	}
+	return _u
+}
+
+// SetWriteRevision sets the "write_revision" field.
+func (_u *ConversationUpdateOne) SetWriteRevision(v int64) *ConversationUpdateOne {
+	_u.mutation.ResetWriteRevision()
+	_u.mutation.SetWriteRevision(v)
+	return _u
+}
+
+// SetNillableWriteRevision sets the "write_revision" field if the given value is not nil.
+func (_u *ConversationUpdateOne) SetNillableWriteRevision(v *int64) *ConversationUpdateOne {
+	if v != nil {
+		_u.SetWriteRevision(*v)
+	}
+	return _u
+}
+
+// AddWriteRevision adds value to the "write_revision" field.
+func (_u *ConversationUpdateOne) AddWriteRevision(v int64) *ConversationUpdateOne {
+	_u.mutation.AddWriteRevision(v)
 	return _u
 }
 
@@ -460,6 +508,12 @@ func (_u *ConversationUpdateOne) sqlSave(ctx context.Context) (_node *Conversati
 	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(conversation.FieldUserID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WriteRevision(); ok {
+		_spec.SetField(conversation.FieldWriteRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedWriteRevision(); ok {
+		_spec.AddField(conversation.FieldWriteRevision, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.RequestFormat(); ok {
 		_spec.SetField(conversation.FieldRequestFormat, field.TypeString, value)

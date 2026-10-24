@@ -19,6 +19,8 @@ const (
 	FieldUpdatedAt = "updated_at"
 	// FieldUserID holds the string denoting the user_id field in the database.
 	FieldUserID = "user_id"
+	// FieldWorkspaceID holds the string denoting the workspace_id field in the database.
+	FieldWorkspaceID = "workspace_id"
 	// FieldConversationID holds the string denoting the conversation_id field in the database.
 	FieldConversationID = "conversation_id"
 	// FieldRole holds the string denoting the role field in the database.
@@ -45,6 +47,7 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldUpdatedAt,
 	FieldUserID,
+	FieldWorkspaceID,
 	FieldConversationID,
 	FieldRole,
 	FieldContentBlocks,
@@ -97,6 +100,11 @@ func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUserID orders the results by the user_id field.
 func ByUserID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUserID, opts...).ToFunc()
+}
+
+// ByWorkspaceID orders the results by the workspace_id field.
+func ByWorkspaceID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorkspaceID, opts...).ToFunc()
 }
 
 // ByConversationID orders the results by the conversation_id field.

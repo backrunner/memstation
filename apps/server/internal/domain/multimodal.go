@@ -2,6 +2,36 @@ package domain
 
 import "time"
 
+// NormalizeMessageParts binds legacy empty fields while rejecting explicit
+// parent substitutions. Callers validate the workspace before normalization.
+func NormalizeMessageParts(user, workspace, conversation string, parts []MessagePart) ([]MessagePart, error) {
+	out := append([]MessagePart(nil), parts...)
+	for i := range out {
+		p := &out[i]
+		if (p.UserID != "" && p.UserID != user) || (p.WorkspaceID != "" && p.WorkspaceID != workspace) || (p.ConversationID != "" && p.ConversationID != conversation) {
+			return nil, ErrAccessDenied
+		}
+		p.UserID = user
+		p.WorkspaceID = workspace
+		p.ConversationID = conversation
+	}
+	return out, nil
+}
+
+func NormalizePartArtifacts(user, workspace, conversation string, artifacts []MessagePartArtifact) ([]MessagePartArtifact, error) {
+	out := append([]MessagePartArtifact(nil), artifacts...)
+	for i := range out {
+		p := &out[i]
+		if (p.UserID != "" && p.UserID != user) || (p.WorkspaceID != "" && p.WorkspaceID != workspace) || (p.ConversationID != "" && p.ConversationID != conversation) {
+			return nil, ErrAccessDenied
+		}
+		p.UserID = user
+		p.WorkspaceID = workspace
+		p.ConversationID = conversation
+	}
+	return out, nil
+}
+
 type BlobSourceKind string
 
 const (
@@ -11,6 +41,7 @@ const (
 )
 
 type BlobObject struct {
+	WorkspaceID      string         `json:"workspace_id,omitempty"`
 	BlobID           string         `json:"blob_id"`
 	UserID           string         `json:"user_id"`
 	SourceKind       BlobSourceKind `json:"source_kind"`
@@ -27,6 +58,7 @@ type BlobObject struct {
 }
 
 type MessagePart struct {
+	WorkspaceID    string           `json:"workspace_id,omitempty"`
 	PartID         string           `json:"part_id"`
 	UserID         string           `json:"user_id"`
 	ConversationID string           `json:"conversation_id"`
@@ -51,6 +83,7 @@ type MessagePart struct {
 }
 
 type MessagePartArtifact struct {
+	WorkspaceID    string         `json:"workspace_id,omitempty"`
 	ArtifactID     string         `json:"artifact_id"`
 	UserID         string         `json:"user_id"`
 	ConversationID string         `json:"conversation_id"`
