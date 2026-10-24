@@ -103,14 +103,14 @@
   :global(.disclosure-toolbar .disclosure-trigger[data-state='open']) { border-color: var(--brand); background: var(--brand-softer); }
   :global(.disclosure-toolbar .disclosure-affordance) { width: 18px; height: 18px; background: transparent; }
   :global(.disclosure-content) { min-width: 0; overflow: hidden; }
-  :global(.disclosure-content[data-state='open']) { animation: disclosure-open 160ms ease-out; }
-  :global(.disclosure-content[data-state='closed']) { animation: disclosure-close 130ms ease-in; }
+  /* Keep the revealed controls at their final hit-test positions immediately.
+     Height animation clips live form controls during rapid pointer interaction. */
+  :global(.disclosure-content[data-state='open']) { animation: disclosure-open 120ms ease-out; }
   :global(.disclosure-content[hidden]) { display: none; }
   :global(.disclosure-body) { display: grid; gap: 12px; min-width: 0; padding: 12px 12px 16px; }
   :global(.disclosure-panel > .disclosure-content > .disclosure-body) { padding-inline: 16px; }
   :global(.disclosure-toolbar > .disclosure-content > .disclosure-body) { margin-top: 12px; padding: 16px 0 4px; border-top: 1px solid var(--border-subtle); }
-  @keyframes -global-disclosure-open { from { height: 0; } to { height: var(--bits-collapsible-content-height); } }
-  @keyframes -global-disclosure-close { from { height: var(--bits-collapsible-content-height); } to { height: 0; } }
+  @keyframes -global-disclosure-open { from { opacity: 0; } to { opacity: 1; } }
   @media (prefers-reduced-motion: reduce) {
     :global(.disclosure-content) { animation: none !important; }
     :global(.disclosure-chevron), :global(.disclosure-trigger) { transition: none; }

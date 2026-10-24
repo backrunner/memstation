@@ -948,6 +948,7 @@ test('mobile filters preserve choices and expose conversation results in the fir
   await page.getByRole('button', { name: 'Filters (1)', exact: true }).click();
   await expect(page.getByLabel('Date from', { exact: true })).toHaveValue('2020-01-01');
   await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
+  await expect(page.getByLabel('Date from', { exact: true })).toHaveValue('');
   await expect(page.getByRole('button', { name: 'Filters', exact: true })).toHaveAttribute('aria-expanded', 'true');
 });
 
@@ -1819,11 +1820,13 @@ test('workspace management navigation resolves owners and keeps service and sect
   await expect(page.getByText('Choose the Personal workspace to browse.', { exact: false })).toBeVisible();
   await page.getByRole('link', { name: /Personal Owner: admin/ }).click();
   await expect(page).toHaveURL('/t/fixture-target/w/personal/keys');
+  await expect(page.getByRole('heading', { name: 'Key memories', exact: true })).toBeVisible();
   await page.goto('/t/fixture-target/open/conversations/conv-seed-1?user_id=admin');
   await expect(page).toHaveURL('/t/fixture-target/w/personal/conversations/conv-seed-1');
   await expect(page.getByRole('heading', { name: 'Conversation', exact: true })).toBeVisible();
   await page.goto('/t/fixture-target/open/memory/facts/fact-1?user_id=admin&generation_id=generation-fixture');
   await expect(page).toHaveURL(/\/w\/personal\/memory\/fact\/fact-1\?generation_id=generation-fixture$/);
+  await expect(page.getByRole('heading', { name: 'Memory document', exact: true })).toBeVisible();
   await page.goto('/t/fixture-target/open/memory/keys/key-1?user_id=bob');
   await expect(page).toHaveURL('/t/fixture-target/w/personal-bob/keys/key-1');
   await expect(page.getByRole('alert')).toBeVisible();
