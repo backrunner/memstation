@@ -38,10 +38,36 @@ Commands
 - Nightly bundle: `./scripts/eval/run-memory-nightly.sh`
 - Worker recovery smoke: `./scripts/ops/run-worker-recovery-smoke.sh`
 - Worker recovery nightly: `./scripts/ops/run-worker-recovery-nightly.sh`
+- Real source replay: `./scripts/eval/run-source-replay.sh`
+  Requires a dedicated loopback MemStation service with serve/worker/scheduler running,
+  `MEMSTATION_EVAL_BASE_URL`, `MEMSTATION_ADMIN_TOKEN`, and `CHAT_MODEL`. Creates new
+  synthetic `eval-` principals, finalizes real gateway conversations, waits for summary
+  and analysis, then compares default injection, derived text only, and no memory.
+  Reports use all expected questions as the denominator, including pipeline failures.
+  Derived-only context excludes source segments, evidence quotes, and source metadata.
+- Persistent HTTP load: `./scripts/eval/run-store-load.sh`
+  Also requires `MEMSTATION_EVAL_DATABASE_URL` and embedding provider variables. The
+  migrated database must be on loopback and named `memstation_eval_*` or
+  `memstation_quality_*`; the HTTP service must use that same database. Defaults to
+  10,000 repeated synthetic rows and 12 offered RPS with concurrency caps 1/4/8.
+  Use `MEMSTATION_EVAL_RPS=0 MEMSTATION_EVAL_REQUESTS=32` for closed-loop concurrency;
+  the report records actual peak in-flight requests. Warmup is excluded. Timings cover
+  HTTP request execution, excluding the client's wait for a concurrency slot.
+  Set `MEMSTATION_PERF_P95_MS=250` to explicitly enforce the latency target after
+  writing the report. This is a capacity fixture, not 10,000 independent accuracy cases.
+
+Both new runners retain synthetic source data in the evaluation database, revoke their
+temporary client keys on completion, and write private reports under `.artifacts/`.
+They do not reset databases or Redis. Keep credentials in environment variables and
+keep external benchmark data and raw reports outside Git. Relative output paths are
+resolved from `apps/server`; prefer an absolute output directory.
 
 Embedding modes
 - `deterministic`: local deterministic vectors, only for smoke/regression and offline manual runs. This is not a real embedding-quality benchmark.
 - `provider`: OpenAI-compatible `/embeddings` evaluation using the configured model/endpoint/key. Use this for accuracy-sensitive local, manual, or dedicated benchmark runs.
+  Provider failures fail these in-process quality/performance runs even if the online
+  engine can fall back to lexical retrieval. Latency smoke preserves all query flags
+  used by the accuracy runner and exports individual samples and result IDs.
 
 Evaluation contract
 - Accuracy claims must use provider embeddings and an explicit temporal/user split. Deterministic embeddings are only a code-path smoke test.
@@ -58,7 +84,10 @@ CI policy
 - Full repo-native and performance benchmark tests are skipped by default in `go test`; opt into diagnostic execution with `MEMSTATION_RUN_BENCHMARKS=true`. Parser, metric, isolation, and runner contract tests remain blocking correctness tests.
 
 Next step
-- See `reliability_benchmark_plan.md` for the proposed source-replay, rebuild-equivalence, activation-safety, and injection-reliability benchmark layers.
+- [2026-10-25 real-model results](../../../../docs/memory-quality-2026-10-25.md)
+  record passing smoke thresholds and the remaining external recall, extraction, and
+  concurrency limitations. Source replay is implemented; rebuild equivalence and full
+  activation/injection safety evaluation remain in `reliability_benchmark_plan.md`.
 
 Artifacts
 - `aggregate.json`: aggregate metrics by variant

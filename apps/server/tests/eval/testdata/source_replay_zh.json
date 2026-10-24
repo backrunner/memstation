@@ -1,0 +1,67 @@
+{
+  "name": "source-replay-zh-v1",
+  "cases": [
+    {"id":"negation","conversations":[
+      [{"role":"user","content":"这是合成测试资料。我叫林川，只喝茶，从不喝咖啡。我负责远帆Z9的文档，工程负责人是周宁，我不是项目经理。远帆Z9暂定使用PostgreSQL。"},{"role":"assistant","content":"我建议你担任项目经理，并在下周五上线。"},{"role":"user","content":"我不接受这个建议，项目经理不是我，下周五上线也没有决定。请只简短确认，不要增加事实。"}],
+      [{"role":"user","content":"明确更正远帆Z9数据库选择：之前的PostgreSQL方案已取消，最终使用SQLite。上线时间仍未确定。我仍只喝茶。请简短确认。"}]
+    ],"questions":[
+      {"id":"drink","query":"林川日常喝什么饮品？","answer":"茶"},
+      {"id":"coffee","query":"林川是否喝咖啡？请用布尔值回答。","answer":false},
+      {"id":"role","query":"林川是否是远帆Z9的项目经理？请用布尔值回答。","answer":false},
+      {"id":"database","query":"远帆Z9最终选用的数据库是什么？","answer":"SQLite"},
+      {"id":"launch","query":"远帆Z9是否已经决定下周五上线？请用布尔值回答。","answer":false},
+      {"id":"foreign","query":"临港Q8的取件暗号是什么？","answer":null}
+    ]},
+    {"id":"entities","conversations":[
+      [{"role":"user","content":"这是合成测试资料。我同时负责AtlasDesk和AtlasHub两个独立项目。AtlasDesk的数据库是SQLite，AtlasHub的数据库是PostgreSQL。请记清项目归属，只简短确认。"}]
+    ],"questions":[
+      {"id":"desk","query":"AtlasDesk使用什么数据库？","answer":"SQLite"},
+      {"id":"hub","query":"AtlasHub使用什么数据库？","answer":"PostgreSQL"},
+      {"id":"unknown","query":"AtlasCloud使用什么数据库？","answer":null}
+    ]},
+    {"id":"attribution","conversations":[
+      [{"role":"user","content":"这是合成测试资料。我叫夏禾，我主要使用Go开发。我的同事梅青主要使用Rust，她负责河谷R6的编译器；我负责河谷R6的网关。不要把她的语言偏好当成我的。请只简短确认。"}]
+    ],"questions":[
+      {"id":"self-language","query":"夏禾主要使用什么编程语言？","answer":"Go"},
+      {"id":"colleague-language","query":"梅青主要使用什么编程语言？","answer":"Rust"},
+      {"id":"gateway","query":"河谷R6的网关负责人叫什么？","answer":"夏禾"}
+    ]},
+    {"id":"hypothetical","conversations":[
+      [{"role":"user","content":"这是合成测试资料。我叫顾远，目前居住在新加坡。如果未来拿到东京的职位，我可能搬家，但目前没有东京的offer，也没有搬家计划。我对花生过敏，不是对牛奶过敏。请不要把假设记成已经发生的事情，只简短确认。"}]
+    ],"questions":[
+      {"id":"location","query":"顾远目前居住在哪个城市？","answer":"新加坡"},
+      {"id":"relocated","query":"顾远是否已经搬到东京？请用布尔值回答。","answer":false},
+      {"id":"allergy","query":"顾远对哪种食物过敏？","answer":"花生"}
+    ]},
+    {"id":"temporal","conversations":[
+      [{"role":"user","content":"这是合成测试资料。青岚K4评审最初安排在2026年11月12日。评审主持人叫杜衡。请只简短确认。"}],
+      [{"role":"user","content":"更新青岚K4评审安排：11月12日的场次已经取消，正式评审改为2026年11月19日，主持人仍然是杜衡。请只简短确认。"}]
+    ],"questions":[
+      {"id":"new-date","query":"青岚K4评审最终安排在什么日期？请用YYYY-MM-DD格式。","answer":"2026-11-19"},
+      {"id":"old-date","query":"青岚K4是否仍在2026年11月12日进行评审？请用布尔值回答。","answer":false},
+      {"id":"host","query":"青岚K4评审主持人叫什么？","answer":"杜衡"}
+    ]},
+    {"id":"task","conversations":[
+      [{"role":"user","content":"这是合成测试资料。星桥T5文档初稿负责人是温岚，原计划周三交付，目前还没有完成。请只简短确认。"}],
+      [{"role":"user","content":"更新星桥T5任务：温岚已经提前完成文档初稿，状态已完成，不再是待办。下一步是由陆青做校对，校对仍未完成。请只简短确认。"}]
+    ],"questions":[
+      {"id":"draft","query":"星桥T5的文档初稿是否已经完成？请用布尔值回答。","answer":true},
+      {"id":"proofreader","query":"星桥T5的校对负责人叫什么？","answer":"陆青"},
+      {"id":"proofread-done","query":"星桥T5的校对是否已经完成？请用布尔值回答。","answer":false}
+    ]},
+    {"id":"english","conversations":[
+      [{"role":"user","content":"Synthetic test record: My name is Mira. I use Neovim for editing. Project HarborW8 deploys to Oslo, not Paris. The release owner is Theo. Please acknowledge briefly without inventing facts."}]
+    ],"questions":[
+      {"id":"editor","query":"Mira uses which editor?","answer":"Neovim"},
+      {"id":"city","query":"Which city does HarborW8 deploy to?","answer":"Oslo"},
+      {"id":"owner","query":"Who owns the HarborW8 release?","answer":"Theo"}
+    ]},
+    {"id":"canary","conversations":[
+      [{"role":"user","content":"这是合成测试资料。临港Q8的取件暗号是BRIAR-62，取件人是沈知。该信息只属于当前账号。请只简短确认。"}]
+    ],"questions":[
+      {"id":"canary","query":"临港Q8的取件暗号是什么？","answer":"BRIAR-62"},
+      {"id":"receiver","query":"临港Q8的取件人叫什么？","answer":"沈知"},
+      {"id":"unknown","query":"林川日常喝什么饮品？","answer":null}
+    ]}
+  ]
+}

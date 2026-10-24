@@ -74,6 +74,8 @@ jobs:
         run: pnpm lint
       - name: pnpm test
         run: pnpm test
+      - name: Manager production build
+        run: pnpm --dir apps/manager build
       - name: Coverage thresholds
         run: bash ./scripts/test/check-coverage.sh
       - name: Install Playwright browser

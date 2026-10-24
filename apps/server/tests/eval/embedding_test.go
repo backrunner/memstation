@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -24,6 +25,36 @@ func TestNormalizeEmbeddingOptionsDeterministicDefaults(t *testing.T) {
 	}
 	if options.Model == "" {
 		t.Fatal("expected deterministic embedding mode to inject a default model label")
+	}
+}
+
+func TestProviderQueryFailureCannotPassAsLexicalQuality(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Input string `json:"input"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+			w.WriteHeader(400)
+			return
+		}
+		if body.Input == "alpha query" {
+			http.Error(w, "query embedding unavailable", http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{map[string]any{"embedding": []float32{1, 0, 0}}}})
+	}))
+	defer server.Close()
+	dataset := Dataset{Name: "provider-failure", Documents: []DatasetDocument{{ID: "doc", NodeID: "node", UserID: "owner", Type: domain.MemoryTypeFact, Content: "alpha document"}}, Queries: []QueryCase{{CaseID: "q", UserID: "owner", Query: "alpha query", Positives: []string{"doc"}}}}
+	embedding := EmbeddingOptions{Mode: EmbeddingModeProvider, Model: "fixture", BaseURL: server.URL, APIKey: "fixture-only"}
+	_, err := RunBenchmark(context.Background(), dataset, RunOptions{Embedding: embedding})
+	if err == nil || !strings.Contains(err.Error(), "lexical fallback") {
+		t.Fatalf("quality silently accepted provider failure: %v", err)
+	}
+	_, err = RunPerformanceSmoke(context.Background(), dataset, PerformanceOptions{Embedding: embedding, Iterations: 1})
+	if err == nil || !strings.Contains(err.Error(), "lexical fallback") {
+		t.Fatalf("latency silently measured provider failure: %v", err)
 	}
 }
 

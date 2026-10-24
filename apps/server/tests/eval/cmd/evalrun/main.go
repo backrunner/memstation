@@ -113,12 +113,12 @@ func main() {
 			fatalf("run performance smoke: %v", err)
 		}
 		report.Performance = &perf
-		if perfMaxP95 > 0 && perf.P95Millis > perfMaxP95 {
-			fatalf("performance smoke failed: p95 %.3fms exceeds %.3fms", perf.P95Millis, perfMaxP95)
-		}
 	}
 	if err := eval.WriteArtifacts(report, outDir); err != nil {
 		fatalf("write artifacts: %v", err)
+	}
+	if report.Performance != nil && perfMaxP95 > 0 && report.Performance.P95Millis > perfMaxP95 {
+		fatalf("performance smoke failed: p95 %.3fms exceeds %.3fms", report.Performance.P95Millis, perfMaxP95)
 	}
 	if enforceSmoke {
 		if err := eval.ValidateSmokeExpectations(report); err != nil {

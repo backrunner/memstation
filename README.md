@@ -153,6 +153,10 @@ Native golden data ships in the repository; external LOCOMO and LongMemEval data
 are downloaded separately. Deterministic test vectors demonstrate the evaluation
 pipeline, not real-model retrieval quality.
 
+Measured real-model recall, source replay, and load results:
+[2026-10-25 evaluation](docs/memory-quality-2026-10-25.md). The report also records
+the targets that remain unmet.
+
 ## Contribute
 
 [Report a bug](https://github.com/backrunner/memstation/issues/new/choose), suggest an

@@ -6,7 +6,7 @@ This document defines the next evaluation layer above the existing retrieval/ran
 
 The repository already has a strong retrieval-focused benchmark foundation:
 
-- repo-native golden dataset for CI smoke
+- repo-native golden dataset for explicit local/manual smoke
 - LOCOMO adapter for external retrieval evaluation
 - ranking ablation across `semantic_only`, `semantic_importance`, `full_no_relations`, and `full`
 - artifact export for aggregate metrics, per-query results, failures, and score breakdowns
@@ -76,12 +76,12 @@ The memory injected into model requests should stay relevant, bounded, and safe:
 
 ### Layer A: Retrieval and Ranking
 
-Keep the existing runner as the lowest-cost CI gate.
+Keep the existing runner as the lowest-cost manual diagnostic. It does not run in default CI.
 
 Use cases:
 
-- smoke on every PR
-- nightly regression on repo-native plus LOCOMO
+- local or dedicated evaluation after retrieval changes
+- explicit repo-native plus LOCOMO regression runs
 
 Existing metrics:
 
@@ -198,7 +198,7 @@ Use three dataset families.
 
 ### 1. Repo-Native Golden
 
-Keep this small, deterministic, and CI-friendly.
+Keep this small and reproducible; correctness contracts can run in CI, while model quality measurements remain manual.
 
 Add more cases for:
 
@@ -238,7 +238,7 @@ LOCOMO remains useful for:
 
 - broader retrieval difficulty
 - relation-heavy recall
-- nightly drift detection
+- manual or dedicated-environment drift detection
 
 It is not sufficient for:
 
@@ -339,3 +339,14 @@ The main missing work is not foundational infrastructure. It is the addition of:
 - end-to-end harnesses
 - generation comparison metrics
 - injection-specific assertions
+
+## Implementation update — 2026-10-25
+
+`liveevalrun` now exercises synthetic source ingestion, summary/analysis materialization,
+HTTP retrieval, and default/derived-only/no-memory reader comparisons. It reports
+coverage failures in the full expected denominator. `storeloadrun` separately measures
+persistent HTTP retrieval with real embeddings and actual peak concurrency. See the
+[measured report](../../../../docs/memory-quality-2026-10-25.md). These do not yet
+implement the complete per-node evidence/embedding expectations, real-model rebuild
+equivalence, generation activation, or exhaustive injection-safety layers proposed
+above. No benchmark threshold was added to default CI.

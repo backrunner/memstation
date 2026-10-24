@@ -187,11 +187,7 @@ func (s *Service) generate(ctx context.Context, input Input, task, role, instruc
 	if task == "analysis.extract" {
 		budget = 8192
 	}
-	raw, err := s.generator.Generate(ctx, memoryllm.Request{UserID: firstNonEmpty(input.UserID, input.Conversation.UserID), Role: role, Task: task, Instruction: instruction, Input: payload, MaxOutputTokens: budget})
-	if err != nil {
-		return err
-	}
-	return memoryllm.Decode(raw, target)
+	return memoryllm.GenerateDecoded(ctx, s.generator, memoryllm.Request{UserID: firstNonEmpty(input.UserID, input.Conversation.UserID), Role: role, Task: task, Instruction: instruction, Input: payload, MaxOutputTokens: budget}, target)
 }
 
 const summaryInstruction = `Summarize the supplied conversation sources faithfully, in their language. Preserve negation, attribution, uncertainty, decisions, changes and unresolved questions. Assistant suggestions are not user facts; plans are not completed events. Return {"summary":string,"topic_label":string,"keywords":[string],"importance":number,"decay_factor":number}. Importance must be 0.5..2 and decay_factor 0.5..3. No generic placeholder text.`
@@ -252,8 +248,9 @@ func validateSummary(s Summary) error {
 }
 
 const extractionInstruction = `Extract only durable, supported memories from the original sources. The summary and existing facts are context, never new evidence. Interpret negation, corrections, hypothetical examples, speaker attribution and temporal changes. Do not treat assistant suggestions as user commitments. Return {"facts":[],"impression":null,"items":[]}. Empty arrays and null impression are correct when there is nothing to remember.
-Each fact is {"key":string,"category":string,"subject":string,"content":string,"confidence":number,"importance":number,"decay_factor":number,"quotes":[{"source_id":string,"text":string}],"supersedes":[existing_fact_id],"valid_from":optional_RFC3339,"valid_to":optional_RFC3339}. Use stable semantic snake_case keys specific to subject and project; reuse an existing key only for the same attribute. Supersede only facts explicitly corrected or replaced, never merely similar facts. Quotes must be exact spans from user or tool sources.
-Optional impression has content, subject, confidence, importance, decay_factor, quotes and describes only supported observations, not fixed personality labels. Items have the same fields plus key,type,title,status; type is task,event,procedure,entity,agent_action,artifact. A future plan is a task, never a completed event. Entities additionally have entity_kind and canonical_name. Do not invent tool calls or artifact IDs. An artifact may include artifact_id only when supplied in an artifact source. Optionally return relations:[{source_key,target_key,type,weight}] between your emitted fact/item keys; allowed types are used_tool,produced_artifact,mentions_entity,depends_on,resulted_in,supports. Weight 0..1. Never copy credentials, tokens, passwords or raw debug payloads into memories or quotes. Confidence 0..1, importance 0.5..2, decay_factor 0.5..3. At most 16 facts and 12 items per response.`
+Each fact is {"key":string,"category":string,"subject":string,"content":string,"confidence":number,"importance":number,"decay_factor":number,"quotes":[{"source_id":string,"text":string}],"supersedes":[existing_fact_id],"valid_from":optional_RFC3339,"valid_to":optional_RFC3339}. Use stable semantic snake_case keys specific to subject and project; reuse an existing key only for the same attribute. Supersede only facts explicitly corrected or replaced, never merely similar facts. Every supersedes entry must be an exact id from existing_facts, and that existing fact's key and subject must exactly equal the emitted fact's key and subject. For a correction of the same attribute, preserve the existing key and subject verbatim; never generate a new key or subject while referencing its old id. If there is no supported matching replacement, use an empty supersedes array. Quotes must be exact spans from user or tool sources.
+Optional impression has content, subject, confidence, importance, decay_factor, quotes and describes only supported observations, not fixed personality labels.
+Each item is {"key":string,"type":string,"title":string,"status":string,"subject":string,"content":string,"confidence":number,"importance":number,"decay_factor":number,"quotes":[{"source_id":string,"text":string}]}. All these item fields are required, including subject and scores for completed or cancelled tasks. Subject identifies the person or project the assertion concerns; do not return an empty subject or content. If the subject cannot be supported, omit that item. Type is task,event,procedure,entity,agent_action,artifact. A future plan is a task, never a completed event. Entities additionally have entity_kind and canonical_name. Do not invent tool calls or artifact IDs. An artifact may include artifact_id only when supplied in an artifact source. Optionally return relations:[{source_key,target_key,type,weight}] between your emitted fact/item keys; allowed types are used_tool,produced_artifact,mentions_entity,depends_on,resulted_in,supports. Weight 0..1. Never copy credentials, tokens, passwords or raw debug payloads into memories or quotes. Confidence 0..1, importance 0.5..2, decay_factor 0.5..3; these ranges apply to every fact, impression and item, with no exceptions for task status. At most 16 facts and 12 items per response.`
 
 func (s *Service) AnalyzeConversation(ctx context.Context, input Input) (Result, error) {
 	user := firstNonEmpty(input.UserID, input.Conversation.UserID)
@@ -461,8 +458,23 @@ func (s *Service) AnalyzeConversation(ctx context.Context, input Input) (Result,
 }
 
 func documentFromItem(item Item, kind domain.MemoryType, user, conversation string, sources []Source) (domain.MemoryDocument, error) {
-	if !validText(item.Content, 8000) || !validText(item.Subject, 240) || !validScore(item.Importance, item.DecayFactor) || !finiteRange(item.Confidence, 0, 1) || len(item.Quotes) > 16 {
-		return domain.MemoryDocument{}, errors.New("invalid LLM memory content or score")
+	if !validText(item.Content, 8000) {
+		return domain.MemoryDocument{}, errors.New("invalid LLM memory content: requires 1..8000 UTF-8 bytes")
+	}
+	if !validText(item.Subject, 240) {
+		return domain.MemoryDocument{}, errors.New("invalid LLM memory subject: requires 1..240 UTF-8 bytes")
+	}
+	if !finiteRange(item.Importance, .5, 2) {
+		return domain.MemoryDocument{}, errors.New("invalid LLM memory importance: requires 0.5..2")
+	}
+	if !finiteRange(item.DecayFactor, .5, 3) {
+		return domain.MemoryDocument{}, errors.New("invalid LLM memory decay_factor: requires 0.5..3")
+	}
+	if !finiteRange(item.Confidence, 0, 1) {
+		return domain.MemoryDocument{}, errors.New("invalid LLM memory confidence: requires 0..1")
+	}
+	if len(item.Quotes) > 16 {
+		return domain.MemoryDocument{}, errors.New("invalid LLM memory quotes: at most 16")
 	}
 	doc := domain.MemoryDocument{UserID: user, ConversationID: conversation, Type: kind, Content: strings.TrimSpace(item.Content), Importance: item.Importance, DecayFactor: item.DecayFactor, Metadata: map[string]any{"subject": item.Subject, "confidence": item.Confidence, "extraction_method": "llm", "score_reason": "llm_extracted", "support_kind": "model_inference", "source": "llm"}}
 	quotes := []any{}

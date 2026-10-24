@@ -127,6 +127,8 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 
 检索 Benchmark 作为本地、手动诊断，不进入默认 CI / nightly 红线。仓库分发原生 golden dataset，LOCOMO 和 LongMemEval 等外部数据单独下载。确定性测试向量只验证评测链路，不代表真实模型召回质量。
 
+真实模型的召回、来源回放和负载结果见 [2026-10-25 效果评测](docs/memory-quality-2026-10-25.md)，其中明确记录尚未达标的部分。
+
 ## 参与贡献
 
 欢迎[报告问题](https://github.com/backrunner/memstation/issues/new/choose)、提出改进或提交范围清晰的 PR，附上复现步骤和模拟数据，详见[贡献指南](CONTRIBUTING.md)。安全漏洞请[私下报告](https://github.com/backrunner/memstation/security/advisories/new)。

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 	"time"
 
@@ -104,15 +105,54 @@ func (c *Client) Generate(ctx context.Context, input Request) (json.RawMessage, 
 }
 
 func Decode(raw []byte, target any) error {
+	value := reflect.ValueOf(target)
+	if value.Kind() != reflect.Pointer || value.IsNil() {
+		return errors.New("memory LLM decode requires a non-nil pointer")
+	}
+	fresh := reflect.New(value.Elem().Type())
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
+	if err := decoder.Decode(fresh.Interface()); err != nil {
 		return fmt.Errorf("invalid memory LLM schema: %w", err)
 	}
 	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
 		return errors.New("memory LLM returned trailing content")
 	}
+	value.Elem().Set(fresh.Elem())
 	return nil
+}
+
+// GenerateDecoded permits one model-only correction of malformed schema. The
+// rejected candidate is never used as a source or partially copied into target.
+// Transport failures and later evidence/score validation still fail normally.
+func GenerateDecoded(ctx context.Context, generator Generator, request Request, target any) error {
+	if generator == nil {
+		return errors.New("memory LLM is not configured")
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		raw, err := generator.Generate(ctx, request)
+		if err != nil {
+			return err
+		}
+		if err = Decode(raw, target); err == nil {
+			return nil
+		}
+		if attempt == 1 {
+			return fmt.Errorf("memory LLM schema correction failed: %w", err)
+		}
+		hint := "The previous response failed strict JSON schema validation."
+		var mismatch *json.UnmarshalTypeError
+		if errors.As(err, &mismatch) && (mismatch.Type.Kind() == reflect.Slice || mismatch.Type.Kind() == reflect.Array) {
+			hint += " A field that requires a JSON array used the wrong type."
+		}
+		// Decoder messages can contain model-controlled unknown property names.
+		// Do not promote that text into the next model's system instruction.
+		request.Instruction += "\n" + hint + " Regenerate one complete JSON object from the same original sources using the exact requested schema. Array fields must be JSON arrays, never a single string. Keep all required fields and omit unknown fields. Do not invent evidence or change source facts to satisfy the schema. This is the only schema correction attempt."
+	}
+	return errors.New("memory LLM schema correction exhausted")
 }
 
 func ModelReference(value string) (domain.Provider, string) {

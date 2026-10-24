@@ -5,6 +5,8 @@
 The [CI workflow](../.github/workflows/ci.yml) runs on pushes, pull requests and manual
 `workflow_dispatch`. Correctness gates remain blocking; diagnostic uploads are
 best-effort with three-day retention. No provider credentials are required.
+The Manager production build is a blocking step alongside lint, unit tests and browser
+E2E. Real-model benchmarks remain separate manual diagnostics.
 
 ## Reproduce the checks
 

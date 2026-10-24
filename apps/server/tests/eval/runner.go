@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"memstation/apps/server/internal/domain"
+	"memstation/apps/server/internal/ports"
 	memoryservice "memstation/apps/server/internal/service/memory"
 	sqlstore "memstation/apps/server/internal/store/sql"
 	vectorstore "memstation/apps/server/internal/store/vector"
@@ -46,6 +48,7 @@ type CaseReport struct {
 	Metrics      CaseMetrics                 `json:"metrics"`
 	Results      []RankedResult              `json:"results"`
 	Notes        string                      `json:"notes,omitempty"`
+	Metadata     map[string]any              `json:"metadata,omitempty"`
 }
 
 type RankedResult struct {
@@ -66,6 +69,37 @@ type FailureSample struct {
 type harness struct {
 	engine    *memoryservice.Engine
 	embedding EmbeddingRunInfo
+	observed  *observedEmbeddingClient
+}
+
+// The online engine may degrade to lexical retrieval when a vector provider fails.
+// A provider quality evaluation must not count that fallback as a model result.
+type observedEmbeddingClient struct {
+	ports.EmbeddingClient
+	mu  sync.Mutex
+	err error
+}
+
+func (c *observedEmbeddingClient) Embed(ctx context.Context, input domain.EmbeddingInput) (domain.EmbeddingResult, error) {
+	result, err := c.EmbeddingClient.Embed(ctx, input)
+	if err != nil {
+		c.mu.Lock()
+		c.err = err
+		c.mu.Unlock()
+	}
+	return result, err
+}
+
+func (h *harness) embeddingError() error {
+	if h.observed == nil {
+		return nil
+	}
+	h.observed.mu.Lock()
+	defer h.observed.mu.Unlock()
+	if h.observed.err != nil {
+		return fmt.Errorf("provider embedding failed; lexical fallback is not a quality measurement: %w", h.observed.err)
+	}
+	return nil
 }
 
 func RunBenchmark(ctx context.Context, dataset Dataset, options RunOptions) (BenchmarkReport, error) {
@@ -118,8 +152,10 @@ func newHarness(ctx context.Context, dataset Dataset, embeddingOptions Embedding
 	if err != nil {
 		return nil, err
 	}
+	var observed *observedEmbeddingClient
 	if embedder != nil {
-		vectors.SetEmbedder(embedder)
+		observed = &observedEmbeddingClient{EmbeddingClient: embedder}
+		vectors.SetEmbedder(observed)
 	}
 	for _, item := range dataset.Documents {
 		doc := item.ToDomain()
@@ -168,6 +204,7 @@ func newHarness(ctx context.Context, dataset Dataset, embeddingOptions Embedding
 	return &harness{
 		engine:    engine,
 		embedding: normalizedEmbedding.runInfo(),
+		observed:  observed,
 	}, nil
 }
 
@@ -203,17 +240,11 @@ func runVariant(ctx context.Context, bench *harness, dataset Dataset, variant me
 		if limit <= 0 {
 			limit = 10
 		}
-		debug, err := bench.engine.SearchWithVariant(ctx, domain.SearchInput{
-			AsOf: query.AsOf, RelationMode: query.RelationMode, EntityScope: query.EntityScope,
-			UserID:              query.UserID,
-			GenerationID:        query.GenerationID,
-			Query:               query.Query,
-			TopN:                limit,
-			IncludeConversation: query.IncludeConversation,
-			IncludeSegments:     query.IncludeSegments,
-			MemoryTypes:         query.MemoryTypes,
-		}, variant)
+		debug, err := bench.engine.SearchWithVariant(ctx, searchInputForCase(query, limit), variant)
 		if err != nil {
+			return VariantReport{}, nil, fmt.Errorf("run case %s: %w", query.CaseID, err)
+		}
+		if err := bench.embeddingError(); err != nil {
 			return VariantReport{}, nil, fmt.Errorf("run case %s: %w", query.CaseID, err)
 		}
 		results := rankResults(query, debug)
@@ -227,6 +258,7 @@ func runVariant(ctx context.Context, bench *harness, dataset Dataset, variant me
 			Metrics:      computeCaseMetrics(query, results),
 			Results:      results,
 			Notes:        query.Notes,
+			Metadata:     query.Metadata,
 		}
 		report.Cases = append(report.Cases, caseReport)
 		if sample := buildFailure(caseReport); sample != nil {
@@ -235,6 +267,15 @@ func runVariant(ctx context.Context, bench *harness, dataset Dataset, variant me
 	}
 	report.Aggregate = summarizeCases(report.Cases)
 	return report, failures, nil
+}
+
+func searchInputForCase(query QueryCase, limit int) domain.SearchInput {
+	return domain.SearchInput{
+		AsOf: query.AsOf, RelationMode: query.RelationMode, EntityScope: query.EntityScope,
+		UserID: query.UserID, GenerationID: query.GenerationID, Query: query.Query, TopN: limit,
+		IncludeConversation: query.IncludeConversation, IncludeSegments: query.IncludeSegments,
+		MemoryTypes: query.MemoryTypes,
+	}
 }
 
 func rankResults(query QueryCase, debug memoryservice.DebugSearchResult) []RankedResult {

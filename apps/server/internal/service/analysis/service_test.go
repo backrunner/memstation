@@ -56,6 +56,34 @@ func TestAnalysisAcceptsGenuineEmptyModelResult(t *testing.T) {
 	}
 }
 
+func TestAnalysisReportsInvalidFieldWithoutCopyingSourceContent(t *testing.T) {
+	t.Parallel()
+	input := sourceInput()
+	for _, field := range []string{"subject", "importance", "decay_factor", "confidence", "content"} {
+		var body map[string]any
+		if err := json.Unmarshal(modelExtraction(t, input), &body); err != nil {
+			t.Fatal(err)
+		}
+		fact := body["facts"].([]any)[0].(map[string]any)
+		if field == "subject" || field == "content" {
+			fact[field] = ""
+		} else {
+			fact[field] = 99
+		}
+		raw, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = withBody(raw).AnalyzeConversation(context.Background(), input)
+		if err == nil || !strings.Contains(err.Error(), "invalid LLM memory "+field) {
+			t.Fatalf("%s: %v", field, err)
+		}
+		if strings.Contains(err.Error(), input.Conversation.Messages[0].Text) {
+			t.Fatal("validation error exposed source text")
+		}
+	}
+}
+
 func TestAnalysisStoresOnlyModelSelectedContentAndStableIDs(t *testing.T) {
 	input := sourceInput()
 	body := modelExtraction(t, input)
