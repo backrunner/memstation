@@ -10,6 +10,7 @@ func (Message) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("user_id"),
  field.String("workspace_id").Immutable(),
+field.String("partition_id").Default("").Immutable(),
 		field.String("conversation_id"),
 		field.String("role"),
 		field.JSON("content_blocks", []map[string]any{}).Optional(),

@@ -1,0 +1,77 @@
+scalar Long
+scalar Time
+scalar JSON
+input WorkspaceScope { user_id: ID!, workspace_id: ID!, partition_id: ID = "" }
+input WorkspaceCreate { user_id: ID!, name: String!, kind: String!, capabilities: [String!] }
+input WorkspacePolicy { user_id: ID!, id: ID!, name: String!, capabilities: [String!]!, policy_version: Long! }
+input IntegrationInput { id: ID = "", user_id: ID!, workspace_id: ID!, name: String!, kind: String!, external_space_id: String!, agent_id: ID!, allowed_event_types: [String!]!, revision: Long! }
+input PartitionInput { id: ID = "", user_id: ID!, workspace_id: ID!, agent_id: ID!, audience_actor_ids: [ID!]!, revision: Long! }
+input GrantInput { user_id: ID!, workspace_id: ID!, agent_id: ID!, capabilities: [String!]!, revision: Long! }
+input SourceSpanInput { start: Int!, end: Int! }
+input SourceReferenceInput { workspace_id: ID!, message_id: ID!, revision: Long!, part_index: Int!, span: SourceSpanInput }
+input CandidateProposal { kind: String!, content: String!, partition_id: ID = "", subject_actor_ids: [ID!]!, source_refs: [SourceReferenceInput!]!, target_node_id: ID = "", target_revision: Long = 0 }
+input EraseSelector { partition_id: ID = "", source_refs: [SourceReferenceInput!], node_ids: [ID!], actor_id: ID = "", workspace: Boolean = false }
+input PublicationProposal { source_node_id: ID!, source_revision: Long!, target_workspace_id: ID!, target_partition_id: ID = "", actor_mapping: JSON, replaces_publication_id: ID = "", expected_publication_revision: Long = 0 }
+type WorkspaceInfo { id: ID!, user_id: ID!, name: String!, kind: String!, status: String!, policy_version: Long!, capabilities: [String!]! }
+type WorkspaceDirectory { items: [WorkspaceInfo!]!, next_cursor: String!, workspace_mode: String! }
+type IntegrationInfo { id: ID!, user_id: ID!, workspace_id: ID!, name: String!, kind: String!, external_space_id: String!, agent_id: ID!, allowed_event_types: [String!]!, revision: Long! }
+type PartitionInfo { id: ID!, user_id: ID!, workspace_id: ID!, agent_id: ID!, audience_actor_ids: [ID!]!, revision: Long! }
+type GrantInfo { user_id: ID!, workspace_id: ID!, agent_id: ID!, capabilities: [String!]!, revision: Long! }
+type SourceSpan { start: Int!, end: Int! }
+type SourceReference { workspace_id: ID!, message_id: ID!, revision: Long!, part_index: Int!, span: SourceSpan }
+type SourceIdentity { external_id: String, actor_id: ID, display_name: String, kind: String! }
+type SourceContent { type: String!, text: String, actor_id: ID, source: SourceReference, author: SourceIdentity }
+type SourceDetail { id: ID!, workspace_id: ID!, partition_id: ID, integration_id: ID!, revision: Long!, speaker_actor_id: ID, parts: [SourceContent!]!, reply_to: SourceReference, occurred_at: Time! }
+type CandidateRecord { id: ID!, workspace_id: ID!, partition_id: ID, agent_id: ID!, kind: String!, content: String!, subject_actor_ids: [ID!]!, source_refs: [SourceReference!]!, origin: String!, status: String!, revision: Long!, target_node_id: ID, target_revision: Long, result_node_id: ID, created_at: Time!, updated_at: Time! }
+type LifecycleOperation { id: ID!, workspace_id: ID!, partition_id: ID, kind: String!, status: String!, revision: Long!, read_blocked: Boolean!, online_cleaned: Boolean!, journal_persisted: Boolean!, backup_status: String!, failure_code: String, result: JSON, expires_at: Time, created_at: Time!, updated_at: Time! }
+type PublicationRecord { id: ID!, source_workspace_id: ID!, source_node_id: ID!, source_revision: Long!, target_workspace_id: ID!, target_partition_id: ID, target_node_id: ID!, status: String!, revision: Long!, operation_id: ID }
+type AcceptanceRecord { event_id: ID!, message_id: ID!, conversation_id: ID, sequence: Long!, status: String! }
+type IngestionProgress { id: ID!, workspace_id: ID!, stream_id: ID!, partition_id: ID, generation_id: ID, accepted_sequence: Long!, indexed_sequence: Long!, status: String!, stage: String, failure_code: String, retry_count: Int!, next_retry_at: Time, dead_letter: Boolean!, events: [AcceptanceRecord!]! }
+type ActorInfo { actor_id: ID!, display_name: String!, kind: String!, revision: Long! }
+type SourceInfo { id: ID!, revision: Long!, speaker_actor_id: ID!, status: String! }
+type MemoryJobInfo { generation_id: ID!, id: ID!, queue: String!, operation_id: ID, user_id: ID!, workspace_id: ID!, partition_id: ID!, conversation_id: ID!, task_type: String!, status: String!, attempt: Int!, failure_code: String, next_retry_at: Time }
+type MemoryControlInfo { actors: [ActorInfo!]!, sources: [SourceInfo!]!, receipts: [IngestionProgress!]!, jobs: [MemoryJobInfo!]!, operations: [LifecycleOperation!]!, limit: Int!, nextCursor: String! }
+type MemoryRecord { kind: String!, visibility: String!, valid_from: Time, valid_to: Time, id: ID!, node_id: ID!, workspace_id: ID!, partition_id: ID, generation_id: ID!, content: String!, subject_actor_ids: [ID!]!, source_refs: [SourceReference!]!, revision: Long!, status: String! }
+type BackgroundCall { id: ID!, workspace_id: ID!, partition_ids: [ID!]!, role: String!, model_alias: String!, model_version: String!, trace_id: String!, job_id: String!, attempt: Int!, provider_request_id: String!, broker_usage_id: String!, status: String!, input_tokens: Int!, output_tokens: Int!, reported_cost: String!, currency: String!, usage_authority: String!, failure_code: String!, created_at: Time!, updated_at: Time! }
+extend type Query {
+ workspaceDirectory(user: ID = "", after: String = "", query: String = "", limit: Int = 50): WorkspaceDirectory!
+ workspaceIntegrations(scope: WorkspaceScope!): [IntegrationInfo!]!
+ workspacePartitions(scope: WorkspaceScope!): [PartitionInfo!]!
+ workspaceAgentGrant(scope: WorkspaceScope!, agent: ID!): GrantInfo!
+ memoryControl(scope: WorkspaceScope!, after: String = "", limit: Int = 50): MemoryControlInfo!
+ ingestionProgress(scope: WorkspaceScope!, id: ID!): IngestionProgress!
+ sourceDetail(scope: WorkspaceScope!, id: ID!): SourceDetail!
+ memoryRecord(scope: WorkspaceScope!, id: ID!): MemoryRecord!
+ memoryCandidates(scope: WorkspaceScope!, id: ID = "", after: String = ""): [CandidateRecord!]!
+ memoryOperation(scope: WorkspaceScope!, id: ID!): LifecycleOperation!
+ memoryPublications(scope: WorkspaceScope!, after: String = ""): [PublicationRecord!]!
+ memoryBackgroundUsage(scope: WorkspaceScope!, after: String = "", limit: Int = 50): [BackgroundCall!]!
+}
+extend type Mutation {
+ reconcileBackgroundUsage(scope: WorkspaceScope!, id: ID!): BackgroundCall!
+ createWorkspace(input: WorkspaceCreate!): WorkspaceInfo!
+ updateWorkspacePolicy(input: WorkspacePolicy!): WorkspaceInfo!
+ configureIntegration(input: IntegrationInput!): IntegrationInfo!
+ configurePartition(input: PartitionInput!): PartitionInfo!
+ setWorkspaceAgentGrant(input: GrantInput!): GrantInfo!
+ proposeMemory(scope: WorkspaceScope!, input: CandidateProposal!): CandidateRecord!
+ reviewMemoryCandidate(scope: WorkspaceScope!, id: ID!, expected_revision: Long!, decision: String!, confirmed_kind: String = ""): CandidateRecord!
+ forgetMemory(scope: WorkspaceScope!, selector: EraseSelector!, idempotency_key: String!): LifecycleOperation!
+ retractSources(scope: WorkspaceScope!, selector: EraseSelector!, idempotency_key: String!): LifecycleOperation!
+ exportMemory(scope: WorkspaceScope!, idempotency_key: String!): LifecycleOperation!
+ publishMemory(scope: WorkspaceScope!, input: PublicationProposal!): PublicationRecord!
+ retractMemoryPublication(scope: WorkspaceScope!, id: ID!, expected_revision: Long!): PublicationRecord!
+ replayMemoryJob(scope: WorkspaceScope!, id: ID!): Boolean!
+}
+
+type WorkspaceAgent { id: ID!, user_id: ID!, actor_id: ID!, name: String!, status: String!, default_workspace_id: ID!, revision: Long!, legacy: Boolean!, created_at: Time!, updated_at: Time! }
+type WorkspaceAgentDetail {agent: WorkspaceAgent!, grant: GrantInfo!, workspace: WorkspaceInfo!, effective_capabilities: [String!]!}
+extend type Mutation {createWorkspaceAgent(scope: WorkspaceScope!, name: String!, capabilities: [String!]!): WorkspaceAgent!}
+extend type Query {workspaceAgentDetail(scope: WorkspaceScope!, agent: ID!): WorkspaceAgentDetail!}
+
+type MemoryGenerationInfo {generation_id: ID!, user_id: ID!, workspace_id: ID!, status: String!, scope: String!, conversation_id: ID, is_active: Boolean!, structure_version: Int!, embedding_version: Int!, embedding_model: String!, activate_on_success: Boolean!, source_count: Int!, processed_count: Int!, embedding_count: Int!, failure_count: Int!, last_error: String, metadata: JSON, created_at: Time!, updated_at: Time!, activated_at: Time}
+type MemoryCapabilitiesInfo {contract_version: String!, server_version: String!, status: String!, capabilities: JSON!, limitations: [String!]!, runtime: MemoryRuntimeInfo!}
+type MemoryRuntimeInfo {ai_backend: String!, role_aliases: JSON!, embedding: EmbeddingIdentityInfo!, usage_authority: String!}
+type EmbeddingIdentityInfo {model_version: String!, dimensions: Int!, fingerprint: String!}
+extend type Query {workspaceMemoryGenerations(scope: WorkspaceScope!): [MemoryGenerationInfo!]!, workspaceMemoryCapabilities(scope: WorkspaceScope!): MemoryCapabilitiesInfo!}
+extend type Mutation {rebuildWorkspaceMemory(scope: WorkspaceScope!, embedding_model: String = "", activate_on_success: Boolean = true): MemoryGenerationInfo!, activateWorkspaceGeneration(scope: WorkspaceScope!, id: ID!): MemoryGenerationInfo!, discardWorkspaceGeneration(scope: WorkspaceScope!, id: ID!): MemoryGenerationInfo!}

@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	storeaccess "memstation/apps/server/internal/store/access"
+
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/security"
 )
@@ -29,11 +31,15 @@ func NewInMemoryMediaRepository() *InMemoryMediaRepository {
 }
 
 func (r *InMemoryMediaRepository) PutBlob(ctx context.Context, blob domain.BlobObject) error {
-	workspace, err := security.PersonalScope(ctx, blob.UserID, blob.WorkspaceID)
+	workspace, err := security.DataScope(ctx, blob.UserID, blob.WorkspaceID)
 	if err != nil {
 		return err
 	}
 	blob.WorkspaceID = workspace
+	if blob.PartitionID != "" && blob.PartitionID != security.WritePartition(ctx) {
+		return domain.ErrAccessDenied
+	}
+	blob.PartitionID = security.WritePartition(ctx)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := time.Now().UTC()
@@ -43,7 +49,7 @@ func (r *InMemoryMediaRepository) PutBlob(ctx context.Context, blob domain.BlobO
 	if blob.UpdatedAt.IsZero() {
 		blob.UpdatedAt = now
 	}
-	if old, ok := r.blobs[key(blob.UserID, blob.BlobID)]; ok && (old.WorkspaceID != workspace || old.StorageKey != blob.StorageKey || old.DeletedAt != nil) {
+	if old, ok := r.blobs[key(blob.UserID, blob.BlobID)]; ok && (old.WorkspaceID != workspace || old.PartitionID != blob.PartitionID || old.StorageKey != blob.StorageKey || old.DeletedAt != nil) {
 		return domain.ErrAccessDenied
 	}
 	blob.Metadata = cloneMetadata(blob.Metadata)
@@ -52,14 +58,14 @@ func (r *InMemoryMediaRepository) PutBlob(ctx context.Context, blob domain.BlobO
 }
 
 func (r *InMemoryMediaRepository) GetBlob(ctx context.Context, userID, blobID string) (domain.BlobObject, error) {
-	workspace, err := security.PersonalScope(ctx, userID, "")
+	workspace, err := security.DataScope(ctx, userID, "")
 	if err != nil {
 		return domain.BlobObject{}, err
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	blob, ok := r.blobs[key(userID, blobID)]
-	if !ok || blob.WorkspaceID != workspace {
+	if !ok || blob.WorkspaceID != workspace || !security.CanReadPartition(ctx, blob.PartitionID) {
 		return domain.BlobObject{}, errors.New("blob not found")
 	}
 	blob.Metadata = cloneMetadata(blob.Metadata)
@@ -67,14 +73,14 @@ func (r *InMemoryMediaRepository) GetBlob(ctx context.Context, userID, blobID st
 }
 
 func (r *InMemoryMediaRepository) DeleteBlob(ctx context.Context, userID, blobID string, deletedAt time.Time) error {
-	workspace, err := security.PersonalScope(ctx, userID, "")
+	workspace, err := security.DataScope(ctx, userID, "")
 	if err != nil {
 		return err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	blob, ok := r.blobs[key(userID, blobID)]
-	if !ok || blob.WorkspaceID != workspace {
+	if !ok || blob.WorkspaceID != workspace || !security.CanReadPartition(ctx, blob.PartitionID) {
 		return nil
 	}
 	if deletedAt.IsZero() {
@@ -87,7 +93,7 @@ func (r *InMemoryMediaRepository) DeleteBlob(ctx context.Context, userID, blobID
 }
 
 func (r *InMemoryMediaRepository) ReplaceMessageParts(ctx context.Context, userID, conversationID string, parts []domain.MessagePart) error {
-	workspace, err := security.PersonalScope(ctx, userID, "")
+	workspace, err := security.DataScope(ctx, userID, "")
 	if err != nil {
 		return err
 	}
@@ -98,11 +104,12 @@ func (r *InMemoryMediaRepository) ReplaceMessageParts(ctx context.Context, userI
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, old := range r.parts[key(userID, conversationID)] {
-		if old.WorkspaceID != workspace {
+		if old.WorkspaceID != workspace || !security.CanReadPartition(ctx, old.PartitionID) {
 			return domain.ErrAccessDenied
 		}
 	}
 	for _, part := range parts {
+		part.PartitionID = security.WritePartition(ctx)
 		if part.BlobID != "" {
 			if blob, ok := r.blobs[key(userID, part.BlobID)]; ok && (blob.WorkspaceID != workspace || blob.DeletedAt != nil) {
 				return domain.ErrAccessDenied
@@ -141,7 +148,7 @@ func (r *InMemoryMediaRepository) ReplaceMessageParts(ctx context.Context, userI
 }
 
 func (r *InMemoryMediaRepository) ListMessageParts(ctx context.Context, userID, conversationID string) ([]domain.MessagePart, error) {
-	workspace, err := security.PersonalScope(ctx, userID, "")
+	workspace, err := security.DataScope(ctx, userID, "")
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +156,7 @@ func (r *InMemoryMediaRepository) ListMessageParts(ctx context.Context, userID, 
 	defer r.mu.RUnlock()
 	items := []domain.MessagePart{}
 	for _, item := range r.parts[key(userID, conversationID)] {
-		if item.UserID == userID && item.WorkspaceID == workspace {
+		if item.UserID == userID && item.WorkspaceID == workspace && security.CanReadPartition(ctx, item.PartitionID) {
 			items = append(items, item)
 		}
 	}
@@ -160,7 +167,7 @@ func (r *InMemoryMediaRepository) ListMessageParts(ctx context.Context, userID, 
 }
 
 func (r *InMemoryMediaRepository) ReplacePartArtifacts(ctx context.Context, userID, conversationID string, artifacts []domain.MessagePartArtifact) error {
-	workspace, err := security.PersonalScope(ctx, userID, "")
+	workspace, err := security.DataScope(ctx, userID, "")
 	if err != nil {
 		return err
 	}
@@ -171,13 +178,14 @@ func (r *InMemoryMediaRepository) ReplacePartArtifacts(ctx context.Context, user
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, old := range r.artifacts[key(userID, conversationID)] {
-		if old.WorkspaceID != workspace {
+		if old.WorkspaceID != workspace || !security.CanReadPartition(ctx, old.PartitionID) {
 			return domain.ErrAccessDenied
 		}
 	}
 	items := make([]domain.MessagePartArtifact, 0, len(artifacts))
 	now := time.Now().UTC()
 	for _, artifact := range artifacts {
+		artifact.PartitionID = security.WritePartition(ctx)
 		if artifact.UserID == "" {
 			artifact.UserID = userID
 		}
@@ -207,7 +215,7 @@ func (r *InMemoryMediaRepository) ReplacePartArtifacts(ctx context.Context, user
 }
 
 func (r *InMemoryMediaRepository) ListPartArtifacts(ctx context.Context, userID, conversationID string) ([]domain.MessagePartArtifact, error) {
-	workspace, err := security.PersonalScope(ctx, userID, "")
+	workspace, err := security.DataScope(ctx, userID, "")
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +223,7 @@ func (r *InMemoryMediaRepository) ListPartArtifacts(ctx context.Context, userID,
 	defer r.mu.RUnlock()
 	items := []domain.MessagePartArtifact{}
 	for _, item := range r.artifacts[key(userID, conversationID)] {
-		if item.UserID == userID && item.WorkspaceID == workspace {
+		if item.UserID == userID && item.WorkspaceID == workspace && security.CanReadPartition(ctx, item.PartitionID) {
 			items = append(items, item)
 		}
 	}
@@ -234,11 +242,15 @@ func NewPostgresMediaRepository(db *sqlpkg.DB) *PostgresMediaRepository {
 }
 
 func (r *PostgresMediaRepository) PutBlob(ctx context.Context, blob domain.BlobObject) error {
-	workspace, err := security.PersonalScope(ctx, blob.UserID, blob.WorkspaceID)
+	workspace, err := security.DataScope(ctx, blob.UserID, blob.WorkspaceID)
 	if err != nil {
 		return err
 	}
 	blob.WorkspaceID = workspace
+	if blob.PartitionID != "" && blob.PartitionID != security.WritePartition(ctx) {
+		return domain.ErrAccessDenied
+	}
+	blob.PartitionID = security.WritePartition(ctx)
 	now := time.Now().UTC()
 	if blob.CreatedAt.IsZero() {
 		blob.CreatedAt = now
@@ -257,8 +269,8 @@ func (r *PostgresMediaRepository) PutBlob(ctx context.Context, blob domain.BlobO
 	result, err := tx.ExecContext(ctx, `
 		INSERT INTO blob_objects (
 			blob_id, user_id, source_kind, storage_backend, storage_key, mime_type, sha256,
-			size_bytes, original_filename, metadata, deleted_at, created_at, updated_at, workspace_id
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+			size_bytes, original_filename, metadata, deleted_at, created_at, updated_at, workspace_id,partition_id
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
 		ON CONFLICT (blob_id) DO UPDATE SET
 			source_kind = EXCLUDED.source_kind,
 			storage_backend = EXCLUDED.storage_backend,
@@ -270,8 +282,8 @@ func (r *PostgresMediaRepository) PutBlob(ctx context.Context, blob domain.BlobO
 			metadata = EXCLUDED.metadata,
 			deleted_at = EXCLUDED.deleted_at,
 			updated_at = EXCLUDED.updated_at
- WHERE blob_objects.user_id=EXCLUDED.user_id AND blob_objects.workspace_id=EXCLUDED.workspace_id AND blob_objects.storage_key=EXCLUDED.storage_key AND blob_objects.deleted_at IS NULL
-	`, blob.BlobID, blob.UserID, string(blob.SourceKind), blob.StorageBackend, blob.StorageKey, blob.MIMEType, blob.SHA256, blob.SizeBytes, blob.OriginalFilename, marshalJSON(blob.Metadata), blob.DeletedAt, blob.CreatedAt, blob.UpdatedAt, workspace)
+ WHERE blob_objects.user_id=EXCLUDED.user_id AND blob_objects.workspace_id=EXCLUDED.workspace_id AND blob_objects.partition_id=EXCLUDED.partition_id AND blob_objects.storage_key=EXCLUDED.storage_key AND blob_objects.deleted_at IS NULL
+	`, blob.BlobID, blob.UserID, string(blob.SourceKind), blob.StorageBackend, blob.StorageKey, blob.MIMEType, blob.SHA256, blob.SizeBytes, blob.OriginalFilename, marshalJSON(blob.Metadata), blob.DeletedAt, blob.CreatedAt, blob.UpdatedAt, workspace, blob.PartitionID)
 	if err != nil {
 		return err
 	}
@@ -286,15 +298,15 @@ func (r *PostgresMediaRepository) PutBlob(ctx context.Context, blob domain.BlobO
 }
 
 func (r *PostgresMediaRepository) GetBlob(ctx context.Context, userID, blobID string) (domain.BlobObject, error) {
-	workspace, err := security.PersonalScope(ctx, userID, "")
+	workspace, err := security.DataScope(ctx, userID, "")
 	if err != nil {
 		return domain.BlobObject{}, err
 	}
 	row := r.db.QueryRowContext(ctx, `
 		SELECT source_kind, storage_backend, storage_key, mime_type, sha256, size_bytes,
-		       original_filename, metadata, deleted_at, created_at, updated_at
+		       original_filename, metadata, deleted_at, created_at, updated_at,partition_id
 		FROM blob_objects
-		WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND blob_id = $1 AND user_id = $2
+		WHERE `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND blob_id = $1 AND user_id = $2
 	`, blobID, userID)
 
 	var blob domain.BlobObject
@@ -304,7 +316,7 @@ func (r *PostgresMediaRepository) GetBlob(ctx context.Context, userID, blobID st
 	blob.BlobID = blobID
 	blob.UserID = userID
 	blob.WorkspaceID = workspace
-	if err := row.Scan(&sourceKind, &blob.StorageBackend, &blob.StorageKey, &blob.MIMEType, &blob.SHA256, &blob.SizeBytes, &blob.OriginalFilename, &metadataBytes, &deletedAt, &blob.CreatedAt, &blob.UpdatedAt); err != nil {
+	if err := row.Scan(&sourceKind, &blob.StorageBackend, &blob.StorageKey, &blob.MIMEType, &blob.SHA256, &blob.SizeBytes, &blob.OriginalFilename, &metadataBytes, &deletedAt, &blob.CreatedAt, &blob.UpdatedAt, &blob.PartitionID); err != nil {
 		if errors.Is(err, sqlpkg.ErrNoRows) {
 			return domain.BlobObject{}, errors.New("blob not found")
 		}
@@ -320,7 +332,7 @@ func (r *PostgresMediaRepository) GetBlob(ctx context.Context, userID, blobID st
 }
 
 func (r *PostgresMediaRepository) DeleteBlob(ctx context.Context, userID, blobID string, deletedAt time.Time) error {
-	workspace, err := security.PersonalScope(ctx, userID, "")
+	workspace, err := security.DataScope(ctx, userID, "")
 	if err != nil {
 		return err
 	}
@@ -330,13 +342,13 @@ func (r *PostgresMediaRepository) DeleteBlob(ctx context.Context, userID, blobID
 	_, err = r.db.ExecContext(ctx, `
 		UPDATE blob_objects
 		SET deleted_at = $1, updated_at = $1
-		WHERE workspace_id=$4 AND blob_id = $2 AND user_id = $3
+		WHERE `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND workspace_id=$4 AND blob_id = $2 AND user_id = $3
 	`, deletedAt, blobID, userID, workspace)
 	return err
 }
 
 func (r *PostgresMediaRepository) ReplaceMessageParts(ctx context.Context, userID, conversationID string, parts []domain.MessagePart) error {
-	workspace, err := security.PersonalScope(ctx, userID, "")
+	workspace, err := security.DataScope(ctx, userID, "")
 	if err != nil {
 		return err
 	}
@@ -350,13 +362,13 @@ func (r *PostgresMediaRepository) ReplaceMessageParts(ctx context.Context, userI
 	}
 	defer rollback(tx)
 	var parent string
-	if err = tx.QueryRowContext(ctx, `SELECT id FROM conversations WHERE id=$1 AND user_id=$2 AND workspace_id=$3 FOR SHARE`, conversationID, userID, workspace).Scan(&parent); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT id FROM conversations WHERE id=$1 AND user_id=$2 AND workspace_id=$3 AND `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND finalize_status<>'invalidated' FOR SHARE`, conversationID, userID, workspace).Scan(&parent); err != nil {
 		return domain.ErrAccessDenied
 	}
 
 	if _, err = tx.ExecContext(ctx, `
 		DELETE FROM message_parts
-		WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND user_id = $1 AND conversation_id = $2
+		WHERE `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND user_id = $1 AND conversation_id = $2
 	`, userID, conversationID); err != nil {
 		return err
 	}
@@ -391,7 +403,7 @@ func (r *PostgresMediaRepository) ReplaceMessageParts(ctx context.Context, userI
 }
 
 func (r *PostgresMediaRepository) ListMessageParts(ctx context.Context, userID, conversationID string) ([]domain.MessagePart, error) {
-	workspace, err := security.PersonalScope(ctx, userID, "")
+	workspace, err := security.DataScope(ctx, userID, "")
 	if err != nil {
 		return nil, err
 	}
@@ -399,7 +411,7 @@ func (r *PostgresMediaRepository) ListMessageParts(ctx context.Context, userID, 
 		SELECT part_id, sequence_num, part_index, role, part_type, mime_type, blob_id, source_url,
 		       provider_file_id, text_content, raw_payload, page_index, start_ms, end_ms, metadata, created_at, updated_at
 		FROM message_parts
-		WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND user_id = $1 AND conversation_id = $2
+		WHERE `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND user_id = $1 AND conversation_id = $2
 		ORDER BY sequence_num ASC, part_index ASC, start_ms ASC, created_at ASC
 	`, userID, conversationID)
 	if err != nil {
@@ -438,7 +450,7 @@ func (r *PostgresMediaRepository) ListMessageParts(ctx context.Context, userID, 
 }
 
 func (r *PostgresMediaRepository) ReplacePartArtifacts(ctx context.Context, userID, conversationID string, artifacts []domain.MessagePartArtifact) error {
-	workspace, err := security.PersonalScope(ctx, userID, "")
+	workspace, err := security.DataScope(ctx, userID, "")
 	if err != nil {
 		return err
 	}
@@ -452,13 +464,13 @@ func (r *PostgresMediaRepository) ReplacePartArtifacts(ctx context.Context, user
 	}
 	defer rollback(tx)
 	var parent string
-	if err = tx.QueryRowContext(ctx, `SELECT id FROM conversations WHERE id=$1 AND user_id=$2 AND workspace_id=$3 FOR SHARE`, conversationID, userID, workspace).Scan(&parent); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT id FROM conversations WHERE id=$1 AND user_id=$2 AND workspace_id=$3 AND `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND finalize_status<>'invalidated' FOR SHARE`, conversationID, userID, workspace).Scan(&parent); err != nil {
 		return domain.ErrAccessDenied
 	}
 
 	if _, err = tx.ExecContext(ctx, `
 		DELETE FROM message_part_artifacts
-		WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND user_id = $1 AND conversation_id = $2
+		WHERE `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND user_id = $1 AND conversation_id = $2
 	`, userID, conversationID); err != nil {
 		return err
 	}
@@ -489,7 +501,7 @@ func (r *PostgresMediaRepository) ReplacePartArtifacts(ctx context.Context, user
 }
 
 func (r *PostgresMediaRepository) ListPartArtifacts(ctx context.Context, userID, conversationID string) ([]domain.MessagePartArtifact, error) {
-	workspace, err := security.PersonalScope(ctx, userID, "")
+	workspace, err := security.DataScope(ctx, userID, "")
 	if err != nil {
 		return nil, err
 	}
@@ -497,7 +509,7 @@ func (r *PostgresMediaRepository) ListPartArtifacts(ctx context.Context, userID,
 		SELECT artifact_id, part_id, artifact_type, status, extractor_kind, model_name, text_content,
 		       page_index, start_ms, end_ms, confidence, metadata, created_at, updated_at
 		FROM message_part_artifacts
-		WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND user_id = $1 AND conversation_id = $2
+		WHERE `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND user_id = $1 AND conversation_id = $2
 		ORDER BY part_id ASC, start_ms ASC, page_index ASC, created_at ASC
 	`, userID, conversationID)
 	if err != nil {

@@ -1082,6 +1082,7 @@ type SearchRequest struct {
 	KnownAt             *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=known_at,json=knownAt,proto3" json:"known_at,omitempty"`
 	RelationMode        string                 `protobuf:"bytes,13,opt,name=relation_mode,json=relationMode,proto3" json:"relation_mode,omitempty"`
 	EntityScope         string                 `protobuf:"bytes,14,opt,name=entity_scope,json=entityScope,proto3" json:"entity_scope,omitempty"`
+	SubjectActorIds     []string               `protobuf:"bytes,15,rep,name=subject_actor_ids,json=subjectActorIds,proto3" json:"subject_actor_ids,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -1214,11 +1215,21 @@ func (x *SearchRequest) GetEntityScope() string {
 	return ""
 }
 
+func (x *SearchRequest) GetSubjectActorIds() []string {
+	if x != nil {
+		return x.SubjectActorIds
+	}
+	return nil
+}
+
 type SearchResponse struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
 	Memories             []*MemoryDocument      `protobuf:"bytes,1,rep,name=memories,proto3" json:"memories,omitempty"`
 	Total                int32                  `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	QueryEmbeddingTokens int32                  `protobuf:"varint,3,opt,name=query_embedding_tokens,json=queryEmbeddingTokens,proto3" json:"query_embedding_tokens,omitempty"`
+	Trace                *structpb.Struct       `protobuf:"bytes,4,opt,name=trace,proto3" json:"trace,omitempty"`
+	Rerank               *structpb.Struct       `protobuf:"bytes,5,opt,name=rerank,proto3" json:"rerank,omitempty"`
+	RecallTrace          *RecallTrace           `protobuf:"bytes,6,opt,name=recall_trace,json=recallTrace,proto3" json:"recall_trace,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -1274,6 +1285,295 @@ func (x *SearchResponse) GetQueryEmbeddingTokens() int32 {
 	return 0
 }
 
+func (x *SearchResponse) GetTrace() *structpb.Struct {
+	if x != nil {
+		return x.Trace
+	}
+	return nil
+}
+
+func (x *SearchResponse) GetRerank() *structpb.Struct {
+	if x != nil {
+		return x.Rerank
+	}
+	return nil
+}
+
+func (x *SearchResponse) GetRecallTrace() *RecallTrace {
+	if x != nil {
+		return x.RecallTrace
+	}
+	return nil
+}
+
+type RecallTrace struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Watermarks        []*StreamWatermark     `protobuf:"bytes,1,rep,name=watermarks,proto3" json:"watermarks,omitempty"`
+	WatermarksPartial bool                   `protobuf:"varint,2,opt,name=watermarks_partial,json=watermarksPartial,proto3" json:"watermarks_partial,omitempty"`
+	ProviderCalls     []*RecallProviderCall  `protobuf:"bytes,3,rep,name=provider_calls,json=providerCalls,proto3" json:"provider_calls,omitempty"`
+	QueryId           string                 `protobuf:"bytes,4,opt,name=query_id,json=queryId,proto3" json:"query_id,omitempty"`
+	ProviderRequestId string                 `protobuf:"bytes,5,opt,name=provider_request_id,json=providerRequestId,proto3" json:"provider_request_id,omitempty"`
+	LatencyMs         int64                  `protobuf:"varint,6,opt,name=latency_ms,json=latencyMs,proto3" json:"latency_ms,omitempty"`
+	ReturnedCount     int32                  `protobuf:"varint,7,opt,name=returned_count,json=returnedCount,proto3" json:"returned_count,omitempty"`
+	EligibleCount     int32                  `protobuf:"varint,8,opt,name=eligible_count,json=eligibleCount,proto3" json:"eligible_count,omitempty"`
+	ScoreDefinition   string                 `protobuf:"bytes,9,opt,name=score_definition,json=scoreDefinition,proto3" json:"score_definition,omitempty"`
+	FailureCode       string                 `protobuf:"bytes,10,opt,name=failure_code,json=failureCode,proto3" json:"failure_code,omitempty"`
+	Degraded          bool                   `protobuf:"varint,11,opt,name=degraded,proto3" json:"degraded,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *RecallTrace) Reset() {
+	*x = RecallTrace{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecallTrace) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecallTrace) ProtoMessage() {}
+
+func (x *RecallTrace) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecallTrace.ProtoReflect.Descriptor instead.
+func (*RecallTrace) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *RecallTrace) GetWatermarks() []*StreamWatermark {
+	if x != nil {
+		return x.Watermarks
+	}
+	return nil
+}
+
+func (x *RecallTrace) GetWatermarksPartial() bool {
+	if x != nil {
+		return x.WatermarksPartial
+	}
+	return false
+}
+
+func (x *RecallTrace) GetProviderCalls() []*RecallProviderCall {
+	if x != nil {
+		return x.ProviderCalls
+	}
+	return nil
+}
+
+func (x *RecallTrace) GetQueryId() string {
+	if x != nil {
+		return x.QueryId
+	}
+	return ""
+}
+
+func (x *RecallTrace) GetProviderRequestId() string {
+	if x != nil {
+		return x.ProviderRequestId
+	}
+	return ""
+}
+
+func (x *RecallTrace) GetLatencyMs() int64 {
+	if x != nil {
+		return x.LatencyMs
+	}
+	return 0
+}
+
+func (x *RecallTrace) GetReturnedCount() int32 {
+	if x != nil {
+		return x.ReturnedCount
+	}
+	return 0
+}
+
+func (x *RecallTrace) GetEligibleCount() int32 {
+	if x != nil {
+		return x.EligibleCount
+	}
+	return 0
+}
+
+func (x *RecallTrace) GetScoreDefinition() string {
+	if x != nil {
+		return x.ScoreDefinition
+	}
+	return ""
+}
+
+func (x *RecallTrace) GetFailureCode() string {
+	if x != nil {
+		return x.FailureCode
+	}
+	return ""
+}
+
+func (x *RecallTrace) GetDegraded() bool {
+	if x != nil {
+		return x.Degraded
+	}
+	return false
+}
+
+type StreamWatermark struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	StreamId      string                 `protobuf:"bytes,1,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
+	PartitionId   string                 `protobuf:"bytes,2,opt,name=partition_id,json=partitionId,proto3" json:"partition_id,omitempty"`
+	GenerationId  string                 `protobuf:"bytes,3,opt,name=generation_id,json=generationId,proto3" json:"generation_id,omitempty"`
+	Accepted      int64                  `protobuf:"varint,4,opt,name=accepted,proto3" json:"accepted,omitempty"`
+	Indexed       int64                  `protobuf:"varint,5,opt,name=indexed,proto3" json:"indexed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamWatermark) Reset() {
+	*x = StreamWatermark{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamWatermark) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamWatermark) ProtoMessage() {}
+
+func (x *StreamWatermark) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamWatermark.ProtoReflect.Descriptor instead.
+func (*StreamWatermark) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *StreamWatermark) GetStreamId() string {
+	if x != nil {
+		return x.StreamId
+	}
+	return ""
+}
+
+func (x *StreamWatermark) GetPartitionId() string {
+	if x != nil {
+		return x.PartitionId
+	}
+	return ""
+}
+
+func (x *StreamWatermark) GetGenerationId() string {
+	if x != nil {
+		return x.GenerationId
+	}
+	return ""
+}
+
+func (x *StreamWatermark) GetAccepted() int64 {
+	if x != nil {
+		return x.Accepted
+	}
+	return 0
+}
+
+func (x *StreamWatermark) GetIndexed() int64 {
+	if x != nil {
+		return x.Indexed
+	}
+	return 0
+}
+
+type RecallProviderCall struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	CallId            string                 `protobuf:"bytes,1,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
+	Role              string                 `protobuf:"bytes,2,opt,name=role,proto3" json:"role,omitempty"`
+	ProviderRequestId string                 `protobuf:"bytes,3,opt,name=provider_request_id,json=providerRequestId,proto3" json:"provider_request_id,omitempty"`
+	Status            string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *RecallProviderCall) Reset() {
+	*x = RecallProviderCall{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecallProviderCall) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecallProviderCall) ProtoMessage() {}
+
+func (x *RecallProviderCall) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecallProviderCall.ProtoReflect.Descriptor instead.
+func (*RecallProviderCall) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *RecallProviderCall) GetCallId() string {
+	if x != nil {
+		return x.CallId
+	}
+	return ""
+}
+
+func (x *RecallProviderCall) GetRole() string {
+	if x != nil {
+		return x.Role
+	}
+	return ""
+}
+
+func (x *RecallProviderCall) GetProviderRequestId() string {
+	if x != nil {
+		return x.ProviderRequestId
+	}
+	return ""
+}
+
+func (x *RecallProviderCall) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
 type InjectionResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
@@ -1284,7 +1584,7 @@ type InjectionResult struct {
 
 func (x *InjectionResult) Reset() {
 	*x = InjectionResult{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[16]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1296,7 +1596,7 @@ func (x *InjectionResult) String() string {
 func (*InjectionResult) ProtoMessage() {}
 
 func (x *InjectionResult) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[16]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1309,7 +1609,7 @@ func (x *InjectionResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InjectionResult.ProtoReflect.Descriptor instead.
 func (*InjectionResult) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{16}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *InjectionResult) GetQuery() string {
@@ -1327,32 +1627,43 @@ func (x *InjectionResult) GetSearch() *SearchResponse {
 }
 
 type MemoryDocument struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	NodeId         string                 `protobuf:"bytes,2,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	GenerationId   string                 `protobuf:"bytes,3,opt,name=generation_id,json=generationId,proto3" json:"generation_id,omitempty"`
-	UserId         string                 `protobuf:"bytes,4,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	ConversationId string                 `protobuf:"bytes,5,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
-	Type           string                 `protobuf:"bytes,6,opt,name=type,proto3" json:"type,omitempty"`
-	Content        string                 `protobuf:"bytes,7,opt,name=content,proto3" json:"content,omitempty"`
-	Score          float64                `protobuf:"fixed64,8,opt,name=score,proto3" json:"score,omitempty"`
-	EffectiveScore float64                `protobuf:"fixed64,9,opt,name=effective_score,json=effectiveScore,proto3" json:"effective_score,omitempty"`
-	Importance     float64                `protobuf:"fixed64,10,opt,name=importance,proto3" json:"importance,omitempty"`
-	DecayFactor    float64                `protobuf:"fixed64,11,opt,name=decay_factor,json=decayFactor,proto3" json:"decay_factor,omitempty"`
-	ActivityAt     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=activity_at,json=activityAt,proto3" json:"activity_at,omitempty"`
-	TimeTier       string                 `protobuf:"bytes,13,opt,name=time_tier,json=timeTier,proto3" json:"time_tier,omitempty"`
-	Metadata       *structpb.Struct       `protobuf:"bytes,14,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	Related        []*RelatedMemory       `protobuf:"bytes,15,rep,name=related,proto3" json:"related,omitempty"`
-	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt      *timestamppb.Timestamp `protobuf:"bytes,17,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	Lineage        *FactLineage           `protobuf:"bytes,18,opt,name=lineage,proto3" json:"lineage,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Id              string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	NodeId          string                 `protobuf:"bytes,2,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	GenerationId    string                 `protobuf:"bytes,3,opt,name=generation_id,json=generationId,proto3" json:"generation_id,omitempty"`
+	UserId          string                 `protobuf:"bytes,4,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	ConversationId  string                 `protobuf:"bytes,5,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	Type            string                 `protobuf:"bytes,6,opt,name=type,proto3" json:"type,omitempty"`
+	Content         string                 `protobuf:"bytes,7,opt,name=content,proto3" json:"content,omitempty"`
+	Score           float64                `protobuf:"fixed64,8,opt,name=score,proto3" json:"score,omitempty"`
+	EffectiveScore  float64                `protobuf:"fixed64,9,opt,name=effective_score,json=effectiveScore,proto3" json:"effective_score,omitempty"`
+	Importance      float64                `protobuf:"fixed64,10,opt,name=importance,proto3" json:"importance,omitempty"`
+	DecayFactor     float64                `protobuf:"fixed64,11,opt,name=decay_factor,json=decayFactor,proto3" json:"decay_factor,omitempty"`
+	ActivityAt      *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=activity_at,json=activityAt,proto3" json:"activity_at,omitempty"`
+	TimeTier        string                 `protobuf:"bytes,13,opt,name=time_tier,json=timeTier,proto3" json:"time_tier,omitempty"`
+	Metadata        *structpb.Struct       `protobuf:"bytes,14,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	Related         []*RelatedMemory       `protobuf:"bytes,15,rep,name=related,proto3" json:"related,omitempty"`
+	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt       *timestamppb.Timestamp `protobuf:"bytes,17,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Lineage         *FactLineage           `protobuf:"bytes,18,opt,name=lineage,proto3" json:"lineage,omitempty"`
+	WorkspaceId     string                 `protobuf:"bytes,19,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	PartitionId     string                 `protobuf:"bytes,20,opt,name=partition_id,json=partitionId,proto3" json:"partition_id,omitempty"`
+	SubjectActorIds []string               `protobuf:"bytes,21,rep,name=subject_actor_ids,json=subjectActorIds,proto3" json:"subject_actor_ids,omitempty"`
+	SourceRefs      []*SourceRef           `protobuf:"bytes,22,rep,name=source_refs,json=sourceRefs,proto3" json:"source_refs,omitempty"`
+	Revision        int64                  `protobuf:"varint,23,opt,name=revision,proto3" json:"revision,omitempty"`
+	Status          string                 `protobuf:"bytes,24,opt,name=status,proto3" json:"status,omitempty"`
+	Kind            string                 `protobuf:"bytes,25,opt,name=kind,proto3" json:"kind,omitempty"`
+	Visibility      string                 `protobuf:"bytes,26,opt,name=visibility,proto3" json:"visibility,omitempty"`
+	ValidFrom       *timestamppb.Timestamp `protobuf:"bytes,27,opt,name=valid_from,json=validFrom,proto3" json:"valid_from,omitempty"`
+	ValidTo         *timestamppb.Timestamp `protobuf:"bytes,28,opt,name=valid_to,json=validTo,proto3" json:"valid_to,omitempty"`
+	Evidences       []*MemoryEvidence      `protobuf:"bytes,29,rep,name=evidences,proto3" json:"evidences,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *MemoryDocument) Reset() {
 	*x = MemoryDocument{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[17]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1364,7 +1675,7 @@ func (x *MemoryDocument) String() string {
 func (*MemoryDocument) ProtoMessage() {}
 
 func (x *MemoryDocument) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[17]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1377,7 +1688,7 @@ func (x *MemoryDocument) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MemoryDocument.ProtoReflect.Descriptor instead.
 func (*MemoryDocument) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{17}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *MemoryDocument) GetId() string {
@@ -1506,6 +1817,247 @@ func (x *MemoryDocument) GetLineage() *FactLineage {
 	return nil
 }
 
+func (x *MemoryDocument) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *MemoryDocument) GetPartitionId() string {
+	if x != nil {
+		return x.PartitionId
+	}
+	return ""
+}
+
+func (x *MemoryDocument) GetSubjectActorIds() []string {
+	if x != nil {
+		return x.SubjectActorIds
+	}
+	return nil
+}
+
+func (x *MemoryDocument) GetSourceRefs() []*SourceRef {
+	if x != nil {
+		return x.SourceRefs
+	}
+	return nil
+}
+
+func (x *MemoryDocument) GetRevision() int64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *MemoryDocument) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *MemoryDocument) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *MemoryDocument) GetVisibility() string {
+	if x != nil {
+		return x.Visibility
+	}
+	return ""
+}
+
+func (x *MemoryDocument) GetValidFrom() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ValidFrom
+	}
+	return nil
+}
+
+func (x *MemoryDocument) GetValidTo() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ValidTo
+	}
+	return nil
+}
+
+func (x *MemoryDocument) GetEvidences() []*MemoryEvidence {
+	if x != nil {
+		return x.Evidences
+	}
+	return nil
+}
+
+type MemoryEvidence struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	GenerationId   string                 `protobuf:"bytes,2,opt,name=generation_id,json=generationId,proto3" json:"generation_id,omitempty"`
+	UserId         string                 `protobuf:"bytes,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	NodeId         string                 `protobuf:"bytes,4,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	ConversationId string                 `protobuf:"bytes,5,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	SequenceNum    int32                  `protobuf:"varint,6,opt,name=sequence_num,json=sequenceNum,proto3" json:"sequence_num,omitempty"`
+	PartId         string                 `protobuf:"bytes,7,opt,name=part_id,json=partId,proto3" json:"part_id,omitempty"`
+	ArtifactId     string                 `protobuf:"bytes,8,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
+	PageIndex      int32                  `protobuf:"varint,9,opt,name=page_index,json=pageIndex,proto3" json:"page_index,omitempty"`
+	StartMs        int64                  `protobuf:"varint,10,opt,name=start_ms,json=startMs,proto3" json:"start_ms,omitempty"`
+	EndMs          int64                  `protobuf:"varint,11,opt,name=end_ms,json=endMs,proto3" json:"end_ms,omitempty"`
+	EvidenceKind   string                 `protobuf:"bytes,12,opt,name=evidence_kind,json=evidenceKind,proto3" json:"evidence_kind,omitempty"`
+	ExcerptText    string                 `protobuf:"bytes,13,opt,name=excerpt_text,json=excerptText,proto3" json:"excerpt_text,omitempty"`
+	Weight         float64                `protobuf:"fixed64,14,opt,name=weight,proto3" json:"weight,omitempty"`
+	Metadata       *structpb.Struct       `protobuf:"bytes,15,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *MemoryEvidence) Reset() {
+	*x = MemoryEvidence{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MemoryEvidence) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MemoryEvidence) ProtoMessage() {}
+
+func (x *MemoryEvidence) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MemoryEvidence.ProtoReflect.Descriptor instead.
+func (*MemoryEvidence) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *MemoryEvidence) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *MemoryEvidence) GetGenerationId() string {
+	if x != nil {
+		return x.GenerationId
+	}
+	return ""
+}
+
+func (x *MemoryEvidence) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *MemoryEvidence) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *MemoryEvidence) GetConversationId() string {
+	if x != nil {
+		return x.ConversationId
+	}
+	return ""
+}
+
+func (x *MemoryEvidence) GetSequenceNum() int32 {
+	if x != nil {
+		return x.SequenceNum
+	}
+	return 0
+}
+
+func (x *MemoryEvidence) GetPartId() string {
+	if x != nil {
+		return x.PartId
+	}
+	return ""
+}
+
+func (x *MemoryEvidence) GetArtifactId() string {
+	if x != nil {
+		return x.ArtifactId
+	}
+	return ""
+}
+
+func (x *MemoryEvidence) GetPageIndex() int32 {
+	if x != nil {
+		return x.PageIndex
+	}
+	return 0
+}
+
+func (x *MemoryEvidence) GetStartMs() int64 {
+	if x != nil {
+		return x.StartMs
+	}
+	return 0
+}
+
+func (x *MemoryEvidence) GetEndMs() int64 {
+	if x != nil {
+		return x.EndMs
+	}
+	return 0
+}
+
+func (x *MemoryEvidence) GetEvidenceKind() string {
+	if x != nil {
+		return x.EvidenceKind
+	}
+	return ""
+}
+
+func (x *MemoryEvidence) GetExcerptText() string {
+	if x != nil {
+		return x.ExcerptText
+	}
+	return ""
+}
+
+func (x *MemoryEvidence) GetWeight() float64 {
+	if x != nil {
+		return x.Weight
+	}
+	return 0
+}
+
+func (x *MemoryEvidence) GetMetadata() *structpb.Struct {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
+func (x *MemoryEvidence) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
 type FactLineage struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
 	FactKey                string                 `protobuf:"bytes,1,opt,name=fact_key,json=factKey,proto3" json:"fact_key,omitempty"`
@@ -1522,7 +2074,7 @@ type FactLineage struct {
 
 func (x *FactLineage) Reset() {
 	*x = FactLineage{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[18]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1534,7 +2086,7 @@ func (x *FactLineage) String() string {
 func (*FactLineage) ProtoMessage() {}
 
 func (x *FactLineage) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[18]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1547,7 +2099,7 @@ func (x *FactLineage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FactLineage.ProtoReflect.Descriptor instead.
 func (*FactLineage) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{18}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *FactLineage) GetFactKey() string {
@@ -1619,7 +2171,7 @@ type RelatedMemory struct {
 
 func (x *RelatedMemory) Reset() {
 	*x = RelatedMemory{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[19]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1631,7 +2183,7 @@ func (x *RelatedMemory) String() string {
 func (*RelatedMemory) ProtoMessage() {}
 
 func (x *RelatedMemory) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[19]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1644,7 +2196,7 @@ func (x *RelatedMemory) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RelatedMemory.ProtoReflect.Descriptor instead.
 func (*RelatedMemory) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{19}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *RelatedMemory) GetNodeId() string {
@@ -1695,7 +2247,7 @@ type ListKeyMemoriesRequest struct {
 
 func (x *ListKeyMemoriesRequest) Reset() {
 	*x = ListKeyMemoriesRequest{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[20]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1707,7 +2259,7 @@ func (x *ListKeyMemoriesRequest) String() string {
 func (*ListKeyMemoriesRequest) ProtoMessage() {}
 
 func (x *ListKeyMemoriesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[20]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1720,7 +2272,7 @@ func (x *ListKeyMemoriesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListKeyMemoriesRequest.ProtoReflect.Descriptor instead.
 func (*ListKeyMemoriesRequest) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{20}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ListKeyMemoriesRequest) GetQuery() string {
@@ -1767,7 +2319,7 @@ type ListKeyMemoriesResponse struct {
 
 func (x *ListKeyMemoriesResponse) Reset() {
 	*x = ListKeyMemoriesResponse{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[21]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1779,7 +2331,7 @@ func (x *ListKeyMemoriesResponse) String() string {
 func (*ListKeyMemoriesResponse) ProtoMessage() {}
 
 func (x *ListKeyMemoriesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[21]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1792,7 +2344,7 @@ func (x *ListKeyMemoriesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListKeyMemoriesResponse.ProtoReflect.Descriptor instead.
 func (*ListKeyMemoriesResponse) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{21}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ListKeyMemoriesResponse) GetItems() []*KeyMemory {
@@ -1826,7 +2378,7 @@ type KeyMemory struct {
 
 func (x *KeyMemory) Reset() {
 	*x = KeyMemory{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[22]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1838,7 +2390,7 @@ func (x *KeyMemory) String() string {
 func (*KeyMemory) ProtoMessage() {}
 
 func (x *KeyMemory) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[22]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1851,7 +2403,7 @@ func (x *KeyMemory) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyMemory.ProtoReflect.Descriptor instead.
 func (*KeyMemory) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{22}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *KeyMemory) GetId() string {
@@ -1981,7 +2533,7 @@ type UpsertKeyMemoryRequest struct {
 
 func (x *UpsertKeyMemoryRequest) Reset() {
 	*x = UpsertKeyMemoryRequest{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[23]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1993,7 +2545,7 @@ func (x *UpsertKeyMemoryRequest) String() string {
 func (*UpsertKeyMemoryRequest) ProtoMessage() {}
 
 func (x *UpsertKeyMemoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[23]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2006,7 +2558,7 @@ func (x *UpsertKeyMemoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpsertKeyMemoryRequest.ProtoReflect.Descriptor instead.
 func (*UpsertKeyMemoryRequest) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{23}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *UpsertKeyMemoryRequest) GetKey() string {
@@ -2067,7 +2619,7 @@ type DeleteKeyMemoryRequest struct {
 
 func (x *DeleteKeyMemoryRequest) Reset() {
 	*x = DeleteKeyMemoryRequest{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[24]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2079,7 +2631,7 @@ func (x *DeleteKeyMemoryRequest) String() string {
 func (*DeleteKeyMemoryRequest) ProtoMessage() {}
 
 func (x *DeleteKeyMemoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[24]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2092,7 +2644,7 @@ func (x *DeleteKeyMemoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteKeyMemoryRequest.ProtoReflect.Descriptor instead.
 func (*DeleteKeyMemoryRequest) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{24}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *DeleteKeyMemoryRequest) GetKey() string {
@@ -2111,7 +2663,7 @@ type DeleteKeyMemoryResponse struct {
 
 func (x *DeleteKeyMemoryResponse) Reset() {
 	*x = DeleteKeyMemoryResponse{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[25]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2123,7 +2675,7 @@ func (x *DeleteKeyMemoryResponse) String() string {
 func (*DeleteKeyMemoryResponse) ProtoMessage() {}
 
 func (x *DeleteKeyMemoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[25]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2136,7 +2688,7 @@ func (x *DeleteKeyMemoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteKeyMemoryResponse.ProtoReflect.Descriptor instead.
 func (*DeleteKeyMemoryResponse) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{25}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *DeleteKeyMemoryResponse) GetDeleted() bool {
@@ -2155,7 +2707,7 @@ type OverviewRequest struct {
 
 func (x *OverviewRequest) Reset() {
 	*x = OverviewRequest{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[26]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2167,7 +2719,7 @@ func (x *OverviewRequest) String() string {
 func (*OverviewRequest) ProtoMessage() {}
 
 func (x *OverviewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[26]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2180,7 +2732,7 @@ func (x *OverviewRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OverviewRequest.ProtoReflect.Descriptor instead.
 func (*OverviewRequest) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{26}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *OverviewRequest) GetUserId() string {
@@ -2199,7 +2751,7 @@ type OverviewResponse struct {
 
 func (x *OverviewResponse) Reset() {
 	*x = OverviewResponse{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[27]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2211,7 +2763,7 @@ func (x *OverviewResponse) String() string {
 func (*OverviewResponse) ProtoMessage() {}
 
 func (x *OverviewResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[27]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2224,7 +2776,7 @@ func (x *OverviewResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OverviewResponse.ProtoReflect.Descriptor instead.
 func (*OverviewResponse) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{27}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *OverviewResponse) GetOverview() *structpb.Struct {
@@ -2244,7 +2796,7 @@ type ListConversationsRequest struct {
 
 func (x *ListConversationsRequest) Reset() {
 	*x = ListConversationsRequest{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[28]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2256,7 +2808,7 @@ func (x *ListConversationsRequest) String() string {
 func (*ListConversationsRequest) ProtoMessage() {}
 
 func (x *ListConversationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[28]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2269,7 +2821,7 @@ func (x *ListConversationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConversationsRequest.ProtoReflect.Descriptor instead.
 func (*ListConversationsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{28}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ListConversationsRequest) GetUserId() string {
@@ -2295,7 +2847,7 @@ type ListConversationsResponse struct {
 
 func (x *ListConversationsResponse) Reset() {
 	*x = ListConversationsResponse{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[29]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2307,7 +2859,7 @@ func (x *ListConversationsResponse) String() string {
 func (*ListConversationsResponse) ProtoMessage() {}
 
 func (x *ListConversationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[29]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2320,7 +2872,7 @@ func (x *ListConversationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConversationsResponse.ProtoReflect.Descriptor instead.
 func (*ListConversationsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{29}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ListConversationsResponse) GetItems() []*ConversationListItem {
@@ -2350,7 +2902,7 @@ type ConversationListItem struct {
 
 func (x *ConversationListItem) Reset() {
 	*x = ConversationListItem{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[30]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2362,7 +2914,7 @@ func (x *ConversationListItem) String() string {
 func (*ConversationListItem) ProtoMessage() {}
 
 func (x *ConversationListItem) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[30]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2375,7 +2927,7 @@ func (x *ConversationListItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConversationListItem.ProtoReflect.Descriptor instead.
 func (*ConversationListItem) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{30}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ConversationListItem) GetConversationId() string {
@@ -2473,7 +3025,7 @@ type GetConversationRequest struct {
 
 func (x *GetConversationRequest) Reset() {
 	*x = GetConversationRequest{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[31]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2485,7 +3037,7 @@ func (x *GetConversationRequest) String() string {
 func (*GetConversationRequest) ProtoMessage() {}
 
 func (x *GetConversationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[31]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2498,7 +3050,7 @@ func (x *GetConversationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConversationRequest.ProtoReflect.Descriptor instead.
 func (*GetConversationRequest) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{31}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *GetConversationRequest) GetUserId() string {
@@ -2545,7 +3097,7 @@ type ConversationRecord struct {
 
 func (x *ConversationRecord) Reset() {
 	*x = ConversationRecord{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[32]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2557,7 +3109,7 @@ func (x *ConversationRecord) String() string {
 func (*ConversationRecord) ProtoMessage() {}
 
 func (x *ConversationRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[32]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2570,7 +3122,7 @@ func (x *ConversationRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConversationRecord.ProtoReflect.Descriptor instead.
 func (*ConversationRecord) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{32}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ConversationRecord) GetConversationId() string {
@@ -2701,7 +3253,7 @@ type ConversationSegment struct {
 
 func (x *ConversationSegment) Reset() {
 	*x = ConversationSegment{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[33]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2713,7 +3265,7 @@ func (x *ConversationSegment) String() string {
 func (*ConversationSegment) ProtoMessage() {}
 
 func (x *ConversationSegment) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[33]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2726,7 +3278,7 @@ func (x *ConversationSegment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConversationSegment.ProtoReflect.Descriptor instead.
 func (*ConversationSegment) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{33}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ConversationSegment) GetId() string {
@@ -2845,7 +3397,7 @@ type GetConversationMemoryRequest struct {
 
 func (x *GetConversationMemoryRequest) Reset() {
 	*x = GetConversationMemoryRequest{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[34]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2857,7 +3409,7 @@ func (x *GetConversationMemoryRequest) String() string {
 func (*GetConversationMemoryRequest) ProtoMessage() {}
 
 func (x *GetConversationMemoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[34]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2870,7 +3422,7 @@ func (x *GetConversationMemoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConversationMemoryRequest.ProtoReflect.Descriptor instead.
 func (*GetConversationMemoryRequest) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{34}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *GetConversationMemoryRequest) GetUserId() string {
@@ -2906,7 +3458,7 @@ type ConversationMemoryResponse struct {
 
 func (x *ConversationMemoryResponse) Reset() {
 	*x = ConversationMemoryResponse{}
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[35]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2918,7 +3470,7 @@ func (x *ConversationMemoryResponse) String() string {
 func (*ConversationMemoryResponse) ProtoMessage() {}
 
 func (x *ConversationMemoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_memstation_v1_api_proto_msgTypes[35]
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2931,7 +3483,7 @@ func (x *ConversationMemoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConversationMemoryResponse.ProtoReflect.Descriptor instead.
 func (*ConversationMemoryResponse) Descriptor() ([]byte, []int) {
-	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{35}
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ConversationMemoryResponse) GetConversationId() string {
@@ -2960,6 +3512,4735 @@ func (x *ConversationMemoryResponse) GetKeyMemories() []*KeyMemory {
 		return x.KeyMemories
 	}
 	return nil
+}
+
+type RecordRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	After         string                 `protobuf:"bytes,2,opt,name=after,proto3" json:"after,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecordRequest) Reset() {
+	*x = RecordRequest{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecordRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecordRequest) ProtoMessage() {}
+
+func (x *RecordRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecordRequest.ProtoReflect.Descriptor instead.
+func (*RecordRequest) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *RecordRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *RecordRequest) GetAfter() string {
+	if x != nil {
+		return x.After
+	}
+	return ""
+}
+
+type TextSpan struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Start         int32                  `protobuf:"varint,1,opt,name=start,proto3" json:"start,omitempty"`
+	End           int32                  `protobuf:"varint,2,opt,name=end,proto3" json:"end,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TextSpan) Reset() {
+	*x = TextSpan{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TextSpan) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TextSpan) ProtoMessage() {}
+
+func (x *TextSpan) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TextSpan.ProtoReflect.Descriptor instead.
+func (*TextSpan) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *TextSpan) GetStart() int32 {
+	if x != nil {
+		return x.Start
+	}
+	return 0
+}
+
+func (x *TextSpan) GetEnd() int32 {
+	if x != nil {
+		return x.End
+	}
+	return 0
+}
+
+type SourceRef struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WorkspaceId   string                 `protobuf:"bytes,1,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	MessageId     string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	Revision      int64                  `protobuf:"varint,3,opt,name=revision,proto3" json:"revision,omitempty"`
+	PartIndex     int32                  `protobuf:"varint,4,opt,name=part_index,json=partIndex,proto3" json:"part_index,omitempty"`
+	Span          *TextSpan              `protobuf:"bytes,5,opt,name=span,proto3" json:"span,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SourceRef) Reset() {
+	*x = SourceRef{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SourceRef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SourceRef) ProtoMessage() {}
+
+func (x *SourceRef) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SourceRef.ProtoReflect.Descriptor instead.
+func (*SourceRef) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *SourceRef) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *SourceRef) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+func (x *SourceRef) GetRevision() int64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *SourceRef) GetPartIndex() int32 {
+	if x != nil {
+		return x.PartIndex
+	}
+	return 0
+}
+
+func (x *SourceRef) GetSpan() *TextSpan {
+	if x != nil {
+		return x.Span
+	}
+	return nil
+}
+
+type SourceSpeaker struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ExternalId    string                 `protobuf:"bytes,1,opt,name=external_id,json=externalId,proto3" json:"external_id,omitempty"`
+	ActorId       string                 `protobuf:"bytes,2,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+	DisplayName   string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Kind          string                 `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SourceSpeaker) Reset() {
+	*x = SourceSpeaker{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SourceSpeaker) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SourceSpeaker) ProtoMessage() {}
+
+func (x *SourceSpeaker) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SourceSpeaker.ProtoReflect.Descriptor instead.
+func (*SourceSpeaker) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *SourceSpeaker) GetExternalId() string {
+	if x != nil {
+		return x.ExternalId
+	}
+	return ""
+}
+
+func (x *SourceSpeaker) GetActorId() string {
+	if x != nil {
+		return x.ActorId
+	}
+	return ""
+}
+
+func (x *SourceSpeaker) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *SourceSpeaker) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+type SourcePart struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	ActorId       string                 `protobuf:"bytes,3,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+	Source        *SourceRef             `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"`
+	Author        *SourceSpeaker         `protobuf:"bytes,5,opt,name=author,proto3" json:"author,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SourcePart) Reset() {
+	*x = SourcePart{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SourcePart) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SourcePart) ProtoMessage() {}
+
+func (x *SourcePart) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SourcePart.ProtoReflect.Descriptor instead.
+func (*SourcePart) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *SourcePart) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *SourcePart) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *SourcePart) GetActorId() string {
+	if x != nil {
+		return x.ActorId
+	}
+	return ""
+}
+
+func (x *SourcePart) GetSource() *SourceRef {
+	if x != nil {
+		return x.Source
+	}
+	return nil
+}
+
+func (x *SourcePart) GetAuthor() *SourceSpeaker {
+	if x != nil {
+		return x.Author
+	}
+	return nil
+}
+
+type SourceEvent struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	EventId         string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	Type            string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	SourceMessageId string                 `protobuf:"bytes,3,opt,name=source_message_id,json=sourceMessageId,proto3" json:"source_message_id,omitempty"`
+	SourceRevision  int64                  `protobuf:"varint,4,opt,name=source_revision,json=sourceRevision,proto3" json:"source_revision,omitempty"`
+	Speaker         *SourceSpeaker         `protobuf:"bytes,5,opt,name=speaker,proto3" json:"speaker,omitempty"`
+	Parts           []*SourcePart          `protobuf:"bytes,6,rep,name=parts,proto3" json:"parts,omitempty"`
+	ReplyTo         *SourceRef             `protobuf:"bytes,7,opt,name=reply_to,json=replyTo,proto3" json:"reply_to,omitempty"`
+	// RFC3339 with timezone, identical to the HTTP contract.
+	OccurredAt      string `protobuf:"bytes,8,opt,name=occurred_at,json=occurredAt,proto3" json:"occurred_at,omitempty"`
+	DeliveryStatus  string `protobuf:"bytes,9,opt,name=delivery_status,json=deliveryStatus,proto3" json:"delivery_status,omitempty"`
+	DeliveryReceipt string `protobuf:"bytes,10,opt,name=delivery_receipt,json=deliveryReceipt,proto3" json:"delivery_receipt,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *SourceEvent) Reset() {
+	*x = SourceEvent{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SourceEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SourceEvent) ProtoMessage() {}
+
+func (x *SourceEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SourceEvent.ProtoReflect.Descriptor instead.
+func (*SourceEvent) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *SourceEvent) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
+func (x *SourceEvent) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *SourceEvent) GetSourceMessageId() string {
+	if x != nil {
+		return x.SourceMessageId
+	}
+	return ""
+}
+
+func (x *SourceEvent) GetSourceRevision() int64 {
+	if x != nil {
+		return x.SourceRevision
+	}
+	return 0
+}
+
+func (x *SourceEvent) GetSpeaker() *SourceSpeaker {
+	if x != nil {
+		return x.Speaker
+	}
+	return nil
+}
+
+func (x *SourceEvent) GetParts() []*SourcePart {
+	if x != nil {
+		return x.Parts
+	}
+	return nil
+}
+
+func (x *SourceEvent) GetReplyTo() *SourceRef {
+	if x != nil {
+		return x.ReplyTo
+	}
+	return nil
+}
+
+func (x *SourceEvent) GetOccurredAt() string {
+	if x != nil {
+		return x.OccurredAt
+	}
+	return ""
+}
+
+func (x *SourceEvent) GetDeliveryStatus() string {
+	if x != nil {
+		return x.DeliveryStatus
+	}
+	return ""
+}
+
+func (x *SourceEvent) GetDeliveryReceipt() string {
+	if x != nil {
+		return x.DeliveryReceipt
+	}
+	return ""
+}
+
+type IngestBatch struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	WorkspaceId     string                 `protobuf:"bytes,1,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	IntegrationId   string                 `protobuf:"bytes,2,opt,name=integration_id,json=integrationId,proto3" json:"integration_id,omitempty"`
+	ExternalSpaceId string                 `protobuf:"bytes,3,opt,name=external_space_id,json=externalSpaceId,proto3" json:"external_space_id,omitempty"`
+	ThreadId        string                 `protobuf:"bytes,4,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
+	PartitionId     string                 `protobuf:"bytes,5,opt,name=partition_id,json=partitionId,proto3" json:"partition_id,omitempty"`
+	Events          []*SourceEvent         `protobuf:"bytes,6,rep,name=events,proto3" json:"events,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *IngestBatch) Reset() {
+	*x = IngestBatch{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IngestBatch) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IngestBatch) ProtoMessage() {}
+
+func (x *IngestBatch) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IngestBatch.ProtoReflect.Descriptor instead.
+func (*IngestBatch) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *IngestBatch) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *IngestBatch) GetIntegrationId() string {
+	if x != nil {
+		return x.IntegrationId
+	}
+	return ""
+}
+
+func (x *IngestBatch) GetExternalSpaceId() string {
+	if x != nil {
+		return x.ExternalSpaceId
+	}
+	return ""
+}
+
+func (x *IngestBatch) GetThreadId() string {
+	if x != nil {
+		return x.ThreadId
+	}
+	return ""
+}
+
+func (x *IngestBatch) GetPartitionId() string {
+	if x != nil {
+		return x.PartitionId
+	}
+	return ""
+}
+
+func (x *IngestBatch) GetEvents() []*SourceEvent {
+	if x != nil {
+		return x.Events
+	}
+	return nil
+}
+
+type ObserveRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Batch          *IngestBatch           `protobuf:"bytes,1,opt,name=batch,proto3" json:"batch,omitempty"`
+	IdempotencyKey string                 `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ObserveRequest) Reset() {
+	*x = ObserveRequest{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ObserveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ObserveRequest) ProtoMessage() {}
+
+func (x *ObserveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ObserveRequest.ProtoReflect.Descriptor instead.
+func (*ObserveRequest) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *ObserveRequest) GetBatch() *IngestBatch {
+	if x != nil {
+		return x.Batch
+	}
+	return nil
+}
+
+func (x *ObserveRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
+}
+
+type EventAcceptance struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	EventId        string                 `protobuf:"bytes,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	MessageId      string                 `protobuf:"bytes,3,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	Status         string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
+	Sequence       int64                  `protobuf:"varint,5,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *EventAcceptance) Reset() {
+	*x = EventAcceptance{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EventAcceptance) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EventAcceptance) ProtoMessage() {}
+
+func (x *EventAcceptance) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EventAcceptance.ProtoReflect.Descriptor instead.
+func (*EventAcceptance) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *EventAcceptance) GetConversationId() string {
+	if x != nil {
+		return x.ConversationId
+	}
+	return ""
+}
+
+func (x *EventAcceptance) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
+func (x *EventAcceptance) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+func (x *EventAcceptance) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *EventAcceptance) GetSequence() int64 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
+}
+
+type IngestionReceipt struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Id               string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	WorkspaceId      string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	StreamId         string                 `protobuf:"bytes,3,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
+	PartitionId      string                 `protobuf:"bytes,4,opt,name=partition_id,json=partitionId,proto3" json:"partition_id,omitempty"`
+	GenerationId     string                 `protobuf:"bytes,5,opt,name=generation_id,json=generationId,proto3" json:"generation_id,omitempty"`
+	AcceptedSequence int64                  `protobuf:"varint,6,opt,name=accepted_sequence,json=acceptedSequence,proto3" json:"accepted_sequence,omitempty"`
+	IndexedSequence  int64                  `protobuf:"varint,7,opt,name=indexed_sequence,json=indexedSequence,proto3" json:"indexed_sequence,omitempty"`
+	Status           string                 `protobuf:"bytes,8,opt,name=status,proto3" json:"status,omitempty"`
+	Stage            string                 `protobuf:"bytes,9,opt,name=stage,proto3" json:"stage,omitempty"`
+	FailureCode      string                 `protobuf:"bytes,10,opt,name=failure_code,json=failureCode,proto3" json:"failure_code,omitempty"`
+	RetryCount       int32                  `protobuf:"varint,11,opt,name=retry_count,json=retryCount,proto3" json:"retry_count,omitempty"`
+	NextRetryAt      string                 `protobuf:"bytes,12,opt,name=next_retry_at,json=nextRetryAt,proto3" json:"next_retry_at,omitempty"`
+	DeadLetter       bool                   `protobuf:"varint,13,opt,name=dead_letter,json=deadLetter,proto3" json:"dead_letter,omitempty"`
+	Events           []*EventAcceptance     `protobuf:"bytes,14,rep,name=events,proto3" json:"events,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *IngestionReceipt) Reset() {
+	*x = IngestionReceipt{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IngestionReceipt) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IngestionReceipt) ProtoMessage() {}
+
+func (x *IngestionReceipt) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IngestionReceipt.ProtoReflect.Descriptor instead.
+func (*IngestionReceipt) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *IngestionReceipt) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *IngestionReceipt) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *IngestionReceipt) GetStreamId() string {
+	if x != nil {
+		return x.StreamId
+	}
+	return ""
+}
+
+func (x *IngestionReceipt) GetPartitionId() string {
+	if x != nil {
+		return x.PartitionId
+	}
+	return ""
+}
+
+func (x *IngestionReceipt) GetGenerationId() string {
+	if x != nil {
+		return x.GenerationId
+	}
+	return ""
+}
+
+func (x *IngestionReceipt) GetAcceptedSequence() int64 {
+	if x != nil {
+		return x.AcceptedSequence
+	}
+	return 0
+}
+
+func (x *IngestionReceipt) GetIndexedSequence() int64 {
+	if x != nil {
+		return x.IndexedSequence
+	}
+	return 0
+}
+
+func (x *IngestionReceipt) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *IngestionReceipt) GetStage() string {
+	if x != nil {
+		return x.Stage
+	}
+	return ""
+}
+
+func (x *IngestionReceipt) GetFailureCode() string {
+	if x != nil {
+		return x.FailureCode
+	}
+	return ""
+}
+
+func (x *IngestionReceipt) GetRetryCount() int32 {
+	if x != nil {
+		return x.RetryCount
+	}
+	return 0
+}
+
+func (x *IngestionReceipt) GetNextRetryAt() string {
+	if x != nil {
+		return x.NextRetryAt
+	}
+	return ""
+}
+
+func (x *IngestionReceipt) GetDeadLetter() bool {
+	if x != nil {
+		return x.DeadLetter
+	}
+	return false
+}
+
+func (x *IngestionReceipt) GetEvents() []*EventAcceptance {
+	if x != nil {
+		return x.Events
+	}
+	return nil
+}
+
+type WindowInput struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	WorkspaceId     string                 `protobuf:"bytes,1,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	IntegrationId   string                 `protobuf:"bytes,2,opt,name=integration_id,json=integrationId,proto3" json:"integration_id,omitempty"`
+	ExternalSpaceId string                 `protobuf:"bytes,3,opt,name=external_space_id,json=externalSpaceId,proto3" json:"external_space_id,omitempty"`
+	ThreadId        string                 `protobuf:"bytes,4,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
+	PartitionId     string                 `protobuf:"bytes,5,opt,name=partition_id,json=partitionId,proto3" json:"partition_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *WindowInput) Reset() {
+	*x = WindowInput{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WindowInput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WindowInput) ProtoMessage() {}
+
+func (x *WindowInput) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WindowInput.ProtoReflect.Descriptor instead.
+func (*WindowInput) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *WindowInput) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *WindowInput) GetIntegrationId() string {
+	if x != nil {
+		return x.IntegrationId
+	}
+	return ""
+}
+
+func (x *WindowInput) GetExternalSpaceId() string {
+	if x != nil {
+		return x.ExternalSpaceId
+	}
+	return ""
+}
+
+func (x *WindowInput) GetThreadId() string {
+	if x != nil {
+		return x.ThreadId
+	}
+	return ""
+}
+
+func (x *WindowInput) GetPartitionId() string {
+	if x != nil {
+		return x.PartitionId
+	}
+	return ""
+}
+
+type OpenWindowRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Window         *WindowInput           `protobuf:"bytes,1,opt,name=window,proto3" json:"window,omitempty"`
+	IdempotencyKey string                 `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *OpenWindowRequest) Reset() {
+	*x = OpenWindowRequest{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenWindowRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenWindowRequest) ProtoMessage() {}
+
+func (x *OpenWindowRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenWindowRequest.ProtoReflect.Descriptor instead.
+func (*OpenWindowRequest) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *OpenWindowRequest) GetWindow() *WindowInput {
+	if x != nil {
+		return x.Window
+	}
+	return nil
+}
+
+func (x *OpenWindowRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
+}
+
+type FinalizeWindowRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Id               string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ExpectedRevision int64                  `protobuf:"varint,2,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *FinalizeWindowRequest) Reset() {
+	*x = FinalizeWindowRequest{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FinalizeWindowRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FinalizeWindowRequest) ProtoMessage() {}
+
+func (x *FinalizeWindowRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FinalizeWindowRequest.ProtoReflect.Descriptor instead.
+func (*FinalizeWindowRequest) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *FinalizeWindowRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *FinalizeWindowRequest) GetExpectedRevision() int64 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
+}
+
+type ConversationWindow struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	WorkspaceId   string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	PartitionId   string                 `protobuf:"bytes,3,opt,name=partition_id,json=partitionId,proto3" json:"partition_id,omitempty"`
+	StreamId      string                 `protobuf:"bytes,4,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
+	Revision      int64                  `protobuf:"varint,5,opt,name=revision,proto3" json:"revision,omitempty"`
+	Status        string                 `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConversationWindow) Reset() {
+	*x = ConversationWindow{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConversationWindow) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConversationWindow) ProtoMessage() {}
+
+func (x *ConversationWindow) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConversationWindow.ProtoReflect.Descriptor instead.
+func (*ConversationWindow) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *ConversationWindow) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ConversationWindow) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *ConversationWindow) GetPartitionId() string {
+	if x != nil {
+		return x.PartitionId
+	}
+	return ""
+}
+
+func (x *ConversationWindow) GetStreamId() string {
+	if x != nil {
+		return x.StreamId
+	}
+	return ""
+}
+
+func (x *ConversationWindow) GetRevision() int64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *ConversationWindow) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+type SourceRecord struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	WorkspaceId    string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	PartitionId    string                 `protobuf:"bytes,3,opt,name=partition_id,json=partitionId,proto3" json:"partition_id,omitempty"`
+	IntegrationId  string                 `protobuf:"bytes,4,opt,name=integration_id,json=integrationId,proto3" json:"integration_id,omitempty"`
+	Revision       int64                  `protobuf:"varint,5,opt,name=revision,proto3" json:"revision,omitempty"`
+	SpeakerActorId string                 `protobuf:"bytes,6,opt,name=speaker_actor_id,json=speakerActorId,proto3" json:"speaker_actor_id,omitempty"`
+	Parts          []*SourcePart          `protobuf:"bytes,7,rep,name=parts,proto3" json:"parts,omitempty"`
+	ReplyTo        *SourceRef             `protobuf:"bytes,8,opt,name=reply_to,json=replyTo,proto3" json:"reply_to,omitempty"`
+	OccurredAt     string                 `protobuf:"bytes,9,opt,name=occurred_at,json=occurredAt,proto3" json:"occurred_at,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SourceRecord) Reset() {
+	*x = SourceRecord{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SourceRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SourceRecord) ProtoMessage() {}
+
+func (x *SourceRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SourceRecord.ProtoReflect.Descriptor instead.
+func (*SourceRecord) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *SourceRecord) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SourceRecord) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *SourceRecord) GetPartitionId() string {
+	if x != nil {
+		return x.PartitionId
+	}
+	return ""
+}
+
+func (x *SourceRecord) GetIntegrationId() string {
+	if x != nil {
+		return x.IntegrationId
+	}
+	return ""
+}
+
+func (x *SourceRecord) GetRevision() int64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *SourceRecord) GetSpeakerActorId() string {
+	if x != nil {
+		return x.SpeakerActorId
+	}
+	return ""
+}
+
+func (x *SourceRecord) GetParts() []*SourcePart {
+	if x != nil {
+		return x.Parts
+	}
+	return nil
+}
+
+func (x *SourceRecord) GetReplyTo() *SourceRef {
+	if x != nil {
+		return x.ReplyTo
+	}
+	return nil
+}
+
+func (x *SourceRecord) GetOccurredAt() string {
+	if x != nil {
+		return x.OccurredAt
+	}
+	return ""
+}
+
+type CandidateInput struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Kind            string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	Content         string                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
+	PartitionId     string                 `protobuf:"bytes,3,opt,name=partition_id,json=partitionId,proto3" json:"partition_id,omitempty"`
+	SubjectActorIds []string               `protobuf:"bytes,4,rep,name=subject_actor_ids,json=subjectActorIds,proto3" json:"subject_actor_ids,omitempty"`
+	SourceRefs      []*SourceRef           `protobuf:"bytes,5,rep,name=source_refs,json=sourceRefs,proto3" json:"source_refs,omitempty"`
+	TargetNodeId    string                 `protobuf:"bytes,6,opt,name=target_node_id,json=targetNodeId,proto3" json:"target_node_id,omitempty"`
+	TargetRevision  int64                  `protobuf:"varint,7,opt,name=target_revision,json=targetRevision,proto3" json:"target_revision,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *CandidateInput) Reset() {
+	*x = CandidateInput{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CandidateInput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CandidateInput) ProtoMessage() {}
+
+func (x *CandidateInput) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CandidateInput.ProtoReflect.Descriptor instead.
+func (*CandidateInput) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *CandidateInput) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *CandidateInput) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *CandidateInput) GetPartitionId() string {
+	if x != nil {
+		return x.PartitionId
+	}
+	return ""
+}
+
+func (x *CandidateInput) GetSubjectActorIds() []string {
+	if x != nil {
+		return x.SubjectActorIds
+	}
+	return nil
+}
+
+func (x *CandidateInput) GetSourceRefs() []*SourceRef {
+	if x != nil {
+		return x.SourceRefs
+	}
+	return nil
+}
+
+func (x *CandidateInput) GetTargetNodeId() string {
+	if x != nil {
+		return x.TargetNodeId
+	}
+	return ""
+}
+
+func (x *CandidateInput) GetTargetRevision() int64 {
+	if x != nil {
+		return x.TargetRevision
+	}
+	return 0
+}
+
+type MemoryCandidate struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Id              string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	WorkspaceId     string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	PartitionId     string                 `protobuf:"bytes,3,opt,name=partition_id,json=partitionId,proto3" json:"partition_id,omitempty"`
+	AgentId         string                 `protobuf:"bytes,4,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	Kind            string                 `protobuf:"bytes,5,opt,name=kind,proto3" json:"kind,omitempty"`
+	Content         string                 `protobuf:"bytes,6,opt,name=content,proto3" json:"content,omitempty"`
+	SubjectActorIds []string               `protobuf:"bytes,7,rep,name=subject_actor_ids,json=subjectActorIds,proto3" json:"subject_actor_ids,omitempty"`
+	SourceRefs      []*SourceRef           `protobuf:"bytes,8,rep,name=source_refs,json=sourceRefs,proto3" json:"source_refs,omitempty"`
+	Origin          string                 `protobuf:"bytes,9,opt,name=origin,proto3" json:"origin,omitempty"`
+	Status          string                 `protobuf:"bytes,10,opt,name=status,proto3" json:"status,omitempty"`
+	Revision        int64                  `protobuf:"varint,11,opt,name=revision,proto3" json:"revision,omitempty"`
+	TargetNodeId    string                 `protobuf:"bytes,12,opt,name=target_node_id,json=targetNodeId,proto3" json:"target_node_id,omitempty"`
+	TargetRevision  int64                  `protobuf:"varint,13,opt,name=target_revision,json=targetRevision,proto3" json:"target_revision,omitempty"`
+	ResultNodeId    string                 `protobuf:"bytes,14,opt,name=result_node_id,json=resultNodeId,proto3" json:"result_node_id,omitempty"`
+	CreatedAt       string                 `protobuf:"bytes,15,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt       string                 `protobuf:"bytes,16,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *MemoryCandidate) Reset() {
+	*x = MemoryCandidate{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MemoryCandidate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MemoryCandidate) ProtoMessage() {}
+
+func (x *MemoryCandidate) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MemoryCandidate.ProtoReflect.Descriptor instead.
+func (*MemoryCandidate) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *MemoryCandidate) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *MemoryCandidate) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *MemoryCandidate) GetPartitionId() string {
+	if x != nil {
+		return x.PartitionId
+	}
+	return ""
+}
+
+func (x *MemoryCandidate) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *MemoryCandidate) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *MemoryCandidate) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *MemoryCandidate) GetSubjectActorIds() []string {
+	if x != nil {
+		return x.SubjectActorIds
+	}
+	return nil
+}
+
+func (x *MemoryCandidate) GetSourceRefs() []*SourceRef {
+	if x != nil {
+		return x.SourceRefs
+	}
+	return nil
+}
+
+func (x *MemoryCandidate) GetOrigin() string {
+	if x != nil {
+		return x.Origin
+	}
+	return ""
+}
+
+func (x *MemoryCandidate) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *MemoryCandidate) GetRevision() int64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *MemoryCandidate) GetTargetNodeId() string {
+	if x != nil {
+		return x.TargetNodeId
+	}
+	return ""
+}
+
+func (x *MemoryCandidate) GetTargetRevision() int64 {
+	if x != nil {
+		return x.TargetRevision
+	}
+	return 0
+}
+
+func (x *MemoryCandidate) GetResultNodeId() string {
+	if x != nil {
+		return x.ResultNodeId
+	}
+	return ""
+}
+
+func (x *MemoryCandidate) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *MemoryCandidate) GetUpdatedAt() string {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return ""
+}
+
+type CandidateList struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*MemoryCandidate     `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CandidateList) Reset() {
+	*x = CandidateList{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CandidateList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CandidateList) ProtoMessage() {}
+
+func (x *CandidateList) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CandidateList.ProtoReflect.Descriptor instead.
+func (*CandidateList) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *CandidateList) GetItems() []*MemoryCandidate {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+type ForgetSelector struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PartitionId   string                 `protobuf:"bytes,1,opt,name=partition_id,json=partitionId,proto3" json:"partition_id,omitempty"`
+	SourceRefs    []*SourceRef           `protobuf:"bytes,2,rep,name=source_refs,json=sourceRefs,proto3" json:"source_refs,omitempty"`
+	NodeIds       []string               `protobuf:"bytes,3,rep,name=node_ids,json=nodeIds,proto3" json:"node_ids,omitempty"`
+	ActorId       string                 `protobuf:"bytes,4,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+	Workspace     bool                   `protobuf:"varint,5,opt,name=workspace,proto3" json:"workspace,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ForgetSelector) Reset() {
+	*x = ForgetSelector{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ForgetSelector) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ForgetSelector) ProtoMessage() {}
+
+func (x *ForgetSelector) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ForgetSelector.ProtoReflect.Descriptor instead.
+func (*ForgetSelector) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *ForgetSelector) GetPartitionId() string {
+	if x != nil {
+		return x.PartitionId
+	}
+	return ""
+}
+
+func (x *ForgetSelector) GetSourceRefs() []*SourceRef {
+	if x != nil {
+		return x.SourceRefs
+	}
+	return nil
+}
+
+func (x *ForgetSelector) GetNodeIds() []string {
+	if x != nil {
+		return x.NodeIds
+	}
+	return nil
+}
+
+func (x *ForgetSelector) GetActorId() string {
+	if x != nil {
+		return x.ActorId
+	}
+	return ""
+}
+
+func (x *ForgetSelector) GetWorkspace() bool {
+	if x != nil {
+		return x.Workspace
+	}
+	return false
+}
+
+type ForgetRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Selector       *ForgetSelector        `protobuf:"bytes,1,opt,name=selector,proto3" json:"selector,omitempty"`
+	IdempotencyKey string                 `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ForgetRequest) Reset() {
+	*x = ForgetRequest{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ForgetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ForgetRequest) ProtoMessage() {}
+
+func (x *ForgetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ForgetRequest.ProtoReflect.Descriptor instead.
+func (*ForgetRequest) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *ForgetRequest) GetSelector() *ForgetSelector {
+	if x != nil {
+		return x.Selector
+	}
+	return nil
+}
+
+func (x *ForgetRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
+}
+
+type ExportRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	IdempotencyKey string                 `protobuf:"bytes,1,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ExportRequest) Reset() {
+	*x = ExportRequest{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportRequest) ProtoMessage() {}
+
+func (x *ExportRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[60]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportRequest.ProtoReflect.Descriptor instead.
+func (*ExportRequest) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{60}
+}
+
+func (x *ExportRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
+}
+
+type MemoryOperation struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Id               string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	WorkspaceId      string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	PartitionId      string                 `protobuf:"bytes,3,opt,name=partition_id,json=partitionId,proto3" json:"partition_id,omitempty"`
+	Kind             string                 `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
+	Status           string                 `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
+	Revision         int64                  `protobuf:"varint,6,opt,name=revision,proto3" json:"revision,omitempty"`
+	ReadBlocked      bool                   `protobuf:"varint,7,opt,name=read_blocked,json=readBlocked,proto3" json:"read_blocked,omitempty"`
+	OnlineCleaned    bool                   `protobuf:"varint,8,opt,name=online_cleaned,json=onlineCleaned,proto3" json:"online_cleaned,omitempty"`
+	JournalPersisted bool                   `protobuf:"varint,9,opt,name=journal_persisted,json=journalPersisted,proto3" json:"journal_persisted,omitempty"`
+	BackupStatus     string                 `protobuf:"bytes,10,opt,name=backup_status,json=backupStatus,proto3" json:"backup_status,omitempty"`
+	FailureCode      string                 `protobuf:"bytes,11,opt,name=failure_code,json=failureCode,proto3" json:"failure_code,omitempty"`
+	Result           *structpb.Struct       `protobuf:"bytes,12,opt,name=result,proto3" json:"result,omitempty"`
+	ExpiresAt        string                 `protobuf:"bytes,13,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	CreatedAt        string                 `protobuf:"bytes,14,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt        string                 `protobuf:"bytes,15,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *MemoryOperation) Reset() {
+	*x = MemoryOperation{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[61]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MemoryOperation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MemoryOperation) ProtoMessage() {}
+
+func (x *MemoryOperation) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[61]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MemoryOperation.ProtoReflect.Descriptor instead.
+func (*MemoryOperation) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{61}
+}
+
+func (x *MemoryOperation) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *MemoryOperation) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *MemoryOperation) GetPartitionId() string {
+	if x != nil {
+		return x.PartitionId
+	}
+	return ""
+}
+
+func (x *MemoryOperation) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *MemoryOperation) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *MemoryOperation) GetRevision() int64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *MemoryOperation) GetReadBlocked() bool {
+	if x != nil {
+		return x.ReadBlocked
+	}
+	return false
+}
+
+func (x *MemoryOperation) GetOnlineCleaned() bool {
+	if x != nil {
+		return x.OnlineCleaned
+	}
+	return false
+}
+
+func (x *MemoryOperation) GetJournalPersisted() bool {
+	if x != nil {
+		return x.JournalPersisted
+	}
+	return false
+}
+
+func (x *MemoryOperation) GetBackupStatus() string {
+	if x != nil {
+		return x.BackupStatus
+	}
+	return ""
+}
+
+func (x *MemoryOperation) GetFailureCode() string {
+	if x != nil {
+		return x.FailureCode
+	}
+	return ""
+}
+
+func (x *MemoryOperation) GetResult() *structpb.Struct {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
+func (x *MemoryOperation) GetExpiresAt() string {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return ""
+}
+
+func (x *MemoryOperation) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *MemoryOperation) GetUpdatedAt() string {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return ""
+}
+
+type MemoryCapabilities struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ContractVersion string                 `protobuf:"bytes,1,opt,name=contract_version,json=contractVersion,proto3" json:"contract_version,omitempty"`
+	ServerVersion   string                 `protobuf:"bytes,2,opt,name=server_version,json=serverVersion,proto3" json:"server_version,omitempty"`
+	Status          string                 `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
+	Access          *structpb.Struct       `protobuf:"bytes,4,opt,name=access,proto3" json:"access,omitempty"`
+	Capabilities    map[string]bool        `protobuf:"bytes,5,rep,name=capabilities,proto3" json:"capabilities,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	Limitations     []string               `protobuf:"bytes,6,rep,name=limitations,proto3" json:"limitations,omitempty"`
+	Runtime         *MemoryRuntime         `protobuf:"bytes,7,opt,name=runtime,proto3" json:"runtime,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *MemoryCapabilities) Reset() {
+	*x = MemoryCapabilities{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[62]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MemoryCapabilities) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MemoryCapabilities) ProtoMessage() {}
+
+func (x *MemoryCapabilities) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[62]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MemoryCapabilities.ProtoReflect.Descriptor instead.
+func (*MemoryCapabilities) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{62}
+}
+
+func (x *MemoryCapabilities) GetContractVersion() string {
+	if x != nil {
+		return x.ContractVersion
+	}
+	return ""
+}
+
+func (x *MemoryCapabilities) GetServerVersion() string {
+	if x != nil {
+		return x.ServerVersion
+	}
+	return ""
+}
+
+func (x *MemoryCapabilities) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *MemoryCapabilities) GetAccess() *structpb.Struct {
+	if x != nil {
+		return x.Access
+	}
+	return nil
+}
+
+func (x *MemoryCapabilities) GetCapabilities() map[string]bool {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
+}
+
+func (x *MemoryCapabilities) GetLimitations() []string {
+	if x != nil {
+		return x.Limitations
+	}
+	return nil
+}
+
+func (x *MemoryCapabilities) GetRuntime() *MemoryRuntime {
+	if x != nil {
+		return x.Runtime
+	}
+	return nil
+}
+
+type AdminWorkspaceScope struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	WorkspaceId   string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	PartitionId   string                 `protobuf:"bytes,3,opt,name=partition_id,json=partitionId,proto3" json:"partition_id,omitempty"`
+	After         string                 `protobuf:"bytes,4,opt,name=after,proto3" json:"after,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminWorkspaceScope) Reset() {
+	*x = AdminWorkspaceScope{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[63]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminWorkspaceScope) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminWorkspaceScope) ProtoMessage() {}
+
+func (x *AdminWorkspaceScope) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[63]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminWorkspaceScope.ProtoReflect.Descriptor instead.
+func (*AdminWorkspaceScope) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{63}
+}
+
+func (x *AdminWorkspaceScope) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *AdminWorkspaceScope) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *AdminWorkspaceScope) GetPartitionId() string {
+	if x != nil {
+		return x.PartitionId
+	}
+	return ""
+}
+
+func (x *AdminWorkspaceScope) GetAfter() string {
+	if x != nil {
+		return x.After
+	}
+	return ""
+}
+
+type ReviewCandidateRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Scope            *AdminWorkspaceScope   `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	Id               string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	ExpectedRevision int64                  `protobuf:"varint,3,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	Decision         string                 `protobuf:"bytes,4,opt,name=decision,proto3" json:"decision,omitempty"`
+	ConfirmedKind    string                 `protobuf:"bytes,5,opt,name=confirmed_kind,json=confirmedKind,proto3" json:"confirmed_kind,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ReviewCandidateRequest) Reset() {
+	*x = ReviewCandidateRequest{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[64]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReviewCandidateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReviewCandidateRequest) ProtoMessage() {}
+
+func (x *ReviewCandidateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[64]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReviewCandidateRequest.ProtoReflect.Descriptor instead.
+func (*ReviewCandidateRequest) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{64}
+}
+
+func (x *ReviewCandidateRequest) GetScope() *AdminWorkspaceScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *ReviewCandidateRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ReviewCandidateRequest) GetExpectedRevision() int64 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
+}
+
+func (x *ReviewCandidateRequest) GetDecision() string {
+	if x != nil {
+		return x.Decision
+	}
+	return ""
+}
+
+func (x *ReviewCandidateRequest) GetConfirmedKind() string {
+	if x != nil {
+		return x.ConfirmedKind
+	}
+	return ""
+}
+
+type PublicationInput struct {
+	state                       protoimpl.MessageState `protogen:"open.v1"`
+	SourceNodeId                string                 `protobuf:"bytes,1,opt,name=source_node_id,json=sourceNodeId,proto3" json:"source_node_id,omitempty"`
+	SourceRevision              int64                  `protobuf:"varint,2,opt,name=source_revision,json=sourceRevision,proto3" json:"source_revision,omitempty"`
+	TargetWorkspaceId           string                 `protobuf:"bytes,3,opt,name=target_workspace_id,json=targetWorkspaceId,proto3" json:"target_workspace_id,omitempty"`
+	TargetPartitionId           string                 `protobuf:"bytes,4,opt,name=target_partition_id,json=targetPartitionId,proto3" json:"target_partition_id,omitempty"`
+	ActorMapping                map[string]string      `protobuf:"bytes,5,rep,name=actor_mapping,json=actorMapping,proto3" json:"actor_mapping,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ReplacesPublicationId       string                 `protobuf:"bytes,6,opt,name=replaces_publication_id,json=replacesPublicationId,proto3" json:"replaces_publication_id,omitempty"`
+	ExpectedPublicationRevision int64                  `protobuf:"varint,7,opt,name=expected_publication_revision,json=expectedPublicationRevision,proto3" json:"expected_publication_revision,omitempty"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
+}
+
+func (x *PublicationInput) Reset() {
+	*x = PublicationInput{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[65]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublicationInput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublicationInput) ProtoMessage() {}
+
+func (x *PublicationInput) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[65]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublicationInput.ProtoReflect.Descriptor instead.
+func (*PublicationInput) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{65}
+}
+
+func (x *PublicationInput) GetSourceNodeId() string {
+	if x != nil {
+		return x.SourceNodeId
+	}
+	return ""
+}
+
+func (x *PublicationInput) GetSourceRevision() int64 {
+	if x != nil {
+		return x.SourceRevision
+	}
+	return 0
+}
+
+func (x *PublicationInput) GetTargetWorkspaceId() string {
+	if x != nil {
+		return x.TargetWorkspaceId
+	}
+	return ""
+}
+
+func (x *PublicationInput) GetTargetPartitionId() string {
+	if x != nil {
+		return x.TargetPartitionId
+	}
+	return ""
+}
+
+func (x *PublicationInput) GetActorMapping() map[string]string {
+	if x != nil {
+		return x.ActorMapping
+	}
+	return nil
+}
+
+func (x *PublicationInput) GetReplacesPublicationId() string {
+	if x != nil {
+		return x.ReplacesPublicationId
+	}
+	return ""
+}
+
+func (x *PublicationInput) GetExpectedPublicationRevision() int64 {
+	if x != nil {
+		return x.ExpectedPublicationRevision
+	}
+	return 0
+}
+
+type PublishRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scope         *AdminWorkspaceScope   `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	Publication   *PublicationInput      `protobuf:"bytes,2,opt,name=publication,proto3" json:"publication,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PublishRequest) Reset() {
+	*x = PublishRequest{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[66]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublishRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublishRequest) ProtoMessage() {}
+
+func (x *PublishRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[66]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublishRequest.ProtoReflect.Descriptor instead.
+func (*PublishRequest) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{66}
+}
+
+func (x *PublishRequest) GetScope() *AdminWorkspaceScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *PublishRequest) GetPublication() *PublicationInput {
+	if x != nil {
+		return x.Publication
+	}
+	return nil
+}
+
+type MemoryPublication struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	SourceWorkspaceId string                 `protobuf:"bytes,2,opt,name=source_workspace_id,json=sourceWorkspaceId,proto3" json:"source_workspace_id,omitempty"`
+	SourceNodeId      string                 `protobuf:"bytes,3,opt,name=source_node_id,json=sourceNodeId,proto3" json:"source_node_id,omitempty"`
+	SourceRevision    int64                  `protobuf:"varint,4,opt,name=source_revision,json=sourceRevision,proto3" json:"source_revision,omitempty"`
+	TargetWorkspaceId string                 `protobuf:"bytes,5,opt,name=target_workspace_id,json=targetWorkspaceId,proto3" json:"target_workspace_id,omitempty"`
+	TargetPartitionId string                 `protobuf:"bytes,6,opt,name=target_partition_id,json=targetPartitionId,proto3" json:"target_partition_id,omitempty"`
+	TargetNodeId      string                 `protobuf:"bytes,7,opt,name=target_node_id,json=targetNodeId,proto3" json:"target_node_id,omitempty"`
+	Status            string                 `protobuf:"bytes,8,opt,name=status,proto3" json:"status,omitempty"`
+	Revision          int64                  `protobuf:"varint,9,opt,name=revision,proto3" json:"revision,omitempty"`
+	OperationId       string                 `protobuf:"bytes,10,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *MemoryPublication) Reset() {
+	*x = MemoryPublication{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[67]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MemoryPublication) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MemoryPublication) ProtoMessage() {}
+
+func (x *MemoryPublication) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[67]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MemoryPublication.ProtoReflect.Descriptor instead.
+func (*MemoryPublication) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{67}
+}
+
+func (x *MemoryPublication) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *MemoryPublication) GetSourceWorkspaceId() string {
+	if x != nil {
+		return x.SourceWorkspaceId
+	}
+	return ""
+}
+
+func (x *MemoryPublication) GetSourceNodeId() string {
+	if x != nil {
+		return x.SourceNodeId
+	}
+	return ""
+}
+
+func (x *MemoryPublication) GetSourceRevision() int64 {
+	if x != nil {
+		return x.SourceRevision
+	}
+	return 0
+}
+
+func (x *MemoryPublication) GetTargetWorkspaceId() string {
+	if x != nil {
+		return x.TargetWorkspaceId
+	}
+	return ""
+}
+
+func (x *MemoryPublication) GetTargetPartitionId() string {
+	if x != nil {
+		return x.TargetPartitionId
+	}
+	return ""
+}
+
+func (x *MemoryPublication) GetTargetNodeId() string {
+	if x != nil {
+		return x.TargetNodeId
+	}
+	return ""
+}
+
+func (x *MemoryPublication) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *MemoryPublication) GetRevision() int64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *MemoryPublication) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+type PublicationList struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*MemoryPublication   `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PublicationList) Reset() {
+	*x = PublicationList{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[68]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PublicationList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PublicationList) ProtoMessage() {}
+
+func (x *PublicationList) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[68]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PublicationList.ProtoReflect.Descriptor instead.
+func (*PublicationList) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{68}
+}
+
+func (x *PublicationList) GetItems() []*MemoryPublication {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+type RetractPublicationRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Scope            *AdminWorkspaceScope   `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	Id               string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	ExpectedRevision int64                  `protobuf:"varint,3,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *RetractPublicationRequest) Reset() {
+	*x = RetractPublicationRequest{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[69]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RetractPublicationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RetractPublicationRequest) ProtoMessage() {}
+
+func (x *RetractPublicationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[69]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RetractPublicationRequest.ProtoReflect.Descriptor instead.
+func (*RetractPublicationRequest) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{69}
+}
+
+func (x *RetractPublicationRequest) GetScope() *AdminWorkspaceScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *RetractPublicationRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *RetractPublicationRequest) GetExpectedRevision() int64 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
+}
+
+type AIUsageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	After         string                 `protobuf:"bytes,1,opt,name=after,proto3" json:"after,omitempty"`
+	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AIUsageRequest) Reset() {
+	*x = AIUsageRequest{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[70]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AIUsageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AIUsageRequest) ProtoMessage() {}
+
+func (x *AIUsageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[70]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AIUsageRequest.ProtoReflect.Descriptor instead.
+func (*AIUsageRequest) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{70}
+}
+
+func (x *AIUsageRequest) GetAfter() string {
+	if x != nil {
+		return x.After
+	}
+	return ""
+}
+
+func (x *AIUsageRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type AICall struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	WorkspaceId       string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	PartitionId       string                 `protobuf:"bytes,3,opt,name=partition_id,json=partitionId,proto3" json:"partition_id,omitempty"`
+	PartitionIds      []string               `protobuf:"bytes,4,rep,name=partition_ids,json=partitionIds,proto3" json:"partition_ids,omitempty"`
+	Role              string                 `protobuf:"bytes,5,opt,name=role,proto3" json:"role,omitempty"`
+	ModelAlias        string                 `protobuf:"bytes,6,opt,name=model_alias,json=modelAlias,proto3" json:"model_alias,omitempty"`
+	ModelVersion      string                 `protobuf:"bytes,7,opt,name=model_version,json=modelVersion,proto3" json:"model_version,omitempty"`
+	TraceId           string                 `protobuf:"bytes,8,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	JobId             string                 `protobuf:"bytes,9,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	Attempt           int32                  `protobuf:"varint,10,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	ProviderRequestId string                 `protobuf:"bytes,11,opt,name=provider_request_id,json=providerRequestId,proto3" json:"provider_request_id,omitempty"`
+	BrokerUsageId     string                 `protobuf:"bytes,12,opt,name=broker_usage_id,json=brokerUsageId,proto3" json:"broker_usage_id,omitempty"`
+	Status            string                 `protobuf:"bytes,13,opt,name=status,proto3" json:"status,omitempty"`
+	InputTokens       int32                  `protobuf:"varint,14,opt,name=input_tokens,json=inputTokens,proto3" json:"input_tokens,omitempty"`
+	OutputTokens      int32                  `protobuf:"varint,15,opt,name=output_tokens,json=outputTokens,proto3" json:"output_tokens,omitempty"`
+	ReportedCost      string                 `protobuf:"bytes,16,opt,name=reported_cost,json=reportedCost,proto3" json:"reported_cost,omitempty"`
+	Currency          string                 `protobuf:"bytes,17,opt,name=currency,proto3" json:"currency,omitempty"`
+	UsageAuthority    string                 `protobuf:"bytes,18,opt,name=usage_authority,json=usageAuthority,proto3" json:"usage_authority,omitempty"`
+	FailureCode       string                 `protobuf:"bytes,19,opt,name=failure_code,json=failureCode,proto3" json:"failure_code,omitempty"`
+	CreatedAt         string                 `protobuf:"bytes,20,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt         string                 `protobuf:"bytes,21,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *AICall) Reset() {
+	*x = AICall{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[71]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AICall) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AICall) ProtoMessage() {}
+
+func (x *AICall) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[71]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AICall.ProtoReflect.Descriptor instead.
+func (*AICall) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{71}
+}
+
+func (x *AICall) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *AICall) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *AICall) GetPartitionId() string {
+	if x != nil {
+		return x.PartitionId
+	}
+	return ""
+}
+
+func (x *AICall) GetPartitionIds() []string {
+	if x != nil {
+		return x.PartitionIds
+	}
+	return nil
+}
+
+func (x *AICall) GetRole() string {
+	if x != nil {
+		return x.Role
+	}
+	return ""
+}
+
+func (x *AICall) GetModelAlias() string {
+	if x != nil {
+		return x.ModelAlias
+	}
+	return ""
+}
+
+func (x *AICall) GetModelVersion() string {
+	if x != nil {
+		return x.ModelVersion
+	}
+	return ""
+}
+
+func (x *AICall) GetTraceId() string {
+	if x != nil {
+		return x.TraceId
+	}
+	return ""
+}
+
+func (x *AICall) GetJobId() string {
+	if x != nil {
+		return x.JobId
+	}
+	return ""
+}
+
+func (x *AICall) GetAttempt() int32 {
+	if x != nil {
+		return x.Attempt
+	}
+	return 0
+}
+
+func (x *AICall) GetProviderRequestId() string {
+	if x != nil {
+		return x.ProviderRequestId
+	}
+	return ""
+}
+
+func (x *AICall) GetBrokerUsageId() string {
+	if x != nil {
+		return x.BrokerUsageId
+	}
+	return ""
+}
+
+func (x *AICall) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *AICall) GetInputTokens() int32 {
+	if x != nil {
+		return x.InputTokens
+	}
+	return 0
+}
+
+func (x *AICall) GetOutputTokens() int32 {
+	if x != nil {
+		return x.OutputTokens
+	}
+	return 0
+}
+
+func (x *AICall) GetReportedCost() string {
+	if x != nil {
+		return x.ReportedCost
+	}
+	return ""
+}
+
+func (x *AICall) GetCurrency() string {
+	if x != nil {
+		return x.Currency
+	}
+	return ""
+}
+
+func (x *AICall) GetUsageAuthority() string {
+	if x != nil {
+		return x.UsageAuthority
+	}
+	return ""
+}
+
+func (x *AICall) GetFailureCode() string {
+	if x != nil {
+		return x.FailureCode
+	}
+	return ""
+}
+
+func (x *AICall) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *AICall) GetUpdatedAt() string {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return ""
+}
+
+type AIUsageResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Items            []*AICall              `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	UsageAuthority   string                 `protobuf:"bytes,2,opt,name=usage_authority,json=usageAuthority,proto3" json:"usage_authority,omitempty"`
+	AdditionalCharge bool                   `protobuf:"varint,3,opt,name=additional_charge,json=additionalCharge,proto3" json:"additional_charge,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *AIUsageResponse) Reset() {
+	*x = AIUsageResponse{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[72]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AIUsageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AIUsageResponse) ProtoMessage() {}
+
+func (x *AIUsageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[72]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AIUsageResponse.ProtoReflect.Descriptor instead.
+func (*AIUsageResponse) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{72}
+}
+
+func (x *AIUsageResponse) GetItems() []*AICall {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *AIUsageResponse) GetUsageAuthority() string {
+	if x != nil {
+		return x.UsageAuthority
+	}
+	return ""
+}
+
+func (x *AIUsageResponse) GetAdditionalCharge() bool {
+	if x != nil {
+		return x.AdditionalCharge
+	}
+	return false
+}
+
+type WorkspaceConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Kind          string                 `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
+	Status        string                 `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
+	PolicyVersion int64                  `protobuf:"varint,6,opt,name=policy_version,json=policyVersion,proto3" json:"policy_version,omitempty"`
+	Capabilities  []string               `protobuf:"bytes,7,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	CreatedAt     string                 `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     string                 `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkspaceConfig) Reset() {
+	*x = WorkspaceConfig{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[73]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkspaceConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkspaceConfig) ProtoMessage() {}
+
+func (x *WorkspaceConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[73]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkspaceConfig.ProtoReflect.Descriptor instead.
+func (*WorkspaceConfig) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{73}
+}
+
+func (x *WorkspaceConfig) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *WorkspaceConfig) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *WorkspaceConfig) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *WorkspaceConfig) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *WorkspaceConfig) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *WorkspaceConfig) GetPolicyVersion() int64 {
+	if x != nil {
+		return x.PolicyVersion
+	}
+	return 0
+}
+
+func (x *WorkspaceConfig) GetCapabilities() []string {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
+}
+
+func (x *WorkspaceConfig) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *WorkspaceConfig) GetUpdatedAt() string {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return ""
+}
+
+type WorkspaceListRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	After         string                 `protobuf:"bytes,2,opt,name=after,proto3" json:"after,omitempty"`
+	Query         string                 `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
+	Limit         int32                  `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkspaceListRequest) Reset() {
+	*x = WorkspaceListRequest{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[74]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkspaceListRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkspaceListRequest) ProtoMessage() {}
+
+func (x *WorkspaceListRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[74]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkspaceListRequest.ProtoReflect.Descriptor instead.
+func (*WorkspaceListRequest) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{74}
+}
+
+func (x *WorkspaceListRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *WorkspaceListRequest) GetAfter() string {
+	if x != nil {
+		return x.After
+	}
+	return ""
+}
+
+func (x *WorkspaceListRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+func (x *WorkspaceListRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type WorkspaceListResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*WorkspaceConfig     `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
+	WorkspaceMode string                 `protobuf:"bytes,3,opt,name=workspace_mode,json=workspaceMode,proto3" json:"workspace_mode,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkspaceListResponse) Reset() {
+	*x = WorkspaceListResponse{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[75]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkspaceListResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkspaceListResponse) ProtoMessage() {}
+
+func (x *WorkspaceListResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[75]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkspaceListResponse.ProtoReflect.Descriptor instead.
+func (*WorkspaceListResponse) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{75}
+}
+
+func (x *WorkspaceListResponse) GetItems() []*WorkspaceConfig {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *WorkspaceListResponse) GetNextCursor() string {
+	if x != nil {
+		return x.NextCursor
+	}
+	return ""
+}
+
+func (x *WorkspaceListResponse) GetWorkspaceMode() string {
+	if x != nil {
+		return x.WorkspaceMode
+	}
+	return ""
+}
+
+type IntegrationConfig struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	UserId            string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	WorkspaceId       string                 `protobuf:"bytes,3,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	Name              string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	Kind              string                 `protobuf:"bytes,5,opt,name=kind,proto3" json:"kind,omitempty"`
+	ExternalSpaceId   string                 `protobuf:"bytes,6,opt,name=external_space_id,json=externalSpaceId,proto3" json:"external_space_id,omitempty"`
+	AgentId           string                 `protobuf:"bytes,7,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	AllowedEventTypes []string               `protobuf:"bytes,8,rep,name=allowed_event_types,json=allowedEventTypes,proto3" json:"allowed_event_types,omitempty"`
+	Revision          int64                  `protobuf:"varint,9,opt,name=revision,proto3" json:"revision,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *IntegrationConfig) Reset() {
+	*x = IntegrationConfig{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[76]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IntegrationConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IntegrationConfig) ProtoMessage() {}
+
+func (x *IntegrationConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[76]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IntegrationConfig.ProtoReflect.Descriptor instead.
+func (*IntegrationConfig) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{76}
+}
+
+func (x *IntegrationConfig) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *IntegrationConfig) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *IntegrationConfig) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *IntegrationConfig) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *IntegrationConfig) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *IntegrationConfig) GetExternalSpaceId() string {
+	if x != nil {
+		return x.ExternalSpaceId
+	}
+	return ""
+}
+
+func (x *IntegrationConfig) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *IntegrationConfig) GetAllowedEventTypes() []string {
+	if x != nil {
+		return x.AllowedEventTypes
+	}
+	return nil
+}
+
+func (x *IntegrationConfig) GetRevision() int64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+type IntegrationList struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*IntegrationConfig   `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IntegrationList) Reset() {
+	*x = IntegrationList{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[77]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IntegrationList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IntegrationList) ProtoMessage() {}
+
+func (x *IntegrationList) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[77]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IntegrationList.ProtoReflect.Descriptor instead.
+func (*IntegrationList) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{77}
+}
+
+func (x *IntegrationList) GetItems() []*IntegrationConfig {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+type PartitionConfig struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Id               string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	UserId           string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	WorkspaceId      string                 `protobuf:"bytes,3,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	AgentId          string                 `protobuf:"bytes,4,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	AudienceActorIds []string               `protobuf:"bytes,5,rep,name=audience_actor_ids,json=audienceActorIds,proto3" json:"audience_actor_ids,omitempty"`
+	Revision         int64                  `protobuf:"varint,6,opt,name=revision,proto3" json:"revision,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *PartitionConfig) Reset() {
+	*x = PartitionConfig{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[78]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PartitionConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PartitionConfig) ProtoMessage() {}
+
+func (x *PartitionConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[78]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PartitionConfig.ProtoReflect.Descriptor instead.
+func (*PartitionConfig) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{78}
+}
+
+func (x *PartitionConfig) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *PartitionConfig) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *PartitionConfig) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *PartitionConfig) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *PartitionConfig) GetAudienceActorIds() []string {
+	if x != nil {
+		return x.AudienceActorIds
+	}
+	return nil
+}
+
+func (x *PartitionConfig) GetRevision() int64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+type PartitionList struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*PartitionConfig     `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PartitionList) Reset() {
+	*x = PartitionList{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[79]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PartitionList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PartitionList) ProtoMessage() {}
+
+func (x *PartitionList) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[79]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PartitionList.ProtoReflect.Descriptor instead.
+func (*PartitionList) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{79}
+}
+
+func (x *PartitionList) GetItems() []*PartitionConfig {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+type WorkspaceGrant struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	WorkspaceId   string                 `protobuf:"bytes,2,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	AgentId       string                 `protobuf:"bytes,3,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	Capabilities  []string               `protobuf:"bytes,4,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	Revision      int64                  `protobuf:"varint,5,opt,name=revision,proto3" json:"revision,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkspaceGrant) Reset() {
+	*x = WorkspaceGrant{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[80]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkspaceGrant) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkspaceGrant) ProtoMessage() {}
+
+func (x *WorkspaceGrant) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[80]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkspaceGrant.ProtoReflect.Descriptor instead.
+func (*WorkspaceGrant) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{80}
+}
+
+func (x *WorkspaceGrant) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *WorkspaceGrant) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *WorkspaceGrant) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *WorkspaceGrant) GetCapabilities() []string {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
+}
+
+func (x *WorkspaceGrant) GetRevision() int64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+type WorkspaceGrantRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scope         *AdminWorkspaceScope   `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	AgentId       string                 `protobuf:"bytes,2,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkspaceGrantRequest) Reset() {
+	*x = WorkspaceGrantRequest{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[81]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkspaceGrantRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkspaceGrantRequest) ProtoMessage() {}
+
+func (x *WorkspaceGrantRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[81]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkspaceGrantRequest.ProtoReflect.Descriptor instead.
+func (*WorkspaceGrantRequest) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{81}
+}
+
+func (x *WorkspaceGrantRequest) GetScope() *AdminWorkspaceScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *WorkspaceGrantRequest) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+type AdminRecordRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scope         *AdminWorkspaceScope   `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	After         string                 `protobuf:"bytes,3,opt,name=after,proto3" json:"after,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminRecordRequest) Reset() {
+	*x = AdminRecordRequest{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[82]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminRecordRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminRecordRequest) ProtoMessage() {}
+
+func (x *AdminRecordRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[82]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminRecordRequest.ProtoReflect.Descriptor instead.
+func (*AdminRecordRequest) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{82}
+}
+
+func (x *AdminRecordRequest) GetScope() *AdminWorkspaceScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *AdminRecordRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *AdminRecordRequest) GetAfter() string {
+	if x != nil {
+		return x.After
+	}
+	return ""
+}
+
+type AdminCandidateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scope         *AdminWorkspaceScope   `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	Candidate     *CandidateInput        `protobuf:"bytes,2,opt,name=candidate,proto3" json:"candidate,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminCandidateRequest) Reset() {
+	*x = AdminCandidateRequest{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[83]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminCandidateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminCandidateRequest) ProtoMessage() {}
+
+func (x *AdminCandidateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[83]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminCandidateRequest.ProtoReflect.Descriptor instead.
+func (*AdminCandidateRequest) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{83}
+}
+
+func (x *AdminCandidateRequest) GetScope() *AdminWorkspaceScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *AdminCandidateRequest) GetCandidate() *CandidateInput {
+	if x != nil {
+		return x.Candidate
+	}
+	return nil
+}
+
+type AdminForgetRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scope         *AdminWorkspaceScope   `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	Request       *ForgetRequest         `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminForgetRequest) Reset() {
+	*x = AdminForgetRequest{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[84]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminForgetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminForgetRequest) ProtoMessage() {}
+
+func (x *AdminForgetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[84]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminForgetRequest.ProtoReflect.Descriptor instead.
+func (*AdminForgetRequest) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{84}
+}
+
+func (x *AdminForgetRequest) GetScope() *AdminWorkspaceScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *AdminForgetRequest) GetRequest() *ForgetRequest {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
+type AdminExportRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Scope          *AdminWorkspaceScope   `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	IdempotencyKey string                 `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *AdminExportRequest) Reset() {
+	*x = AdminExportRequest{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[85]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminExportRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminExportRequest) ProtoMessage() {}
+
+func (x *AdminExportRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[85]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminExportRequest.ProtoReflect.Descriptor instead.
+func (*AdminExportRequest) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{85}
+}
+
+func (x *AdminExportRequest) GetScope() *AdminWorkspaceScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *AdminExportRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
+}
+
+type AdminUsageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scope         *AdminWorkspaceScope   `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	Request       *AIUsageRequest        `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminUsageRequest) Reset() {
+	*x = AdminUsageRequest{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[86]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminUsageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminUsageRequest) ProtoMessage() {}
+
+func (x *AdminUsageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[86]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminUsageRequest.ProtoReflect.Descriptor instead.
+func (*AdminUsageRequest) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{86}
+}
+
+func (x *AdminUsageRequest) GetScope() *AdminWorkspaceScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *AdminUsageRequest) GetRequest() *AIUsageRequest {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
+type MemoryControlRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scope         *AdminWorkspaceScope   `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	After         string                 `protobuf:"bytes,2,opt,name=after,proto3" json:"after,omitempty"`
+	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MemoryControlRequest) Reset() {
+	*x = MemoryControlRequest{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[87]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MemoryControlRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MemoryControlRequest) ProtoMessage() {}
+
+func (x *MemoryControlRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[87]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MemoryControlRequest.ProtoReflect.Descriptor instead.
+func (*MemoryControlRequest) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{87}
+}
+
+func (x *MemoryControlRequest) GetScope() *AdminWorkspaceScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *MemoryControlRequest) GetAfter() string {
+	if x != nil {
+		return x.After
+	}
+	return ""
+}
+
+func (x *MemoryControlRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type WorkspaceActor struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ActorId       string                 `protobuf:"bytes,1,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+	DisplayName   string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Kind          string                 `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
+	Revision      int64                  `protobuf:"varint,4,opt,name=revision,proto3" json:"revision,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkspaceActor) Reset() {
+	*x = WorkspaceActor{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[88]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkspaceActor) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkspaceActor) ProtoMessage() {}
+
+func (x *WorkspaceActor) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[88]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkspaceActor.ProtoReflect.Descriptor instead.
+func (*WorkspaceActor) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{88}
+}
+
+func (x *WorkspaceActor) GetActorId() string {
+	if x != nil {
+		return x.ActorId
+	}
+	return ""
+}
+
+func (x *WorkspaceActor) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *WorkspaceActor) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *WorkspaceActor) GetRevision() int64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+type SourceSummary struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Revision       int64                  `protobuf:"varint,2,opt,name=revision,proto3" json:"revision,omitempty"`
+	SpeakerActorId string                 `protobuf:"bytes,3,opt,name=speaker_actor_id,json=speakerActorId,proto3" json:"speaker_actor_id,omitempty"`
+	Status         string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SourceSummary) Reset() {
+	*x = SourceSummary{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[89]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SourceSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SourceSummary) ProtoMessage() {}
+
+func (x *SourceSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[89]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SourceSummary.ProtoReflect.Descriptor instead.
+func (*SourceSummary) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{89}
+}
+
+func (x *SourceSummary) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SourceSummary) GetRevision() int64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *SourceSummary) GetSpeakerActorId() string {
+	if x != nil {
+		return x.SpeakerActorId
+	}
+	return ""
+}
+
+func (x *SourceSummary) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+type MemoryJob struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Queue          string                 `protobuf:"bytes,2,opt,name=queue,proto3" json:"queue,omitempty"`
+	OperationId    string                 `protobuf:"bytes,3,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
+	UserId         string                 `protobuf:"bytes,4,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	WorkspaceId    string                 `protobuf:"bytes,5,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	PartitionId    string                 `protobuf:"bytes,6,opt,name=partition_id,json=partitionId,proto3" json:"partition_id,omitempty"`
+	ConversationId string                 `protobuf:"bytes,7,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	TaskType       string                 `protobuf:"bytes,8,opt,name=task_type,json=taskType,proto3" json:"task_type,omitempty"`
+	Status         string                 `protobuf:"bytes,9,opt,name=status,proto3" json:"status,omitempty"`
+	Attempt        int32                  `protobuf:"varint,10,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	FailureCode    string                 `protobuf:"bytes,11,opt,name=failure_code,json=failureCode,proto3" json:"failure_code,omitempty"`
+	NextRetryAt    string                 `protobuf:"bytes,12,opt,name=next_retry_at,json=nextRetryAt,proto3" json:"next_retry_at,omitempty"`
+	GenerationId   string                 `protobuf:"bytes,13,opt,name=generation_id,json=generationId,proto3" json:"generation_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *MemoryJob) Reset() {
+	*x = MemoryJob{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[90]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MemoryJob) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MemoryJob) ProtoMessage() {}
+
+func (x *MemoryJob) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[90]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MemoryJob.ProtoReflect.Descriptor instead.
+func (*MemoryJob) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{90}
+}
+
+func (x *MemoryJob) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *MemoryJob) GetQueue() string {
+	if x != nil {
+		return x.Queue
+	}
+	return ""
+}
+
+func (x *MemoryJob) GetOperationId() string {
+	if x != nil {
+		return x.OperationId
+	}
+	return ""
+}
+
+func (x *MemoryJob) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *MemoryJob) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *MemoryJob) GetPartitionId() string {
+	if x != nil {
+		return x.PartitionId
+	}
+	return ""
+}
+
+func (x *MemoryJob) GetConversationId() string {
+	if x != nil {
+		return x.ConversationId
+	}
+	return ""
+}
+
+func (x *MemoryJob) GetTaskType() string {
+	if x != nil {
+		return x.TaskType
+	}
+	return ""
+}
+
+func (x *MemoryJob) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *MemoryJob) GetAttempt() int32 {
+	if x != nil {
+		return x.Attempt
+	}
+	return 0
+}
+
+func (x *MemoryJob) GetFailureCode() string {
+	if x != nil {
+		return x.FailureCode
+	}
+	return ""
+}
+
+func (x *MemoryJob) GetNextRetryAt() string {
+	if x != nil {
+		return x.NextRetryAt
+	}
+	return ""
+}
+
+func (x *MemoryJob) GetGenerationId() string {
+	if x != nil {
+		return x.GenerationId
+	}
+	return ""
+}
+
+type MemoryControlOverview struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Actors        []*WorkspaceActor      `protobuf:"bytes,1,rep,name=actors,proto3" json:"actors,omitempty"`
+	Sources       []*SourceSummary       `protobuf:"bytes,2,rep,name=sources,proto3" json:"sources,omitempty"`
+	Receipts      []*IngestionReceipt    `protobuf:"bytes,3,rep,name=receipts,proto3" json:"receipts,omitempty"`
+	Jobs          []*MemoryJob           `protobuf:"bytes,4,rep,name=jobs,proto3" json:"jobs,omitempty"`
+	Operations    []*MemoryOperation     `protobuf:"bytes,5,rep,name=operations,proto3" json:"operations,omitempty"`
+	Limit         int32                  `protobuf:"varint,6,opt,name=limit,proto3" json:"limit,omitempty"`
+	NextCursor    string                 `protobuf:"bytes,7,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MemoryControlOverview) Reset() {
+	*x = MemoryControlOverview{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[91]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MemoryControlOverview) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MemoryControlOverview) ProtoMessage() {}
+
+func (x *MemoryControlOverview) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[91]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MemoryControlOverview.ProtoReflect.Descriptor instead.
+func (*MemoryControlOverview) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{91}
+}
+
+func (x *MemoryControlOverview) GetActors() []*WorkspaceActor {
+	if x != nil {
+		return x.Actors
+	}
+	return nil
+}
+
+func (x *MemoryControlOverview) GetSources() []*SourceSummary {
+	if x != nil {
+		return x.Sources
+	}
+	return nil
+}
+
+func (x *MemoryControlOverview) GetReceipts() []*IngestionReceipt {
+	if x != nil {
+		return x.Receipts
+	}
+	return nil
+}
+
+func (x *MemoryControlOverview) GetJobs() []*MemoryJob {
+	if x != nil {
+		return x.Jobs
+	}
+	return nil
+}
+
+func (x *MemoryControlOverview) GetOperations() []*MemoryOperation {
+	if x != nil {
+		return x.Operations
+	}
+	return nil
+}
+
+func (x *MemoryControlOverview) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *MemoryControlOverview) GetNextCursor() string {
+	if x != nil {
+		return x.NextCursor
+	}
+	return ""
+}
+
+type WorkspaceAgentCreate struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scope         *AdminWorkspaceScope   `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Capabilities  []string               `protobuf:"bytes,3,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkspaceAgentCreate) Reset() {
+	*x = WorkspaceAgentCreate{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[92]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkspaceAgentCreate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkspaceAgentCreate) ProtoMessage() {}
+
+func (x *WorkspaceAgentCreate) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[92]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkspaceAgentCreate.ProtoReflect.Descriptor instead.
+func (*WorkspaceAgentCreate) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{92}
+}
+
+func (x *WorkspaceAgentCreate) GetScope() *AdminWorkspaceScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *WorkspaceAgentCreate) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *WorkspaceAgentCreate) GetCapabilities() []string {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
+}
+
+type WorkspaceAgent struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Id                 string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	UserId             string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	ActorId            string                 `protobuf:"bytes,3,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+	Name               string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	Status             string                 `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
+	DefaultWorkspaceId string                 `protobuf:"bytes,6,opt,name=default_workspace_id,json=defaultWorkspaceId,proto3" json:"default_workspace_id,omitempty"`
+	Revision           int64                  `protobuf:"varint,7,opt,name=revision,proto3" json:"revision,omitempty"`
+	Legacy             bool                   `protobuf:"varint,8,opt,name=legacy,proto3" json:"legacy,omitempty"`
+	CreatedAt          string                 `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt          string                 `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *WorkspaceAgent) Reset() {
+	*x = WorkspaceAgent{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[93]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkspaceAgent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkspaceAgent) ProtoMessage() {}
+
+func (x *WorkspaceAgent) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[93]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkspaceAgent.ProtoReflect.Descriptor instead.
+func (*WorkspaceAgent) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{93}
+}
+
+func (x *WorkspaceAgent) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *WorkspaceAgent) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *WorkspaceAgent) GetActorId() string {
+	if x != nil {
+		return x.ActorId
+	}
+	return ""
+}
+
+func (x *WorkspaceAgent) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *WorkspaceAgent) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *WorkspaceAgent) GetDefaultWorkspaceId() string {
+	if x != nil {
+		return x.DefaultWorkspaceId
+	}
+	return ""
+}
+
+func (x *WorkspaceAgent) GetRevision() int64 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
+func (x *WorkspaceAgent) GetLegacy() bool {
+	if x != nil {
+		return x.Legacy
+	}
+	return false
+}
+
+func (x *WorkspaceAgent) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *WorkspaceAgent) GetUpdatedAt() string {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return ""
+}
+
+type WorkspaceAgentDetail struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	Agent                 *WorkspaceAgent        `protobuf:"bytes,1,opt,name=agent,proto3" json:"agent,omitempty"`
+	Grant                 *WorkspaceGrant        `protobuf:"bytes,2,opt,name=grant,proto3" json:"grant,omitempty"`
+	Workspace             *WorkspaceConfig       `protobuf:"bytes,3,opt,name=workspace,proto3" json:"workspace,omitempty"`
+	EffectiveCapabilities []string               `protobuf:"bytes,4,rep,name=effective_capabilities,json=effectiveCapabilities,proto3" json:"effective_capabilities,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *WorkspaceAgentDetail) Reset() {
+	*x = WorkspaceAgentDetail{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[94]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkspaceAgentDetail) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkspaceAgentDetail) ProtoMessage() {}
+
+func (x *WorkspaceAgentDetail) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[94]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkspaceAgentDetail.ProtoReflect.Descriptor instead.
+func (*WorkspaceAgentDetail) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{94}
+}
+
+func (x *WorkspaceAgentDetail) GetAgent() *WorkspaceAgent {
+	if x != nil {
+		return x.Agent
+	}
+	return nil
+}
+
+func (x *WorkspaceAgentDetail) GetGrant() *WorkspaceGrant {
+	if x != nil {
+		return x.Grant
+	}
+	return nil
+}
+
+func (x *WorkspaceAgentDetail) GetWorkspace() *WorkspaceConfig {
+	if x != nil {
+		return x.Workspace
+	}
+	return nil
+}
+
+func (x *WorkspaceAgentDetail) GetEffectiveCapabilities() []string {
+	if x != nil {
+		return x.EffectiveCapabilities
+	}
+	return nil
+}
+
+type MemoryRuntime struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	AiBackend      string                 `protobuf:"bytes,1,opt,name=ai_backend,json=aiBackend,proto3" json:"ai_backend,omitempty"`
+	RoleAliases    map[string]string      `protobuf:"bytes,2,rep,name=role_aliases,json=roleAliases,proto3" json:"role_aliases,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Embedding      *EmbeddingIdentity     `protobuf:"bytes,3,opt,name=embedding,proto3" json:"embedding,omitempty"`
+	UsageAuthority string                 `protobuf:"bytes,4,opt,name=usage_authority,json=usageAuthority,proto3" json:"usage_authority,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *MemoryRuntime) Reset() {
+	*x = MemoryRuntime{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[95]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MemoryRuntime) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MemoryRuntime) ProtoMessage() {}
+
+func (x *MemoryRuntime) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[95]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MemoryRuntime.ProtoReflect.Descriptor instead.
+func (*MemoryRuntime) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{95}
+}
+
+func (x *MemoryRuntime) GetAiBackend() string {
+	if x != nil {
+		return x.AiBackend
+	}
+	return ""
+}
+
+func (x *MemoryRuntime) GetRoleAliases() map[string]string {
+	if x != nil {
+		return x.RoleAliases
+	}
+	return nil
+}
+
+func (x *MemoryRuntime) GetEmbedding() *EmbeddingIdentity {
+	if x != nil {
+		return x.Embedding
+	}
+	return nil
+}
+
+func (x *MemoryRuntime) GetUsageAuthority() string {
+	if x != nil {
+		return x.UsageAuthority
+	}
+	return ""
+}
+
+type EmbeddingIdentity struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ModelVersion  string                 `protobuf:"bytes,1,opt,name=model_version,json=modelVersion,proto3" json:"model_version,omitempty"`
+	Dimensions    int32                  `protobuf:"varint,2,opt,name=dimensions,proto3" json:"dimensions,omitempty"`
+	Fingerprint   string                 `protobuf:"bytes,3,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EmbeddingIdentity) Reset() {
+	*x = EmbeddingIdentity{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[96]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EmbeddingIdentity) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EmbeddingIdentity) ProtoMessage() {}
+
+func (x *EmbeddingIdentity) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[96]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EmbeddingIdentity.ProtoReflect.Descriptor instead.
+func (*EmbeddingIdentity) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{96}
+}
+
+func (x *EmbeddingIdentity) GetModelVersion() string {
+	if x != nil {
+		return x.ModelVersion
+	}
+	return ""
+}
+
+func (x *EmbeddingIdentity) GetDimensions() int32 {
+	if x != nil {
+		return x.Dimensions
+	}
+	return 0
+}
+
+func (x *EmbeddingIdentity) GetFingerprint() string {
+	if x != nil {
+		return x.Fingerprint
+	}
+	return ""
+}
+
+type MemoryGeneration struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	GenerationId      string                 `protobuf:"bytes,1,opt,name=generation_id,json=generationId,proto3" json:"generation_id,omitempty"`
+	UserId            string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	WorkspaceId       string                 `protobuf:"bytes,3,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
+	Status            string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
+	Scope             string                 `protobuf:"bytes,5,opt,name=scope,proto3" json:"scope,omitempty"`
+	ConversationId    string                 `protobuf:"bytes,6,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	IsActive          bool                   `protobuf:"varint,7,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
+	StructureVersion  int32                  `protobuf:"varint,8,opt,name=structure_version,json=structureVersion,proto3" json:"structure_version,omitempty"`
+	EmbeddingVersion  int32                  `protobuf:"varint,9,opt,name=embedding_version,json=embeddingVersion,proto3" json:"embedding_version,omitempty"`
+	EmbeddingModel    string                 `protobuf:"bytes,10,opt,name=embedding_model,json=embeddingModel,proto3" json:"embedding_model,omitempty"`
+	ActivateOnSuccess bool                   `protobuf:"varint,11,opt,name=activate_on_success,json=activateOnSuccess,proto3" json:"activate_on_success,omitempty"`
+	SourceCount       int32                  `protobuf:"varint,12,opt,name=source_count,json=sourceCount,proto3" json:"source_count,omitempty"`
+	ProcessedCount    int32                  `protobuf:"varint,13,opt,name=processed_count,json=processedCount,proto3" json:"processed_count,omitempty"`
+	EmbeddingCount    int32                  `protobuf:"varint,14,opt,name=embedding_count,json=embeddingCount,proto3" json:"embedding_count,omitempty"`
+	FailureCount      int32                  `protobuf:"varint,15,opt,name=failure_count,json=failureCount,proto3" json:"failure_count,omitempty"`
+	LastError         string                 `protobuf:"bytes,16,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	Metadata          *structpb.Struct       `protobuf:"bytes,17,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	CreatedAt         string                 `protobuf:"bytes,18,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt         string                 `protobuf:"bytes,19,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	ActivatedAt       string                 `protobuf:"bytes,20,opt,name=activated_at,json=activatedAt,proto3" json:"activated_at,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *MemoryGeneration) Reset() {
+	*x = MemoryGeneration{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[97]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MemoryGeneration) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MemoryGeneration) ProtoMessage() {}
+
+func (x *MemoryGeneration) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[97]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MemoryGeneration.ProtoReflect.Descriptor instead.
+func (*MemoryGeneration) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{97}
+}
+
+func (x *MemoryGeneration) GetGenerationId() string {
+	if x != nil {
+		return x.GenerationId
+	}
+	return ""
+}
+
+func (x *MemoryGeneration) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *MemoryGeneration) GetWorkspaceId() string {
+	if x != nil {
+		return x.WorkspaceId
+	}
+	return ""
+}
+
+func (x *MemoryGeneration) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *MemoryGeneration) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+func (x *MemoryGeneration) GetConversationId() string {
+	if x != nil {
+		return x.ConversationId
+	}
+	return ""
+}
+
+func (x *MemoryGeneration) GetIsActive() bool {
+	if x != nil {
+		return x.IsActive
+	}
+	return false
+}
+
+func (x *MemoryGeneration) GetStructureVersion() int32 {
+	if x != nil {
+		return x.StructureVersion
+	}
+	return 0
+}
+
+func (x *MemoryGeneration) GetEmbeddingVersion() int32 {
+	if x != nil {
+		return x.EmbeddingVersion
+	}
+	return 0
+}
+
+func (x *MemoryGeneration) GetEmbeddingModel() string {
+	if x != nil {
+		return x.EmbeddingModel
+	}
+	return ""
+}
+
+func (x *MemoryGeneration) GetActivateOnSuccess() bool {
+	if x != nil {
+		return x.ActivateOnSuccess
+	}
+	return false
+}
+
+func (x *MemoryGeneration) GetSourceCount() int32 {
+	if x != nil {
+		return x.SourceCount
+	}
+	return 0
+}
+
+func (x *MemoryGeneration) GetProcessedCount() int32 {
+	if x != nil {
+		return x.ProcessedCount
+	}
+	return 0
+}
+
+func (x *MemoryGeneration) GetEmbeddingCount() int32 {
+	if x != nil {
+		return x.EmbeddingCount
+	}
+	return 0
+}
+
+func (x *MemoryGeneration) GetFailureCount() int32 {
+	if x != nil {
+		return x.FailureCount
+	}
+	return 0
+}
+
+func (x *MemoryGeneration) GetLastError() string {
+	if x != nil {
+		return x.LastError
+	}
+	return ""
+}
+
+func (x *MemoryGeneration) GetMetadata() *structpb.Struct {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
+func (x *MemoryGeneration) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *MemoryGeneration) GetUpdatedAt() string {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return ""
+}
+
+func (x *MemoryGeneration) GetActivatedAt() string {
+	if x != nil {
+		return x.ActivatedAt
+	}
+	return ""
+}
+
+type GenerationList struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*MemoryGeneration    `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GenerationList) Reset() {
+	*x = GenerationList{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[98]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GenerationList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GenerationList) ProtoMessage() {}
+
+func (x *GenerationList) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[98]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GenerationList.ProtoReflect.Descriptor instead.
+func (*GenerationList) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{98}
+}
+
+func (x *GenerationList) GetItems() []*MemoryGeneration {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+type GenerationRebuildRequest struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	Scope                  *AdminWorkspaceScope   `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	EmbeddingModelOverride string                 `protobuf:"bytes,2,opt,name=embedding_model_override,json=embeddingModelOverride,proto3" json:"embedding_model_override,omitempty"`
+	ActivateOnSuccess      bool                   `protobuf:"varint,3,opt,name=activate_on_success,json=activateOnSuccess,proto3" json:"activate_on_success,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *GenerationRebuildRequest) Reset() {
+	*x = GenerationRebuildRequest{}
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[99]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GenerationRebuildRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GenerationRebuildRequest) ProtoMessage() {}
+
+func (x *GenerationRebuildRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_memstation_v1_api_proto_msgTypes[99]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GenerationRebuildRequest.ProtoReflect.Descriptor instead.
+func (*GenerationRebuildRequest) Descriptor() ([]byte, []int) {
+	return file_proto_memstation_v1_api_proto_rawDescGZIP(), []int{99}
+}
+
+func (x *GenerationRebuildRequest) GetScope() *AdminWorkspaceScope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *GenerationRebuildRequest) GetEmbeddingModelOverride() string {
+	if x != nil {
+		return x.EmbeddingModelOverride
+	}
+	return ""
+}
+
+func (x *GenerationRebuildRequest) GetActivateOnSuccess() bool {
+	if x != nil {
+		return x.ActivateOnSuccess
+	}
+	return false
 }
 
 var File_proto_memstation_v1_api_proto protoreflect.FileDescriptor
@@ -3058,7 +8339,7 @@ const file_proto_memstation_v1_api_proto_rawDesc = "" +
 	"\vUsageRecord\x12!\n" +
 	"\finput_tokens\x18\x01 \x01(\x05R\vinputTokens\x12#\n" +
 	"\routput_tokens\x18\x02 \x01(\x05R\foutputTokens\x12!\n" +
-	"\ftotal_tokens\x18\x03 \x01(\x05R\vtotalTokens\"\xba\x04\n" +
+	"\ftotal_tokens\x18\x03 \x01(\x05R\vtotalTokens\"\xe6\x04\n" +
 	"\rSearchRequest\x12#\n" +
 	"\rgeneration_id\x18\x01 \x01(\tR\fgenerationId\x12\x14\n" +
 	"\x05query\x18\x02 \x01(\tR\x05query\x12\x13\n" +
@@ -3075,14 +8356,45 @@ const file_proto_memstation_v1_api_proto_rawDesc = "" +
 	"\x05as_of\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\x04asOf\x125\n" +
 	"\bknown_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\aknownAt\x12#\n" +
 	"\rrelation_mode\x18\r \x01(\tR\frelationMode\x12!\n" +
-	"\fentity_scope\x18\x0e \x01(\tR\ventityScope\"\x97\x01\n" +
+	"\fentity_scope\x18\x0e \x01(\tR\ventityScope\x12*\n" +
+	"\x11subject_actor_ids\x18\x0f \x03(\tR\x0fsubjectActorIds\"\xb6\x02\n" +
 	"\x0eSearchResponse\x129\n" +
 	"\bmemories\x18\x01 \x03(\v2\x1d.memstation.v1.MemoryDocumentR\bmemories\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x124\n" +
-	"\x16query_embedding_tokens\x18\x03 \x01(\x05R\x14queryEmbeddingTokens\"^\n" +
+	"\x16query_embedding_tokens\x18\x03 \x01(\x05R\x14queryEmbeddingTokens\x12-\n" +
+	"\x05trace\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x05trace\x12/\n" +
+	"\x06rerank\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x06rerank\x12=\n" +
+	"\frecall_trace\x18\x06 \x01(\v2\x1a.memstation.v1.RecallTraceR\vrecallTrace\"\xe8\x03\n" +
+	"\vRecallTrace\x12>\n" +
+	"\n" +
+	"watermarks\x18\x01 \x03(\v2\x1e.memstation.v1.StreamWatermarkR\n" +
+	"watermarks\x12-\n" +
+	"\x12watermarks_partial\x18\x02 \x01(\bR\x11watermarksPartial\x12H\n" +
+	"\x0eprovider_calls\x18\x03 \x03(\v2!.memstation.v1.RecallProviderCallR\rproviderCalls\x12\x19\n" +
+	"\bquery_id\x18\x04 \x01(\tR\aqueryId\x12.\n" +
+	"\x13provider_request_id\x18\x05 \x01(\tR\x11providerRequestId\x12\x1d\n" +
+	"\n" +
+	"latency_ms\x18\x06 \x01(\x03R\tlatencyMs\x12%\n" +
+	"\x0ereturned_count\x18\a \x01(\x05R\rreturnedCount\x12%\n" +
+	"\x0eeligible_count\x18\b \x01(\x05R\religibleCount\x12)\n" +
+	"\x10score_definition\x18\t \x01(\tR\x0fscoreDefinition\x12!\n" +
+	"\ffailure_code\x18\n" +
+	" \x01(\tR\vfailureCode\x12\x1a\n" +
+	"\bdegraded\x18\v \x01(\bR\bdegraded\"\xac\x01\n" +
+	"\x0fStreamWatermark\x12\x1b\n" +
+	"\tstream_id\x18\x01 \x01(\tR\bstreamId\x12!\n" +
+	"\fpartition_id\x18\x02 \x01(\tR\vpartitionId\x12#\n" +
+	"\rgeneration_id\x18\x03 \x01(\tR\fgenerationId\x12\x1a\n" +
+	"\baccepted\x18\x04 \x01(\x03R\baccepted\x12\x18\n" +
+	"\aindexed\x18\x05 \x01(\x03R\aindexed\"\x89\x01\n" +
+	"\x12RecallProviderCall\x12\x17\n" +
+	"\acall_id\x18\x01 \x01(\tR\x06callId\x12\x12\n" +
+	"\x04role\x18\x02 \x01(\tR\x04role\x12.\n" +
+	"\x13provider_request_id\x18\x03 \x01(\tR\x11providerRequestId\x12\x16\n" +
+	"\x06status\x18\x04 \x01(\tR\x06status\"^\n" +
 	"\x0fInjectionResult\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x125\n" +
-	"\x06search\x18\x02 \x01(\v2\x1d.memstation.v1.SearchResponseR\x06search\"\xc3\x05\n" +
+	"\x06search\x18\x02 \x01(\v2\x1d.memstation.v1.SearchResponseR\x06search\"\x87\t\n" +
 	"\x0eMemoryDocument\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\anode_id\x18\x02 \x01(\tR\x06nodeId\x12#\n" +
@@ -3107,7 +8419,43 @@ const file_proto_memstation_v1_api_proto_rawDesc = "" +
 	"created_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x124\n" +
-	"\alineage\x18\x12 \x01(\v2\x1a.memstation.v1.FactLineageR\alineage\"\xc7\x02\n" +
+	"\alineage\x18\x12 \x01(\v2\x1a.memstation.v1.FactLineageR\alineage\x12!\n" +
+	"\fworkspace_id\x18\x13 \x01(\tR\vworkspaceId\x12!\n" +
+	"\fpartition_id\x18\x14 \x01(\tR\vpartitionId\x12*\n" +
+	"\x11subject_actor_ids\x18\x15 \x03(\tR\x0fsubjectActorIds\x129\n" +
+	"\vsource_refs\x18\x16 \x03(\v2\x18.memstation.v1.SourceRefR\n" +
+	"sourceRefs\x12\x1a\n" +
+	"\brevision\x18\x17 \x01(\x03R\brevision\x12\x16\n" +
+	"\x06status\x18\x18 \x01(\tR\x06status\x12\x12\n" +
+	"\x04kind\x18\x19 \x01(\tR\x04kind\x12\x1e\n" +
+	"\n" +
+	"visibility\x18\x1a \x01(\tR\n" +
+	"visibility\x129\n" +
+	"\n" +
+	"valid_from\x18\x1b \x01(\v2\x1a.google.protobuf.TimestampR\tvalidFrom\x125\n" +
+	"\bvalid_to\x18\x1c \x01(\v2\x1a.google.protobuf.TimestampR\avalidTo\x12;\n" +
+	"\tevidences\x18\x1d \x03(\v2\x1d.memstation.v1.MemoryEvidenceR\tevidences\"\x9e\x04\n" +
+	"\x0eMemoryEvidence\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
+	"\rgeneration_id\x18\x02 \x01(\tR\fgenerationId\x12\x17\n" +
+	"\auser_id\x18\x03 \x01(\tR\x06userId\x12\x17\n" +
+	"\anode_id\x18\x04 \x01(\tR\x06nodeId\x12'\n" +
+	"\x0fconversation_id\x18\x05 \x01(\tR\x0econversationId\x12!\n" +
+	"\fsequence_num\x18\x06 \x01(\x05R\vsequenceNum\x12\x17\n" +
+	"\apart_id\x18\a \x01(\tR\x06partId\x12\x1f\n" +
+	"\vartifact_id\x18\b \x01(\tR\n" +
+	"artifactId\x12\x1d\n" +
+	"\n" +
+	"page_index\x18\t \x01(\x05R\tpageIndex\x12\x19\n" +
+	"\bstart_ms\x18\n" +
+	" \x01(\x03R\astartMs\x12\x15\n" +
+	"\x06end_ms\x18\v \x01(\x03R\x05endMs\x12#\n" +
+	"\revidence_kind\x18\f \x01(\tR\fevidenceKind\x12!\n" +
+	"\fexcerpt_text\x18\r \x01(\tR\vexcerptText\x12\x16\n" +
+	"\x06weight\x18\x0e \x01(\x01R\x06weight\x123\n" +
+	"\bmetadata\x18\x0f \x01(\v2\x17.google.protobuf.StructR\bmetadata\x129\n" +
+	"\n" +
+	"created_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\xc7\x02\n" +
 	"\vFactLineage\x12\x19\n" +
 	"\bfact_key\x18\x01 \x01(\tR\afactKey\x12(\n" +
 	"\x10lineage_group_id\x18\x02 \x01(\tR\x0elineageGroupId\x12!\n" +
@@ -3242,7 +8590,440 @@ const file_proto_memstation_v1_api_proto_rawDesc = "" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12#\n" +
 	"\rgeneration_id\x18\x02 \x01(\tR\fgenerationId\x12;\n" +
 	"\tdocuments\x18\x03 \x03(\v2\x1d.memstation.v1.MemoryDocumentR\tdocuments\x12;\n" +
-	"\fkey_memories\x18\x04 \x03(\v2\x18.memstation.v1.KeyMemoryR\vkeyMemories2Y\n" +
+	"\fkey_memories\x18\x04 \x03(\v2\x18.memstation.v1.KeyMemoryR\vkeyMemories\"5\n" +
+	"\rRecordRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05after\x18\x02 \x01(\tR\x05after\"2\n" +
+	"\bTextSpan\x12\x14\n" +
+	"\x05start\x18\x01 \x01(\x05R\x05start\x12\x10\n" +
+	"\x03end\x18\x02 \x01(\x05R\x03end\"\xb5\x01\n" +
+	"\tSourceRef\x12!\n" +
+	"\fworkspace_id\x18\x01 \x01(\tR\vworkspaceId\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x02 \x01(\tR\tmessageId\x12\x1a\n" +
+	"\brevision\x18\x03 \x01(\x03R\brevision\x12\x1d\n" +
+	"\n" +
+	"part_index\x18\x04 \x01(\x05R\tpartIndex\x12+\n" +
+	"\x04span\x18\x05 \x01(\v2\x17.memstation.v1.TextSpanR\x04span\"\x82\x01\n" +
+	"\rSourceSpeaker\x12\x1f\n" +
+	"\vexternal_id\x18\x01 \x01(\tR\n" +
+	"externalId\x12\x19\n" +
+	"\bactor_id\x18\x02 \x01(\tR\aactorId\x12!\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x12\n" +
+	"\x04kind\x18\x04 \x01(\tR\x04kind\"\xb7\x01\n" +
+	"\n" +
+	"SourcePart\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\x12\x19\n" +
+	"\bactor_id\x18\x03 \x01(\tR\aactorId\x120\n" +
+	"\x06source\x18\x04 \x01(\v2\x18.memstation.v1.SourceRefR\x06source\x124\n" +
+	"\x06author\x18\x05 \x01(\v2\x1c.memstation.v1.SourceSpeakerR\x06author\"\xa4\x03\n" +
+	"\vSourceEvent\x12\x19\n" +
+	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12*\n" +
+	"\x11source_message_id\x18\x03 \x01(\tR\x0fsourceMessageId\x12'\n" +
+	"\x0fsource_revision\x18\x04 \x01(\x03R\x0esourceRevision\x126\n" +
+	"\aspeaker\x18\x05 \x01(\v2\x1c.memstation.v1.SourceSpeakerR\aspeaker\x12/\n" +
+	"\x05parts\x18\x06 \x03(\v2\x19.memstation.v1.SourcePartR\x05parts\x123\n" +
+	"\breply_to\x18\a \x01(\v2\x18.memstation.v1.SourceRefR\areplyTo\x12\x1f\n" +
+	"\voccurred_at\x18\b \x01(\tR\n" +
+	"occurredAt\x12'\n" +
+	"\x0fdelivery_status\x18\t \x01(\tR\x0edeliveryStatus\x12)\n" +
+	"\x10delivery_receipt\x18\n" +
+	" \x01(\tR\x0fdeliveryReceipt\"\xf7\x01\n" +
+	"\vIngestBatch\x12!\n" +
+	"\fworkspace_id\x18\x01 \x01(\tR\vworkspaceId\x12%\n" +
+	"\x0eintegration_id\x18\x02 \x01(\tR\rintegrationId\x12*\n" +
+	"\x11external_space_id\x18\x03 \x01(\tR\x0fexternalSpaceId\x12\x1b\n" +
+	"\tthread_id\x18\x04 \x01(\tR\bthreadId\x12!\n" +
+	"\fpartition_id\x18\x05 \x01(\tR\vpartitionId\x122\n" +
+	"\x06events\x18\x06 \x03(\v2\x1a.memstation.v1.SourceEventR\x06events\"k\n" +
+	"\x0eObserveRequest\x120\n" +
+	"\x05batch\x18\x01 \x01(\v2\x1a.memstation.v1.IngestBatchR\x05batch\x12'\n" +
+	"\x0fidempotency_key\x18\x02 \x01(\tR\x0eidempotencyKey\"\xa8\x01\n" +
+	"\x0fEventAcceptance\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12\x19\n" +
+	"\bevent_id\x18\x02 \x01(\tR\aeventId\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x03 \x01(\tR\tmessageId\x12\x16\n" +
+	"\x06status\x18\x04 \x01(\tR\x06status\x12\x1a\n" +
+	"\bsequence\x18\x05 \x01(\x03R\bsequence\"\xf1\x03\n" +
+	"\x10IngestionReceipt\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12\x1b\n" +
+	"\tstream_id\x18\x03 \x01(\tR\bstreamId\x12!\n" +
+	"\fpartition_id\x18\x04 \x01(\tR\vpartitionId\x12#\n" +
+	"\rgeneration_id\x18\x05 \x01(\tR\fgenerationId\x12+\n" +
+	"\x11accepted_sequence\x18\x06 \x01(\x03R\x10acceptedSequence\x12)\n" +
+	"\x10indexed_sequence\x18\a \x01(\x03R\x0findexedSequence\x12\x16\n" +
+	"\x06status\x18\b \x01(\tR\x06status\x12\x14\n" +
+	"\x05stage\x18\t \x01(\tR\x05stage\x12!\n" +
+	"\ffailure_code\x18\n" +
+	" \x01(\tR\vfailureCode\x12\x1f\n" +
+	"\vretry_count\x18\v \x01(\x05R\n" +
+	"retryCount\x12\"\n" +
+	"\rnext_retry_at\x18\f \x01(\tR\vnextRetryAt\x12\x1f\n" +
+	"\vdead_letter\x18\r \x01(\bR\n" +
+	"deadLetter\x126\n" +
+	"\x06events\x18\x0e \x03(\v2\x1e.memstation.v1.EventAcceptanceR\x06events\"\xc3\x01\n" +
+	"\vWindowInput\x12!\n" +
+	"\fworkspace_id\x18\x01 \x01(\tR\vworkspaceId\x12%\n" +
+	"\x0eintegration_id\x18\x02 \x01(\tR\rintegrationId\x12*\n" +
+	"\x11external_space_id\x18\x03 \x01(\tR\x0fexternalSpaceId\x12\x1b\n" +
+	"\tthread_id\x18\x04 \x01(\tR\bthreadId\x12!\n" +
+	"\fpartition_id\x18\x05 \x01(\tR\vpartitionId\"p\n" +
+	"\x11OpenWindowRequest\x122\n" +
+	"\x06window\x18\x01 \x01(\v2\x1a.memstation.v1.WindowInputR\x06window\x12'\n" +
+	"\x0fidempotency_key\x18\x02 \x01(\tR\x0eidempotencyKey\"T\n" +
+	"\x15FinalizeWindowRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12+\n" +
+	"\x11expected_revision\x18\x02 \x01(\x03R\x10expectedRevision\"\xbb\x01\n" +
+	"\x12ConversationWindow\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12!\n" +
+	"\fpartition_id\x18\x03 \x01(\tR\vpartitionId\x12\x1b\n" +
+	"\tstream_id\x18\x04 \x01(\tR\bstreamId\x12\x1a\n" +
+	"\brevision\x18\x05 \x01(\x03R\brevision\x12\x16\n" +
+	"\x06status\x18\x06 \x01(\tR\x06status\"\xd8\x02\n" +
+	"\fSourceRecord\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12!\n" +
+	"\fpartition_id\x18\x03 \x01(\tR\vpartitionId\x12%\n" +
+	"\x0eintegration_id\x18\x04 \x01(\tR\rintegrationId\x12\x1a\n" +
+	"\brevision\x18\x05 \x01(\x03R\brevision\x12(\n" +
+	"\x10speaker_actor_id\x18\x06 \x01(\tR\x0espeakerActorId\x12/\n" +
+	"\x05parts\x18\a \x03(\v2\x19.memstation.v1.SourcePartR\x05parts\x123\n" +
+	"\breply_to\x18\b \x01(\v2\x18.memstation.v1.SourceRefR\areplyTo\x12\x1f\n" +
+	"\voccurred_at\x18\t \x01(\tR\n" +
+	"occurredAt\"\x97\x02\n" +
+	"\x0eCandidateInput\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x18\n" +
+	"\acontent\x18\x02 \x01(\tR\acontent\x12!\n" +
+	"\fpartition_id\x18\x03 \x01(\tR\vpartitionId\x12*\n" +
+	"\x11subject_actor_ids\x18\x04 \x03(\tR\x0fsubjectActorIds\x129\n" +
+	"\vsource_refs\x18\x05 \x03(\v2\x18.memstation.v1.SourceRefR\n" +
+	"sourceRefs\x12$\n" +
+	"\x0etarget_node_id\x18\x06 \x01(\tR\ftargetNodeId\x12'\n" +
+	"\x0ftarget_revision\x18\a \x01(\x03R\x0etargetRevision\"\x96\x04\n" +
+	"\x0fMemoryCandidate\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12!\n" +
+	"\fpartition_id\x18\x03 \x01(\tR\vpartitionId\x12\x19\n" +
+	"\bagent_id\x18\x04 \x01(\tR\aagentId\x12\x12\n" +
+	"\x04kind\x18\x05 \x01(\tR\x04kind\x12\x18\n" +
+	"\acontent\x18\x06 \x01(\tR\acontent\x12*\n" +
+	"\x11subject_actor_ids\x18\a \x03(\tR\x0fsubjectActorIds\x129\n" +
+	"\vsource_refs\x18\b \x03(\v2\x18.memstation.v1.SourceRefR\n" +
+	"sourceRefs\x12\x16\n" +
+	"\x06origin\x18\t \x01(\tR\x06origin\x12\x16\n" +
+	"\x06status\x18\n" +
+	" \x01(\tR\x06status\x12\x1a\n" +
+	"\brevision\x18\v \x01(\x03R\brevision\x12$\n" +
+	"\x0etarget_node_id\x18\f \x01(\tR\ftargetNodeId\x12'\n" +
+	"\x0ftarget_revision\x18\r \x01(\x03R\x0etargetRevision\x12$\n" +
+	"\x0eresult_node_id\x18\x0e \x01(\tR\fresultNodeId\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x0f \x01(\tR\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\x10 \x01(\tR\tupdatedAt\"E\n" +
+	"\rCandidateList\x124\n" +
+	"\x05items\x18\x01 \x03(\v2\x1e.memstation.v1.MemoryCandidateR\x05items\"\xc2\x01\n" +
+	"\x0eForgetSelector\x12!\n" +
+	"\fpartition_id\x18\x01 \x01(\tR\vpartitionId\x129\n" +
+	"\vsource_refs\x18\x02 \x03(\v2\x18.memstation.v1.SourceRefR\n" +
+	"sourceRefs\x12\x19\n" +
+	"\bnode_ids\x18\x03 \x03(\tR\anodeIds\x12\x19\n" +
+	"\bactor_id\x18\x04 \x01(\tR\aactorId\x12\x1c\n" +
+	"\tworkspace\x18\x05 \x01(\bR\tworkspace\"s\n" +
+	"\rForgetRequest\x129\n" +
+	"\bselector\x18\x01 \x01(\v2\x1d.memstation.v1.ForgetSelectorR\bselector\x12'\n" +
+	"\x0fidempotency_key\x18\x02 \x01(\tR\x0eidempotencyKey\"8\n" +
+	"\rExportRequest\x12'\n" +
+	"\x0fidempotency_key\x18\x01 \x01(\tR\x0eidempotencyKey\"\xfc\x03\n" +
+	"\x0fMemoryOperation\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12!\n" +
+	"\fpartition_id\x18\x03 \x01(\tR\vpartitionId\x12\x12\n" +
+	"\x04kind\x18\x04 \x01(\tR\x04kind\x12\x16\n" +
+	"\x06status\x18\x05 \x01(\tR\x06status\x12\x1a\n" +
+	"\brevision\x18\x06 \x01(\x03R\brevision\x12!\n" +
+	"\fread_blocked\x18\a \x01(\bR\vreadBlocked\x12%\n" +
+	"\x0eonline_cleaned\x18\b \x01(\bR\ronlineCleaned\x12+\n" +
+	"\x11journal_persisted\x18\t \x01(\bR\x10journalPersisted\x12#\n" +
+	"\rbackup_status\x18\n" +
+	" \x01(\tR\fbackupStatus\x12!\n" +
+	"\ffailure_code\x18\v \x01(\tR\vfailureCode\x12/\n" +
+	"\x06result\x18\f \x01(\v2\x17.google.protobuf.StructR\x06result\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\r \x01(\tR\texpiresAt\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x0e \x01(\tR\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\x0f \x01(\tR\tupdatedAt\"\xa3\x03\n" +
+	"\x12MemoryCapabilities\x12)\n" +
+	"\x10contract_version\x18\x01 \x01(\tR\x0fcontractVersion\x12%\n" +
+	"\x0eserver_version\x18\x02 \x01(\tR\rserverVersion\x12\x16\n" +
+	"\x06status\x18\x03 \x01(\tR\x06status\x12/\n" +
+	"\x06access\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x06access\x12W\n" +
+	"\fcapabilities\x18\x05 \x03(\v23.memstation.v1.MemoryCapabilities.CapabilitiesEntryR\fcapabilities\x12 \n" +
+	"\vlimitations\x18\x06 \x03(\tR\vlimitations\x126\n" +
+	"\aruntime\x18\a \x01(\v2\x1c.memstation.v1.MemoryRuntimeR\aruntime\x1a?\n" +
+	"\x11CapabilitiesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\x8a\x01\n" +
+	"\x13AdminWorkspaceScope\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12!\n" +
+	"\fpartition_id\x18\x03 \x01(\tR\vpartitionId\x12\x14\n" +
+	"\x05after\x18\x04 \x01(\tR\x05after\"\xd2\x01\n" +
+	"\x16ReviewCandidateRequest\x128\n" +
+	"\x05scope\x18\x01 \x01(\v2\".memstation.v1.AdminWorkspaceScopeR\x05scope\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12+\n" +
+	"\x11expected_revision\x18\x03 \x01(\x03R\x10expectedRevision\x12\x1a\n" +
+	"\bdecision\x18\x04 \x01(\tR\bdecision\x12%\n" +
+	"\x0econfirmed_kind\x18\x05 \x01(\tR\rconfirmedKind\"\xd6\x03\n" +
+	"\x10PublicationInput\x12$\n" +
+	"\x0esource_node_id\x18\x01 \x01(\tR\fsourceNodeId\x12'\n" +
+	"\x0fsource_revision\x18\x02 \x01(\x03R\x0esourceRevision\x12.\n" +
+	"\x13target_workspace_id\x18\x03 \x01(\tR\x11targetWorkspaceId\x12.\n" +
+	"\x13target_partition_id\x18\x04 \x01(\tR\x11targetPartitionId\x12V\n" +
+	"\ractor_mapping\x18\x05 \x03(\v21.memstation.v1.PublicationInput.ActorMappingEntryR\factorMapping\x126\n" +
+	"\x17replaces_publication_id\x18\x06 \x01(\tR\x15replacesPublicationId\x12B\n" +
+	"\x1dexpected_publication_revision\x18\a \x01(\x03R\x1bexpectedPublicationRevision\x1a?\n" +
+	"\x11ActorMappingEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8d\x01\n" +
+	"\x0ePublishRequest\x128\n" +
+	"\x05scope\x18\x01 \x01(\v2\".memstation.v1.AdminWorkspaceScopeR\x05scope\x12A\n" +
+	"\vpublication\x18\x02 \x01(\v2\x1f.memstation.v1.PublicationInputR\vpublication\"\xff\x02\n" +
+	"\x11MemoryPublication\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12.\n" +
+	"\x13source_workspace_id\x18\x02 \x01(\tR\x11sourceWorkspaceId\x12$\n" +
+	"\x0esource_node_id\x18\x03 \x01(\tR\fsourceNodeId\x12'\n" +
+	"\x0fsource_revision\x18\x04 \x01(\x03R\x0esourceRevision\x12.\n" +
+	"\x13target_workspace_id\x18\x05 \x01(\tR\x11targetWorkspaceId\x12.\n" +
+	"\x13target_partition_id\x18\x06 \x01(\tR\x11targetPartitionId\x12$\n" +
+	"\x0etarget_node_id\x18\a \x01(\tR\ftargetNodeId\x12\x16\n" +
+	"\x06status\x18\b \x01(\tR\x06status\x12\x1a\n" +
+	"\brevision\x18\t \x01(\x03R\brevision\x12!\n" +
+	"\foperation_id\x18\n" +
+	" \x01(\tR\voperationId\"I\n" +
+	"\x0fPublicationList\x126\n" +
+	"\x05items\x18\x01 \x03(\v2 .memstation.v1.MemoryPublicationR\x05items\"\x92\x01\n" +
+	"\x19RetractPublicationRequest\x128\n" +
+	"\x05scope\x18\x01 \x01(\v2\".memstation.v1.AdminWorkspaceScopeR\x05scope\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12+\n" +
+	"\x11expected_revision\x18\x03 \x01(\x03R\x10expectedRevision\"<\n" +
+	"\x0eAIUsageRequest\x12\x14\n" +
+	"\x05after\x18\x01 \x01(\tR\x05after\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\"\xac\x05\n" +
+	"\x06AICall\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12!\n" +
+	"\fpartition_id\x18\x03 \x01(\tR\vpartitionId\x12#\n" +
+	"\rpartition_ids\x18\x04 \x03(\tR\fpartitionIds\x12\x12\n" +
+	"\x04role\x18\x05 \x01(\tR\x04role\x12\x1f\n" +
+	"\vmodel_alias\x18\x06 \x01(\tR\n" +
+	"modelAlias\x12#\n" +
+	"\rmodel_version\x18\a \x01(\tR\fmodelVersion\x12\x19\n" +
+	"\btrace_id\x18\b \x01(\tR\atraceId\x12\x15\n" +
+	"\x06job_id\x18\t \x01(\tR\x05jobId\x12\x18\n" +
+	"\aattempt\x18\n" +
+	" \x01(\x05R\aattempt\x12.\n" +
+	"\x13provider_request_id\x18\v \x01(\tR\x11providerRequestId\x12&\n" +
+	"\x0fbroker_usage_id\x18\f \x01(\tR\rbrokerUsageId\x12\x16\n" +
+	"\x06status\x18\r \x01(\tR\x06status\x12!\n" +
+	"\finput_tokens\x18\x0e \x01(\x05R\vinputTokens\x12#\n" +
+	"\routput_tokens\x18\x0f \x01(\x05R\foutputTokens\x12#\n" +
+	"\rreported_cost\x18\x10 \x01(\tR\freportedCost\x12\x1a\n" +
+	"\bcurrency\x18\x11 \x01(\tR\bcurrency\x12'\n" +
+	"\x0fusage_authority\x18\x12 \x01(\tR\x0eusageAuthority\x12!\n" +
+	"\ffailure_code\x18\x13 \x01(\tR\vfailureCode\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x14 \x01(\tR\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\x15 \x01(\tR\tupdatedAt\"\x94\x01\n" +
+	"\x0fAIUsageResponse\x12+\n" +
+	"\x05items\x18\x01 \x03(\v2\x15.memstation.v1.AICallR\x05items\x12'\n" +
+	"\x0fusage_authority\x18\x02 \x01(\tR\x0eusageAuthority\x12+\n" +
+	"\x11additional_charge\x18\x03 \x01(\bR\x10additionalCharge\"\x83\x02\n" +
+	"\x0fWorkspaceConfig\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x12\n" +
+	"\x04kind\x18\x04 \x01(\tR\x04kind\x12\x16\n" +
+	"\x06status\x18\x05 \x01(\tR\x06status\x12%\n" +
+	"\x0epolicy_version\x18\x06 \x01(\x03R\rpolicyVersion\x12\"\n" +
+	"\fcapabilities\x18\a \x03(\tR\fcapabilities\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\b \x01(\tR\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\t \x01(\tR\tupdatedAt\"q\n" +
+	"\x14WorkspaceListRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x14\n" +
+	"\x05after\x18\x02 \x01(\tR\x05after\x12\x14\n" +
+	"\x05query\x18\x03 \x01(\tR\x05query\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\x05R\x05limit\"\x95\x01\n" +
+	"\x15WorkspaceListResponse\x124\n" +
+	"\x05items\x18\x01 \x03(\v2\x1e.memstation.v1.WorkspaceConfigR\x05items\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\tR\n" +
+	"nextCursor\x12%\n" +
+	"\x0eworkspace_mode\x18\x03 \x01(\tR\rworkspaceMode\"\x9a\x02\n" +
+	"\x11IntegrationConfig\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12!\n" +
+	"\fworkspace_id\x18\x03 \x01(\tR\vworkspaceId\x12\x12\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\x12\x12\n" +
+	"\x04kind\x18\x05 \x01(\tR\x04kind\x12*\n" +
+	"\x11external_space_id\x18\x06 \x01(\tR\x0fexternalSpaceId\x12\x19\n" +
+	"\bagent_id\x18\a \x01(\tR\aagentId\x12.\n" +
+	"\x13allowed_event_types\x18\b \x03(\tR\x11allowedEventTypes\x12\x1a\n" +
+	"\brevision\x18\t \x01(\x03R\brevision\"I\n" +
+	"\x0fIntegrationList\x126\n" +
+	"\x05items\x18\x01 \x03(\v2 .memstation.v1.IntegrationConfigR\x05items\"\xc2\x01\n" +
+	"\x0fPartitionConfig\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12!\n" +
+	"\fworkspace_id\x18\x03 \x01(\tR\vworkspaceId\x12\x19\n" +
+	"\bagent_id\x18\x04 \x01(\tR\aagentId\x12,\n" +
+	"\x12audience_actor_ids\x18\x05 \x03(\tR\x10audienceActorIds\x12\x1a\n" +
+	"\brevision\x18\x06 \x01(\x03R\brevision\"E\n" +
+	"\rPartitionList\x124\n" +
+	"\x05items\x18\x01 \x03(\v2\x1e.memstation.v1.PartitionConfigR\x05items\"\xa7\x01\n" +
+	"\x0eWorkspaceGrant\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12!\n" +
+	"\fworkspace_id\x18\x02 \x01(\tR\vworkspaceId\x12\x19\n" +
+	"\bagent_id\x18\x03 \x01(\tR\aagentId\x12\"\n" +
+	"\fcapabilities\x18\x04 \x03(\tR\fcapabilities\x12\x1a\n" +
+	"\brevision\x18\x05 \x01(\x03R\brevision\"l\n" +
+	"\x15WorkspaceGrantRequest\x128\n" +
+	"\x05scope\x18\x01 \x01(\v2\".memstation.v1.AdminWorkspaceScopeR\x05scope\x12\x19\n" +
+	"\bagent_id\x18\x02 \x01(\tR\aagentId\"t\n" +
+	"\x12AdminRecordRequest\x128\n" +
+	"\x05scope\x18\x01 \x01(\v2\".memstation.v1.AdminWorkspaceScopeR\x05scope\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12\x14\n" +
+	"\x05after\x18\x03 \x01(\tR\x05after\"\x8e\x01\n" +
+	"\x15AdminCandidateRequest\x128\n" +
+	"\x05scope\x18\x01 \x01(\v2\".memstation.v1.AdminWorkspaceScopeR\x05scope\x12;\n" +
+	"\tcandidate\x18\x02 \x01(\v2\x1d.memstation.v1.CandidateInputR\tcandidate\"\x86\x01\n" +
+	"\x12AdminForgetRequest\x128\n" +
+	"\x05scope\x18\x01 \x01(\v2\".memstation.v1.AdminWorkspaceScopeR\x05scope\x126\n" +
+	"\arequest\x18\x02 \x01(\v2\x1c.memstation.v1.ForgetRequestR\arequest\"w\n" +
+	"\x12AdminExportRequest\x128\n" +
+	"\x05scope\x18\x01 \x01(\v2\".memstation.v1.AdminWorkspaceScopeR\x05scope\x12'\n" +
+	"\x0fidempotency_key\x18\x02 \x01(\tR\x0eidempotencyKey\"\x86\x01\n" +
+	"\x11AdminUsageRequest\x128\n" +
+	"\x05scope\x18\x01 \x01(\v2\".memstation.v1.AdminWorkspaceScopeR\x05scope\x127\n" +
+	"\arequest\x18\x02 \x01(\v2\x1d.memstation.v1.AIUsageRequestR\arequest\"|\n" +
+	"\x14MemoryControlRequest\x128\n" +
+	"\x05scope\x18\x01 \x01(\v2\".memstation.v1.AdminWorkspaceScopeR\x05scope\x12\x14\n" +
+	"\x05after\x18\x02 \x01(\tR\x05after\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\x05R\x05limit\"~\n" +
+	"\x0eWorkspaceActor\x12\x19\n" +
+	"\bactor_id\x18\x01 \x01(\tR\aactorId\x12!\n" +
+	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x12\n" +
+	"\x04kind\x18\x03 \x01(\tR\x04kind\x12\x1a\n" +
+	"\brevision\x18\x04 \x01(\x03R\brevision\"}\n" +
+	"\rSourceSummary\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
+	"\brevision\x18\x02 \x01(\x03R\brevision\x12(\n" +
+	"\x10speaker_actor_id\x18\x03 \x01(\tR\x0espeakerActorId\x12\x16\n" +
+	"\x06status\x18\x04 \x01(\tR\x06status\"\x97\x03\n" +
+	"\tMemoryJob\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05queue\x18\x02 \x01(\tR\x05queue\x12!\n" +
+	"\foperation_id\x18\x03 \x01(\tR\voperationId\x12\x17\n" +
+	"\auser_id\x18\x04 \x01(\tR\x06userId\x12!\n" +
+	"\fworkspace_id\x18\x05 \x01(\tR\vworkspaceId\x12!\n" +
+	"\fpartition_id\x18\x06 \x01(\tR\vpartitionId\x12'\n" +
+	"\x0fconversation_id\x18\a \x01(\tR\x0econversationId\x12\x1b\n" +
+	"\ttask_type\x18\b \x01(\tR\btaskType\x12\x16\n" +
+	"\x06status\x18\t \x01(\tR\x06status\x12\x18\n" +
+	"\aattempt\x18\n" +
+	" \x01(\x05R\aattempt\x12!\n" +
+	"\ffailure_code\x18\v \x01(\tR\vfailureCode\x12\"\n" +
+	"\rnext_retry_at\x18\f \x01(\tR\vnextRetryAt\x12#\n" +
+	"\rgeneration_id\x18\r \x01(\tR\fgenerationId\"\xe8\x02\n" +
+	"\x15MemoryControlOverview\x125\n" +
+	"\x06actors\x18\x01 \x03(\v2\x1d.memstation.v1.WorkspaceActorR\x06actors\x126\n" +
+	"\asources\x18\x02 \x03(\v2\x1c.memstation.v1.SourceSummaryR\asources\x12;\n" +
+	"\breceipts\x18\x03 \x03(\v2\x1f.memstation.v1.IngestionReceiptR\breceipts\x12,\n" +
+	"\x04jobs\x18\x04 \x03(\v2\x18.memstation.v1.MemoryJobR\x04jobs\x12>\n" +
+	"\n" +
+	"operations\x18\x05 \x03(\v2\x1e.memstation.v1.MemoryOperationR\n" +
+	"operations\x12\x14\n" +
+	"\x05limit\x18\x06 \x01(\x05R\x05limit\x12\x1f\n" +
+	"\vnext_cursor\x18\a \x01(\tR\n" +
+	"nextCursor\"\x88\x01\n" +
+	"\x14WorkspaceAgentCreate\x128\n" +
+	"\x05scope\x18\x01 \x01(\v2\".memstation.v1.AdminWorkspaceScopeR\x05scope\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\"\n" +
+	"\fcapabilities\x18\x03 \x03(\tR\fcapabilities\"\xa4\x02\n" +
+	"\x0eWorkspaceAgent\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x19\n" +
+	"\bactor_id\x18\x03 \x01(\tR\aactorId\x12\x12\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\x12\x16\n" +
+	"\x06status\x18\x05 \x01(\tR\x06status\x120\n" +
+	"\x14default_workspace_id\x18\x06 \x01(\tR\x12defaultWorkspaceId\x12\x1a\n" +
+	"\brevision\x18\a \x01(\x03R\brevision\x12\x16\n" +
+	"\x06legacy\x18\b \x01(\bR\x06legacy\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\t \x01(\tR\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\n" +
+	" \x01(\tR\tupdatedAt\"\xf5\x01\n" +
+	"\x14WorkspaceAgentDetail\x123\n" +
+	"\x05agent\x18\x01 \x01(\v2\x1d.memstation.v1.WorkspaceAgentR\x05agent\x123\n" +
+	"\x05grant\x18\x02 \x01(\v2\x1d.memstation.v1.WorkspaceGrantR\x05grant\x12<\n" +
+	"\tworkspace\x18\x03 \x01(\v2\x1e.memstation.v1.WorkspaceConfigR\tworkspace\x125\n" +
+	"\x16effective_capabilities\x18\x04 \x03(\tR\x15effectiveCapabilities\"\xa9\x02\n" +
+	"\rMemoryRuntime\x12\x1d\n" +
+	"\n" +
+	"ai_backend\x18\x01 \x01(\tR\taiBackend\x12P\n" +
+	"\frole_aliases\x18\x02 \x03(\v2-.memstation.v1.MemoryRuntime.RoleAliasesEntryR\vroleAliases\x12>\n" +
+	"\tembedding\x18\x03 \x01(\v2 .memstation.v1.EmbeddingIdentityR\tembedding\x12'\n" +
+	"\x0fusage_authority\x18\x04 \x01(\tR\x0eusageAuthority\x1a>\n" +
+	"\x10RoleAliasesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"z\n" +
+	"\x11EmbeddingIdentity\x12#\n" +
+	"\rmodel_version\x18\x01 \x01(\tR\fmodelVersion\x12\x1e\n" +
+	"\n" +
+	"dimensions\x18\x02 \x01(\x05R\n" +
+	"dimensions\x12 \n" +
+	"\vfingerprint\x18\x03 \x01(\tR\vfingerprint\"\xe9\x05\n" +
+	"\x10MemoryGeneration\x12#\n" +
+	"\rgeneration_id\x18\x01 \x01(\tR\fgenerationId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12!\n" +
+	"\fworkspace_id\x18\x03 \x01(\tR\vworkspaceId\x12\x16\n" +
+	"\x06status\x18\x04 \x01(\tR\x06status\x12\x14\n" +
+	"\x05scope\x18\x05 \x01(\tR\x05scope\x12'\n" +
+	"\x0fconversation_id\x18\x06 \x01(\tR\x0econversationId\x12\x1b\n" +
+	"\tis_active\x18\a \x01(\bR\bisActive\x12+\n" +
+	"\x11structure_version\x18\b \x01(\x05R\x10structureVersion\x12+\n" +
+	"\x11embedding_version\x18\t \x01(\x05R\x10embeddingVersion\x12'\n" +
+	"\x0fembedding_model\x18\n" +
+	" \x01(\tR\x0eembeddingModel\x12.\n" +
+	"\x13activate_on_success\x18\v \x01(\bR\x11activateOnSuccess\x12!\n" +
+	"\fsource_count\x18\f \x01(\x05R\vsourceCount\x12'\n" +
+	"\x0fprocessed_count\x18\r \x01(\x05R\x0eprocessedCount\x12'\n" +
+	"\x0fembedding_count\x18\x0e \x01(\x05R\x0eembeddingCount\x12#\n" +
+	"\rfailure_count\x18\x0f \x01(\x05R\ffailureCount\x12\x1d\n" +
+	"\n" +
+	"last_error\x18\x10 \x01(\tR\tlastError\x123\n" +
+	"\bmetadata\x18\x11 \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x12 \x01(\tR\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\x13 \x01(\tR\tupdatedAt\x12!\n" +
+	"\factivated_at\x18\x14 \x01(\tR\vactivatedAt\"G\n" +
+	"\x0eGenerationList\x125\n" +
+	"\x05items\x18\x01 \x03(\v2\x1f.memstation.v1.MemoryGenerationR\x05items\"\xbe\x01\n" +
+	"\x18GenerationRebuildRequest\x128\n" +
+	"\x05scope\x18\x01 \x01(\v2\".memstation.v1.AdminWorkspaceScopeR\x05scope\x128\n" +
+	"\x18embedding_model_override\x18\x02 \x01(\tR\x16embeddingModelOverride\x12.\n" +
+	"\x13activate_on_success\x18\x03 \x01(\bR\x11activateOnSuccess2Y\n" +
 	"\rHealthService\x12H\n" +
 	"\tGetStatus\x12\x16.google.protobuf.Empty\x1a#.memstation.v1.HealthStatusResponse2\xa6\x01\n" +
 	"\x0eGatewayService\x12G\n" +
@@ -3258,7 +9039,63 @@ const file_proto_memstation_v1_api_proto_rawDesc = "" +
 	"\bOverview\x12\x1e.memstation.v1.OverviewRequest\x1a\x1f.memstation.v1.OverviewResponse\x12f\n" +
 	"\x11ListConversations\x12'.memstation.v1.ListConversationsRequest\x1a(.memstation.v1.ListConversationsResponse\x12[\n" +
 	"\x0fGetConversation\x12%.memstation.v1.GetConversationRequest\x1a!.memstation.v1.ConversationRecord\x12o\n" +
-	"\x15GetConversationMemory\x12+.memstation.v1.GetConversationMemoryRequest\x1a).memstation.v1.ConversationMemoryResponseB9Z7memstation/apps/server/proto/memstation/v1;memstationv1b\x06proto3"
+	"\x15GetConversationMemory\x12+.memstation.v1.GetConversationMemoryRequest\x1a).memstation.v1.ConversationMemoryResponse2\xb7\t\n" +
+	"\x11MemoryDataService\x12B\n" +
+	"\x05Probe\x12\x16.google.protobuf.Empty\x1a!.memstation.v1.MemoryCapabilities\x12I\n" +
+	"\aObserve\x12\x1d.memstation.v1.ObserveRequest\x1a\x1f.memstation.v1.IngestionReceipt\x12I\n" +
+	"\bProgress\x12\x1c.memstation.v1.RecordRequest\x1a\x1f.memstation.v1.IngestionReceipt\x12Q\n" +
+	"\n" +
+	"OpenWindow\x12 .memstation.v1.OpenWindowRequest\x1a!.memstation.v1.ConversationWindow\x12L\n" +
+	"\tGetWindow\x12\x1c.memstation.v1.RecordRequest\x1a!.memstation.v1.ConversationWindow\x12S\n" +
+	"\bFinalize\x12$.memstation.v1.FinalizeWindowRequest\x1a!.memstation.v1.ConversationWindow\x12F\n" +
+	"\aInspect\x12\x1c.memstation.v1.RecordRequest\x1a\x1d.memstation.v1.MemoryDocument\x12C\n" +
+	"\x06Source\x12\x1c.memstation.v1.RecordRequest\x1a\x1b.memstation.v1.SourceRecord\x12H\n" +
+	"\aPropose\x12\x1d.memstation.v1.CandidateInput\x1a\x1e.memstation.v1.MemoryCandidate\x12H\n" +
+	"\n" +
+	"Candidates\x12\x1c.memstation.v1.RecordRequest\x1a\x1c.memstation.v1.CandidateList\x12G\n" +
+	"\aRetract\x12\x1c.memstation.v1.ForgetRequest\x1a\x1e.memstation.v1.MemoryOperation\x12F\n" +
+	"\x06Forget\x12\x1c.memstation.v1.ForgetRequest\x1a\x1e.memstation.v1.MemoryOperation\x12F\n" +
+	"\x06Export\x12\x1c.memstation.v1.ExportRequest\x1a\x1e.memstation.v1.MemoryOperation\x12I\n" +
+	"\tOperation\x12\x1c.memstation.v1.RecordRequest\x1a\x1e.memstation.v1.MemoryOperation\x12E\n" +
+	"\x0eReconcileUsage\x12\x1c.memstation.v1.RecordRequest\x1a\x15.memstation.v1.AICall\x12F\n" +
+	"\x05Usage\x12\x1d.memstation.v1.AIUsageRequest\x1a\x1e.memstation.v1.AIUsageResponse2\xa0\x15\n" +
+	"\x15WorkspaceAdminService\x12P\n" +
+	"\vGenerations\x12\".memstation.v1.AdminWorkspaceScope\x1a\x1d.memstation.v1.GenerationList\x12S\n" +
+	"\aRebuild\x12'.memstation.v1.GenerationRebuildRequest\x1a\x1f.memstation.v1.MemoryGeneration\x12X\n" +
+	"\x12ActivateGeneration\x12!.memstation.v1.AdminRecordRequest\x1a\x1f.memstation.v1.MemoryGeneration\x12W\n" +
+	"\x11DiscardGeneration\x12!.memstation.v1.AdminRecordRequest\x1a\x1f.memstation.v1.MemoryGeneration\x12U\n" +
+	"\fCapabilities\x12\".memstation.v1.AdminWorkspaceScope\x1a!.memstation.v1.MemoryCapabilities\x12Q\n" +
+	"\vCreateAgent\x12#.memstation.v1.WorkspaceAgentCreate\x1a\x1d.memstation.v1.WorkspaceAgent\x12R\n" +
+	"\x05Agent\x12$.memstation.v1.WorkspaceGrantRequest\x1a#.memstation.v1.WorkspaceAgentDetail\x12W\n" +
+	"\n" +
+	"Workspaces\x12#.memstation.v1.WorkspaceListRequest\x1a$.memstation.v1.WorkspaceListResponse\x12Q\n" +
+	"\x0fCreateWorkspace\x12\x1e.memstation.v1.WorkspaceConfig\x1a\x1e.memstation.v1.WorkspaceConfig\x12Q\n" +
+	"\x0fUpdateWorkspace\x12\x1e.memstation.v1.WorkspaceConfig\x1a\x1e.memstation.v1.WorkspaceConfig\x12R\n" +
+	"\fIntegrations\x12\".memstation.v1.AdminWorkspaceScope\x1a\x1e.memstation.v1.IntegrationList\x12T\n" +
+	"\x0ePutIntegration\x12 .memstation.v1.IntegrationConfig\x1a .memstation.v1.IntegrationConfig\x12N\n" +
+	"\n" +
+	"Partitions\x12\".memstation.v1.AdminWorkspaceScope\x1a\x1c.memstation.v1.PartitionList\x12N\n" +
+	"\fPutPartition\x12\x1e.memstation.v1.PartitionConfig\x1a\x1e.memstation.v1.PartitionConfig\x12L\n" +
+	"\x05Grant\x12$.memstation.v1.WorkspaceGrantRequest\x1a\x1d.memstation.v1.WorkspaceGrant\x12H\n" +
+	"\bSetGrant\x12\x1d.memstation.v1.WorkspaceGrant\x1a\x1d.memstation.v1.WorkspaceGrant\x12T\n" +
+	"\aControl\x12#.memstation.v1.MemoryControlRequest\x1a$.memstation.v1.MemoryControlOverview\x12F\n" +
+	"\tReplayJob\x12!.memstation.v1.AdminRecordRequest\x1a\x16.google.protobuf.Empty\x12K\n" +
+	"\aInspect\x12!.memstation.v1.AdminRecordRequest\x1a\x1d.memstation.v1.MemoryDocument\x12H\n" +
+	"\x06Source\x12!.memstation.v1.AdminRecordRequest\x1a\x1b.memstation.v1.SourceRecord\x12N\n" +
+	"\bProgress\x12!.memstation.v1.AdminRecordRequest\x1a\x1f.memstation.v1.IngestionReceipt\x12M\n" +
+	"\n" +
+	"Candidates\x12!.memstation.v1.AdminRecordRequest\x1a\x1c.memstation.v1.CandidateList\x12O\n" +
+	"\aPropose\x12$.memstation.v1.AdminCandidateRequest\x1a\x1e.memstation.v1.MemoryCandidate\x12K\n" +
+	"\x06Forget\x12!.memstation.v1.AdminForgetRequest\x1a\x1e.memstation.v1.MemoryOperation\x12L\n" +
+	"\aRetract\x12!.memstation.v1.AdminForgetRequest\x1a\x1e.memstation.v1.MemoryOperation\x12K\n" +
+	"\x06Export\x12!.memstation.v1.AdminExportRequest\x1a\x1e.memstation.v1.MemoryOperation\x12N\n" +
+	"\tOperation\x12!.memstation.v1.AdminRecordRequest\x1a\x1e.memstation.v1.MemoryOperation\x12J\n" +
+	"\x0eReconcileUsage\x12!.memstation.v1.AdminRecordRequest\x1a\x15.memstation.v1.AICall\x12I\n" +
+	"\x05Usage\x12 .memstation.v1.AdminUsageRequest\x1a\x1e.memstation.v1.AIUsageResponse\x12X\n" +
+	"\x0fReviewCandidate\x12%.memstation.v1.ReviewCandidateRequest\x1a\x1e.memstation.v1.MemoryCandidate\x12J\n" +
+	"\aPublish\x12\x1d.memstation.v1.PublishRequest\x1a .memstation.v1.MemoryPublication\x12R\n" +
+	"\fPublications\x12\".memstation.v1.AdminWorkspaceScope\x1a\x1e.memstation.v1.PublicationList\x12`\n" +
+	"\x12RetractPublication\x12(.memstation.v1.RetractPublicationRequest\x1a .memstation.v1.MemoryPublicationB9Z7memstation/apps/server/proto/memstation/v1;memstationv1b\x06proto3"
 
 var (
 	file_proto_memstation_v1_api_proto_rawDescOnce sync.Once
@@ -3273,7 +9110,7 @@ func file_proto_memstation_v1_api_proto_rawDescGZIP() []byte {
 }
 
 var (
-	file_proto_memstation_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
+	file_proto_memstation_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 103)
 	file_proto_memstation_v1_api_proto_goTypes  = []any{
 		(*HealthStatusResponse)(nil),         // 0: memstation.v1.HealthStatusResponse
 		(*HealthComponent)(nil),              // 1: memstation.v1.HealthComponent
@@ -3291,124 +9128,355 @@ var (
 		(*UsageRecord)(nil),                  // 13: memstation.v1.UsageRecord
 		(*SearchRequest)(nil),                // 14: memstation.v1.SearchRequest
 		(*SearchResponse)(nil),               // 15: memstation.v1.SearchResponse
-		(*InjectionResult)(nil),              // 16: memstation.v1.InjectionResult
-		(*MemoryDocument)(nil),               // 17: memstation.v1.MemoryDocument
-		(*FactLineage)(nil),                  // 18: memstation.v1.FactLineage
-		(*RelatedMemory)(nil),                // 19: memstation.v1.RelatedMemory
-		(*ListKeyMemoriesRequest)(nil),       // 20: memstation.v1.ListKeyMemoriesRequest
-		(*ListKeyMemoriesResponse)(nil),      // 21: memstation.v1.ListKeyMemoriesResponse
-		(*KeyMemory)(nil),                    // 22: memstation.v1.KeyMemory
-		(*UpsertKeyMemoryRequest)(nil),       // 23: memstation.v1.UpsertKeyMemoryRequest
-		(*DeleteKeyMemoryRequest)(nil),       // 24: memstation.v1.DeleteKeyMemoryRequest
-		(*DeleteKeyMemoryResponse)(nil),      // 25: memstation.v1.DeleteKeyMemoryResponse
-		(*OverviewRequest)(nil),              // 26: memstation.v1.OverviewRequest
-		(*OverviewResponse)(nil),             // 27: memstation.v1.OverviewResponse
-		(*ListConversationsRequest)(nil),     // 28: memstation.v1.ListConversationsRequest
-		(*ListConversationsResponse)(nil),    // 29: memstation.v1.ListConversationsResponse
-		(*ConversationListItem)(nil),         // 30: memstation.v1.ConversationListItem
-		(*GetConversationRequest)(nil),       // 31: memstation.v1.GetConversationRequest
-		(*ConversationRecord)(nil),           // 32: memstation.v1.ConversationRecord
-		(*ConversationSegment)(nil),          // 33: memstation.v1.ConversationSegment
-		(*GetConversationMemoryRequest)(nil), // 34: memstation.v1.GetConversationMemoryRequest
-		(*ConversationMemoryResponse)(nil),   // 35: memstation.v1.ConversationMemoryResponse
-		(*wrapperspb.BoolValue)(nil),         // 36: google.protobuf.BoolValue
-		(*structpb.Struct)(nil),              // 37: google.protobuf.Struct
-		(*timestamppb.Timestamp)(nil),        // 38: google.protobuf.Timestamp
-		(*structpb.Value)(nil),               // 39: google.protobuf.Value
-		(*emptypb.Empty)(nil),                // 40: google.protobuf.Empty
+		(*RecallTrace)(nil),                  // 16: memstation.v1.RecallTrace
+		(*StreamWatermark)(nil),              // 17: memstation.v1.StreamWatermark
+		(*RecallProviderCall)(nil),           // 18: memstation.v1.RecallProviderCall
+		(*InjectionResult)(nil),              // 19: memstation.v1.InjectionResult
+		(*MemoryDocument)(nil),               // 20: memstation.v1.MemoryDocument
+		(*MemoryEvidence)(nil),               // 21: memstation.v1.MemoryEvidence
+		(*FactLineage)(nil),                  // 22: memstation.v1.FactLineage
+		(*RelatedMemory)(nil),                // 23: memstation.v1.RelatedMemory
+		(*ListKeyMemoriesRequest)(nil),       // 24: memstation.v1.ListKeyMemoriesRequest
+		(*ListKeyMemoriesResponse)(nil),      // 25: memstation.v1.ListKeyMemoriesResponse
+		(*KeyMemory)(nil),                    // 26: memstation.v1.KeyMemory
+		(*UpsertKeyMemoryRequest)(nil),       // 27: memstation.v1.UpsertKeyMemoryRequest
+		(*DeleteKeyMemoryRequest)(nil),       // 28: memstation.v1.DeleteKeyMemoryRequest
+		(*DeleteKeyMemoryResponse)(nil),      // 29: memstation.v1.DeleteKeyMemoryResponse
+		(*OverviewRequest)(nil),              // 30: memstation.v1.OverviewRequest
+		(*OverviewResponse)(nil),             // 31: memstation.v1.OverviewResponse
+		(*ListConversationsRequest)(nil),     // 32: memstation.v1.ListConversationsRequest
+		(*ListConversationsResponse)(nil),    // 33: memstation.v1.ListConversationsResponse
+		(*ConversationListItem)(nil),         // 34: memstation.v1.ConversationListItem
+		(*GetConversationRequest)(nil),       // 35: memstation.v1.GetConversationRequest
+		(*ConversationRecord)(nil),           // 36: memstation.v1.ConversationRecord
+		(*ConversationSegment)(nil),          // 37: memstation.v1.ConversationSegment
+		(*GetConversationMemoryRequest)(nil), // 38: memstation.v1.GetConversationMemoryRequest
+		(*ConversationMemoryResponse)(nil),   // 39: memstation.v1.ConversationMemoryResponse
+		(*RecordRequest)(nil),                // 40: memstation.v1.RecordRequest
+		(*TextSpan)(nil),                     // 41: memstation.v1.TextSpan
+		(*SourceRef)(nil),                    // 42: memstation.v1.SourceRef
+		(*SourceSpeaker)(nil),                // 43: memstation.v1.SourceSpeaker
+		(*SourcePart)(nil),                   // 44: memstation.v1.SourcePart
+		(*SourceEvent)(nil),                  // 45: memstation.v1.SourceEvent
+		(*IngestBatch)(nil),                  // 46: memstation.v1.IngestBatch
+		(*ObserveRequest)(nil),               // 47: memstation.v1.ObserveRequest
+		(*EventAcceptance)(nil),              // 48: memstation.v1.EventAcceptance
+		(*IngestionReceipt)(nil),             // 49: memstation.v1.IngestionReceipt
+		(*WindowInput)(nil),                  // 50: memstation.v1.WindowInput
+		(*OpenWindowRequest)(nil),            // 51: memstation.v1.OpenWindowRequest
+		(*FinalizeWindowRequest)(nil),        // 52: memstation.v1.FinalizeWindowRequest
+		(*ConversationWindow)(nil),           // 53: memstation.v1.ConversationWindow
+		(*SourceRecord)(nil),                 // 54: memstation.v1.SourceRecord
+		(*CandidateInput)(nil),               // 55: memstation.v1.CandidateInput
+		(*MemoryCandidate)(nil),              // 56: memstation.v1.MemoryCandidate
+		(*CandidateList)(nil),                // 57: memstation.v1.CandidateList
+		(*ForgetSelector)(nil),               // 58: memstation.v1.ForgetSelector
+		(*ForgetRequest)(nil),                // 59: memstation.v1.ForgetRequest
+		(*ExportRequest)(nil),                // 60: memstation.v1.ExportRequest
+		(*MemoryOperation)(nil),              // 61: memstation.v1.MemoryOperation
+		(*MemoryCapabilities)(nil),           // 62: memstation.v1.MemoryCapabilities
+		(*AdminWorkspaceScope)(nil),          // 63: memstation.v1.AdminWorkspaceScope
+		(*ReviewCandidateRequest)(nil),       // 64: memstation.v1.ReviewCandidateRequest
+		(*PublicationInput)(nil),             // 65: memstation.v1.PublicationInput
+		(*PublishRequest)(nil),               // 66: memstation.v1.PublishRequest
+		(*MemoryPublication)(nil),            // 67: memstation.v1.MemoryPublication
+		(*PublicationList)(nil),              // 68: memstation.v1.PublicationList
+		(*RetractPublicationRequest)(nil),    // 69: memstation.v1.RetractPublicationRequest
+		(*AIUsageRequest)(nil),               // 70: memstation.v1.AIUsageRequest
+		(*AICall)(nil),                       // 71: memstation.v1.AICall
+		(*AIUsageResponse)(nil),              // 72: memstation.v1.AIUsageResponse
+		(*WorkspaceConfig)(nil),              // 73: memstation.v1.WorkspaceConfig
+		(*WorkspaceListRequest)(nil),         // 74: memstation.v1.WorkspaceListRequest
+		(*WorkspaceListResponse)(nil),        // 75: memstation.v1.WorkspaceListResponse
+		(*IntegrationConfig)(nil),            // 76: memstation.v1.IntegrationConfig
+		(*IntegrationList)(nil),              // 77: memstation.v1.IntegrationList
+		(*PartitionConfig)(nil),              // 78: memstation.v1.PartitionConfig
+		(*PartitionList)(nil),                // 79: memstation.v1.PartitionList
+		(*WorkspaceGrant)(nil),               // 80: memstation.v1.WorkspaceGrant
+		(*WorkspaceGrantRequest)(nil),        // 81: memstation.v1.WorkspaceGrantRequest
+		(*AdminRecordRequest)(nil),           // 82: memstation.v1.AdminRecordRequest
+		(*AdminCandidateRequest)(nil),        // 83: memstation.v1.AdminCandidateRequest
+		(*AdminForgetRequest)(nil),           // 84: memstation.v1.AdminForgetRequest
+		(*AdminExportRequest)(nil),           // 85: memstation.v1.AdminExportRequest
+		(*AdminUsageRequest)(nil),            // 86: memstation.v1.AdminUsageRequest
+		(*MemoryControlRequest)(nil),         // 87: memstation.v1.MemoryControlRequest
+		(*WorkspaceActor)(nil),               // 88: memstation.v1.WorkspaceActor
+		(*SourceSummary)(nil),                // 89: memstation.v1.SourceSummary
+		(*MemoryJob)(nil),                    // 90: memstation.v1.MemoryJob
+		(*MemoryControlOverview)(nil),        // 91: memstation.v1.MemoryControlOverview
+		(*WorkspaceAgentCreate)(nil),         // 92: memstation.v1.WorkspaceAgentCreate
+		(*WorkspaceAgent)(nil),               // 93: memstation.v1.WorkspaceAgent
+		(*WorkspaceAgentDetail)(nil),         // 94: memstation.v1.WorkspaceAgentDetail
+		(*MemoryRuntime)(nil),                // 95: memstation.v1.MemoryRuntime
+		(*EmbeddingIdentity)(nil),            // 96: memstation.v1.EmbeddingIdentity
+		(*MemoryGeneration)(nil),             // 97: memstation.v1.MemoryGeneration
+		(*GenerationList)(nil),               // 98: memstation.v1.GenerationList
+		(*GenerationRebuildRequest)(nil),     // 99: memstation.v1.GenerationRebuildRequest
+		nil,                                  // 100: memstation.v1.MemoryCapabilities.CapabilitiesEntry
+		nil,                                  // 101: memstation.v1.PublicationInput.ActorMappingEntry
+		nil,                                  // 102: memstation.v1.MemoryRuntime.RoleAliasesEntry
+		(*wrapperspb.BoolValue)(nil),         // 103: google.protobuf.BoolValue
+		(*structpb.Struct)(nil),              // 104: google.protobuf.Struct
+		(*timestamppb.Timestamp)(nil),        // 105: google.protobuf.Timestamp
+		(*structpb.Value)(nil),               // 106: google.protobuf.Value
+		(*emptypb.Empty)(nil),                // 107: google.protobuf.Empty
 	}
 )
 
 var file_proto_memstation_v1_api_proto_depIdxs = []int32{
-	1,  // 0: memstation.v1.HealthStatusResponse.components:type_name -> memstation.v1.HealthComponent
-	2,  // 1: memstation.v1.ListModelsResponse.items:type_name -> memstation.v1.ModelCapability
-	6,  // 2: memstation.v1.CompleteRequest.request:type_name -> memstation.v1.UnifiedRequest
-	7,  // 3: memstation.v1.CompleteResponse.response:type_name -> memstation.v1.UnifiedResponse
-	16, // 4: memstation.v1.CompleteResponse.injection:type_name -> memstation.v1.InjectionResult
-	36, // 5: memstation.v1.UnifiedRequest.memory_persist:type_name -> google.protobuf.BoolValue
-	36, // 6: memstation.v1.UnifiedRequest.source_retain:type_name -> google.protobuf.BoolValue
-	8,  // 7: memstation.v1.UnifiedRequest.messages:type_name -> memstation.v1.UnifiedMessage
-	10, // 8: memstation.v1.UnifiedRequest.tools:type_name -> memstation.v1.ToolDefinition
-	37, // 9: memstation.v1.UnifiedRequest.provider_metadata:type_name -> google.protobuf.Struct
-	37, // 10: memstation.v1.UnifiedRequest.request_metadata:type_name -> google.protobuf.Struct
-	38, // 11: memstation.v1.UnifiedRequest.received_at:type_name -> google.protobuf.Timestamp
-	8,  // 12: memstation.v1.UnifiedResponse.message:type_name -> memstation.v1.UnifiedMessage
-	13, // 13: memstation.v1.UnifiedResponse.usage:type_name -> memstation.v1.UsageRecord
-	38, // 14: memstation.v1.UnifiedResponse.created_at:type_name -> google.protobuf.Timestamp
-	37, // 15: memstation.v1.UnifiedResponse.raw:type_name -> google.protobuf.Struct
-	9,  // 16: memstation.v1.UnifiedMessage.blocks:type_name -> memstation.v1.ContentBlock
-	11, // 17: memstation.v1.UnifiedMessage.tool_calls:type_name -> memstation.v1.ToolCall
-	12, // 18: memstation.v1.UnifiedMessage.tool_results:type_name -> memstation.v1.ToolResult
-	37, // 19: memstation.v1.UnifiedMessage.metadata:type_name -> google.protobuf.Struct
-	37, // 20: memstation.v1.ContentBlock.metadata:type_name -> google.protobuf.Struct
-	37, // 21: memstation.v1.ToolDefinition.input_schema:type_name -> google.protobuf.Struct
-	39, // 22: memstation.v1.ToolCall.arguments:type_name -> google.protobuf.Value
-	39, // 23: memstation.v1.ToolResult.output:type_name -> google.protobuf.Value
-	38, // 24: memstation.v1.SearchRequest.date_from:type_name -> google.protobuf.Timestamp
-	38, // 25: memstation.v1.SearchRequest.date_to:type_name -> google.protobuf.Timestamp
-	38, // 26: memstation.v1.SearchRequest.as_of:type_name -> google.protobuf.Timestamp
-	38, // 27: memstation.v1.SearchRequest.known_at:type_name -> google.protobuf.Timestamp
-	17, // 28: memstation.v1.SearchResponse.memories:type_name -> memstation.v1.MemoryDocument
-	15, // 29: memstation.v1.InjectionResult.search:type_name -> memstation.v1.SearchResponse
-	38, // 30: memstation.v1.MemoryDocument.activity_at:type_name -> google.protobuf.Timestamp
-	37, // 31: memstation.v1.MemoryDocument.metadata:type_name -> google.protobuf.Struct
-	19, // 32: memstation.v1.MemoryDocument.related:type_name -> memstation.v1.RelatedMemory
-	38, // 33: memstation.v1.MemoryDocument.created_at:type_name -> google.protobuf.Timestamp
-	38, // 34: memstation.v1.MemoryDocument.updated_at:type_name -> google.protobuf.Timestamp
-	18, // 35: memstation.v1.MemoryDocument.lineage:type_name -> memstation.v1.FactLineage
-	38, // 36: memstation.v1.ListKeyMemoriesRequest.date_from:type_name -> google.protobuf.Timestamp
-	38, // 37: memstation.v1.ListKeyMemoriesRequest.date_to:type_name -> google.protobuf.Timestamp
-	22, // 38: memstation.v1.ListKeyMemoriesResponse.items:type_name -> memstation.v1.KeyMemory
-	38, // 39: memstation.v1.KeyMemory.last_confirmed_at:type_name -> google.protobuf.Timestamp
-	38, // 40: memstation.v1.KeyMemory.activity_at:type_name -> google.protobuf.Timestamp
-	37, // 41: memstation.v1.KeyMemory.metadata:type_name -> google.protobuf.Struct
-	38, // 42: memstation.v1.KeyMemory.created_at:type_name -> google.protobuf.Timestamp
-	38, // 43: memstation.v1.KeyMemory.updated_at:type_name -> google.protobuf.Timestamp
-	38, // 44: memstation.v1.UpsertKeyMemoryRequest.last_confirmed_at:type_name -> google.protobuf.Timestamp
-	37, // 45: memstation.v1.UpsertKeyMemoryRequest.metadata:type_name -> google.protobuf.Struct
-	37, // 46: memstation.v1.OverviewResponse.overview:type_name -> google.protobuf.Struct
-	30, // 47: memstation.v1.ListConversationsResponse.items:type_name -> memstation.v1.ConversationListItem
-	38, // 48: memstation.v1.ConversationListItem.updated_at:type_name -> google.protobuf.Timestamp
-	37, // 49: memstation.v1.ConversationListItem.metadata:type_name -> google.protobuf.Struct
-	8,  // 50: memstation.v1.ConversationRecord.messages:type_name -> memstation.v1.UnifiedMessage
-	33, // 51: memstation.v1.ConversationRecord.segments:type_name -> memstation.v1.ConversationSegment
-	7,  // 52: memstation.v1.ConversationRecord.response:type_name -> memstation.v1.UnifiedResponse
-	13, // 53: memstation.v1.ConversationRecord.usage:type_name -> memstation.v1.UsageRecord
-	37, // 54: memstation.v1.ConversationRecord.metadata:type_name -> google.protobuf.Struct
-	38, // 55: memstation.v1.ConversationRecord.created_at:type_name -> google.protobuf.Timestamp
-	38, // 56: memstation.v1.ConversationRecord.updated_at:type_name -> google.protobuf.Timestamp
-	37, // 57: memstation.v1.ConversationSegment.metadata:type_name -> google.protobuf.Struct
-	38, // 58: memstation.v1.ConversationSegment.created_at:type_name -> google.protobuf.Timestamp
-	38, // 59: memstation.v1.ConversationSegment.updated_at:type_name -> google.protobuf.Timestamp
-	17, // 60: memstation.v1.ConversationMemoryResponse.documents:type_name -> memstation.v1.MemoryDocument
-	22, // 61: memstation.v1.ConversationMemoryResponse.key_memories:type_name -> memstation.v1.KeyMemory
-	40, // 62: memstation.v1.HealthService.GetStatus:input_type -> google.protobuf.Empty
-	40, // 63: memstation.v1.GatewayService.ListModels:input_type -> google.protobuf.Empty
-	4,  // 64: memstation.v1.GatewayService.Complete:input_type -> memstation.v1.CompleteRequest
-	14, // 65: memstation.v1.MemoryService.Search:input_type -> memstation.v1.SearchRequest
-	20, // 66: memstation.v1.MemoryService.ListKeyMemories:input_type -> memstation.v1.ListKeyMemoriesRequest
-	23, // 67: memstation.v1.MemoryService.UpsertKeyMemory:input_type -> memstation.v1.UpsertKeyMemoryRequest
-	24, // 68: memstation.v1.MemoryService.DeleteKeyMemory:input_type -> memstation.v1.DeleteKeyMemoryRequest
-	26, // 69: memstation.v1.AdminService.Overview:input_type -> memstation.v1.OverviewRequest
-	28, // 70: memstation.v1.AdminService.ListConversations:input_type -> memstation.v1.ListConversationsRequest
-	31, // 71: memstation.v1.AdminService.GetConversation:input_type -> memstation.v1.GetConversationRequest
-	34, // 72: memstation.v1.AdminService.GetConversationMemory:input_type -> memstation.v1.GetConversationMemoryRequest
-	0,  // 73: memstation.v1.HealthService.GetStatus:output_type -> memstation.v1.HealthStatusResponse
-	3,  // 74: memstation.v1.GatewayService.ListModels:output_type -> memstation.v1.ListModelsResponse
-	5,  // 75: memstation.v1.GatewayService.Complete:output_type -> memstation.v1.CompleteResponse
-	15, // 76: memstation.v1.MemoryService.Search:output_type -> memstation.v1.SearchResponse
-	21, // 77: memstation.v1.MemoryService.ListKeyMemories:output_type -> memstation.v1.ListKeyMemoriesResponse
-	22, // 78: memstation.v1.MemoryService.UpsertKeyMemory:output_type -> memstation.v1.KeyMemory
-	25, // 79: memstation.v1.MemoryService.DeleteKeyMemory:output_type -> memstation.v1.DeleteKeyMemoryResponse
-	27, // 80: memstation.v1.AdminService.Overview:output_type -> memstation.v1.OverviewResponse
-	29, // 81: memstation.v1.AdminService.ListConversations:output_type -> memstation.v1.ListConversationsResponse
-	32, // 82: memstation.v1.AdminService.GetConversation:output_type -> memstation.v1.ConversationRecord
-	35, // 83: memstation.v1.AdminService.GetConversationMemory:output_type -> memstation.v1.ConversationMemoryResponse
-	73, // [73:84] is the sub-list for method output_type
-	62, // [62:73] is the sub-list for method input_type
-	62, // [62:62] is the sub-list for extension type_name
-	62, // [62:62] is the sub-list for extension extendee
-	0,  // [0:62] is the sub-list for field type_name
+	1,   // 0: memstation.v1.HealthStatusResponse.components:type_name -> memstation.v1.HealthComponent
+	2,   // 1: memstation.v1.ListModelsResponse.items:type_name -> memstation.v1.ModelCapability
+	6,   // 2: memstation.v1.CompleteRequest.request:type_name -> memstation.v1.UnifiedRequest
+	7,   // 3: memstation.v1.CompleteResponse.response:type_name -> memstation.v1.UnifiedResponse
+	19,  // 4: memstation.v1.CompleteResponse.injection:type_name -> memstation.v1.InjectionResult
+	103, // 5: memstation.v1.UnifiedRequest.memory_persist:type_name -> google.protobuf.BoolValue
+	103, // 6: memstation.v1.UnifiedRequest.source_retain:type_name -> google.protobuf.BoolValue
+	8,   // 7: memstation.v1.UnifiedRequest.messages:type_name -> memstation.v1.UnifiedMessage
+	10,  // 8: memstation.v1.UnifiedRequest.tools:type_name -> memstation.v1.ToolDefinition
+	104, // 9: memstation.v1.UnifiedRequest.provider_metadata:type_name -> google.protobuf.Struct
+	104, // 10: memstation.v1.UnifiedRequest.request_metadata:type_name -> google.protobuf.Struct
+	105, // 11: memstation.v1.UnifiedRequest.received_at:type_name -> google.protobuf.Timestamp
+	8,   // 12: memstation.v1.UnifiedResponse.message:type_name -> memstation.v1.UnifiedMessage
+	13,  // 13: memstation.v1.UnifiedResponse.usage:type_name -> memstation.v1.UsageRecord
+	105, // 14: memstation.v1.UnifiedResponse.created_at:type_name -> google.protobuf.Timestamp
+	104, // 15: memstation.v1.UnifiedResponse.raw:type_name -> google.protobuf.Struct
+	9,   // 16: memstation.v1.UnifiedMessage.blocks:type_name -> memstation.v1.ContentBlock
+	11,  // 17: memstation.v1.UnifiedMessage.tool_calls:type_name -> memstation.v1.ToolCall
+	12,  // 18: memstation.v1.UnifiedMessage.tool_results:type_name -> memstation.v1.ToolResult
+	104, // 19: memstation.v1.UnifiedMessage.metadata:type_name -> google.protobuf.Struct
+	104, // 20: memstation.v1.ContentBlock.metadata:type_name -> google.protobuf.Struct
+	104, // 21: memstation.v1.ToolDefinition.input_schema:type_name -> google.protobuf.Struct
+	106, // 22: memstation.v1.ToolCall.arguments:type_name -> google.protobuf.Value
+	106, // 23: memstation.v1.ToolResult.output:type_name -> google.protobuf.Value
+	105, // 24: memstation.v1.SearchRequest.date_from:type_name -> google.protobuf.Timestamp
+	105, // 25: memstation.v1.SearchRequest.date_to:type_name -> google.protobuf.Timestamp
+	105, // 26: memstation.v1.SearchRequest.as_of:type_name -> google.protobuf.Timestamp
+	105, // 27: memstation.v1.SearchRequest.known_at:type_name -> google.protobuf.Timestamp
+	20,  // 28: memstation.v1.SearchResponse.memories:type_name -> memstation.v1.MemoryDocument
+	104, // 29: memstation.v1.SearchResponse.trace:type_name -> google.protobuf.Struct
+	104, // 30: memstation.v1.SearchResponse.rerank:type_name -> google.protobuf.Struct
+	16,  // 31: memstation.v1.SearchResponse.recall_trace:type_name -> memstation.v1.RecallTrace
+	17,  // 32: memstation.v1.RecallTrace.watermarks:type_name -> memstation.v1.StreamWatermark
+	18,  // 33: memstation.v1.RecallTrace.provider_calls:type_name -> memstation.v1.RecallProviderCall
+	15,  // 34: memstation.v1.InjectionResult.search:type_name -> memstation.v1.SearchResponse
+	105, // 35: memstation.v1.MemoryDocument.activity_at:type_name -> google.protobuf.Timestamp
+	104, // 36: memstation.v1.MemoryDocument.metadata:type_name -> google.protobuf.Struct
+	23,  // 37: memstation.v1.MemoryDocument.related:type_name -> memstation.v1.RelatedMemory
+	105, // 38: memstation.v1.MemoryDocument.created_at:type_name -> google.protobuf.Timestamp
+	105, // 39: memstation.v1.MemoryDocument.updated_at:type_name -> google.protobuf.Timestamp
+	22,  // 40: memstation.v1.MemoryDocument.lineage:type_name -> memstation.v1.FactLineage
+	42,  // 41: memstation.v1.MemoryDocument.source_refs:type_name -> memstation.v1.SourceRef
+	105, // 42: memstation.v1.MemoryDocument.valid_from:type_name -> google.protobuf.Timestamp
+	105, // 43: memstation.v1.MemoryDocument.valid_to:type_name -> google.protobuf.Timestamp
+	21,  // 44: memstation.v1.MemoryDocument.evidences:type_name -> memstation.v1.MemoryEvidence
+	104, // 45: memstation.v1.MemoryEvidence.metadata:type_name -> google.protobuf.Struct
+	105, // 46: memstation.v1.MemoryEvidence.created_at:type_name -> google.protobuf.Timestamp
+	105, // 47: memstation.v1.ListKeyMemoriesRequest.date_from:type_name -> google.protobuf.Timestamp
+	105, // 48: memstation.v1.ListKeyMemoriesRequest.date_to:type_name -> google.protobuf.Timestamp
+	26,  // 49: memstation.v1.ListKeyMemoriesResponse.items:type_name -> memstation.v1.KeyMemory
+	105, // 50: memstation.v1.KeyMemory.last_confirmed_at:type_name -> google.protobuf.Timestamp
+	105, // 51: memstation.v1.KeyMemory.activity_at:type_name -> google.protobuf.Timestamp
+	104, // 52: memstation.v1.KeyMemory.metadata:type_name -> google.protobuf.Struct
+	105, // 53: memstation.v1.KeyMemory.created_at:type_name -> google.protobuf.Timestamp
+	105, // 54: memstation.v1.KeyMemory.updated_at:type_name -> google.protobuf.Timestamp
+	105, // 55: memstation.v1.UpsertKeyMemoryRequest.last_confirmed_at:type_name -> google.protobuf.Timestamp
+	104, // 56: memstation.v1.UpsertKeyMemoryRequest.metadata:type_name -> google.protobuf.Struct
+	104, // 57: memstation.v1.OverviewResponse.overview:type_name -> google.protobuf.Struct
+	34,  // 58: memstation.v1.ListConversationsResponse.items:type_name -> memstation.v1.ConversationListItem
+	105, // 59: memstation.v1.ConversationListItem.updated_at:type_name -> google.protobuf.Timestamp
+	104, // 60: memstation.v1.ConversationListItem.metadata:type_name -> google.protobuf.Struct
+	8,   // 61: memstation.v1.ConversationRecord.messages:type_name -> memstation.v1.UnifiedMessage
+	37,  // 62: memstation.v1.ConversationRecord.segments:type_name -> memstation.v1.ConversationSegment
+	7,   // 63: memstation.v1.ConversationRecord.response:type_name -> memstation.v1.UnifiedResponse
+	13,  // 64: memstation.v1.ConversationRecord.usage:type_name -> memstation.v1.UsageRecord
+	104, // 65: memstation.v1.ConversationRecord.metadata:type_name -> google.protobuf.Struct
+	105, // 66: memstation.v1.ConversationRecord.created_at:type_name -> google.protobuf.Timestamp
+	105, // 67: memstation.v1.ConversationRecord.updated_at:type_name -> google.protobuf.Timestamp
+	104, // 68: memstation.v1.ConversationSegment.metadata:type_name -> google.protobuf.Struct
+	105, // 69: memstation.v1.ConversationSegment.created_at:type_name -> google.protobuf.Timestamp
+	105, // 70: memstation.v1.ConversationSegment.updated_at:type_name -> google.protobuf.Timestamp
+	20,  // 71: memstation.v1.ConversationMemoryResponse.documents:type_name -> memstation.v1.MemoryDocument
+	26,  // 72: memstation.v1.ConversationMemoryResponse.key_memories:type_name -> memstation.v1.KeyMemory
+	41,  // 73: memstation.v1.SourceRef.span:type_name -> memstation.v1.TextSpan
+	42,  // 74: memstation.v1.SourcePart.source:type_name -> memstation.v1.SourceRef
+	43,  // 75: memstation.v1.SourcePart.author:type_name -> memstation.v1.SourceSpeaker
+	43,  // 76: memstation.v1.SourceEvent.speaker:type_name -> memstation.v1.SourceSpeaker
+	44,  // 77: memstation.v1.SourceEvent.parts:type_name -> memstation.v1.SourcePart
+	42,  // 78: memstation.v1.SourceEvent.reply_to:type_name -> memstation.v1.SourceRef
+	45,  // 79: memstation.v1.IngestBatch.events:type_name -> memstation.v1.SourceEvent
+	46,  // 80: memstation.v1.ObserveRequest.batch:type_name -> memstation.v1.IngestBatch
+	48,  // 81: memstation.v1.IngestionReceipt.events:type_name -> memstation.v1.EventAcceptance
+	50,  // 82: memstation.v1.OpenWindowRequest.window:type_name -> memstation.v1.WindowInput
+	44,  // 83: memstation.v1.SourceRecord.parts:type_name -> memstation.v1.SourcePart
+	42,  // 84: memstation.v1.SourceRecord.reply_to:type_name -> memstation.v1.SourceRef
+	42,  // 85: memstation.v1.CandidateInput.source_refs:type_name -> memstation.v1.SourceRef
+	42,  // 86: memstation.v1.MemoryCandidate.source_refs:type_name -> memstation.v1.SourceRef
+	56,  // 87: memstation.v1.CandidateList.items:type_name -> memstation.v1.MemoryCandidate
+	42,  // 88: memstation.v1.ForgetSelector.source_refs:type_name -> memstation.v1.SourceRef
+	58,  // 89: memstation.v1.ForgetRequest.selector:type_name -> memstation.v1.ForgetSelector
+	104, // 90: memstation.v1.MemoryOperation.result:type_name -> google.protobuf.Struct
+	104, // 91: memstation.v1.MemoryCapabilities.access:type_name -> google.protobuf.Struct
+	100, // 92: memstation.v1.MemoryCapabilities.capabilities:type_name -> memstation.v1.MemoryCapabilities.CapabilitiesEntry
+	95,  // 93: memstation.v1.MemoryCapabilities.runtime:type_name -> memstation.v1.MemoryRuntime
+	63,  // 94: memstation.v1.ReviewCandidateRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	101, // 95: memstation.v1.PublicationInput.actor_mapping:type_name -> memstation.v1.PublicationInput.ActorMappingEntry
+	63,  // 96: memstation.v1.PublishRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	65,  // 97: memstation.v1.PublishRequest.publication:type_name -> memstation.v1.PublicationInput
+	67,  // 98: memstation.v1.PublicationList.items:type_name -> memstation.v1.MemoryPublication
+	63,  // 99: memstation.v1.RetractPublicationRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	71,  // 100: memstation.v1.AIUsageResponse.items:type_name -> memstation.v1.AICall
+	73,  // 101: memstation.v1.WorkspaceListResponse.items:type_name -> memstation.v1.WorkspaceConfig
+	76,  // 102: memstation.v1.IntegrationList.items:type_name -> memstation.v1.IntegrationConfig
+	78,  // 103: memstation.v1.PartitionList.items:type_name -> memstation.v1.PartitionConfig
+	63,  // 104: memstation.v1.WorkspaceGrantRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	63,  // 105: memstation.v1.AdminRecordRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	63,  // 106: memstation.v1.AdminCandidateRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	55,  // 107: memstation.v1.AdminCandidateRequest.candidate:type_name -> memstation.v1.CandidateInput
+	63,  // 108: memstation.v1.AdminForgetRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	59,  // 109: memstation.v1.AdminForgetRequest.request:type_name -> memstation.v1.ForgetRequest
+	63,  // 110: memstation.v1.AdminExportRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	63,  // 111: memstation.v1.AdminUsageRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	70,  // 112: memstation.v1.AdminUsageRequest.request:type_name -> memstation.v1.AIUsageRequest
+	63,  // 113: memstation.v1.MemoryControlRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	88,  // 114: memstation.v1.MemoryControlOverview.actors:type_name -> memstation.v1.WorkspaceActor
+	89,  // 115: memstation.v1.MemoryControlOverview.sources:type_name -> memstation.v1.SourceSummary
+	49,  // 116: memstation.v1.MemoryControlOverview.receipts:type_name -> memstation.v1.IngestionReceipt
+	90,  // 117: memstation.v1.MemoryControlOverview.jobs:type_name -> memstation.v1.MemoryJob
+	61,  // 118: memstation.v1.MemoryControlOverview.operations:type_name -> memstation.v1.MemoryOperation
+	63,  // 119: memstation.v1.WorkspaceAgentCreate.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	93,  // 120: memstation.v1.WorkspaceAgentDetail.agent:type_name -> memstation.v1.WorkspaceAgent
+	80,  // 121: memstation.v1.WorkspaceAgentDetail.grant:type_name -> memstation.v1.WorkspaceGrant
+	73,  // 122: memstation.v1.WorkspaceAgentDetail.workspace:type_name -> memstation.v1.WorkspaceConfig
+	102, // 123: memstation.v1.MemoryRuntime.role_aliases:type_name -> memstation.v1.MemoryRuntime.RoleAliasesEntry
+	96,  // 124: memstation.v1.MemoryRuntime.embedding:type_name -> memstation.v1.EmbeddingIdentity
+	104, // 125: memstation.v1.MemoryGeneration.metadata:type_name -> google.protobuf.Struct
+	97,  // 126: memstation.v1.GenerationList.items:type_name -> memstation.v1.MemoryGeneration
+	63,  // 127: memstation.v1.GenerationRebuildRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	107, // 128: memstation.v1.HealthService.GetStatus:input_type -> google.protobuf.Empty
+	107, // 129: memstation.v1.GatewayService.ListModels:input_type -> google.protobuf.Empty
+	4,   // 130: memstation.v1.GatewayService.Complete:input_type -> memstation.v1.CompleteRequest
+	14,  // 131: memstation.v1.MemoryService.Search:input_type -> memstation.v1.SearchRequest
+	24,  // 132: memstation.v1.MemoryService.ListKeyMemories:input_type -> memstation.v1.ListKeyMemoriesRequest
+	27,  // 133: memstation.v1.MemoryService.UpsertKeyMemory:input_type -> memstation.v1.UpsertKeyMemoryRequest
+	28,  // 134: memstation.v1.MemoryService.DeleteKeyMemory:input_type -> memstation.v1.DeleteKeyMemoryRequest
+	30,  // 135: memstation.v1.AdminService.Overview:input_type -> memstation.v1.OverviewRequest
+	32,  // 136: memstation.v1.AdminService.ListConversations:input_type -> memstation.v1.ListConversationsRequest
+	35,  // 137: memstation.v1.AdminService.GetConversation:input_type -> memstation.v1.GetConversationRequest
+	38,  // 138: memstation.v1.AdminService.GetConversationMemory:input_type -> memstation.v1.GetConversationMemoryRequest
+	107, // 139: memstation.v1.MemoryDataService.Probe:input_type -> google.protobuf.Empty
+	47,  // 140: memstation.v1.MemoryDataService.Observe:input_type -> memstation.v1.ObserveRequest
+	40,  // 141: memstation.v1.MemoryDataService.Progress:input_type -> memstation.v1.RecordRequest
+	51,  // 142: memstation.v1.MemoryDataService.OpenWindow:input_type -> memstation.v1.OpenWindowRequest
+	40,  // 143: memstation.v1.MemoryDataService.GetWindow:input_type -> memstation.v1.RecordRequest
+	52,  // 144: memstation.v1.MemoryDataService.Finalize:input_type -> memstation.v1.FinalizeWindowRequest
+	40,  // 145: memstation.v1.MemoryDataService.Inspect:input_type -> memstation.v1.RecordRequest
+	40,  // 146: memstation.v1.MemoryDataService.Source:input_type -> memstation.v1.RecordRequest
+	55,  // 147: memstation.v1.MemoryDataService.Propose:input_type -> memstation.v1.CandidateInput
+	40,  // 148: memstation.v1.MemoryDataService.Candidates:input_type -> memstation.v1.RecordRequest
+	59,  // 149: memstation.v1.MemoryDataService.Retract:input_type -> memstation.v1.ForgetRequest
+	59,  // 150: memstation.v1.MemoryDataService.Forget:input_type -> memstation.v1.ForgetRequest
+	60,  // 151: memstation.v1.MemoryDataService.Export:input_type -> memstation.v1.ExportRequest
+	40,  // 152: memstation.v1.MemoryDataService.Operation:input_type -> memstation.v1.RecordRequest
+	40,  // 153: memstation.v1.MemoryDataService.ReconcileUsage:input_type -> memstation.v1.RecordRequest
+	70,  // 154: memstation.v1.MemoryDataService.Usage:input_type -> memstation.v1.AIUsageRequest
+	63,  // 155: memstation.v1.WorkspaceAdminService.Generations:input_type -> memstation.v1.AdminWorkspaceScope
+	99,  // 156: memstation.v1.WorkspaceAdminService.Rebuild:input_type -> memstation.v1.GenerationRebuildRequest
+	82,  // 157: memstation.v1.WorkspaceAdminService.ActivateGeneration:input_type -> memstation.v1.AdminRecordRequest
+	82,  // 158: memstation.v1.WorkspaceAdminService.DiscardGeneration:input_type -> memstation.v1.AdminRecordRequest
+	63,  // 159: memstation.v1.WorkspaceAdminService.Capabilities:input_type -> memstation.v1.AdminWorkspaceScope
+	92,  // 160: memstation.v1.WorkspaceAdminService.CreateAgent:input_type -> memstation.v1.WorkspaceAgentCreate
+	81,  // 161: memstation.v1.WorkspaceAdminService.Agent:input_type -> memstation.v1.WorkspaceGrantRequest
+	74,  // 162: memstation.v1.WorkspaceAdminService.Workspaces:input_type -> memstation.v1.WorkspaceListRequest
+	73,  // 163: memstation.v1.WorkspaceAdminService.CreateWorkspace:input_type -> memstation.v1.WorkspaceConfig
+	73,  // 164: memstation.v1.WorkspaceAdminService.UpdateWorkspace:input_type -> memstation.v1.WorkspaceConfig
+	63,  // 165: memstation.v1.WorkspaceAdminService.Integrations:input_type -> memstation.v1.AdminWorkspaceScope
+	76,  // 166: memstation.v1.WorkspaceAdminService.PutIntegration:input_type -> memstation.v1.IntegrationConfig
+	63,  // 167: memstation.v1.WorkspaceAdminService.Partitions:input_type -> memstation.v1.AdminWorkspaceScope
+	78,  // 168: memstation.v1.WorkspaceAdminService.PutPartition:input_type -> memstation.v1.PartitionConfig
+	81,  // 169: memstation.v1.WorkspaceAdminService.Grant:input_type -> memstation.v1.WorkspaceGrantRequest
+	80,  // 170: memstation.v1.WorkspaceAdminService.SetGrant:input_type -> memstation.v1.WorkspaceGrant
+	87,  // 171: memstation.v1.WorkspaceAdminService.Control:input_type -> memstation.v1.MemoryControlRequest
+	82,  // 172: memstation.v1.WorkspaceAdminService.ReplayJob:input_type -> memstation.v1.AdminRecordRequest
+	82,  // 173: memstation.v1.WorkspaceAdminService.Inspect:input_type -> memstation.v1.AdminRecordRequest
+	82,  // 174: memstation.v1.WorkspaceAdminService.Source:input_type -> memstation.v1.AdminRecordRequest
+	82,  // 175: memstation.v1.WorkspaceAdminService.Progress:input_type -> memstation.v1.AdminRecordRequest
+	82,  // 176: memstation.v1.WorkspaceAdminService.Candidates:input_type -> memstation.v1.AdminRecordRequest
+	83,  // 177: memstation.v1.WorkspaceAdminService.Propose:input_type -> memstation.v1.AdminCandidateRequest
+	84,  // 178: memstation.v1.WorkspaceAdminService.Forget:input_type -> memstation.v1.AdminForgetRequest
+	84,  // 179: memstation.v1.WorkspaceAdminService.Retract:input_type -> memstation.v1.AdminForgetRequest
+	85,  // 180: memstation.v1.WorkspaceAdminService.Export:input_type -> memstation.v1.AdminExportRequest
+	82,  // 181: memstation.v1.WorkspaceAdminService.Operation:input_type -> memstation.v1.AdminRecordRequest
+	82,  // 182: memstation.v1.WorkspaceAdminService.ReconcileUsage:input_type -> memstation.v1.AdminRecordRequest
+	86,  // 183: memstation.v1.WorkspaceAdminService.Usage:input_type -> memstation.v1.AdminUsageRequest
+	64,  // 184: memstation.v1.WorkspaceAdminService.ReviewCandidate:input_type -> memstation.v1.ReviewCandidateRequest
+	66,  // 185: memstation.v1.WorkspaceAdminService.Publish:input_type -> memstation.v1.PublishRequest
+	63,  // 186: memstation.v1.WorkspaceAdminService.Publications:input_type -> memstation.v1.AdminWorkspaceScope
+	69,  // 187: memstation.v1.WorkspaceAdminService.RetractPublication:input_type -> memstation.v1.RetractPublicationRequest
+	0,   // 188: memstation.v1.HealthService.GetStatus:output_type -> memstation.v1.HealthStatusResponse
+	3,   // 189: memstation.v1.GatewayService.ListModels:output_type -> memstation.v1.ListModelsResponse
+	5,   // 190: memstation.v1.GatewayService.Complete:output_type -> memstation.v1.CompleteResponse
+	15,  // 191: memstation.v1.MemoryService.Search:output_type -> memstation.v1.SearchResponse
+	25,  // 192: memstation.v1.MemoryService.ListKeyMemories:output_type -> memstation.v1.ListKeyMemoriesResponse
+	26,  // 193: memstation.v1.MemoryService.UpsertKeyMemory:output_type -> memstation.v1.KeyMemory
+	29,  // 194: memstation.v1.MemoryService.DeleteKeyMemory:output_type -> memstation.v1.DeleteKeyMemoryResponse
+	31,  // 195: memstation.v1.AdminService.Overview:output_type -> memstation.v1.OverviewResponse
+	33,  // 196: memstation.v1.AdminService.ListConversations:output_type -> memstation.v1.ListConversationsResponse
+	36,  // 197: memstation.v1.AdminService.GetConversation:output_type -> memstation.v1.ConversationRecord
+	39,  // 198: memstation.v1.AdminService.GetConversationMemory:output_type -> memstation.v1.ConversationMemoryResponse
+	62,  // 199: memstation.v1.MemoryDataService.Probe:output_type -> memstation.v1.MemoryCapabilities
+	49,  // 200: memstation.v1.MemoryDataService.Observe:output_type -> memstation.v1.IngestionReceipt
+	49,  // 201: memstation.v1.MemoryDataService.Progress:output_type -> memstation.v1.IngestionReceipt
+	53,  // 202: memstation.v1.MemoryDataService.OpenWindow:output_type -> memstation.v1.ConversationWindow
+	53,  // 203: memstation.v1.MemoryDataService.GetWindow:output_type -> memstation.v1.ConversationWindow
+	53,  // 204: memstation.v1.MemoryDataService.Finalize:output_type -> memstation.v1.ConversationWindow
+	20,  // 205: memstation.v1.MemoryDataService.Inspect:output_type -> memstation.v1.MemoryDocument
+	54,  // 206: memstation.v1.MemoryDataService.Source:output_type -> memstation.v1.SourceRecord
+	56,  // 207: memstation.v1.MemoryDataService.Propose:output_type -> memstation.v1.MemoryCandidate
+	57,  // 208: memstation.v1.MemoryDataService.Candidates:output_type -> memstation.v1.CandidateList
+	61,  // 209: memstation.v1.MemoryDataService.Retract:output_type -> memstation.v1.MemoryOperation
+	61,  // 210: memstation.v1.MemoryDataService.Forget:output_type -> memstation.v1.MemoryOperation
+	61,  // 211: memstation.v1.MemoryDataService.Export:output_type -> memstation.v1.MemoryOperation
+	61,  // 212: memstation.v1.MemoryDataService.Operation:output_type -> memstation.v1.MemoryOperation
+	71,  // 213: memstation.v1.MemoryDataService.ReconcileUsage:output_type -> memstation.v1.AICall
+	72,  // 214: memstation.v1.MemoryDataService.Usage:output_type -> memstation.v1.AIUsageResponse
+	98,  // 215: memstation.v1.WorkspaceAdminService.Generations:output_type -> memstation.v1.GenerationList
+	97,  // 216: memstation.v1.WorkspaceAdminService.Rebuild:output_type -> memstation.v1.MemoryGeneration
+	97,  // 217: memstation.v1.WorkspaceAdminService.ActivateGeneration:output_type -> memstation.v1.MemoryGeneration
+	97,  // 218: memstation.v1.WorkspaceAdminService.DiscardGeneration:output_type -> memstation.v1.MemoryGeneration
+	62,  // 219: memstation.v1.WorkspaceAdminService.Capabilities:output_type -> memstation.v1.MemoryCapabilities
+	93,  // 220: memstation.v1.WorkspaceAdminService.CreateAgent:output_type -> memstation.v1.WorkspaceAgent
+	94,  // 221: memstation.v1.WorkspaceAdminService.Agent:output_type -> memstation.v1.WorkspaceAgentDetail
+	75,  // 222: memstation.v1.WorkspaceAdminService.Workspaces:output_type -> memstation.v1.WorkspaceListResponse
+	73,  // 223: memstation.v1.WorkspaceAdminService.CreateWorkspace:output_type -> memstation.v1.WorkspaceConfig
+	73,  // 224: memstation.v1.WorkspaceAdminService.UpdateWorkspace:output_type -> memstation.v1.WorkspaceConfig
+	77,  // 225: memstation.v1.WorkspaceAdminService.Integrations:output_type -> memstation.v1.IntegrationList
+	76,  // 226: memstation.v1.WorkspaceAdminService.PutIntegration:output_type -> memstation.v1.IntegrationConfig
+	79,  // 227: memstation.v1.WorkspaceAdminService.Partitions:output_type -> memstation.v1.PartitionList
+	78,  // 228: memstation.v1.WorkspaceAdminService.PutPartition:output_type -> memstation.v1.PartitionConfig
+	80,  // 229: memstation.v1.WorkspaceAdminService.Grant:output_type -> memstation.v1.WorkspaceGrant
+	80,  // 230: memstation.v1.WorkspaceAdminService.SetGrant:output_type -> memstation.v1.WorkspaceGrant
+	91,  // 231: memstation.v1.WorkspaceAdminService.Control:output_type -> memstation.v1.MemoryControlOverview
+	107, // 232: memstation.v1.WorkspaceAdminService.ReplayJob:output_type -> google.protobuf.Empty
+	20,  // 233: memstation.v1.WorkspaceAdminService.Inspect:output_type -> memstation.v1.MemoryDocument
+	54,  // 234: memstation.v1.WorkspaceAdminService.Source:output_type -> memstation.v1.SourceRecord
+	49,  // 235: memstation.v1.WorkspaceAdminService.Progress:output_type -> memstation.v1.IngestionReceipt
+	57,  // 236: memstation.v1.WorkspaceAdminService.Candidates:output_type -> memstation.v1.CandidateList
+	56,  // 237: memstation.v1.WorkspaceAdminService.Propose:output_type -> memstation.v1.MemoryCandidate
+	61,  // 238: memstation.v1.WorkspaceAdminService.Forget:output_type -> memstation.v1.MemoryOperation
+	61,  // 239: memstation.v1.WorkspaceAdminService.Retract:output_type -> memstation.v1.MemoryOperation
+	61,  // 240: memstation.v1.WorkspaceAdminService.Export:output_type -> memstation.v1.MemoryOperation
+	61,  // 241: memstation.v1.WorkspaceAdminService.Operation:output_type -> memstation.v1.MemoryOperation
+	71,  // 242: memstation.v1.WorkspaceAdminService.ReconcileUsage:output_type -> memstation.v1.AICall
+	72,  // 243: memstation.v1.WorkspaceAdminService.Usage:output_type -> memstation.v1.AIUsageResponse
+	56,  // 244: memstation.v1.WorkspaceAdminService.ReviewCandidate:output_type -> memstation.v1.MemoryCandidate
+	67,  // 245: memstation.v1.WorkspaceAdminService.Publish:output_type -> memstation.v1.MemoryPublication
+	68,  // 246: memstation.v1.WorkspaceAdminService.Publications:output_type -> memstation.v1.PublicationList
+	67,  // 247: memstation.v1.WorkspaceAdminService.RetractPublication:output_type -> memstation.v1.MemoryPublication
+	188, // [188:248] is the sub-list for method output_type
+	128, // [128:188] is the sub-list for method input_type
+	128, // [128:128] is the sub-list for extension type_name
+	128, // [128:128] is the sub-list for extension extendee
+	0,   // [0:128] is the sub-list for field type_name
 }
 
 func init() { file_proto_memstation_v1_api_proto_init() }
@@ -3422,9 +9490,9 @@ func file_proto_memstation_v1_api_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_memstation_v1_api_proto_rawDesc), len(file_proto_memstation_v1_api_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   36,
+			NumMessages:   103,
 			NumExtensions: 0,
-			NumServices:   4,
+			NumServices:   6,
 		},
 		GoTypes:           file_proto_memstation_v1_api_proto_goTypes,
 		DependencyIndexes: file_proto_memstation_v1_api_proto_depIdxs,

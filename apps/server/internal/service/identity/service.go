@@ -24,12 +24,12 @@ func ValidateName(name string) bool {
 }
 
 func ValidateCapabilities(caps []string) error {
-	if len(caps) > len(domain.PersonalCapabilities()) {
+	if len(caps) > len(domain.AllCapabilities()) {
 		return ErrInvalidInput
 	}
 	seen := map[string]bool{}
 	for _, capability := range caps {
-		if !slices.Contains(domain.PersonalCapabilities(), capability) || seen[capability] {
+		if !slices.Contains(domain.AllCapabilities(), capability) || seen[capability] {
 			return ErrInvalidInput
 		}
 		seen[capability] = true
@@ -94,7 +94,7 @@ func (s *Service) Grant(ctx context.Context, user, agent string) (domain.Workspa
 }
 
 func (s *Service) SetGrant(ctx context.Context, g domain.WorkspaceGrant) (domain.WorkspaceGrant, error) {
-	if g.UserID == "" || g.AgentID == "" || g.Revision < 1 || g.WorkspaceID != domain.PersonalWorkspaceID(g.UserID) {
+	if g.UserID == "" || g.AgentID == "" || g.Revision < 0 || g.WorkspaceID == "" {
 		return g, ErrInvalidInput
 	}
 	if err := ValidateCapabilities(g.Capabilities); err != nil {
@@ -129,11 +129,11 @@ func (s *Service) Detail(ctx context.Context, user, id string) (domain.AgentDeta
 	if err != nil {
 		return detail, err
 	}
-	g, err := s.Grant(ctx, user, id)
+	g, err := s.repo.GetGrant(ctx, user, a.DefaultWorkspaceID, id)
 	if err != nil {
 		return detail, err
 	}
-	w, err := s.Personal(ctx, user)
+	w, err := s.Workspace(ctx, user, a.DefaultWorkspaceID)
 	if err != nil {
 		return detail, err
 	}

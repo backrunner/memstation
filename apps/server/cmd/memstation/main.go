@@ -84,13 +84,21 @@ func newMigrateCommand() *cobra.Command {
 }
 
 func newSeedCommand() *cobra.Command {
-	return &cobra.Command{
+	var initializeDeletionJournal, verifyRecovery bool
+	cmd := &cobra.Command{
 		Use:   "seed",
 		Short: "Seed default admin and model capability registry metadata",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()
-			return app.RunSeed(ctx)
+			if verifyRecovery {
+				return app.RunRecoveryCheck(ctx)
+			}
+			return app.RunSeed(ctx, initializeDeletionJournal)
 		},
 	}
+	cmd.Flags().BoolVar(&verifyRecovery, "verify-recovery", false, "Verify and replay the latest independent deletion journal without creating seed data")
+	cmd.Flags().BoolVar(&initializeDeletionJournal, "initialize-deletion-journal", false, "Initialize independent deletion history for a first-time legacy upgrade (never use during backup restore)")
+	cmd.MarkFlagsMutuallyExclusive("initialize-deletion-journal", "verify-recovery")
+	return cmd
 }

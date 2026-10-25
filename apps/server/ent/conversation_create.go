@@ -60,6 +60,34 @@ func (_c *ConversationCreate) SetWorkspaceID(v string) *ConversationCreate {
 	return _c
 }
 
+// SetPartitionID sets the "partition_id" field.
+func (_c *ConversationCreate) SetPartitionID(v string) *ConversationCreate {
+	_c.mutation.SetPartitionID(v)
+	return _c
+}
+
+// SetNillablePartitionID sets the "partition_id" field if the given value is not nil.
+func (_c *ConversationCreate) SetNillablePartitionID(v *string) *ConversationCreate {
+	if v != nil {
+		_c.SetPartitionID(*v)
+	}
+	return _c
+}
+
+// SetContextMode sets the "context_mode" field.
+func (_c *ConversationCreate) SetContextMode(v string) *ConversationCreate {
+	_c.mutation.SetContextMode(v)
+	return _c
+}
+
+// SetNillableContextMode sets the "context_mode" field if the given value is not nil.
+func (_c *ConversationCreate) SetNillableContextMode(v *string) *ConversationCreate {
+	if v != nil {
+		_c.SetContextMode(*v)
+	}
+	return _c
+}
+
 // SetAgentID sets the "agent_id" field.
 func (_c *ConversationCreate) SetAgentID(v string) *ConversationCreate {
 	_c.mutation.SetAgentID(v)
@@ -205,6 +233,14 @@ func (_c *ConversationCreate) defaults() {
 		v := conversation.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.PartitionID(); !ok {
+		v := conversation.DefaultPartitionID
+		_c.mutation.SetPartitionID(v)
+	}
+	if _, ok := _c.mutation.ContextMode(); !ok {
+		v := conversation.DefaultContextMode
+		_c.mutation.SetContextMode(v)
+	}
 	if _, ok := _c.mutation.WriteRevision(); !ok {
 		v := conversation.DefaultWriteRevision
 		_c.mutation.SetWriteRevision(v)
@@ -240,6 +276,12 @@ func (_c *ConversationCreate) check() error {
 	}
 	if _, ok := _c.mutation.WorkspaceID(); !ok {
 		return &ValidationError{Name: "workspace_id", err: errors.New(`ent: missing required field "Conversation.workspace_id"`)}
+	}
+	if _, ok := _c.mutation.PartitionID(); !ok {
+		return &ValidationError{Name: "partition_id", err: errors.New(`ent: missing required field "Conversation.partition_id"`)}
+	}
+	if _, ok := _c.mutation.ContextMode(); !ok {
+		return &ValidationError{Name: "context_mode", err: errors.New(`ent: missing required field "Conversation.context_mode"`)}
 	}
 	if _, ok := _c.mutation.AgentID(); !ok {
 		return &ValidationError{Name: "agent_id", err: errors.New(`ent: missing required field "Conversation.agent_id"`)}
@@ -303,6 +345,14 @@ func (_c *ConversationCreate) createSpec() (*Conversation, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.WorkspaceID(); ok {
 		_spec.SetField(conversation.FieldWorkspaceID, field.TypeString, value)
 		_node.WorkspaceID = value
+	}
+	if value, ok := _c.mutation.PartitionID(); ok {
+		_spec.SetField(conversation.FieldPartitionID, field.TypeString, value)
+		_node.PartitionID = value
+	}
+	if value, ok := _c.mutation.ContextMode(); ok {
+		_spec.SetField(conversation.FieldContextMode, field.TypeString, value)
+		_node.ContextMode = value
 	}
 	if value, ok := _c.mutation.AgentID(); ok {
 		_spec.SetField(conversation.FieldAgentID, field.TypeString, value)

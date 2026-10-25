@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	storeaccess "memstation/apps/server/internal/store/access"
+
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/ports"
 	"memstation/apps/server/internal/runtimeconfig"
@@ -67,7 +69,7 @@ func (s *PGVectorStore) Backend() string {
 }
 
 func (s *PGVectorStore) Search(ctx context.Context, input domain.VectorSearchInput) ([]domain.VectorSearchResult, error) {
-	workspace, err := security.PersonalScope(ctx, input.UserID, input.WorkspaceID)
+	workspace, err := security.DataScope(ctx, input.UserID, input.WorkspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -85,14 +87,14 @@ func (s *PGVectorStore) Search(ctx context.Context, input domain.VectorSearchInp
 
 	db := s.currentDB()
 	if db == nil {
-		return s.searchInMemory(input, queryVector, embeddingModel), nil
+		return s.searchInMemory(ctx, input, queryVector, embeddingModel), nil
 	}
 
 	limit := input.TopK * 4
 	if limit < 20 {
 		limit = 20
 	}
-	filterClause := ""
+	filterClause := " AND " + storeaccess.NodeSQL(ctx, "n")
 	vectorColumn := "e.vector"
 	vectorParameterCast := "vector"
 	if vectorType, ok := annVectorType(len(queryVector)); ok {
@@ -165,11 +167,12 @@ func annVectorType(dimension int) (string, bool) {
 }
 
 func (s *PGVectorStore) Upsert(ctx context.Context, input domain.VectorUpsertRequest) error {
-	workspace, err := security.PersonalScope(ctx, input.UserID, input.WorkspaceID)
+	workspace, err := security.DataScope(ctx, input.UserID, input.WorkspaceID)
 	if err != nil {
 		return err
 	}
 	input.WorkspaceID = workspace
+	input.PartitionID = security.WritePartition(ctx)
 	if input.EmbeddingVersion <= 0 {
 		input.EmbeddingVersion = 1
 	}
@@ -185,7 +188,7 @@ func (s *PGVectorStore) Upsert(ctx context.Context, input domain.VectorUpsertReq
 			return err
 		}
 		input.Vector = embedded.Vector
-		if strings.TrimSpace(input.EmbeddingModel) == "" {
+		if strings.TrimSpace(embedded.Model) != "" {
 			input.EmbeddingModel = embedded.Model
 		}
 	}
@@ -224,26 +227,45 @@ func (s *PGVectorStore) Upsert(ctx context.Context, input domain.VectorUpsertReq
 	} else if err != nil {
 		return err
 	}
-	if writable, err := memorygeneration.LockWritableGeneration(ctx, tx, input.UserID, workspace, expectedGeneration); err != nil || !writable {
+	lockedGeneration := expectedGeneration
+	if input.GenerationID != "" {
+		lockedGeneration = input.GenerationID
+	}
+	if writable, err := memorygeneration.LockWritableGeneration(ctx, tx, input.UserID, workspace, lockedGeneration); err != nil || !writable {
 		return err
 	}
-	var owner, parentWorkspace, generation, kind, status string
+	var owner, parentWorkspace, generation, kind, status, partition, accessStatus string
 	var revision int64
-	err = tx.QueryRowContext(ctx, `SELECT user_id,workspace_id,generation_id,node_type,embedding_revision,embedding_status FROM memory_nodes WHERE id=$1 FOR UPDATE`, input.NodeID).Scan(&owner, &parentWorkspace, &generation, &kind, &revision, &status)
+	err = tx.QueryRowContext(ctx, `SELECT user_id,workspace_id,generation_id,node_type,embedding_revision,embedding_status,partition_id,access_status FROM memory_nodes WHERE id=$1 FOR UPDATE`, input.NodeID).Scan(&owner, &parentWorkspace, &generation, &kind, &revision, &status, &partition, &accessStatus)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil // A delayed task must not recreate a deleted node's embedding.
 	}
 	if err != nil {
 		return err
 	}
-	if owner != input.UserID || parentWorkspace != workspace || kind != input.NodeType || (input.GenerationID != "" && input.GenerationID != generation) {
+	carry := false
+	if input.GenerationID != "" && input.GenerationID != generation {
+		carry, err = memorygeneration.ValidateCarryEmbeddingTx(ctx, tx, input.UserID, workspace, input.GenerationID, input.NodeID)
+		if err != nil {
+			return err
+		}
+	}
+	if owner != input.UserID || parentWorkspace != workspace || kind != input.NodeType || (input.GenerationID != "" && input.GenerationID != generation && !carry) {
 		return domain.ErrAccessDenied
+	}
+	if !security.CanReadPartition(ctx, partition) {
+		return domain.ErrAccessDenied
+	}
+	if accessStatus != "active" {
+		return nil
 	}
 	if generation != expectedGeneration {
 		return errors.New("embedding parent generation changed; retry")
 	}
-	input.GenerationID = generation
-	if input.EmbeddingRevision > 0 && (revision != input.EmbeddingRevision || status != "pending") {
+	if !carry {
+		input.GenerationID = generation
+	}
+	if !carry && input.EmbeddingRevision > 0 && (revision != input.EmbeddingRevision || status != "pending") {
 		return nil
 	}
 	now := time.Now().UTC()
@@ -266,6 +288,9 @@ func (s *PGVectorStore) Upsert(ctx context.Context, input domain.VectorUpsertReq
 	if err != nil {
 		return err
 	}
+	if carry {
+		return tx.Commit()
+	}
 	_, err = tx.ExecContext(ctx, `UPDATE memory_nodes SET embedding_status='ready',updated_at=$1 WHERE id=$2 AND user_id=$3 AND workspace_id=$4`, now, input.NodeID, input.UserID, workspace)
 	if err != nil {
 		return err
@@ -274,7 +299,7 @@ func (s *PGVectorStore) Upsert(ctx context.Context, input domain.VectorUpsertReq
 }
 
 func (s *PGVectorStore) DeleteByNode(ctx context.Context, userID, nodeID string) error {
-	workspace, err := security.PersonalScope(ctx, userID, "")
+	workspace, err := security.DataScope(ctx, userID, "")
 	if err != nil {
 		return err
 	}
@@ -334,9 +359,9 @@ func (s *PGVectorStore) embedQuery(ctx context.Context, input domain.VectorSearc
 		return EmbedText(input.Query), model, nil
 	}
 	result, err := s.embedder.Embed(ctx, domain.EmbeddingInput{
-		UserID: input.UserID,
-		Text:   input.Query,
-		Model:  model,
+		UserID: input.UserID, GenerationID: input.GenerationID, EmbeddingVersion: input.EmbeddingVersion,
+		Text:  input.Query,
+		Model: model,
 	})
 	if err != nil {
 		return nil, "", err
@@ -352,9 +377,9 @@ func (s *PGVectorStore) embedDocument(ctx context.Context, input domain.VectorUp
 		}, nil
 	}
 	return s.embedder.Embed(ctx, domain.EmbeddingInput{
-		UserID: input.UserID,
-		Text:   input.Content,
-		Model:  strings.TrimSpace(input.EmbeddingModel),
+		UserID: input.UserID, GenerationID: input.GenerationID, EmbeddingVersion: input.EmbeddingVersion,
+		Text:  input.Content,
+		Model: strings.TrimSpace(input.EmbeddingModel),
 	})
 }
 
@@ -401,13 +426,13 @@ func Similarity(left, right []float32) float64 {
 	return dot
 }
 
-func (s *PGVectorStore) searchInMemory(input domain.VectorSearchInput, queryVector []float32, embeddingModel string) []domain.VectorSearchResult {
+func (s *PGVectorStore) searchInMemory(ctx context.Context, input domain.VectorSearchInput, queryVector []float32, embeddingModel string) []domain.VectorSearchResult {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	results := make([]domain.VectorSearchResult, 0)
 	for _, item := range s.items {
-		if item.UserID != input.UserID || item.WorkspaceID != input.WorkspaceID || item.EmbeddingVersion != input.EmbeddingVersion {
+		if item.UserID != input.UserID || item.WorkspaceID != input.WorkspaceID || !security.CanReadPartition(ctx, item.PartitionID) || item.EmbeddingVersion != input.EmbeddingVersion {
 			continue
 		}
 		if strings.TrimSpace(input.GenerationID) != "" && !matchesVectorGeneration(input.GenerationID, item.GenerationID, item.NodeType) {

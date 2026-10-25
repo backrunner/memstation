@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	memorycontrolservice "memstation/apps/server/internal/service/memorycontrol"
+
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
@@ -32,6 +34,7 @@ import (
 	"memstation/apps/server/internal/runtimeconfig"
 	"memstation/apps/server/internal/security"
 	adminservice "memstation/apps/server/internal/service/admin"
+	"memstation/apps/server/internal/service/aibroker"
 	analysisservice "memstation/apps/server/internal/service/analysis"
 	apikeyservice "memstation/apps/server/internal/service/apikey"
 	auditsvc "memstation/apps/server/internal/service/audit"
@@ -39,6 +42,8 @@ import (
 	conversationservice "memstation/apps/server/internal/service/conversation"
 	embeddingservice "memstation/apps/server/internal/service/embedding"
 	gatewayservice "memstation/apps/server/internal/service/gateway"
+	ingestionservice "memstation/apps/server/internal/service/ingestion"
+	lifecycleservice "memstation/apps/server/internal/service/lifecycle"
 	memoryservice "memstation/apps/server/internal/service/memory"
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
 	"memstation/apps/server/internal/service/memoryllm"
@@ -50,6 +55,7 @@ import (
 	usageservice "memstation/apps/server/internal/service/usage"
 	userservice "memstation/apps/server/internal/service/user"
 	blobstore "memstation/apps/server/internal/store/blob"
+	"memstation/apps/server/internal/store/deletionjournal"
 	sqlstore "memstation/apps/server/internal/store/sql"
 	"memstation/apps/server/internal/store/vector"
 	grpctransport "memstation/apps/server/internal/transport/grpc"
@@ -77,6 +83,7 @@ type Container struct {
 	Conversations *conversationservice.Service
 	Multimodal    *multimodalservice.Service
 	Memory        *memoryservice.Service
+	Lifecycle     *sqlstore.MemoryLifecycleRepository
 	Generations   *memorygenservice.Service
 	Admin         *adminservice.Service
 	Usage         *usageservice.Service
@@ -149,6 +156,18 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		return nil, err
 	}
 	cfg = runtimeSnapshot.ApplyConfig(cfg)
+	if cfg.MemoryAIBackend != "direct" && cfg.MemoryAIBackend != "broker" {
+		return nil, errors.New("memory AI backend must be direct or broker")
+	}
+	if cfg.MemoryAIBackend == "broker" {
+		if cfg.MemoryBrokerCredential == cfg.AdminToken || cfg.MemoryBrokerCredential == cfg.DevAPIKey || cfg.MemoryBrokerCredential == cfg.MasterKey {
+			return nil, errors.New("AI broker requires a separate service credential")
+		}
+		cfg.SummaryModel = "openai_compatible:" + cfg.MemoryBrokerSummaryAlias
+		cfg.AnalysisModel = "openai_compatible:" + cfg.MemoryBrokerAnalysisAlias
+		cfg.EmbeddingModel = "openai_compatible:" + cfg.MemoryBrokerEmbeddingAlias
+		cfg.RerankModel = "rerank_compatible:" + cfg.MemoryBrokerRerankAlias
+	}
 
 	redisClient, err := bootstrap.OpenRedis(ctx, cfg)
 	redisErr := err
@@ -202,7 +221,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	apiKeys := apikeyservice.NewService(dbHandle)
 	apiKeys.SetFallbackAudit(audit.Record)
 
-	var conversationRepo ports.ConversationRepository = sqlstore.NewHybridConversationRepository(dbHandle)
+	conversationRepo := sqlstore.NewHybridConversationRepository(dbHandle)
 	var mediaRepo ports.MediaRepository = sqlstore.NewHybridMediaRepository(dbHandle)
 	hybridMemory := sqlstore.NewHybridMemoryRepository(dbHandle)
 	hybridMemory.SetFallbackAudit(audit.Record)
@@ -218,6 +237,16 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	}
 	embeddingClient := embeddingservice.NewService(providerCfg.Resolver(providerconfigservice.ScopeEmbedding), settings, cfg.ProviderTimeout)
 	vectorStore.SetEmbedder(embeddingClient)
+	aiLedger := sqlstore.NewAICallRepository(dbHandle)
+	var broker *aibroker.Client
+	if cfg.MemoryAIBackend == "broker" {
+		broker, err = aibroker.New(aibroker.Config{BaseURL: cfg.MemoryBrokerBaseURL, Credential: cfg.MemoryBrokerCredential, Timeout: cfg.ProviderTimeout, Roles: map[string]string{"summary": cfg.MemoryBrokerSummaryAlias, "analysis": cfg.MemoryBrokerAnalysisAlias, "embedding": cfg.MemoryBrokerEmbeddingAlias, "rerank": cfg.MemoryBrokerRerankAlias}, Embedding: domain.EmbeddingIdentity{ModelVersion: cfg.MemoryBrokerEmbeddingModel, Dimensions: cfg.MemoryBrokerEmbeddingDimensions, Fingerprint: cfg.MemoryBrokerEmbeddingFingerprint}}, aiLedger)
+		if err != nil {
+			return nil, err
+		}
+		vectorStore.SetEmbedder(broker)
+	}
+
 	generations := memorygenservice.NewService(dbHandle, cfg.EmbeddingModel)
 	health.Add("vectorstore", observability.CheckFunc(vectorStore.Health))
 	health.Add("outbox", observability.CheckFunc(func(ctx context.Context) error {
@@ -235,6 +264,9 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	})
 	reranker := rerankservice.NewService(providerCfg.Resolver(providerconfigservice.ScopeRerank), cfg.RerankModel, cfg.ProviderTimeout)
 	memoryEngine.SetReranker(reranker)
+	if broker != nil {
+		memoryEngine.SetReranker(broker)
+	}
 	memoryEngine.SetRerankConfig(memoryservice.RerankConfig{
 		Model:               cfg.RerankModel,
 		CandidateMultiplier: cfg.RerankCandidateMultiplier,
@@ -271,10 +303,15 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	memories := memoryservice.NewService(memoryEngine, memoryRepo)
 	memories.SetKeyMemoryCache(jsonCache)
 	memories.SetVectorStore(vectorStore)
-	memories.SetScorer(memoryservice.NewScorer(internalProviderRegistry, settings))
+	memoryLLM := memoryllm.NewClient(internalProviderRegistry, settings, cfg.ProviderTimeout)
+	if broker != nil {
+		memoryLLM.SetRuntime(broker)
+	}
+	memoryScorer := memoryservice.NewScorerWithGenerator(memoryLLM)
+	memories.SetScorer(memoryScorer)
 	memories.SetGenerationService(generations)
 	gateway.SetToolRuntime(gatewayservice.NewToolRuntime(memories, audit, keySet(cfg.KeyMemoryWriteKeys), 3))
-	analysis := analysisservice.NewService(memoryllm.NewClient(internalProviderRegistry, settings, cfg.ProviderTimeout))
+	analysis := analysisservice.NewService(memoryLLM)
 	admin := adminservice.NewService(conversationRepo, mediaRepo, memoryRepo, settings, audit, models)
 	admin.SetGenerationService(generations)
 	admin.SetMemoryProcessor(analysis, cfg.KeyMemoryAutoKeys)
@@ -285,6 +322,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		AdminToken:                 cfg.AdminToken,
 		DevAPIKey:                  cfg.DevAPIKey,
 		SessionManager:             sessionManager,
+		ResolveAccess:              apiKeys.ResolveAccess,
 		LookupPrincipal:            apiKeys.LookupPrincipalByHash,
 		LookupDevelopmentPrincipal: apiKeys.DevelopmentPrincipal,
 	}
@@ -309,9 +347,45 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		}))
 	}
 
+	ingestionRepo := sqlstore.NewDurableIngestionRepository(dbHandle)
+	memories.SetWatermarks(ingestionRepo)
+	lifecycleRepo := sqlstore.NewMemoryLifecycleRepository(dbHandle)
+	lifecycleRepo.SetWindowBudget(cfg.IngestionWindowBudget)
+	journalKey := cfg.DeletionJournalKey
+	if journalKey == "" {
+		journalKey = cfg.MasterKey
+	}
+	deletionJournal, err := deletionjournal.New(cfg.DeletionJournalPath, journalKey)
+	if err != nil {
+		return nil, err
+	}
+	lifecycleRepo.SetDeletionJournal(deletionJournal)
+	ingestionRepo.SetDeletionJournal(deletionJournal)
+	lifecycleRepo.SetCleanup(blobStore, func(ctx context.Context) error { return jsonCache.DeletePrefix(ctx, "memory:") })
+	memoryGate := sqlstore.NewMemoryGate(lifecycleRepo)
+	health.Add("deletion_history", observability.CheckFunc(memoryGate.Verify))
+	lifecycle := lifecycleservice.NewService(lifecycleRepo)
+	lifecycle.SetReady(memoryGate.Check)
+	memoryRuntime := domain.MemoryRuntime{AIBackend: cfg.MemoryAIBackend, RoleAliases: map[string]string{}, UsageAuthority: "memstation"}
+	if broker != nil {
+		memoryRuntime.RoleAliases = map[string]string{"summary": cfg.MemoryBrokerSummaryAlias, "analysis": cfg.MemoryBrokerAnalysisAlias, "embedding": cfg.MemoryBrokerEmbeddingAlias, "rerank": cfg.MemoryBrokerRerankAlias}
+		memoryRuntime.Embedding = domain.EmbeddingIdentity{ModelVersion: cfg.MemoryBrokerEmbeddingModel, Dimensions: cfg.MemoryBrokerEmbeddingDimensions, Fingerprint: cfg.MemoryBrokerEmbeddingFingerprint}
+		memoryRuntime.UsageAuthority = "broker"
+	}
+	lifecycle.SetRuntime(memoryRuntime)
+	memoryControl := memorycontrolservice.NewService(lifecycleRepo, func(queue, id string) error {
+		if inspector == nil {
+			return errors.New("queue unavailable")
+		}
+		return inspector.RunTask(queue, id)
+	})
+
 	publisher := worker.NewPublisher(logger, asynqClient)
 	relay := worker.NewRelay(logger, outboxRepo, publisher)
 	scheduler := worker.NewScheduler(logger, relay, conversations, cfg.ConversationTimeout)
+	relay.SetTaskAuthority(ingestionRepo)
+	scheduler.SetIngestion(ingestionRepo)
+	scheduler.SetRetention(lifecycleRepo.ExpireExports)
 	systemConfig.SetLiveApplier(systemconfigservice.LiveApplier{
 		Validate: func(snapshot systemconfigservice.Snapshot) error {
 			if _, err := blobstore.NewStore(snapshot.MultimodalConfig()); err != nil {
@@ -389,6 +463,11 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		},
 	})
 	workerMux := worker.NewServeMux(logger, worker.Services{
+		AcknowledgeReceipt:   ingestionRepo.AcknowledgeReceipt,
+		DataReady:            memoryGate.Check,
+		ProcessOperation:     lifecycleRepo.ProcessOperation,
+		TaskAuthority:        ingestionRepo,
+		Jobs:                 ingestionRepo,
 		Conversations:        conversationRepo,
 		MediaStore:           mediaRepo,
 		Memories:             memoryRepo,
@@ -398,13 +477,15 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		Publisher:            publisher,
 		Analysis:             analysis,
 		Multimodal:           multimodal,
-		Scorer:               memoryservice.NewScorer(internalProviderRegistry, settings),
+		Scorer:               memoryScorer,
 		EmbeddingModel:       cfg.EmbeddingModel,
 		AllowedKeyMemoryKeys: keySet(cfg.KeyMemoryAutoKeys),
 		RecordAudit:          audit.Record,
 		InvalidateKeyMemory:  memories.InvalidateKeyMemoryCache,
 	})
 	graphQLResolver := &graphresolver.Resolver{
+		Generations: generations,
+		Identity:    apiKeys.Identities(), Ingestion: ingestionservice.NewService(ingestionRepo, cfg.IngestionWindowBudget), Lifecycle: lifecycle, MemoryControlService: memoryControl, AIUsage: aibroker.NewUsageService(aiLedger, broker),
 		UserService:         users,
 		APIKeyService:       apiKeys,
 		SettingsService:     settings,
@@ -417,6 +498,9 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	}
 
 	router := httptransport.NewRouter(httptransport.Dependencies{
+		AIUsage:   aibroker.NewUsageService(aiLedger, broker),
+		Lifecycle: lifecycle, MemoryControl: memoryControl, DataReady: memoryGate.Check,
+		Ingestion:        ingestionservice.NewService(ingestionRepo, cfg.IngestionWindowBudget),
 		Config:           cfg,
 		Logger:           logger,
 		Health:           health,
@@ -442,6 +526,8 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		Inspector:        inspector,
 	})
 	grpcServer := grpctransport.NewServer(grpctransport.Dependencies{
+		AIUsage:   aibroker.NewUsageService(aiLedger, broker),
+		DataReady: memoryGate.Check, Ingestion: ingestionservice.NewService(ingestionRepo, cfg.IngestionWindowBudget), Lifecycle: lifecycle, MemoryControl: memoryControl, Identity: apiKeys.Identities(),
 		Config:      cfg,
 		Logger:      logger,
 		Health:      health,
@@ -475,6 +561,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		Conversations: conversations,
 		Multimodal:    multimodal,
 		Memory:        memories,
+		Lifecycle:     lifecycleRepo,
 		Generations:   generations,
 		Admin:         admin,
 		Usage:         usage,
@@ -569,7 +656,8 @@ func RunWorker(ctx context.Context) error {
 		return nil
 	}
 	server := asynq.NewServer(*container.AsynqOpt, asynq.Config{
-		Concurrency: 10,
+		RetryDelayFunc: worker.MemoryRetryDelay,
+		Concurrency:    10,
 		Queues: map[string]int{
 			worker.QueueCritical: 4,
 			worker.QueueDefault:  6,
@@ -610,12 +698,17 @@ func RunMigrate(ctx context.Context) error {
 	return applySQLMigrations(ctx, container.DB, container.Logger, migrationsDir)
 }
 
-func RunSeed(ctx context.Context) error {
+func RunSeed(ctx context.Context, initializeDeletionJournal ...bool) error {
 	container, err := buildContainer(ctx)
 	if err != nil {
 		return err
 	}
 	defer shutdownAll(context.Background(), container.cleanup)
+	if len(initializeDeletionJournal) > 0 && initializeDeletionJournal[0] {
+		if err = container.Lifecycle.InitializeLegacyDeletionJournal(ctx); err != nil {
+			return err
+		}
+	}
 	adminUser, err := container.Users.EnsureDefaultAdmin(ctx, "Admin")
 	if err != nil {
 		return err
@@ -716,4 +809,19 @@ type logWriter struct{ logger *slog.Logger }
 func (w logWriter) Write(p []byte) (int, error) {
 	w.logger.Info(string(p))
 	return len(p), nil
+}
+
+// RunRecoveryCheck applies the latest independently persisted deletion history
+// without seeding users, credentials or configuration.
+func RunRecoveryCheck(ctx context.Context) error {
+	container, err := buildContainer(ctx)
+	if err != nil {
+		return err
+	}
+	defer shutdownAll(context.Background(), container.cleanup)
+	if err = container.Lifecycle.EnsureDeletionJournal(ctx); err != nil {
+		return err
+	}
+	container.Logger.InfoContext(ctx, "memory recovery verified")
+	return nil
 }

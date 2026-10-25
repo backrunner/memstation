@@ -27,7 +27,7 @@ func mergeConversationWriteMetadata(stored, incoming map[string]any, status doma
 }
 
 func normalizeConversationScope(ctx context.Context, c domain.ConversationRecord) (domain.ConversationRecord, error) {
-	w, err := security.PersonalScope(ctx, c.UserID, c.WorkspaceID)
+	w, err := security.DataScope(ctx, c.UserID, c.WorkspaceID)
 	if err != nil {
 		return c, err
 	}

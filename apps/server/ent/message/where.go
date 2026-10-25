@@ -74,6 +74,11 @@ func WorkspaceID(v string) predicate.Message {
 	return predicate.Message(sql.FieldEQ(FieldWorkspaceID, v))
 }
 
+// PartitionID applies equality check predicate on the "partition_id" field. It's identical to PartitionIDEQ.
+func PartitionID(v string) predicate.Message {
+	return predicate.Message(sql.FieldEQ(FieldPartitionID, v))
+}
+
 // ConversationID applies equality check predicate on the "conversation_id" field. It's identical to ConversationIDEQ.
 func ConversationID(v string) predicate.Message {
 	return predicate.Message(sql.FieldEQ(FieldConversationID, v))
@@ -302,6 +307,71 @@ func WorkspaceIDEqualFold(v string) predicate.Message {
 // WorkspaceIDContainsFold applies the ContainsFold predicate on the "workspace_id" field.
 func WorkspaceIDContainsFold(v string) predicate.Message {
 	return predicate.Message(sql.FieldContainsFold(FieldWorkspaceID, v))
+}
+
+// PartitionIDEQ applies the EQ predicate on the "partition_id" field.
+func PartitionIDEQ(v string) predicate.Message {
+	return predicate.Message(sql.FieldEQ(FieldPartitionID, v))
+}
+
+// PartitionIDNEQ applies the NEQ predicate on the "partition_id" field.
+func PartitionIDNEQ(v string) predicate.Message {
+	return predicate.Message(sql.FieldNEQ(FieldPartitionID, v))
+}
+
+// PartitionIDIn applies the In predicate on the "partition_id" field.
+func PartitionIDIn(vs ...string) predicate.Message {
+	return predicate.Message(sql.FieldIn(FieldPartitionID, vs...))
+}
+
+// PartitionIDNotIn applies the NotIn predicate on the "partition_id" field.
+func PartitionIDNotIn(vs ...string) predicate.Message {
+	return predicate.Message(sql.FieldNotIn(FieldPartitionID, vs...))
+}
+
+// PartitionIDGT applies the GT predicate on the "partition_id" field.
+func PartitionIDGT(v string) predicate.Message {
+	return predicate.Message(sql.FieldGT(FieldPartitionID, v))
+}
+
+// PartitionIDGTE applies the GTE predicate on the "partition_id" field.
+func PartitionIDGTE(v string) predicate.Message {
+	return predicate.Message(sql.FieldGTE(FieldPartitionID, v))
+}
+
+// PartitionIDLT applies the LT predicate on the "partition_id" field.
+func PartitionIDLT(v string) predicate.Message {
+	return predicate.Message(sql.FieldLT(FieldPartitionID, v))
+}
+
+// PartitionIDLTE applies the LTE predicate on the "partition_id" field.
+func PartitionIDLTE(v string) predicate.Message {
+	return predicate.Message(sql.FieldLTE(FieldPartitionID, v))
+}
+
+// PartitionIDContains applies the Contains predicate on the "partition_id" field.
+func PartitionIDContains(v string) predicate.Message {
+	return predicate.Message(sql.FieldContains(FieldPartitionID, v))
+}
+
+// PartitionIDHasPrefix applies the HasPrefix predicate on the "partition_id" field.
+func PartitionIDHasPrefix(v string) predicate.Message {
+	return predicate.Message(sql.FieldHasPrefix(FieldPartitionID, v))
+}
+
+// PartitionIDHasSuffix applies the HasSuffix predicate on the "partition_id" field.
+func PartitionIDHasSuffix(v string) predicate.Message {
+	return predicate.Message(sql.FieldHasSuffix(FieldPartitionID, v))
+}
+
+// PartitionIDEqualFold applies the EqualFold predicate on the "partition_id" field.
+func PartitionIDEqualFold(v string) predicate.Message {
+	return predicate.Message(sql.FieldEqualFold(FieldPartitionID, v))
+}
+
+// PartitionIDContainsFold applies the ContainsFold predicate on the "partition_id" field.
+func PartitionIDContainsFold(v string) predicate.Message {
+	return predicate.Message(sql.FieldContainsFold(FieldPartitionID, v))
 }
 
 // ConversationIDEQ applies the EQ predicate on the "conversation_id" field.

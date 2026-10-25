@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
+
+	"memstation/apps/server/internal/security"
 
 	"github.com/hibiken/asynq"
 
@@ -54,6 +57,9 @@ func handleMemoryRebuildConversation(logger *slog.Logger, services Services) fun
 		if err := services.Generations.MarkGenerationSourceRunning(ctx, payload.UserID, payload.GenerationID, payload.SnapshotID); err != nil {
 			return err
 		}
+		if generation.Metadata["rebuild_mode"] == "preserve_authoritative_records" {
+			return completeRebuildSource(ctx, services, payload, 0)
+		}
 		logger.InfoContext(ctx, "memory rebuild conversation started", "generation_id", payload.GenerationID, "snapshot_id", payload.SnapshotID)
 		embeddingCount, err := rebuildSnapshotIntoGeneration(ctx, services, generation, snapshot)
 		if errors.Is(err, errGenerationSourceSuperseded) {
@@ -73,11 +79,11 @@ func completeRebuildSource(ctx context.Context, services Services, payload Memor
 	if err != nil {
 		return err
 	}
-	if ready && services.Publisher != nil {
+	if ready && services.Publisher != nil && !services.Generations.DurableTasks() {
 		return services.Publisher.Publish(ctx, domain.TaskMessage{
 			Type: TypeMemoryRebuildActivate, Queue: QueueDefault,
 			UniqueKey: TypeMemoryRebuildActivate + ":" + payload.GenerationID,
-			Payload:   map[string]any{"user_id": payload.UserID, "workspace_id": domain.PersonalWorkspaceID(payload.UserID), "generation_id": payload.GenerationID},
+			Payload:   map[string]any{"user_id": payload.UserID, "workspace_id": security.WorkspaceID(ctx, payload.UserID), "generation_id": payload.GenerationID},
 		})
 	}
 	return nil
@@ -168,14 +174,14 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 	}
 	summaryDoc, err = storeSummaryWithCheckpoint(ctx, services, summaryDoc)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("store rebuilt summary: %w", err)
 	}
 	if err := storeDocumentEvidences(ctx, services, snapshot.UserID, generation.GenerationID, summaryDoc.NodeID, snapshot.ConversationID, summaryEvidences); err != nil {
 		return 0, err
 	}
 	segmentDocs, err := storeSegmentDocuments(ctx, services, segments, summaryDoc, conversation.UpdatedAt, snapshot.Parts, snapshot.Artifacts)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("store rebuilt segments: %w", err)
 	}
 
 	analyzer := services.Analysis
@@ -194,7 +200,7 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 		ExistingFacts:  existingFacts,
 	})
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("analyze rebuilt source: %w", err)
 	}
 	factDocs := result.Facts
 	if len(factDocs) == 0 && result.Fact.ID != "" {
@@ -208,7 +214,7 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 			return 0, err
 		}
 		if err := services.Memories.StoreDocument(ctx, factDocs[idx]); err != nil {
-			return 0, err
+			return 0, fmt.Errorf("store rebuilt fact: %w", err)
 		}
 		if len(summaryEvidences) > 0 {
 			factEvidences := groundedNodeEvidences(factDocs[idx], summaryEvidences)
@@ -232,7 +238,7 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 			return 0, err
 		}
 		if err := services.Memories.StoreDocument(ctx, result.Impression); err != nil {
-			return 0, err
+			return 0, fmt.Errorf("store rebuilt impression: %w", err)
 		}
 		if len(summaryEvidences) > 0 {
 			impressionEvidences := groundedNodeEvidences(result.Impression, summaryEvidences)
@@ -254,7 +260,7 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 			return 0, err
 		}
 		if err := services.Memories.StoreDocument(ctx, genericDocs[idx]); err != nil {
-			return 0, err
+			return 0, fmt.Errorf("store rebuilt generic record: %w", err)
 		}
 		if len(summaryEvidences) > 0 {
 			itemEvidences := groundedNodeEvidences(genericDocs[idx], summaryEvidences)

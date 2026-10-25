@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"slices"
 
 	"memstation/apps/server/internal/domain"
 )
@@ -40,12 +41,16 @@ type accessRefresh func(context.Context) (domain.AccessContext, error)
 
 func WithAccess(ctx context.Context, access domain.AccessContext) context.Context {
 	access.Capabilities = append([]string{}, access.Capabilities...)
+	access.PartitionIDs = append([]string{}, access.PartitionIDs...)
+	access.Audience.ActorIDs = append([]string{}, access.Audience.ActorIDs...)
 	return context.WithValue(WithUserID(ctx, access.UserID), accessContextKey, access)
 }
 
 func AccessFromContext(ctx context.Context) (domain.AccessContext, bool) {
 	value, ok := ctx.Value(accessContextKey).(domain.AccessContext)
 	value.Capabilities = append([]string{}, value.Capabilities...)
+	value.PartitionIDs = append([]string{}, value.PartitionIDs...)
+	value.Audience.ActorIDs = append([]string{}, value.Audience.ActorIDs...)
 	return value, ok
 }
 
@@ -56,8 +61,12 @@ func RequireCapability(ctx context.Context, capability string) error {
 		return nil
 	}
 	if refresh, ok := ctx.Value(accessRefreshKey).(accessRefresh); ok {
+		original := access
 		var err error
 		access, err = refresh(ctx)
+		if err == nil && (original.PolicyVersion != access.PolicyVersion || original.GrantRevision != access.GrantRevision || !slices.Equal(original.PartitionIDs, access.PartitionIDs)) {
+			return domain.ErrAccessDenied
+		}
 		if err != nil {
 			return domain.ErrAccessDenied
 		}

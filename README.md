@@ -20,10 +20,11 @@ MemStation connects AI clients to model providers and carries useful context fro
 one conversation to the next. Keep the conversations, inspect what became a memory,
 correct it when needed, and control how it is recalled.
 
-**Current scope:** personal self-hosting, a single instance and Personal workspaces.
-Multiple Agents can share a service with scoped credentials. Group-chat ingestion,
-other workspace kinds, organizations and billing are still on the roadmap.
-Production-scale performance validation is ongoing.
+**Current scope:** single-instance self-hosting with Personal, group and project
+workspaces. Independent event ingestion, scoped Agent credentials, private audiences
+and source deletion are available through the [memory service contract](docs/plans/workspace-agents/contracts.md).
+Actual Mimic integration, organizations, billing and production-scale performance
+validation remain separate delivery gates.
 
 <a href="docs/assets/manager-preview.png"><img src="docs/assets/manager-preview.png" alt="Manager dashboard with conversation activity, memory counts, queues and audit history" width="1440" /></a>
 <p align="center"><sub>Current Manager UI, captured from synthetic repository fixtures.</sub></p>
@@ -143,7 +144,7 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 | Develop and contribute | [Local workflows](docs/local-debugging.md), [contribution guide](CONTRIBUTING.md), [engineering specification](AGENTS.md) |
 | Configure Manager | [Service connections, sessions and network policy](docs/manager-connections.md) |
 | Understand memory | [Architecture](docs/architecture.md), [LLM generation](docs/llm-memory.md), [graph and fact history](docs/graph-memory.md) |
-| Workspaces and Agents | [Implementation status and integration plan](docs/plans/workspace-agents/README.md); only Personal workspaces are enabled |
+| Workspaces and Agents | [Independent memory implementation and acceptance](docs/plans/workspace-agents/implementation-status.md), [deployment and integration](docs/independent-memory-integration.md) |
 | Verify behavior | [CI and testing](docs/ci.md), [retrieval evaluation](apps/server/tests/eval/README.md) |
 | Deploy and operate | [Compose](deploy/compose/DEVELOPMENT.md), [Kubernetes baseline](deploy/k8s), [Nginx](deploy/nginx), [telemetry](deploy/otel), [backup and restore](deploy/compose/BACKUP_RESTORE.md) |
 | Open-source scope | [Publication audit and licensing boundaries](docs/open-source.md), [third-party notices](THIRD_PARTY_NOTICES.md) |
@@ -156,6 +157,7 @@ pipeline, not real-model retrieval quality.
 Measured real-model recall, source replay, and load results:
 [2026-10-25 evaluation](docs/memory-quality-2026-10-25.md). The report also records
 the targets that remain unmet.
+
 
 ## Contribute
 

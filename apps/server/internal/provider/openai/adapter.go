@@ -150,7 +150,8 @@ func (a *Adapter) completeChat(ctx context.Context, req domain.UnifiedRequest, c
 		Model   string `json:"model"`
 		Created int64  `json:"created"`
 		Choices []struct {
-			Message struct {
+			FinishReason string `json:"finish_reason"`
+			Message      struct {
 				Role      string `json:"role"`
 				Content   any    `json:"content"`
 				ToolCalls []struct {
@@ -203,6 +204,9 @@ func (a *Adapter) completeChat(ctx context.Context, req domain.UnifiedRequest, c
 		unified.Message.Blocks = blocks
 	}
 	unified.Message.ToolCalls = toolCalls
+	if len(response.Choices) > 0 {
+		unified.FinishReason = response.Choices[0].FinishReason
+	}
 	return unified, nil
 }
 

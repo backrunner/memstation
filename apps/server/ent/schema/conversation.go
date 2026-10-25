@@ -11,6 +11,8 @@ func (Conversation) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("user_id"),
  field.String("workspace_id").Immutable(),
+ field.String("partition_id").Default("").Immutable(),
+ field.String("context_mode").Default("client_history").Immutable(),
  field.String("agent_id").Immutable(),
 field.Int64("write_revision").Default(0),
 		field.String("request_format"),

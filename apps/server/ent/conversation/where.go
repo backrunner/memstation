@@ -74,6 +74,16 @@ func WorkspaceID(v string) predicate.Conversation {
 	return predicate.Conversation(sql.FieldEQ(FieldWorkspaceID, v))
 }
 
+// PartitionID applies equality check predicate on the "partition_id" field. It's identical to PartitionIDEQ.
+func PartitionID(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldEQ(FieldPartitionID, v))
+}
+
+// ContextMode applies equality check predicate on the "context_mode" field. It's identical to ContextModeEQ.
+func ContextMode(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldEQ(FieldContextMode, v))
+}
+
 // AgentID applies equality check predicate on the "agent_id" field. It's identical to AgentIDEQ.
 func AgentID(v string) predicate.Conversation {
 	return predicate.Conversation(sql.FieldEQ(FieldAgentID, v))
@@ -322,6 +332,136 @@ func WorkspaceIDEqualFold(v string) predicate.Conversation {
 // WorkspaceIDContainsFold applies the ContainsFold predicate on the "workspace_id" field.
 func WorkspaceIDContainsFold(v string) predicate.Conversation {
 	return predicate.Conversation(sql.FieldContainsFold(FieldWorkspaceID, v))
+}
+
+// PartitionIDEQ applies the EQ predicate on the "partition_id" field.
+func PartitionIDEQ(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldEQ(FieldPartitionID, v))
+}
+
+// PartitionIDNEQ applies the NEQ predicate on the "partition_id" field.
+func PartitionIDNEQ(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldNEQ(FieldPartitionID, v))
+}
+
+// PartitionIDIn applies the In predicate on the "partition_id" field.
+func PartitionIDIn(vs ...string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldIn(FieldPartitionID, vs...))
+}
+
+// PartitionIDNotIn applies the NotIn predicate on the "partition_id" field.
+func PartitionIDNotIn(vs ...string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldNotIn(FieldPartitionID, vs...))
+}
+
+// PartitionIDGT applies the GT predicate on the "partition_id" field.
+func PartitionIDGT(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldGT(FieldPartitionID, v))
+}
+
+// PartitionIDGTE applies the GTE predicate on the "partition_id" field.
+func PartitionIDGTE(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldGTE(FieldPartitionID, v))
+}
+
+// PartitionIDLT applies the LT predicate on the "partition_id" field.
+func PartitionIDLT(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldLT(FieldPartitionID, v))
+}
+
+// PartitionIDLTE applies the LTE predicate on the "partition_id" field.
+func PartitionIDLTE(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldLTE(FieldPartitionID, v))
+}
+
+// PartitionIDContains applies the Contains predicate on the "partition_id" field.
+func PartitionIDContains(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldContains(FieldPartitionID, v))
+}
+
+// PartitionIDHasPrefix applies the HasPrefix predicate on the "partition_id" field.
+func PartitionIDHasPrefix(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldHasPrefix(FieldPartitionID, v))
+}
+
+// PartitionIDHasSuffix applies the HasSuffix predicate on the "partition_id" field.
+func PartitionIDHasSuffix(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldHasSuffix(FieldPartitionID, v))
+}
+
+// PartitionIDEqualFold applies the EqualFold predicate on the "partition_id" field.
+func PartitionIDEqualFold(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldEqualFold(FieldPartitionID, v))
+}
+
+// PartitionIDContainsFold applies the ContainsFold predicate on the "partition_id" field.
+func PartitionIDContainsFold(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldContainsFold(FieldPartitionID, v))
+}
+
+// ContextModeEQ applies the EQ predicate on the "context_mode" field.
+func ContextModeEQ(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldEQ(FieldContextMode, v))
+}
+
+// ContextModeNEQ applies the NEQ predicate on the "context_mode" field.
+func ContextModeNEQ(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldNEQ(FieldContextMode, v))
+}
+
+// ContextModeIn applies the In predicate on the "context_mode" field.
+func ContextModeIn(vs ...string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldIn(FieldContextMode, vs...))
+}
+
+// ContextModeNotIn applies the NotIn predicate on the "context_mode" field.
+func ContextModeNotIn(vs ...string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldNotIn(FieldContextMode, vs...))
+}
+
+// ContextModeGT applies the GT predicate on the "context_mode" field.
+func ContextModeGT(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldGT(FieldContextMode, v))
+}
+
+// ContextModeGTE applies the GTE predicate on the "context_mode" field.
+func ContextModeGTE(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldGTE(FieldContextMode, v))
+}
+
+// ContextModeLT applies the LT predicate on the "context_mode" field.
+func ContextModeLT(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldLT(FieldContextMode, v))
+}
+
+// ContextModeLTE applies the LTE predicate on the "context_mode" field.
+func ContextModeLTE(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldLTE(FieldContextMode, v))
+}
+
+// ContextModeContains applies the Contains predicate on the "context_mode" field.
+func ContextModeContains(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldContains(FieldContextMode, v))
+}
+
+// ContextModeHasPrefix applies the HasPrefix predicate on the "context_mode" field.
+func ContextModeHasPrefix(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldHasPrefix(FieldContextMode, v))
+}
+
+// ContextModeHasSuffix applies the HasSuffix predicate on the "context_mode" field.
+func ContextModeHasSuffix(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldHasSuffix(FieldContextMode, v))
+}
+
+// ContextModeEqualFold applies the EqualFold predicate on the "context_mode" field.
+func ContextModeEqualFold(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldEqualFold(FieldContextMode, v))
+}
+
+// ContextModeContainsFold applies the ContainsFold predicate on the "context_mode" field.
+func ContextModeContainsFold(v string) predicate.Conversation {
+	return predicate.Conversation(sql.FieldContainsFold(FieldContextMode, v))
 }
 
 // AgentIDEQ applies the EQ predicate on the "agent_id" field.

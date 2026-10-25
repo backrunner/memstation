@@ -3,6 +3,7 @@
 package migrate
 
 import (
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/dialect/sql/schema"
 	"entgo.io/ent/schema/field"
 )
@@ -53,6 +54,30 @@ var (
 				Name:    "actor_user_id_id",
 				Unique:  true,
 				Columns: []*schema.Column{ActorsColumns[3], ActorsColumns[0]},
+			},
+		},
+	}
+	// ActorIdentitiesColumns holds the columns for the "actor_identities" table.
+	ActorIdentitiesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "identity_namespace_id", Type: field.TypeString},
+		{Name: "external_actor_id", Type: field.TypeString},
+		{Name: "actor_id", Type: field.TypeString},
+		{Name: "verification_status", Type: field.TypeString, Default: "integration"},
+	}
+	// ActorIdentitiesTable holds the schema information for the "actor_identities" table.
+	ActorIdentitiesTable = &schema.Table{
+		Name:       "actor_identities",
+		Columns:    ActorIdentitiesColumns,
+		PrimaryKey: []*schema.Column{ActorIdentitiesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "actor_identities_user_id_identity_namespace_id_external_act_key",
+				Unique:  true,
+				Columns: []*schema.Column{ActorIdentitiesColumns[3], ActorIdentitiesColumns[4], ActorIdentitiesColumns[5]},
 			},
 		},
 	}
@@ -112,6 +137,8 @@ var (
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "user_id", Type: field.TypeString},
 		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "partition_id", Type: field.TypeString, Default: ""},
+		{Name: "context_mode", Type: field.TypeString, Default: "client_history"},
 		{Name: "agent_id", Type: field.TypeString},
 		{Name: "write_revision", Type: field.TypeInt64, Default: 0},
 		{Name: "request_format", Type: field.TypeString},
@@ -139,6 +166,88 @@ var (
 				Columns: []*schema.Column{ConversationsColumns[3], ConversationsColumns[4], ConversationsColumns[2]},
 			},
 		},
+	}
+	// DeletionJournalEntriesColumns holds the columns for the "deletion_journal_entries" table.
+	DeletionJournalEntriesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "sequence_num", Type: field.TypeInt64, Unique: true},
+		{Name: "operation_id", Type: field.TypeString},
+		{Name: "payload", Type: field.TypeJSON},
+		{Name: "digest", Type: field.TypeString},
+	}
+	// DeletionJournalEntriesTable holds the schema information for the "deletion_journal_entries" table.
+	DeletionJournalEntriesTable = &schema.Table{
+		Name:       "deletion_journal_entries",
+		Columns:    DeletionJournalEntriesColumns,
+		PrimaryKey: []*schema.Column{DeletionJournalEntriesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "deletion_journal_entries_sequence_num_key",
+				Unique:  true,
+				Columns: []*schema.Column{DeletionJournalEntriesColumns[3]},
+			},
+		},
+	}
+	// DeletionJournalStateColumns holds the columns for the "deletion_journal_state" table.
+	DeletionJournalStateColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "deployment_id", Type: field.TypeString},
+		{Name: "sequence_num", Type: field.TypeInt64, Default: 0},
+		{Name: "digest", Type: field.TypeString, Default: ""},
+	}
+	// DeletionJournalStateTable holds the schema information for the "deletion_journal_state" table.
+	DeletionJournalStateTable = &schema.Table{
+		Name:       "deletion_journal_state",
+		Columns:    DeletionJournalStateColumns,
+		PrimaryKey: []*schema.Column{DeletionJournalStateColumns[0]},
+	}
+	// EmbeddingIndexProfilesColumns holds the columns for the "embedding_index_profiles" table.
+	EmbeddingIndexProfilesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "generation_id", Type: field.TypeString},
+		{Name: "embedding_version", Type: field.TypeInt},
+		{Name: "model_version", Type: field.TypeString},
+		{Name: "dimensions", Type: field.TypeInt},
+		{Name: "fingerprint", Type: field.TypeString},
+	}
+	// EmbeddingIndexProfilesTable holds the schema information for the "embedding_index_profiles" table.
+	EmbeddingIndexProfilesTable = &schema.Table{
+		Name:       "embedding_index_profiles",
+		Columns:    EmbeddingIndexProfilesColumns,
+		PrimaryKey: []*schema.Column{EmbeddingIndexProfilesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "embedding_index_profiles_user_id_workspace_id_generation_id_key",
+				Unique:  true,
+				Columns: []*schema.Column{EmbeddingIndexProfilesColumns[3], EmbeddingIndexProfilesColumns[4], EmbeddingIndexProfilesColumns[5], EmbeddingIndexProfilesColumns[6]},
+			},
+		},
+	}
+	// EventConversationRequestsColumns holds the columns for the "event_conversation_requests" table.
+	EventConversationRequestsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "partition_id", Type: field.TypeString, Default: ""},
+		{Name: "stream_id", Type: field.TypeString},
+		{Name: "conversation_id", Type: field.TypeString},
+		{Name: "payload_hash", Type: field.TypeString},
+	}
+	// EventConversationRequestsTable holds the schema information for the "event_conversation_requests" table.
+	EventConversationRequestsTable = &schema.Table{
+		Name:       "event_conversation_requests",
+		Columns:    EventConversationRequestsColumns,
+		PrimaryKey: []*schema.Column{EventConversationRequestsColumns[0]},
 	}
 	// FactsColumns holds the columns for the "facts" table.
 	FactsColumns = []*schema.Column{
@@ -191,12 +300,123 @@ var (
 		Columns:    ImpressionsColumns,
 		PrimaryKey: []*schema.Column{ImpressionsColumns[0]},
 	}
+	// IngestionReceiptsColumns holds the columns for the "ingestion_receipts" table.
+	IngestionReceiptsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "processing_started_at", Type: field.TypeTime, Nullable: true},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "partition_id", Type: field.TypeString, Default: ""},
+		{Name: "stream_id", Type: field.TypeString},
+		{Name: "idempotency_key", Type: field.TypeString},
+		{Name: "payload_hash", Type: field.TypeString},
+		{Name: "first_sequence", Type: field.TypeInt64},
+		{Name: "last_sequence", Type: field.TypeInt64},
+		{Name: "events", Type: field.TypeJSON},
+	}
+	// IngestionReceiptsTable holds the schema information for the "ingestion_receipts" table.
+	IngestionReceiptsTable = &schema.Table{
+		Name:       "ingestion_receipts",
+		Columns:    IngestionReceiptsColumns,
+		PrimaryKey: []*schema.Column{IngestionReceiptsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "ingestion_receipts_user_id_workspace_id_stream_id_idempoten_key",
+				Unique:  true,
+				Columns: []*schema.Column{IngestionReceiptsColumns[4], IngestionReceiptsColumns[5], IngestionReceiptsColumns[7], IngestionReceiptsColumns[8]},
+			},
+		},
+	}
+	// IngestionWindowSourcesColumns holds the columns for the "ingestion_window_sources" table.
+	IngestionWindowSourcesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "conversation_id", Type: field.TypeString},
+		{Name: "source_message_id", Type: field.TypeString},
+		{Name: "source_revision", Type: field.TypeInt64},
+		{Name: "sequence_num", Type: field.TypeInt},
+	}
+	// IngestionWindowSourcesTable holds the schema information for the "ingestion_window_sources" table.
+	IngestionWindowSourcesTable = &schema.Table{
+		Name:       "ingestion_window_sources",
+		Columns:    IngestionWindowSourcesColumns,
+		PrimaryKey: []*schema.Column{IngestionWindowSourcesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "ingestion_window_sources_conversation_id_sequence_num_key",
+				Unique:  true,
+				Columns: []*schema.Column{IngestionWindowSourcesColumns[5], IngestionWindowSourcesColumns[8]},
+			},
+			{
+				Name:    "ingestion_window_sources_conversation_id_source_message_id_key",
+				Unique:  true,
+				Columns: []*schema.Column{IngestionWindowSourcesColumns[5], IngestionWindowSourcesColumns[6]},
+			},
+		},
+	}
+	// IntegrationsColumns holds the columns for the "integrations" table.
+	IntegrationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "name", Type: field.TypeString},
+		{Name: "kind", Type: field.TypeString},
+		{Name: "identity_namespace_id", Type: field.TypeString},
+		{Name: "status", Type: field.TypeString, Default: "active"},
+		{Name: "revision", Type: field.TypeInt64, Default: 1},
+	}
+	// IntegrationsTable holds the schema information for the "integrations" table.
+	IntegrationsTable = &schema.Table{
+		Name:       "integrations",
+		Columns:    IntegrationsColumns,
+		PrimaryKey: []*schema.Column{IntegrationsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "integrations_user_id_id_key",
+				Unique:  true,
+				Columns: []*schema.Column{IntegrationsColumns[3], IntegrationsColumns[0]},
+			},
+		},
+	}
+	// IntegrationAgentGrantsColumns holds the columns for the "integration_agent_grants" table.
+	IntegrationAgentGrantsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "integration_id", Type: field.TypeString},
+		{Name: "agent_id", Type: field.TypeString},
+		{Name: "allowed_event_types", Type: field.TypeJSON},
+		{Name: "revision", Type: field.TypeInt64, Default: 1},
+	}
+	// IntegrationAgentGrantsTable holds the schema information for the "integration_agent_grants" table.
+	IntegrationAgentGrantsTable = &schema.Table{
+		Name:       "integration_agent_grants",
+		Columns:    IntegrationAgentGrantsColumns,
+		PrimaryKey: []*schema.Column{IntegrationAgentGrantsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "integration_agent_grants_user_id_workspace_id_integration_i_key",
+				Unique:  true,
+				Columns: []*schema.Column{IntegrationAgentGrantsColumns[3], IntegrationAgentGrantsColumns[4], IntegrationAgentGrantsColumns[5], IntegrationAgentGrantsColumns[6]},
+			},
+		},
+	}
 	// KeyMemoriesColumns holds the columns for the "key_memories" table.
 	KeyMemoriesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "partition_id", Type: field.TypeString, Default: ""},
 		{Name: "node_id", Type: field.TypeString, Unique: true},
 		{Name: "key", Type: field.TypeString},
 		{Name: "value", Type: field.TypeString},
@@ -211,6 +431,92 @@ var (
 		Name:       "key_memories",
 		Columns:    KeyMemoriesColumns,
 		PrimaryKey: []*schema.Column{KeyMemoriesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "key_memories_scoped_key",
+				Unique:  true,
+				Columns: []*schema.Column{KeyMemoriesColumns[3], KeyMemoriesColumns[4], KeyMemoriesColumns[5], KeyMemoriesColumns[7]},
+			},
+		},
+	}
+	// MemoryAiCallsColumns holds the columns for the "memory_ai_calls" table.
+	MemoryAiCallsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "partition_id", Type: field.TypeString, Default: ""},
+		{Name: "partition_ids", Type: field.TypeJSON},
+		{Name: "role", Type: field.TypeString},
+		{Name: "model_alias", Type: field.TypeString},
+		{Name: "model_version", Type: field.TypeString, Default: ""},
+		{Name: "trace_id", Type: field.TypeString, Default: ""},
+		{Name: "job_id", Type: field.TypeString, Default: ""},
+		{Name: "attempt", Type: field.TypeInt, Default: 0},
+		{Name: "provider_request_id", Type: field.TypeString, Default: ""},
+		{Name: "broker_usage_id", Type: field.TypeString, Default: ""},
+		{Name: "status", Type: field.TypeString, Default: "started"},
+		{Name: "input_tokens", Type: field.TypeInt, Default: 0},
+		{Name: "output_tokens", Type: field.TypeInt, Default: 0},
+		{Name: "reported_cost", Type: field.TypeString, Default: ""},
+		{Name: "currency", Type: field.TypeString, Default: ""},
+		{Name: "usage_authority", Type: field.TypeString, Default: "broker"},
+		{Name: "failure_code", Type: field.TypeString, Default: ""},
+	}
+	// MemoryAiCallsTable holds the schema information for the "memory_ai_calls" table.
+	MemoryAiCallsTable = &schema.Table{
+		Name:       "memory_ai_calls",
+		Columns:    MemoryAiCallsColumns,
+		PrimaryKey: []*schema.Column{MemoryAiCallsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "memoryaicall_user_id_workspace_id_partition_id_created_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{MemoryAiCallsColumns[3], MemoryAiCallsColumns[4], MemoryAiCallsColumns[5], MemoryAiCallsColumns[1], MemoryAiCallsColumns[0]},
+			},
+			{
+				Name:    "memoryaicall_broker_usage_id",
+				Unique:  true,
+				Columns: []*schema.Column{MemoryAiCallsColumns[14]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "broker_usage_id<>''",
+				},
+			},
+		},
+	}
+	// MemoryCandidatesColumns holds the columns for the "memory_candidates" table.
+	MemoryCandidatesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "partition_id", Type: field.TypeString, Default: ""},
+		{Name: "agent_id", Type: field.TypeString},
+		{Name: "kind", Type: field.TypeString},
+		{Name: "content", Type: field.TypeString},
+		{Name: "origin", Type: field.TypeString},
+		{Name: "subject_actor_ids", Type: field.TypeJSON},
+		{Name: "source_refs", Type: field.TypeJSON},
+		{Name: "status", Type: field.TypeString, Default: "pending"},
+		{Name: "revision", Type: field.TypeInt64, Default: 1},
+		{Name: "target_node_id", Type: field.TypeString, Default: ""},
+		{Name: "target_revision", Type: field.TypeInt64, Default: 0},
+		{Name: "result_node_id", Type: field.TypeString, Default: ""},
+	}
+	// MemoryCandidatesTable holds the schema information for the "memory_candidates" table.
+	MemoryCandidatesTable = &schema.Table{
+		Name:       "memory_candidates",
+		Columns:    MemoryCandidatesColumns,
+		PrimaryKey: []*schema.Column{MemoryCandidatesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "memory_candidates_scope",
+				Unique:  false,
+				Columns: []*schema.Column{MemoryCandidatesColumns[3], MemoryCandidatesColumns[4], MemoryCandidatesColumns[5], MemoryCandidatesColumns[12], MemoryCandidatesColumns[1]},
+			},
+		},
 	}
 	// MemoryEmbeddingsColumns holds the columns for the "memory_embeddings" table.
 	MemoryEmbeddingsColumns = []*schema.Column{
@@ -246,6 +552,40 @@ var (
 			},
 		},
 	}
+	// MemoryGenerationCarriesColumns holds the columns for the "memory_generation_carries" table.
+	MemoryGenerationCarriesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "partition_id", Type: field.TypeString, Default: ""},
+		{Name: "generation_id", Type: field.TypeString},
+		{Name: "node_id", Type: field.TypeString},
+		{Name: "source_generation_id", Type: field.TypeString},
+		{Name: "source_revision", Type: field.TypeInt64},
+		{Name: "embedding_revision", Type: field.TypeInt64},
+		{Name: "status", Type: field.TypeString, Default: "queued"},
+		{Name: "last_error", Type: field.TypeString, Default: ""},
+	}
+	// MemoryGenerationCarriesTable holds the schema information for the "memory_generation_carries" table.
+	MemoryGenerationCarriesTable = &schema.Table{
+		Name:       "memory_generation_carries",
+		Columns:    MemoryGenerationCarriesColumns,
+		PrimaryKey: []*schema.Column{MemoryGenerationCarriesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "memory_generation_carries_generation_id_node_id_key",
+				Unique:  true,
+				Columns: []*schema.Column{MemoryGenerationCarriesColumns[6], MemoryGenerationCarriesColumns[7]},
+			},
+			{
+				Name:    "memory_generation_carries_scope",
+				Unique:  false,
+				Columns: []*schema.Column{MemoryGenerationCarriesColumns[3], MemoryGenerationCarriesColumns[4], MemoryGenerationCarriesColumns[6]},
+			},
+		},
+	}
 	// MemoryItemsColumns holds the columns for the "memory_items" table.
 	MemoryItemsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString, Unique: true},
@@ -272,6 +612,50 @@ var (
 		Columns:    MemoryItemsColumns,
 		PrimaryKey: []*schema.Column{MemoryItemsColumns[0]},
 	}
+	// MemoryJobsColumns holds the columns for the "memory_jobs" table.
+	MemoryJobsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "generation_id", Type: field.TypeString, Default: ""},
+		{Name: "queue", Type: field.TypeString, Default: "default"},
+		{Name: "operation_id", Type: field.TypeString, Default: ""},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "partition_id", Type: field.TypeString, Default: ""},
+		{Name: "conversation_id", Type: field.TypeString, Default: ""},
+		{Name: "task_type", Type: field.TypeString},
+		{Name: "status", Type: field.TypeString},
+		{Name: "failure_code", Type: field.TypeString, Default: ""},
+		{Name: "attempt", Type: field.TypeInt, Default: 0},
+		{Name: "next_retry_at", Type: field.TypeTime, Nullable: true},
+	}
+	// MemoryJobsTable holds the schema information for the "memory_jobs" table.
+	MemoryJobsTable = &schema.Table{
+		Name:       "memory_jobs",
+		Columns:    MemoryJobsColumns,
+		PrimaryKey: []*schema.Column{MemoryJobsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "memory_jobs_generation",
+				Unique:  false,
+				Columns: []*schema.Column{MemoryJobsColumns[6], MemoryJobsColumns[7], MemoryJobsColumns[3], MemoryJobsColumns[9]},
+			},
+			{
+				Name:    "memory_jobs_operation_idx",
+				Unique:  false,
+				Columns: []*schema.Column{MemoryJobsColumns[5]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "(operation_id <> ''::text)",
+				},
+			},
+			{
+				Name:    "memory_jobs_workspace_status",
+				Unique:  false,
+				Columns: []*schema.Column{MemoryJobsColumns[6], MemoryJobsColumns[7], MemoryJobsColumns[8], MemoryJobsColumns[11], MemoryJobsColumns[2]},
+			},
+		},
+	}
 	// MemoryKeywordsColumns holds the columns for the "memory_keywords" table.
 	MemoryKeywordsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -294,8 +678,14 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "generation_id", Type: field.TypeString, Default: ""},
+		{Name: "source_conversation_id", Type: field.TypeString, Default: ""},
 		{Name: "user_id", Type: field.TypeString},
 		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "partition_id", Type: field.TypeString, Default: ""},
+		{Name: "access_status", Type: field.TypeString, Default: "active"},
+		{Name: "subject_actor_ids", Type: field.TypeJSON},
+		{Name: "source_refs", Type: field.TypeJSON},
+		{Name: "revision", Type: field.TypeInt64, Default: 1},
 		{Name: "node_type", Type: field.TypeString},
 		{Name: "entity_id", Type: field.TypeString},
 		{Name: "importance", Type: field.TypeFloat64, Default: 1},
@@ -312,19 +702,117 @@ var (
 		PrimaryKey: []*schema.Column{MemoryNodesColumns[0]},
 		Indexes: []*schema.Index{
 			{
-				Name:    "memorynode_user_id_node_type_entity_id",
+				Name:    "memory_nodes_scoped_entity",
 				Unique:  true,
-				Columns: []*schema.Column{MemoryNodesColumns[4], MemoryNodesColumns[6], MemoryNodesColumns[7]},
+				Columns: []*schema.Column{MemoryNodesColumns[5], MemoryNodesColumns[6], MemoryNodesColumns[7], MemoryNodesColumns[12], MemoryNodesColumns[13]},
 			},
 			{
 				Name:    "memorynode_user_id_workspace_id_id",
 				Unique:  true,
-				Columns: []*schema.Column{MemoryNodesColumns[4], MemoryNodesColumns[5], MemoryNodesColumns[0]},
+				Columns: []*schema.Column{MemoryNodesColumns[5], MemoryNodesColumns[6], MemoryNodesColumns[0]},
 			},
 			{
 				Name:    "memorynode_user_id_workspace_id_node_type_activity_at",
 				Unique:  false,
-				Columns: []*schema.Column{MemoryNodesColumns[4], MemoryNodesColumns[5], MemoryNodesColumns[6], MemoryNodesColumns[10]},
+				Columns: []*schema.Column{MemoryNodesColumns[5], MemoryNodesColumns[6], MemoryNodesColumns[12], MemoryNodesColumns[16]},
+			},
+			{
+				Name:    "memory_nodes_access",
+				Unique:  false,
+				Columns: []*schema.Column{MemoryNodesColumns[5], MemoryNodesColumns[6], MemoryNodesColumns[7], MemoryNodesColumns[8], MemoryNodesColumns[3]},
+			},
+			{
+				Name:    "memory_nodes_source_window",
+				Unique:  false,
+				Columns: []*schema.Column{MemoryNodesColumns[5], MemoryNodesColumns[6], MemoryNodesColumns[4]},
+			},
+		},
+	}
+	// MemoryOperationsColumns holds the columns for the "memory_operations" table.
+	MemoryOperationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "partition_id", Type: field.TypeString, Default: ""},
+		{Name: "agent_id", Type: field.TypeString},
+		{Name: "kind", Type: field.TypeString},
+		{Name: "status", Type: field.TypeString, Default: "pending"},
+		{Name: "revision", Type: field.TypeInt64, Default: 1},
+		{Name: "selector", Type: field.TypeJSON},
+		{Name: "read_blocked", Type: field.TypeBool, Default: false},
+		{Name: "online_cleaned", Type: field.TypeBool, Default: false},
+		{Name: "journal_persisted", Type: field.TypeBool, Default: false},
+		{Name: "backup_status", Type: field.TypeString, Default: "retained_until_expiry"},
+		{Name: "failure_code", Type: field.TypeString, Default: ""},
+		{Name: "result", Type: field.TypeJSON},
+		{Name: "expires_at", Type: field.TypeTime, Nullable: true},
+	}
+	// MemoryOperationsTable holds the schema information for the "memory_operations" table.
+	MemoryOperationsTable = &schema.Table{
+		Name:       "memory_operations",
+		Columns:    MemoryOperationsColumns,
+		PrimaryKey: []*schema.Column{MemoryOperationsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "memory_operations_scope",
+				Unique:  false,
+				Columns: []*schema.Column{MemoryOperationsColumns[3], MemoryOperationsColumns[4], MemoryOperationsColumns[5], MemoryOperationsColumns[8], MemoryOperationsColumns[1]},
+			},
+		},
+	}
+	// MemoryPartitionsColumns holds the columns for the "memory_partitions" table.
+	MemoryPartitionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "agent_id", Type: field.TypeString},
+		{Name: "audience_actor_ids", Type: field.TypeJSON},
+		{Name: "revision", Type: field.TypeInt64, Default: 1},
+	}
+	// MemoryPartitionsTable holds the schema information for the "memory_partitions" table.
+	MemoryPartitionsTable = &schema.Table{
+		Name:       "memory_partitions",
+		Columns:    MemoryPartitionsColumns,
+		PrimaryKey: []*schema.Column{MemoryPartitionsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "memory_partitions_user_id_workspace_id_id_key",
+				Unique:  true,
+				Columns: []*schema.Column{MemoryPartitionsColumns[3], MemoryPartitionsColumns[4], MemoryPartitionsColumns[0]},
+			},
+		},
+	}
+	// MemoryPublicationsColumns holds the columns for the "memory_publications" table.
+	MemoryPublicationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "retraction_operation_id", Type: field.TypeString, Default: ""},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "source_workspace_id", Type: field.TypeString},
+		{Name: "source_node_id", Type: field.TypeString},
+		{Name: "target_workspace_id", Type: field.TypeString},
+		{Name: "target_node_id", Type: field.TypeString},
+		{Name: "target_partition_id", Type: field.TypeString, Default: ""},
+		{Name: "source_revision", Type: field.TypeInt64},
+		{Name: "revision", Type: field.TypeInt64, Default: 1},
+		{Name: "status", Type: field.TypeString, Default: "active"},
+		{Name: "actor_mapping", Type: field.TypeJSON},
+	}
+	// MemoryPublicationsTable holds the schema information for the "memory_publications" table.
+	MemoryPublicationsTable = &schema.Table{
+		Name:       "memory_publications",
+		Columns:    MemoryPublicationsColumns,
+		PrimaryKey: []*schema.Column{MemoryPublicationsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "memory_publications_target_node_id_key",
+				Unique:  true,
+				Columns: []*schema.Column{MemoryPublicationsColumns[8]},
 			},
 		},
 	}
@@ -365,6 +853,69 @@ var (
 			},
 		},
 	}
+	// MemorySourceDependenciesColumns holds the columns for the "memory_source_dependencies" table.
+	MemorySourceDependenciesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "node_id", Type: field.TypeString},
+		{Name: "source_message_id", Type: field.TypeString},
+		{Name: "source_revision", Type: field.TypeInt64},
+	}
+	// MemorySourceDependenciesTable holds the schema information for the "memory_source_dependencies" table.
+	MemorySourceDependenciesTable = &schema.Table{
+		Name:       "memory_source_dependencies",
+		Columns:    MemorySourceDependenciesColumns,
+		PrimaryKey: []*schema.Column{MemorySourceDependenciesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "memory_source_dependencies_node_id_source_message_id_source_key",
+				Unique:  true,
+				Columns: []*schema.Column{MemorySourceDependenciesColumns[5], MemorySourceDependenciesColumns[6], MemorySourceDependenciesColumns[7]},
+			},
+			{
+				Name:    "source_dependencies_message",
+				Unique:  false,
+				Columns: []*schema.Column{MemorySourceDependenciesColumns[3], MemorySourceDependenciesColumns[4], MemorySourceDependenciesColumns[6]},
+			},
+		},
+	}
+	// MemoryStreamsColumns holds the columns for the "memory_streams" table.
+	MemoryStreamsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "integration_id", Type: field.TypeString},
+		{Name: "external_space_id", Type: field.TypeString},
+		{Name: "thread_id", Type: field.TypeString, Default: ""},
+		{Name: "partition_id", Type: field.TypeString, Default: ""},
+		{Name: "current_conversation_id", Type: field.TypeString, Default: ""},
+		{Name: "generation_id", Type: field.TypeString, Default: ""},
+		{Name: "accepted_sequence", Type: field.TypeInt64, Default: 0},
+		{Name: "indexed_sequence", Type: field.TypeInt64, Default: 0},
+	}
+	// MemoryStreamsTable holds the schema information for the "memory_streams" table.
+	MemoryStreamsTable = &schema.Table{
+		Name:       "memory_streams",
+		Columns:    MemoryStreamsColumns,
+		PrimaryKey: []*schema.Column{MemoryStreamsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "memory_streams_user_id_workspace_id_id_key",
+				Unique:  true,
+				Columns: []*schema.Column{MemoryStreamsColumns[3], MemoryStreamsColumns[4], MemoryStreamsColumns[0]},
+			},
+			{
+				Name:    "memory_streams_user_id_workspace_id_integration_id_external_key",
+				Unique:  true,
+				Columns: []*schema.Column{MemoryStreamsColumns[3], MemoryStreamsColumns[4], MemoryStreamsColumns[5], MemoryStreamsColumns[6], MemoryStreamsColumns[7], MemoryStreamsColumns[8]},
+			},
+		},
+	}
 	// MemorySummariesColumns holds the columns for the "memory_summaries" table.
 	MemorySummariesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -387,6 +938,32 @@ var (
 		Columns:    MemorySummariesColumns,
 		PrimaryKey: []*schema.Column{MemorySummariesColumns[0]},
 	}
+	// MemoryTombstonesColumns holds the columns for the "memory_tombstones" table.
+	MemoryTombstonesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "partition_id", Type: field.TypeString, Default: ""},
+		{Name: "operation_id", Type: field.TypeString},
+		{Name: "target_type", Type: field.TypeString},
+		{Name: "target_id", Type: field.TypeString},
+		{Name: "cutoff", Type: field.TypeTime},
+	}
+	// MemoryTombstonesTable holds the schema information for the "memory_tombstones" table.
+	MemoryTombstonesTable = &schema.Table{
+		Name:       "memory_tombstones",
+		Columns:    MemoryTombstonesColumns,
+		PrimaryKey: []*schema.Column{MemoryTombstonesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "memory_tombstones_user_id_workspace_id_partition_id_target__key",
+				Unique:  true,
+				Columns: []*schema.Column{MemoryTombstonesColumns[3], MemoryTombstonesColumns[4], MemoryTombstonesColumns[5], MemoryTombstonesColumns[7], MemoryTombstonesColumns[8]},
+			},
+		},
+	}
 	// MessagesColumns holds the columns for the "messages" table.
 	MessagesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -394,6 +971,7 @@ var (
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "user_id", Type: field.TypeString},
 		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "partition_id", Type: field.TypeString, Default: ""},
 		{Name: "conversation_id", Type: field.TypeString},
 		{Name: "role", Type: field.TypeString},
 		{Name: "content_blocks", Type: field.TypeJSON, Nullable: true},
@@ -429,6 +1007,125 @@ var (
 		Name:       "outbox_events",
 		Columns:    OutboxEventsColumns,
 		PrimaryKey: []*schema.Column{OutboxEventsColumns[0]},
+	}
+	// SourceEventsColumns holds the columns for the "source_events" table.
+	SourceEventsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "operation_id", Type: field.TypeString, Default: ""},
+		{Name: "processing_conversation_id", Type: field.TypeString, Default: ""},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "integration_id", Type: field.TypeString},
+		{Name: "external_event_id", Type: field.TypeString},
+		{Name: "source_message_id", Type: field.TypeString},
+		{Name: "stream_id", Type: field.TypeString},
+		{Name: "event_type", Type: field.TypeString},
+		{Name: "payload_hash", Type: field.TypeString},
+		{Name: "conversation_id", Type: field.TypeString, Default: ""},
+		{Name: "source_revision", Type: field.TypeInt64},
+		{Name: "sequence_num", Type: field.TypeInt64},
+		{Name: "payload", Type: field.TypeJSON},
+	}
+	// SourceEventsTable holds the schema information for the "source_events" table.
+	SourceEventsTable = &schema.Table{
+		Name:       "source_events",
+		Columns:    SourceEventsColumns,
+		PrimaryKey: []*schema.Column{SourceEventsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "source_events_operation_idx",
+				Unique:  false,
+				Columns: []*schema.Column{SourceEventsColumns[3]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "(operation_id <> ''::text)",
+				},
+			},
+			{
+				Name:    "source_events_stream_id_sequence_num_key",
+				Unique:  true,
+				Columns: []*schema.Column{SourceEventsColumns[10], SourceEventsColumns[15]},
+			},
+			{
+				Name:    "source_events_user_id_workspace_id_integration_id_external__key",
+				Unique:  true,
+				Columns: []*schema.Column{SourceEventsColumns[5], SourceEventsColumns[6], SourceEventsColumns[7], SourceEventsColumns[8]},
+			},
+			{
+				Name:    "source_events_window",
+				Unique:  false,
+				Columns: []*schema.Column{SourceEventsColumns[13]},
+			},
+		},
+	}
+	// SourceLinksColumns holds the columns for the "source_links" table.
+	SourceLinksColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "source_message_id", Type: field.TypeString},
+		{Name: "parent_message_id", Type: field.TypeString},
+		{Name: "source_revision", Type: field.TypeInt64},
+		{Name: "parent_revision", Type: field.TypeInt64},
+	}
+	// SourceLinksTable holds the schema information for the "source_links" table.
+	SourceLinksTable = &schema.Table{
+		Name:       "source_links",
+		Columns:    SourceLinksColumns,
+		PrimaryKey: []*schema.Column{SourceLinksColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "source_links_parent_idx",
+				Unique:  false,
+				Columns: []*schema.Column{SourceLinksColumns[3], SourceLinksColumns[4], SourceLinksColumns[6]},
+			},
+			{
+				Name:    "source_links_source_message_id_source_revision_parent_messa_key",
+				Unique:  true,
+				Columns: []*schema.Column{SourceLinksColumns[5], SourceLinksColumns[7], SourceLinksColumns[6], SourceLinksColumns[8]},
+			},
+		},
+	}
+	// SourceMessagesColumns holds the columns for the "source_messages" table.
+	SourceMessagesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "integration_id", Type: field.TypeString},
+		{Name: "external_message_id", Type: field.TypeString},
+		{Name: "partition_id", Type: field.TypeString, Default: ""},
+		{Name: "stream_id", Type: field.TypeString},
+		{Name: "speaker_actor_id", Type: field.TypeString, Default: ""},
+		{Name: "payload_hash", Type: field.TypeString},
+		{Name: "content_status", Type: field.TypeString, Default: "active"},
+		{Name: "revision", Type: field.TypeInt64},
+		{Name: "parts", Type: field.TypeJSON},
+		{Name: "reply_to", Type: field.TypeJSON, Nullable: true},
+		{Name: "occurred_at", Type: field.TypeTime},
+		{Name: "tombstoned", Type: field.TypeBool, Default: false},
+	}
+	// SourceMessagesTable holds the schema information for the "source_messages" table.
+	SourceMessagesTable = &schema.Table{
+		Name:       "source_messages",
+		Columns:    SourceMessagesColumns,
+		PrimaryKey: []*schema.Column{SourceMessagesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "source_messages_user_id_workspace_id_id_key",
+				Unique:  true,
+				Columns: []*schema.Column{SourceMessagesColumns[3], SourceMessagesColumns[4], SourceMessagesColumns[0]},
+			},
+			{
+				Name:    "source_messages_user_id_workspace_id_integration_id_externa_key",
+				Unique:  true,
+				Columns: []*schema.Column{SourceMessagesColumns[3], SourceMessagesColumns[4], SourceMessagesColumns[5], SourceMessagesColumns[6]},
+			},
+		},
 	}
 	// TokenUsagesColumns holds the columns for the "token_usages" table.
 	TokenUsagesColumns = []*schema.Column{
@@ -537,31 +1234,112 @@ var (
 			},
 		},
 	}
+	// WorkspaceMembersColumns holds the columns for the "workspace_members" table.
+	WorkspaceMembersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "actor_id", Type: field.TypeString},
+		{Name: "display_name", Type: field.TypeString},
+		{Name: "status", Type: field.TypeString, Default: "active"},
+		{Name: "revision", Type: field.TypeInt64, Default: 1},
+	}
+	// WorkspaceMembersTable holds the schema information for the "workspace_members" table.
+	WorkspaceMembersTable = &schema.Table{
+		Name:       "workspace_members",
+		Columns:    WorkspaceMembersColumns,
+		PrimaryKey: []*schema.Column{WorkspaceMembersColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "workspace_members_user_id_workspace_id_actor_id_key",
+				Unique:  true,
+				Columns: []*schema.Column{WorkspaceMembersColumns[3], WorkspaceMembersColumns[4], WorkspaceMembersColumns[5]},
+			},
+		},
+	}
+	// WorkspaceSourcesColumns holds the columns for the "workspace_sources" table.
+	WorkspaceSourcesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeString},
+		{Name: "workspace_id", Type: field.TypeString},
+		{Name: "integration_id", Type: field.TypeString},
+		{Name: "external_space_id", Type: field.TypeString},
+		{Name: "revision", Type: field.TypeInt64, Default: 1},
+	}
+	// WorkspaceSourcesTable holds the schema information for the "workspace_sources" table.
+	WorkspaceSourcesTable = &schema.Table{
+		Name:       "workspace_sources",
+		Columns:    WorkspaceSourcesColumns,
+		PrimaryKey: []*schema.Column{WorkspaceSourcesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "workspace_sources_user_id_integration_id_external_space_id_key",
+				Unique:  true,
+				Columns: []*schema.Column{WorkspaceSourcesColumns[3], WorkspaceSourcesColumns[5], WorkspaceSourcesColumns[6]},
+			},
+			{
+				Name:    "workspace_sources_user_id_workspace_id_integration_id_exter_key",
+				Unique:  true,
+				Columns: []*schema.Column{WorkspaceSourcesColumns[3], WorkspaceSourcesColumns[4], WorkspaceSourcesColumns[5], WorkspaceSourcesColumns[6]},
+			},
+		},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		APIKeysTable,
 		ActorsTable,
+		ActorIdentitiesTable,
 		AgentsTable,
 		AuditEventsTable,
 		ConversationsTable,
+		DeletionJournalEntriesTable,
+		DeletionJournalStateTable,
+		EmbeddingIndexProfilesTable,
+		EventConversationRequestsTable,
 		FactsTable,
 		ImpressionsTable,
+		IngestionReceiptsTable,
+		IngestionWindowSourcesTable,
+		IntegrationsTable,
+		IntegrationAgentGrantsTable,
 		KeyMemoriesTable,
+		MemoryAiCallsTable,
+		MemoryCandidatesTable,
 		MemoryEmbeddingsTable,
+		MemoryGenerationCarriesTable,
 		MemoryItemsTable,
+		MemoryJobsTable,
 		MemoryKeywordsTable,
 		MemoryNodesTable,
+		MemoryOperationsTable,
+		MemoryPartitionsTable,
+		MemoryPublicationsTable,
 		MemoryRelationsTable,
+		MemorySourceDependenciesTable,
+		MemoryStreamsTable,
 		MemorySummariesTable,
+		MemoryTombstonesTable,
 		MessagesTable,
 		OutboxEventsTable,
+		SourceEventsTable,
+		SourceLinksTable,
+		SourceMessagesTable,
 		TokenUsagesTable,
 		UsersTable,
 		UserSettingsTable,
 		WorkspacesTable,
 		WorkspaceGrantsTable,
+		WorkspaceMembersTable,
+		WorkspaceSourcesTable,
 	}
 )
 
 func init() {
+	DeletionJournalStateTable.Annotation = &entsql.Annotation{
+		Table: "deletion_journal_state",
+	}
 }

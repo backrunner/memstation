@@ -21,7 +21,7 @@ func (r *PostgresMemoryRepository) BrowseDocuments(ctx context.Context, input do
 }
 
 func (r *InMemoryMemoryRepository) BrowseDocuments(ctx context.Context, input domain.MemoryBrowseQuery, position *domain.MemoryPosition) ([]domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, input.UserID, ""); err != nil {
+	if _, err := security.DataScope(ctx, input.UserID, ""); err != nil {
 		return nil, err
 	}
 	r.mu.RLock()
@@ -29,7 +29,7 @@ func (r *InMemoryMemoryRepository) BrowseDocuments(ctx context.Context, input do
 	items := []domain.MemoryDocument{}
 	query := strings.ToLower(input.Query)
 	for _, doc := range r.documents {
-		if doc.UserID != input.UserID || !matchesDocumentGeneration(input.UserID, input.GenerationID, doc) || !matchesMemoryType(doc.Type, input.Kinds) {
+		if doc.UserID != input.UserID || !documentVisible(ctx, doc) || !matchesDocumentGeneration(ctx, input.UserID, input.GenerationID, doc) || !matchesMemoryType(doc.Type, input.Kinds) {
 			continue
 		}
 		if !strings.Contains(strings.ToLower(doc.Content), query) && !strings.Contains(strings.ToLower(doc.ID), query) {
@@ -38,7 +38,7 @@ func (r *InMemoryMemoryRepository) BrowseDocuments(ctx context.Context, input do
 		if position != nil && !memoryPositionBefore(doc, *position) {
 			continue
 		}
-		items = append(items, attachDocumentRuntimeMetadata(doc))
+		items = append(items, attachDocumentRuntimeMetadata(ctx, doc))
 	}
 	sort.Slice(items, func(i, j int) bool {
 		return memoryPositionBefore(items[j], domain.MemoryPosition{UpdatedAt: items[i].UpdatedAt, Kind: items[i].Type, ID: items[i].ID})

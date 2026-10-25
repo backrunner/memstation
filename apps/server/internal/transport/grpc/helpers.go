@@ -405,9 +405,14 @@ func toProtoRelatedMemories(items []domain.RelatedMemory) []*pb.RelatedMemory {
 }
 
 func toProtoMemoryDocument(item domain.MemoryDocument) *pb.MemoryDocument {
+	item = domain.ProjectMemoryDocument(item)
+	evidences := make([]*pb.MemoryEvidence, 0, len(item.Evidences))
+	for _, e := range item.Evidences {
+		evidences = append(evidences, &pb.MemoryEvidence{Id: e.ID, GenerationId: e.GenerationID, UserId: e.UserID, NodeId: e.NodeID, ConversationId: e.ConversationID, SequenceNum: int32(e.SequenceNum), PartId: e.PartID, ArtifactId: e.ArtifactID, PageIndex: int32(e.PageIndex), StartMs: e.StartMS, EndMs: e.EndMS, EvidenceKind: e.EvidenceKind, ExcerptText: e.ExcerptText, Weight: e.Weight, Metadata: toProtoStruct(e.Metadata), CreatedAt: toProtoTimestamp(e.CreatedAt)})
+	}
 	item.Metadata = domain.PublicMemoryMetadata(item.Metadata)
 	return &pb.MemoryDocument{
-		Id:             item.ID,
+		Kind: item.Kind, Visibility: item.Visibility, ValidFrom: toProtoOptionalTimestamp(item.ValidFrom), ValidTo: toProtoOptionalTimestamp(item.ValidTo), Evidences: evidences, WorkspaceId: item.WorkspaceID, PartitionId: item.PartitionID, SubjectActorIds: item.SubjectActorIDs, Revision: item.Revision, Status: item.Status, SourceRefs: toProtoSourceRefs(item.SourceRefs), Id: item.ID,
 		NodeId:         item.NodeID,
 		GenerationId:   item.GenerationID,
 		UserId:         item.UserID,
@@ -447,11 +452,27 @@ func toProtoFactLineage(item *domain.MemoryLineageMeta) *pb.FactLineage {
 func toProtoSearchResult(item domain.SearchResult) *pb.SearchResponse {
 	out := &pb.SearchResponse{
 		Total:                int32(item.Total),
+		Trace:                jsonStruct(item.Trace),
+		RecallTrace:          toProtoRecallTrace(item.Trace),
 		QueryEmbeddingTokens: int32(item.QueryEmbeddingTokens),
 		Memories:             make([]*pb.MemoryDocument, 0, len(item.Memories)),
 	}
 	for _, memory := range item.Memories {
 		out.Memories = append(out.Memories, toProtoMemoryDocument(memory))
+	}
+	return out
+}
+
+func toProtoRecallTrace(t *domain.RecallTrace) *pb.RecallTrace {
+	if t == nil {
+		return nil
+	}
+	out := &pb.RecallTrace{QueryId: t.QueryID, ProviderRequestId: t.ProviderRequestID, LatencyMs: t.LatencyMS, ReturnedCount: int32(t.ReturnedCount), EligibleCount: int32(t.EligibleCount), ScoreDefinition: t.ScoreDefinition, FailureCode: t.FailureCode, Degraded: t.Degraded, WatermarksPartial: t.WatermarksPartial}
+	for _, w := range t.Watermarks {
+		out.Watermarks = append(out.Watermarks, &pb.StreamWatermark{StreamId: w.StreamID, PartitionId: w.PartitionID, GenerationId: w.GenerationID, Accepted: w.Accepted, Indexed: w.Indexed})
+	}
+	for _, c := range t.ProviderCalls {
+		out.ProviderCalls = append(out.ProviderCalls, &pb.RecallProviderCall{CallId: c.CallID, Role: c.Role, ProviderRequestId: c.ProviderRequestID, Status: c.Status})
 	}
 	return out
 }
@@ -561,4 +582,28 @@ func toProtoConversationRecord(item domain.ConversationRecord) *pb.ConversationR
 		CreatedAt:      toProtoTimestamp(item.CreatedAt),
 		UpdatedAt:      toProtoTimestamp(item.UpdatedAt),
 	}
+}
+
+func toProtoSourceRefs(refs []domain.SourceRef) []*pb.SourceRef {
+	out := make([]*pb.SourceRef, 0, len(refs))
+	for _, r := range refs {
+		p := &pb.SourceRef{WorkspaceId: r.WorkspaceID, MessageId: r.MessageID, Revision: r.Revision, PartIndex: int32(r.PartIndex)}
+		if r.Span != nil {
+			p.Span = &pb.TextSpan{Start: int32(r.Span.Start), End: int32(r.Span.End)}
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+func jsonStruct(value any) *structpb.Struct {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil
+	}
+	out := &structpb.Struct{}
+	if protojson.Unmarshal(raw, out) != nil {
+		return nil
+	}
+	return out
 }

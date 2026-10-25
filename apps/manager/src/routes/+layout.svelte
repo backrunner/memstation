@@ -245,7 +245,7 @@
   function buildBreadcrumbs(pathname: string): Array<{ label: string; href: string; isLast: boolean }> {
     if (page.params.target) {
       const directory = workspaceDirectoryURL(page.params.target);
-      return [{ label: 'Workspaces', href: directory, isLast: !page.params.workspace }, ...(page.params.workspace ? [{ label: pathname.includes('/access') ? 'Workspace agents' : pathname.includes('/conversations') ? 'Workspace conversations' : pathname.includes('/keys') ? 'Workspace key memories' : pathname.includes('/memory') ? 'Workspace memory' : 'Workspace settings', href: pathname, isLast: true }] : [])];
+      return [{ label: 'Workspaces', href: directory, isLast: !page.params.workspace }, ...(page.params.workspace ? [{ label: pathname.includes('/access') ? 'Workspace agents' : pathname.includes('/conversations') ? 'Workspace conversations' : pathname.includes('/keys') ? 'Workspace key memories' : pathname.includes('/memory') ? 'Workspace memory' : pathname.includes('/lifecycle') ? 'Memory service' : 'Workspace settings', href: pathname, isLast: true }] : [])];
     }
     const segments = pathname.split('/').filter(Boolean);
     if (segments.length === 0) {

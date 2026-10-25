@@ -100,7 +100,7 @@ func (c *updateCaptureConn) QueryContext(_ context.Context, query string, args [
 	c.driver.queryArgs = values
 	c.driver.queryCount++
 	rows := append([][]any(nil), c.driver.rows...)
-	if strings.Contains(query, "SELECT id,user_id,workspace_id,node_type,entity_id FROM memory_nodes") {
+	if strings.Contains(query, "SELECT id,user_id,workspace_id,node_type,entity_id,partition_id,access_status FROM memory_nodes") || strings.Contains(query, "SELECT context_mode,partition_id,finalize_status FROM conversations") {
 		rows = nil
 	}
 	c.driver.mu.Unlock()

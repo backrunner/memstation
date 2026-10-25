@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"memstation/apps/server/ent/memorynode"
 	"strings"
@@ -23,10 +24,22 @@ type MemoryNode struct {
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 	// GenerationID holds the value of the "generation_id" field.
 	GenerationID string `json:"generation_id,omitempty"`
+	// SourceConversationID holds the value of the "source_conversation_id" field.
+	SourceConversationID string `json:"source_conversation_id,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID string `json:"user_id,omitempty"`
 	// WorkspaceID holds the value of the "workspace_id" field.
 	WorkspaceID string `json:"workspace_id,omitempty"`
+	// PartitionID holds the value of the "partition_id" field.
+	PartitionID string `json:"partition_id,omitempty"`
+	// AccessStatus holds the value of the "access_status" field.
+	AccessStatus string `json:"access_status,omitempty"`
+	// SubjectActorIds holds the value of the "subject_actor_ids" field.
+	SubjectActorIds []string `json:"subject_actor_ids,omitempty"`
+	// SourceRefs holds the value of the "source_refs" field.
+	SourceRefs []map[string]interface{} `json:"source_refs,omitempty"`
+	// Revision holds the value of the "revision" field.
+	Revision int64 `json:"revision,omitempty"`
 	// NodeType holds the value of the "node_type" field.
 	NodeType string `json:"node_type,omitempty"`
 	// EntityID holds the value of the "entity_id" field.
@@ -51,11 +64,13 @@ func (*MemoryNode) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case memorynode.FieldSubjectActorIds, memorynode.FieldSourceRefs:
+			values[i] = new([]byte)
 		case memorynode.FieldImportance, memorynode.FieldDecayFactor:
 			values[i] = new(sql.NullFloat64)
-		case memorynode.FieldID, memorynode.FieldEmbeddingRevision:
+		case memorynode.FieldID, memorynode.FieldRevision, memorynode.FieldEmbeddingRevision:
 			values[i] = new(sql.NullInt64)
-		case memorynode.FieldGenerationID, memorynode.FieldUserID, memorynode.FieldWorkspaceID, memorynode.FieldNodeType, memorynode.FieldEntityID, memorynode.FieldTimeTier, memorynode.FieldEmbeddingStatus:
+		case memorynode.FieldGenerationID, memorynode.FieldSourceConversationID, memorynode.FieldUserID, memorynode.FieldWorkspaceID, memorynode.FieldPartitionID, memorynode.FieldAccessStatus, memorynode.FieldNodeType, memorynode.FieldEntityID, memorynode.FieldTimeTier, memorynode.FieldEmbeddingStatus:
 			values[i] = new(sql.NullString)
 		case memorynode.FieldCreatedAt, memorynode.FieldUpdatedAt, memorynode.FieldActivityAt:
 			values[i] = new(sql.NullTime)
@@ -98,6 +113,12 @@ func (_m *MemoryNode) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.GenerationID = value.String
 			}
+		case memorynode.FieldSourceConversationID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field source_conversation_id", values[i])
+			} else if value.Valid {
+				_m.SourceConversationID = value.String
+			}
 		case memorynode.FieldUserID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field user_id", values[i])
@@ -109,6 +130,40 @@ func (_m *MemoryNode) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field workspace_id", values[i])
 			} else if value.Valid {
 				_m.WorkspaceID = value.String
+			}
+		case memorynode.FieldPartitionID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field partition_id", values[i])
+			} else if value.Valid {
+				_m.PartitionID = value.String
+			}
+		case memorynode.FieldAccessStatus:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field access_status", values[i])
+			} else if value.Valid {
+				_m.AccessStatus = value.String
+			}
+		case memorynode.FieldSubjectActorIds:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field subject_actor_ids", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.SubjectActorIds); err != nil {
+					return fmt.Errorf("unmarshal field subject_actor_ids: %w", err)
+				}
+			}
+		case memorynode.FieldSourceRefs:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field source_refs", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.SourceRefs); err != nil {
+					return fmt.Errorf("unmarshal field source_refs: %w", err)
+				}
+			}
+		case memorynode.FieldRevision:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field revision", values[i])
+			} else if value.Valid {
+				_m.Revision = value.Int64
 			}
 		case memorynode.FieldNodeType:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -203,11 +258,29 @@ func (_m *MemoryNode) String() string {
 	builder.WriteString("generation_id=")
 	builder.WriteString(_m.GenerationID)
 	builder.WriteString(", ")
+	builder.WriteString("source_conversation_id=")
+	builder.WriteString(_m.SourceConversationID)
+	builder.WriteString(", ")
 	builder.WriteString("user_id=")
 	builder.WriteString(_m.UserID)
 	builder.WriteString(", ")
 	builder.WriteString("workspace_id=")
 	builder.WriteString(_m.WorkspaceID)
+	builder.WriteString(", ")
+	builder.WriteString("partition_id=")
+	builder.WriteString(_m.PartitionID)
+	builder.WriteString(", ")
+	builder.WriteString("access_status=")
+	builder.WriteString(_m.AccessStatus)
+	builder.WriteString(", ")
+	builder.WriteString("subject_actor_ids=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SubjectActorIds))
+	builder.WriteString(", ")
+	builder.WriteString("source_refs=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SourceRefs))
+	builder.WriteString(", ")
+	builder.WriteString("revision=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Revision))
 	builder.WriteString(", ")
 	builder.WriteString("node_type=")
 	builder.WriteString(_m.NodeType)

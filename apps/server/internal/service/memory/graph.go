@@ -159,7 +159,7 @@ func (e *Engine) addEntitySeeds(ctx context.Context, input domain.SearchInput, s
 }
 
 func (s *Service) ListEntityAliases(ctx context.Context, u, g string) ([]domain.EntityAlias, error) {
-	if _, err := security.PersonalScope(ctx, u, ""); err != nil {
+	if _, err := security.DataScope(ctx, u, ""); err != nil {
 		return nil, err
 	}
 	resolved, err := s.resolveGenerationID(ctx, u, g)
@@ -170,7 +170,7 @@ func (s *Service) ListEntityAliases(ctx context.Context, u, g string) ([]domain.
 }
 
 func (s *Service) PutEntityAlias(ctx context.Context, a domain.EntityAlias) (domain.EntityAlias, error) {
-	if _, err := security.PersonalScope(ctx, a.UserID, a.WorkspaceID); err != nil {
+	if _, err := security.DataScope(ctx, a.UserID, a.WorkspaceID); err != nil {
 		return a, err
 	}
 	g, err := s.resolveGenerationID(ctx, a.UserID, a.GenerationID)
@@ -208,7 +208,7 @@ func (e *Engine) searchHistoricalFacts(ctx context.Context, input domain.SearchI
 	}
 	candidates := []searchCandidate{}
 	for _, d := range docs {
-		if !matchesSearchDocument(d, input) || !matchesTemporalSearchInput(d, input) {
+		if !matchesSearchDocument(ctx, d, input) || !matchesTemporalSearchInput(d, input) {
 			continue
 		}
 		// Historical validity was checked in the store. Today's superseded flag is

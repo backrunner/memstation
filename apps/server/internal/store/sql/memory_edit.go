@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"time"
 
+	"memstation/apps/server/internal/security"
+
 	"memstation/apps/server/internal/domain"
 
 	"github.com/google/uuid"
@@ -15,16 +17,16 @@ func lockKeyMemoryEditTx(ctx context.Context, tx *sql.Tx, user, key string) erro
 	return err
 }
 
-func memoryEditEvent(user, action, kind, id string, condition *domain.MemoryWriteCondition) domain.AuditEvent {
+func memoryEditEvent(ctx context.Context, user, action, kind, id string, condition *domain.MemoryWriteCondition) domain.AuditEvent {
 	actorType, actorID := "admin", "admin"
 	if condition.ActorType != "" && condition.ActorID != "" {
 		actorType, actorID = condition.ActorType, condition.ActorID
 	}
-	return domain.AuditEvent{ID: uuid.NewString(), ActorType: actorType, ActorID: actorID, Action: action, TargetType: kind, TargetID: id, CreatedAt: time.Now().UTC(), Payload: map[string]any{"user_id": user, "workspace_id": domain.PersonalWorkspaceID(user), "generation_id": condition.GenerationID, "expected_updated_at": condition.UpdatedAt}}
+	return domain.AuditEvent{ID: uuid.NewString(), ActorType: actorType, ActorID: actorID, Action: action, TargetType: kind, TargetID: id, CreatedAt: time.Now().UTC(), Payload: map[string]any{"user_id": user, "workspace_id": security.WorkspaceID(ctx, user), "generation_id": condition.GenerationID, "expected_updated_at": condition.UpdatedAt}}
 }
 
 func memoryEditAuditTx(ctx context.Context, tx *sql.Tx, user, action, kind, id string, condition *domain.MemoryWriteCondition) error {
-	e := memoryEditEvent(user, action, kind, id, condition)
+	e := memoryEditEvent(ctx, user, action, kind, id, condition)
 	_, err := tx.ExecContext(ctx, `INSERT INTO audit_events (id,actor_type,actor_id,action,target_type,target_id,payload,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)`, e.ID, e.ActorType, e.ActorID, e.Action, e.TargetType, e.TargetID, marshalJSON(e.Payload), e.CreatedAt)
 	return err
 }
@@ -58,7 +60,7 @@ func (r *InMemoryMemoryRepository) editAudit(ctx context.Context, user, action, 
 	if condition == nil {
 		return
 	}
-	e := memoryEditEvent(user, action, kind, id, condition)
+	e := memoryEditEvent(ctx, user, action, kind, id, condition)
 	r.editAudits = append(r.editAudits, e)
 	if r.fallbackAudit != nil {
 		r.fallbackAudit(ctx, e)

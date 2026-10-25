@@ -112,3 +112,9 @@ type UserSetting struct {
 	ToolWriteEnabled   bool    `json:"toolWriteEnabled"`
 	MaxInjectionTokens int     `json:"maxInjectionTokens"`
 }
+
+type WorkspaceScope struct {
+	UserID      string  `json:"user_id"`
+	WorkspaceID string  `json:"workspace_id"`
+	PartitionID *string `json:"partition_id,omitempty"`
+}

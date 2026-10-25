@@ -2,7 +2,9 @@ package security
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 
@@ -10,6 +12,7 @@ import (
 )
 
 type Authenticator struct {
+	ResolveAccess              func(context.Context, domain.AccessContext, string, domain.Audience) (domain.AccessContext, error)
 	AdminToken                 string
 	DevAPIKey                  string
 	SessionManager             *AdminSessionManager
@@ -49,7 +52,7 @@ func (a Authenticator) AuthenticatePrincipal(ctx context.Context, token string) 
 		}
 		if a.LookupPrincipal != nil {
 			p, err := a.LookupPrincipal(ctx, prefix, hash)
-			if err != nil || p.UserID == "" || p.AgentID == "" || p.CredentialID == "" || p.WorkspaceID != domain.PersonalWorkspaceID(p.UserID) {
+			if err != nil || p.UserID == "" || p.AgentID == "" || p.CredentialID == "" || p.WorkspaceID == "" || (p.WorkspaceID != domain.PersonalWorkspaceID(p.UserID) && p.ScopeVersion < 2) {
 				return domain.AccessContext{}, errors.New("invalid api key")
 			}
 			return p, nil
@@ -66,17 +69,29 @@ func (a Authenticator) AuthenticatePrincipal(ctx context.Context, token string) 
 }
 
 func (a Authenticator) AuthenticateContext(ctx context.Context, token, workspace string) (context.Context, error) {
+	return a.AuthenticateAudienceContext(ctx, token, workspace, domain.Audience{})
+}
+
+func (a Authenticator) AuthenticateAudienceContext(ctx context.Context, token, workspace string, audience domain.Audience) (context.Context, error) {
 	p, err := a.AuthenticatePrincipal(ctx, token)
 	if err != nil {
 		return ctx, err
 	}
-	if workspace != "" && workspace != p.WorkspaceID {
+	if a.ResolveAccess != nil {
+		p, err = a.ResolveAccess(ctx, p, workspace, audience)
+		if err != nil {
+			return ctx, err
+		}
+	} else if workspace != "" && workspace != p.WorkspaceID || audience.Kind != "" && audience.Kind != "workspace" || len(audience.ActorIDs) > 0 {
 		return ctx, domain.ErrAccessDenied
 	}
 	ctx = WithAccess(ctx, p)
 	// Re-check authority during tool continuations, including after an upstream call.
 	return context.WithValue(ctx, accessRefreshKey, accessRefresh(func(ctx context.Context) (domain.AccessContext, error) {
 		next, err := a.AuthenticatePrincipal(ctx, token)
+		if err == nil && a.ResolveAccess != nil {
+			next, err = a.ResolveAccess(ctx, next, p.WorkspaceID, p.Audience)
+		}
 		if err != nil || next.UserID != p.UserID || next.AgentID != p.AgentID || next.WorkspaceID != p.WorkspaceID {
 			return domain.AccessContext{}, domain.ErrAccessDenied
 		}
@@ -88,7 +103,17 @@ func (a Authenticator) AuthenticateRequest(ctx context.Context, r *http.Request)
 	if len(r.Header.Values("X-MemStation-Workspace")) > 1 {
 		return ctx, domain.ErrAccessDenied
 	}
-	return a.AuthenticateContext(ctx, bearerToken(r.Header.Get("Authorization")), strings.TrimSpace(r.Header.Get("X-MemStation-Workspace")))
+	var audience domain.Audience
+	if len(r.Header.Values("X-MemStation-Audience")) > 1 {
+		return ctx, domain.ErrAccessDenied
+	}
+	var err error
+	audience, err = ParseAudience(r.Header.Get("X-MemStation-Audience"))
+	if err != nil {
+		return ctx, err
+	}
+
+	return a.AuthenticateAudienceContext(ctx, bearerToken(r.Header.Get("Authorization")), strings.TrimSpace(r.Header.Get("X-MemStation-Workspace")), audience)
 }
 
 func (a Authenticator) AuthenticateAdmin(r *http.Request) bool {
@@ -110,4 +135,23 @@ func bearerToken(header string) string {
 		return ""
 	}
 	return strings.TrimSpace(strings.TrimPrefix(header, prefix))
+}
+
+func ParseAudience(raw string) (domain.Audience, error) {
+	var a domain.Audience
+	if raw == "" {
+		return a, nil
+	}
+	if len(raw) > 4096 {
+		return a, domain.ErrAccessDenied
+	}
+	d := json.NewDecoder(strings.NewReader(raw))
+	d.DisallowUnknownFields()
+	if err := d.Decode(&a); err != nil {
+		return a, domain.ErrAccessDenied
+	}
+	if err := d.Decode(new(any)); err != io.EOF {
+		return a, domain.ErrAccessDenied
+	}
+	return a, nil
 }

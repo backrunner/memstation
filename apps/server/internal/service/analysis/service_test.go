@@ -269,3 +269,24 @@ func TestSummaryMergeBoundsAllRequests(t *testing.T) {
 		t.Fatal(result.ChunkCount, merges, err)
 	}
 }
+
+func TestAnalysisPinsSourceConversationRevision(t *testing.T) {
+	input := sourceInput()
+	input.Conversation.Revision = 7
+	result, err := withBody(modelExtraction(t, input)).AnalyzeConversation(context.Background(), input)
+	if err != nil || len(result.Facts) == 0 {
+		t.Fatal(result, err)
+	}
+	docs := append(append([]domain.MemoryDocument{}, result.Facts...), result.GenericItems...)
+	if result.Impression.ID != "" {
+		docs = append(docs, result.Impression)
+	}
+	for _, doc := range docs {
+		if doc.Metadata["source_conversation_revision"] != int64(7) {
+			t.Fatalf("missing immutable source revision for %s", doc.ID)
+		}
+	}
+	if result.Fact.Metadata["source_conversation_revision"] != int64(7) {
+		t.Fatal("primary fact lost source revision")
+	}
+}

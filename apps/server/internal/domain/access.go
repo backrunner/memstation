@@ -13,20 +13,38 @@ var (
 	ErrAccessNotFound       = errors.New("identity not found")
 	ErrAccessConflict       = errors.New("identity revision conflict")
 	ErrAccessDenied         = errors.New("access denied")
+	ErrMemoryTaskObsolete   = errors.New("memory task source is no longer current")
 )
 
 // These are the capabilities implemented by the current data plane. New
 // capabilities must not be issued before every corresponding path enforces them.
 const (
-	CapabilityGateway    = "gateway.invoke"
-	CapabilityMemoryRead = "memory.read"
-	CapabilityMemoryEdit = "memory.edit"
-	CapabilityFilesRead  = "files.read"
-	CapabilityFilesWrite = "files.write"
+	CapabilityGateway         = "gateway.invoke"
+	CapabilityMemoryRead      = "memory.read"
+	CapabilityMemoryEdit      = "memory.edit"
+	CapabilityFilesRead       = "files.read"
+	CapabilityFilesWrite      = "files.write"
+	CapabilityEventsWrite     = "events.write"
+	CapabilitySourcesRead     = "sources.read"
+	CapabilitySourcesRetract  = "sources.retract"
+	CapabilityCandidatesWrite = "memory.propose"
+	CapabilityMemoryForget    = "memory.forget"
+	CapabilityMemoryExport    = "memory.export"
+	CapabilityUsageRead       = "usage.read"
 )
 
 func PersonalCapabilities() []string {
 	return []string{CapabilityGateway, CapabilityMemoryRead, CapabilityMemoryEdit, CapabilityFilesRead, CapabilityFilesWrite}
+}
+
+// AllCapabilities is the registry, not the default grant of a legacy key.
+func AllCapabilities() []string {
+	return append(PersonalCapabilities(), CapabilityEventsWrite, CapabilitySourcesRead, CapabilitySourcesRetract, CapabilityCandidatesWrite, CapabilityMemoryForget, CapabilityMemoryExport, CapabilityUsageRead)
+}
+
+type Audience struct {
+	Kind     string   `json:"kind"`
+	ActorIDs []string `json:"actor_ids,omitempty"`
 }
 
 func AccessID(kind, userID string) string {
@@ -120,6 +138,9 @@ type Credential struct {
 
 // AccessContext is constructed by authentication, never decoded from client JSON.
 type AccessContext struct {
+	ScopeVersion  int      `json:"scope_version,omitempty"`
+	PartitionIDs  []string `json:"partition_ids,omitempty"`
+	Audience      Audience `json:"audience"`
 	UserID        string   `json:"user_id"`
 	AgentID       string   `json:"agent_id"`
 	CredentialID  string   `json:"credential_id"`
@@ -136,7 +157,7 @@ func (a AccessContext) Allows(capability string) bool {
 
 func EffectiveCapabilities(ceiling, grant, policy []string) []string {
 	out := []string{}
-	for _, capability := range PersonalCapabilities() {
+	for _, capability := range AllCapabilities() {
 		if slices.Contains(ceiling, capability) && slices.Contains(grant, capability) && slices.Contains(policy, capability) {
 			out = append(out, capability)
 		}

@@ -41,6 +41,7 @@ const (
 )
 
 type BlobObject struct {
+	PartitionID      string         `json:"partition_id,omitempty"`
 	WorkspaceID      string         `json:"workspace_id,omitempty"`
 	BlobID           string         `json:"blob_id"`
 	UserID           string         `json:"user_id"`
@@ -58,6 +59,7 @@ type BlobObject struct {
 }
 
 type MessagePart struct {
+	PartitionID    string           `json:"partition_id,omitempty"`
 	WorkspaceID    string           `json:"workspace_id,omitempty"`
 	PartID         string           `json:"part_id"`
 	UserID         string           `json:"user_id"`
@@ -83,6 +85,7 @@ type MessagePart struct {
 }
 
 type MessagePartArtifact struct {
+	PartitionID    string         `json:"partition_id,omitempty"`
 	WorkspaceID    string         `json:"workspace_id,omitempty"`
 	ArtifactID     string         `json:"artifact_id"`
 	UserID         string         `json:"user_id"`

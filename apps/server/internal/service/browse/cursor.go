@@ -24,7 +24,7 @@ type cursor struct {
 // Prepare binds a position to its owner, workspace, collection and filter.
 // Cursors are not credentials: stores independently enforce scope on every query.
 func Prepare(ctx context.Context, collection string, input *domain.RecordBrowseQuery) (*domain.RecordPosition, string, error) {
-	workspace, err := security.PersonalScope(ctx, input.UserID, "")
+	workspace, err := security.DataScope(ctx, input.UserID, "")
 	if err != nil {
 		return nil, "", err
 	}

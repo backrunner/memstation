@@ -236,8 +236,12 @@ func TestPostgresMemoryQueriesExcludeOtherWorkspaceBeforeLimit(t *testing.T) {
 	if n, e := repo.CountKeyMemories(ctx, owner); e != nil || n != 1 {
 		t.Fatalf("hidden key counted: %d %v", n, e)
 	}
-	if err = repo.UpsertKeyMemory(ctx, domain.KeyMemory{UserID: owner, Key: "hidden", Value: "overwrite"}); err == nil {
-		t.Fatal("key upsert crossed scope")
+	if err = repo.UpsertKeyMemory(ctx, domain.KeyMemory{UserID: owner, Key: "hidden", Value: "personal copy"}); err != nil {
+		t.Fatal(err)
+	}
+	var otherValue string
+	if err = db.QueryRowContext(ctx, `SELECT value FROM key_memories WHERE user_id=$1 AND node_id=$2`, owner, hiddenKeyNode).Scan(&otherValue); err != nil || otherValue != "scope token hidden" {
+		t.Fatalf("same key changed another workspace: %q %v", otherValue, err)
 	}
 	for _, nodeID := range []string{hiddenNode, owner + "-fresh-node"} {
 		if err = repo.StoreDocument(ctx, domain.MemoryDocument{UserID: owner, ID: hidden, NodeID: nodeID, Type: domain.MemoryTypeFact, Content: "overwrite"}); !errors.Is(err, domain.ErrAccessDenied) {

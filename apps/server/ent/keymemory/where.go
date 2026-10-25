@@ -69,6 +69,16 @@ func UserID(v string) predicate.KeyMemory {
 	return predicate.KeyMemory(sql.FieldEQ(FieldUserID, v))
 }
 
+// WorkspaceID applies equality check predicate on the "workspace_id" field. It's identical to WorkspaceIDEQ.
+func WorkspaceID(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldEQ(FieldWorkspaceID, v))
+}
+
+// PartitionID applies equality check predicate on the "partition_id" field. It's identical to PartitionIDEQ.
+func PartitionID(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldEQ(FieldPartitionID, v))
+}
+
 // NodeID applies equality check predicate on the "node_id" field. It's identical to NodeIDEQ.
 func NodeID(v string) predicate.KeyMemory {
 	return predicate.KeyMemory(sql.FieldEQ(FieldNodeID, v))
@@ -252,6 +262,136 @@ func UserIDEqualFold(v string) predicate.KeyMemory {
 // UserIDContainsFold applies the ContainsFold predicate on the "user_id" field.
 func UserIDContainsFold(v string) predicate.KeyMemory {
 	return predicate.KeyMemory(sql.FieldContainsFold(FieldUserID, v))
+}
+
+// WorkspaceIDEQ applies the EQ predicate on the "workspace_id" field.
+func WorkspaceIDEQ(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldEQ(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDNEQ applies the NEQ predicate on the "workspace_id" field.
+func WorkspaceIDNEQ(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldNEQ(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDIn applies the In predicate on the "workspace_id" field.
+func WorkspaceIDIn(vs ...string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldIn(FieldWorkspaceID, vs...))
+}
+
+// WorkspaceIDNotIn applies the NotIn predicate on the "workspace_id" field.
+func WorkspaceIDNotIn(vs ...string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldNotIn(FieldWorkspaceID, vs...))
+}
+
+// WorkspaceIDGT applies the GT predicate on the "workspace_id" field.
+func WorkspaceIDGT(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldGT(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDGTE applies the GTE predicate on the "workspace_id" field.
+func WorkspaceIDGTE(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldGTE(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDLT applies the LT predicate on the "workspace_id" field.
+func WorkspaceIDLT(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldLT(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDLTE applies the LTE predicate on the "workspace_id" field.
+func WorkspaceIDLTE(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldLTE(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDContains applies the Contains predicate on the "workspace_id" field.
+func WorkspaceIDContains(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldContains(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDHasPrefix applies the HasPrefix predicate on the "workspace_id" field.
+func WorkspaceIDHasPrefix(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldHasPrefix(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDHasSuffix applies the HasSuffix predicate on the "workspace_id" field.
+func WorkspaceIDHasSuffix(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldHasSuffix(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDEqualFold applies the EqualFold predicate on the "workspace_id" field.
+func WorkspaceIDEqualFold(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldEqualFold(FieldWorkspaceID, v))
+}
+
+// WorkspaceIDContainsFold applies the ContainsFold predicate on the "workspace_id" field.
+func WorkspaceIDContainsFold(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldContainsFold(FieldWorkspaceID, v))
+}
+
+// PartitionIDEQ applies the EQ predicate on the "partition_id" field.
+func PartitionIDEQ(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldEQ(FieldPartitionID, v))
+}
+
+// PartitionIDNEQ applies the NEQ predicate on the "partition_id" field.
+func PartitionIDNEQ(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldNEQ(FieldPartitionID, v))
+}
+
+// PartitionIDIn applies the In predicate on the "partition_id" field.
+func PartitionIDIn(vs ...string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldIn(FieldPartitionID, vs...))
+}
+
+// PartitionIDNotIn applies the NotIn predicate on the "partition_id" field.
+func PartitionIDNotIn(vs ...string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldNotIn(FieldPartitionID, vs...))
+}
+
+// PartitionIDGT applies the GT predicate on the "partition_id" field.
+func PartitionIDGT(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldGT(FieldPartitionID, v))
+}
+
+// PartitionIDGTE applies the GTE predicate on the "partition_id" field.
+func PartitionIDGTE(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldGTE(FieldPartitionID, v))
+}
+
+// PartitionIDLT applies the LT predicate on the "partition_id" field.
+func PartitionIDLT(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldLT(FieldPartitionID, v))
+}
+
+// PartitionIDLTE applies the LTE predicate on the "partition_id" field.
+func PartitionIDLTE(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldLTE(FieldPartitionID, v))
+}
+
+// PartitionIDContains applies the Contains predicate on the "partition_id" field.
+func PartitionIDContains(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldContains(FieldPartitionID, v))
+}
+
+// PartitionIDHasPrefix applies the HasPrefix predicate on the "partition_id" field.
+func PartitionIDHasPrefix(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldHasPrefix(FieldPartitionID, v))
+}
+
+// PartitionIDHasSuffix applies the HasSuffix predicate on the "partition_id" field.
+func PartitionIDHasSuffix(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldHasSuffix(FieldPartitionID, v))
+}
+
+// PartitionIDEqualFold applies the EqualFold predicate on the "partition_id" field.
+func PartitionIDEqualFold(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldEqualFold(FieldPartitionID, v))
+}
+
+// PartitionIDContainsFold applies the ContainsFold predicate on the "partition_id" field.
+func PartitionIDContainsFold(v string) predicate.KeyMemory {
+	return predicate.KeyMemory(sql.FieldContainsFold(FieldPartitionID, v))
 }
 
 // NodeIDEQ applies the EQ predicate on the "node_id" field.

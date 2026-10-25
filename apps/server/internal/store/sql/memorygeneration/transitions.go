@@ -12,7 +12,7 @@ import (
 )
 
 func (s *Repository) AddSnapshotToGeneration(ctx context.Context, generationID string, snapshot domain.MemorySourceSnapshot) (domain.MemoryGenerationSource, bool, error) {
-	if _, err := security.PersonalScope(ctx, snapshot.UserID, snapshot.WorkspaceID); err != nil {
+	if _, err := security.DataScope(ctx, snapshot.UserID, snapshot.WorkspaceID); err != nil {
 		return domain.MemoryGenerationSource{}, false, err
 	}
 	if generationID == "" || snapshot.SnapshotID == "" {
@@ -50,10 +50,13 @@ func (s *Repository) AddSnapshotToGeneration(ctx context.Context, generationID s
 			return item, false, err
 		}
 		if n == 0 {
-			old, err := scanGenerationSource(tx.QueryRowContext(ctx, `SELECT id,generation_id,user_id,snapshot_id,conversation_id,source_hash,status,last_error,created_at,updated_at,processed_at FROM memory_generation_sources WHERE generation_id=$1 AND snapshot_id=$2 AND user_id=$3 AND workspace_id=$4`, generationID, item.SnapshotID, item.UserID, item.WorkspaceID))
+			old, err := scanGenerationSource(ctx, tx.QueryRowContext(ctx, `SELECT id,generation_id,user_id,snapshot_id,conversation_id,source_hash,status,last_error,created_at,updated_at,processed_at FROM memory_generation_sources WHERE generation_id=$1 AND snapshot_id=$2 AND user_id=$3 AND workspace_id=$4`, generationID, item.SnapshotID, item.UserID, item.WorkspaceID))
 			return old, false, err
 		}
 		if _, err = tx.ExecContext(ctx, `UPDATE memory_generations SET source_count=source_count+1,updated_at=$1 WHERE generation_id=$2 AND user_id=$3 AND workspace_id=$4`, now, generationID, item.UserID, item.WorkspaceID); err != nil {
+			return item, false, err
+		}
+		if err = enqueueRebuildSourceTx(ctx, tx, item); err != nil {
 			return item, false, err
 		}
 		return item, true, tx.Commit()
@@ -61,7 +64,7 @@ func (s *Repository) AddSnapshotToGeneration(ctx context.Context, generationID s
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	generation, ok := s.generations[generationID]
-	if !ok || !sameScope(snapshot.UserID, generation.UserID, generation.WorkspaceID) {
+	if !ok || !sameScope(ctx, snapshot.UserID, generation.UserID, generation.WorkspaceID) {
 		return item, false, domain.ErrAccessDenied
 	}
 	if !acceptsSources(generation) {
@@ -136,7 +139,7 @@ func transition(g domain.MemoryGeneration, source domain.MemoryGenerationSource,
 }
 
 func (s *Repository) transitionSource(ctx context.Context, userID, generationID, snapshotID string, status domain.MemoryGenerationSourceStatus, lastError string, count int) (domain.MemoryGeneration, bool, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemoryGeneration{}, false, err
 	}
 	if db := s.currentDB(); db != nil {
@@ -152,7 +155,7 @@ func (s *Repository) transitionSource(ctx context.Context, userID, generationID,
 		if g.Status == domain.MemoryGenerationStatusDiscarded || g.IsActive {
 			return g, false, nil
 		}
-		item, err := scanGenerationSource(tx.QueryRowContext(ctx, `SELECT id,generation_id,user_id,snapshot_id,conversation_id,source_hash,status,last_error,created_at,updated_at,processed_at FROM memory_generation_sources WHERE user_id=$1 AND workspace_id=$2 AND generation_id=$3 AND snapshot_id=$4 FOR UPDATE`, userID, g.WorkspaceID, generationID, snapshotID))
+		item, err := scanGenerationSource(ctx, tx.QueryRowContext(ctx, `SELECT id,generation_id,user_id,snapshot_id,conversation_id,source_hash,status,last_error,created_at,updated_at,processed_at FROM memory_generation_sources WHERE user_id=$1 AND workspace_id=$2 AND generation_id=$3 AND snapshot_id=$4 FOR UPDATE`, userID, g.WorkspaceID, generationID, snapshotID))
 		if err != nil {
 			return g, false, err
 		}
@@ -166,12 +169,15 @@ func (s *Repository) transitionSource(ctx context.Context, userID, generationID,
 		if _, err = tx.ExecContext(ctx, `UPDATE memory_generations SET status=$1,processed_count=$2,embedding_count=$3,failure_count=$4,last_error=$5,updated_at=$6 WHERE generation_id=$7 AND user_id=$8 AND workspace_id=$9`, g.Status, g.ProcessedCount, g.EmbeddingCount, g.FailureCount, g.LastError, g.UpdatedAt, generationID, userID, g.WorkspaceID); err != nil {
 			return g, false, err
 		}
+		if err = enqueueActivationTx(ctx, tx, g); err != nil {
+			return g, false, err
+		}
 		return g, true, tx.Commit()
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	g, ok := s.generations[generationID]
-	if !ok || !sameScope(userID, g.UserID, g.WorkspaceID) {
+	if !ok || !sameScope(ctx, userID, g.UserID, g.WorkspaceID) {
 		return domain.MemoryGeneration{}, false, domain.ErrAccessDenied
 	}
 	if g.Status == domain.MemoryGenerationStatusDiscarded || g.IsActive {
@@ -179,7 +185,7 @@ func (s *Repository) transitionSource(ctx context.Context, userID, generationID,
 	}
 	for _, id := range s.sourcesByGeneration[generationID] {
 		item := s.generationSources[id]
-		if item.SnapshotID == snapshotID && sameScope(userID, item.UserID, item.WorkspaceID) {
+		if item.SnapshotID == snapshotID && sameScope(ctx, userID, item.UserID, item.WorkspaceID) {
 			g, item, changed := transition(g, item, status, lastError, count)
 			if changed {
 				s.generations[generationID] = g

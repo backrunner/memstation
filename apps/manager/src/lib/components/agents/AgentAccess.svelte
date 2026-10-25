@@ -64,7 +64,7 @@
     loading = true;
     error = '';
     try {
-      const result = await fetchAgentDetail(target, userId, agentId, controller.signal);
+      const result = await fetchAgentDetail(target, userId, agentId, controller.signal, workspaceId);
       if (!alive || request !== version) return;
       if (workspaceId && result.workspace.id !== workspaceId) throw new Error('This agent is not in the selected workspace.');
       detail = result;
@@ -138,7 +138,7 @@
     if (!detail || busy || !keyName.trim()) return;
     busy = true; keyError = ''; success = '';
     try {
-      const result = await createUserAPIKey(target, userId, keyName.trim(), { agent_id: agentId, capabilities: keyCaps, ...(keyLifetime !== 'never' ? { expires_at: new Date(Date.now() + Number(keyLifetime) * 86400000).toISOString() } : {}) });
+      const result = await createUserAPIKey(target, userId, keyName.trim(), { agent_id: agentId, ...(workspaceId?{workspace_id:workspaceId}:{}), capabilities: keyCaps, ...(keyLifetime !== 'never' ? { expires_at: new Date(Date.now() + Number(keyLifetime) * 86400000).toISOString() } : {}) });
       if (!alive) return;
       createdKey = result.api_key;
       keyOpen = false;
@@ -178,7 +178,7 @@
   {#if createdKey}<section class="card page-stack" aria-label="New API key"><div class="page-header"><h2 class="section-title">New API key</h2><Button class="btn-secondary" onclick={() => { createdKey = ''; success = 'Credential created.'; }}>Hide key</Button></div><p class="panel-meta">Shown once. Copy and store it now.</p><CodeBlock code={createdKey} language="text" /></section>{/if}
   {#if loading}<p class="panel-meta" role="status">Loading agent access…</p>{/if}
   {#if detail}
-    <p class="panel-meta">Personal workspace. {detail.agent.status === 'active' ? 'Active' : 'Disabled'}{detail.agent.legacy ? ' (legacy agent)' : ''}. Agents share this account’s Personal memory.</p>
+    <p class="panel-meta">Workspace {detail.workspace.name}. {detail.agent.status === 'active' ? 'Active' : 'Disabled'}{detail.agent.legacy ? ' (legacy agent)' : ''}. Each workspace has its own memory.</p>
     <div class="access-columns">
       <section class="card page-stack">
         <h2 class="section-title">Agent identity</h2>
@@ -190,7 +190,7 @@
         <div class="lifecycle"><p class="panel-meta">{detail.agent.status === 'active' ? 'Disabling this agent revokes every credential. Its conversations and memory remain available to the account.' : 'Enabling this agent does not restore revoked credentials.'}</p><Button class={detail.agent.status === 'active' ? 'btn-danger' : 'btn-secondary'} disabled={busy || loading || conflict} onclick={() => statusConfirm = true}>{detail.agent.status === 'active' ? 'Disable agent' : 'Enable agent'}</Button></div>
       </section>
       <section class="card page-stack">
-        <h2 class="section-title">Personal permissions</h2>
+        <h2 class="section-title">Workspace permissions</h2>
         <p class="panel-meta">Credentials can only use the intersection of their ceiling, these permissions and workspace policy.</p>
         <form class="page-stack" on:submit|preventDefault={saveGrant}>
           <CapabilityFields bind:value={caps} allowed={detail.workspace.capabilities} disabled={busy || loading} />
@@ -218,7 +218,7 @@
 
 <Dialog.Root open={keyOpen} onOpenChange={(value) => { if (!busy) keyOpen = value; }}>
   <Dialog.Portal><Dialog.Overlay class="dialog-overlay" /><Dialog.Content class="dialog-card credential-dialog" escapeKeydownBehavior={busy ? 'ignore' : 'close'} interactOutsideBehavior={busy ? 'ignore' : 'close'}>
-    <Dialog.Title class="section-title">Issue credential</Dialog.Title><Dialog.Description class="panel-meta">For {detail?.agent.name} in Personal. The secret is shown once.</Dialog.Description>
+    <Dialog.Title class="section-title">Issue credential</Dialog.Title><Dialog.Description class="panel-meta">For {detail?.agent.name} in {detail?.workspace.name}. The secret is shown once.</Dialog.Description>
     <form class="page-stack" on:submit|preventDefault={issue}>
       <TextInputField label="Credential name" bind:value={keyName} placeholder="e.g. Development laptop" required maxlength={120} disabled={busy} />
       <SelectField label="Lifetime" bind:value={keyLifetime} disabled={busy} items={[{ value: '7', label: '7 days' }, { value: '30', label: '30 days' }, { value: '90', label: '90 days' }, { value: 'never', label: 'No expiry' }]} />

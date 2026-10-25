@@ -26,6 +26,10 @@ type Conversation struct {
 	UserID string `json:"user_id,omitempty"`
 	// WorkspaceID holds the value of the "workspace_id" field.
 	WorkspaceID string `json:"workspace_id,omitempty"`
+	// PartitionID holds the value of the "partition_id" field.
+	PartitionID string `json:"partition_id,omitempty"`
+	// ContextMode holds the value of the "context_mode" field.
+	ContextMode string `json:"context_mode,omitempty"`
 	// AgentID holds the value of the "agent_id" field.
 	AgentID string `json:"agent_id,omitempty"`
 	// WriteRevision holds the value of the "write_revision" field.
@@ -56,7 +60,7 @@ func (*Conversation) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case conversation.FieldID, conversation.FieldWriteRevision:
 			values[i] = new(sql.NullInt64)
-		case conversation.FieldUserID, conversation.FieldWorkspaceID, conversation.FieldAgentID, conversation.FieldRequestFormat, conversation.FieldUpstreamProvider, conversation.FieldMode, conversation.FieldFinalizeStatus, conversation.FieldSummaryStatus, conversation.FieldAnalysisStatus:
+		case conversation.FieldUserID, conversation.FieldWorkspaceID, conversation.FieldPartitionID, conversation.FieldContextMode, conversation.FieldAgentID, conversation.FieldRequestFormat, conversation.FieldUpstreamProvider, conversation.FieldMode, conversation.FieldFinalizeStatus, conversation.FieldSummaryStatus, conversation.FieldAnalysisStatus:
 			values[i] = new(sql.NullString)
 		case conversation.FieldCreatedAt, conversation.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -104,6 +108,18 @@ func (_m *Conversation) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field workspace_id", values[i])
 			} else if value.Valid {
 				_m.WorkspaceID = value.String
+			}
+		case conversation.FieldPartitionID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field partition_id", values[i])
+			} else if value.Valid {
+				_m.PartitionID = value.String
+			}
+		case conversation.FieldContextMode:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field context_mode", values[i])
+			} else if value.Valid {
+				_m.ContextMode = value.String
 			}
 		case conversation.FieldAgentID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -208,6 +224,12 @@ func (_m *Conversation) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("workspace_id=")
 	builder.WriteString(_m.WorkspaceID)
+	builder.WriteString(", ")
+	builder.WriteString("partition_id=")
+	builder.WriteString(_m.PartitionID)
+	builder.WriteString(", ")
+	builder.WriteString("context_mode=")
+	builder.WriteString(_m.ContextMode)
 	builder.WriteString(", ")
 	builder.WriteString("agent_id=")
 	builder.WriteString(_m.AgentID)

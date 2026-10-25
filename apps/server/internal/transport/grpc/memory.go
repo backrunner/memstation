@@ -55,6 +55,7 @@ func (s *memoryServiceServer) Search(ctx context.Context, req *pb.SearchRequest)
 	result, err := s.memory.Search(ctx, domain.SearchInput{
 		AsOf: asOf, KnownAt: knownAt, RelationMode: req.GetRelationMode(), EntityScope: req.GetEntityScope(),
 		UserID:              security.UserIDFromContext(ctx),
+		SubjectActorIDs:     req.GetSubjectActorIds(),
 		GenerationID:        strings.TrimSpace(req.GetGenerationId()),
 		Query:               req.GetQuery(),
 		TopN:                int(req.GetTopN()),

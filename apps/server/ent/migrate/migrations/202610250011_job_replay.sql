@@ -1,0 +1,1 @@
+ALTER TABLE memory_jobs ADD COLUMN queue text NOT NULL DEFAULT 'default';

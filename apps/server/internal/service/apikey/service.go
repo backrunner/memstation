@@ -19,6 +19,7 @@ import (
 type Record = domain.Credential
 
 type CreateOptions struct {
+	WorkspaceID  string     `json:"workspace_id,omitempty"`
 	Name         string     `json:"name"`
 	AgentID      string     `json:"agent_id,omitempty"`
 	Capabilities []string   `json:"capabilities,omitempty"`
@@ -67,12 +68,13 @@ func (s *Service) CreateWithOptions(ctx context.Context, user string, input Crea
 	if err := identity.ValidateCapabilities(input.Capabilities); err != nil {
 		return Record{}, "", err
 	}
-	if input.AgentID != "" {
-		if _, err := s.identities.Grant(ctx, user, input.AgentID); err != nil {
-			return Record{}, "", err
-		}
+	var w domain.Workspace
+	var err error
+	if input.WorkspaceID == "" {
+		w, err = s.identities.Personal(ctx, user)
+	} else {
+		w, err = s.identities.Workspace(ctx, user, input.WorkspaceID)
 	}
-	w, err := s.identities.Personal(ctx, user)
 	if err != nil {
 		return Record{}, "", err
 	}
@@ -82,7 +84,7 @@ func (s *Service) CreateWithOptions(ctx context.Context, user string, input Crea
 	if input.AgentID == "" {
 		input.AgentID = domain.LegacyAgentID(user)
 	}
-	grant, err := s.identities.Grant(ctx, user, input.AgentID)
+	grant, err := s.identities.WorkspaceGrant(ctx, user, w.ID, input.AgentID)
 	if err != nil {
 		return Record{}, "", err
 	}
@@ -169,10 +171,28 @@ func (s *Service) ListForAgent(ctx context.Context, user, agent, after string, l
 	for _, k := range records {
 		caps := []string{}
 		if k.RevokedAt == nil && (k.ExpiresAt == nil || k.ExpiresAt.After(now)) {
-			caps = domain.EffectiveCapabilities(k.Capabilities, d.EffectiveCapabilities, d.Workspace.Capabilities)
+			grant, grantErr := s.identities.WorkspaceGrant(ctx, user, k.DefaultWorkspaceID, agent)
+			workspace, workspaceErr := s.identities.Workspace(ctx, user, k.DefaultWorkspaceID)
+			if grantErr == nil && workspaceErr == nil && d.Agent.Status == "active" && workspace.Status == "active" {
+				caps = domain.EffectiveCapabilities(k.Capabilities, grant.Capabilities, workspace.Capabilities)
+			}
 		}
 		k.Hash = ""
 		items = append(items, domain.CredentialAccess{Credential: k, EffectiveCapabilities: caps})
 	}
 	return items, nil
+}
+
+func (s *Service) ResolveAccess(ctx context.Context, p domain.AccessContext, workspace string, audience domain.Audience) (domain.AccessContext, error) {
+	if p.CredentialID == "development" {
+		if workspace != "" && workspace != p.WorkspaceID || audience.Kind != "" && audience.Kind != "workspace" || len(audience.ActorIDs) > 0 {
+			return domain.AccessContext{}, domain.ErrAccessDenied
+		}
+		return p, nil
+	}
+	repo, ok := s.repo.(ports.WorkspaceAdministration)
+	if !ok {
+		return domain.AccessContext{}, domain.ErrAccessDenied
+	}
+	return repo.ResolveAccess(ctx, p, workspace, audience)
 }

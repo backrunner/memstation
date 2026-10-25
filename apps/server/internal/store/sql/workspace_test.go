@@ -172,17 +172,17 @@ func runWorkspacePolicyLifecycle(t *testing.T, db *sqlpkg.DB) {
 			t.Fatal("audit failure left a partial write", after, err)
 		}
 	}
-	unsupported := domain.Workspace{ID: "project-" + uuid.NewString(), UserID: owner, Name: "Hidden project", Kind: "project", Status: "active", PolicyVersion: 1, Capabilities: domain.PersonalCapabilities()}
+	project := domain.Workspace{ID: "project-" + uuid.NewString(), UserID: owner, Name: "Hidden project", Kind: "project", Status: "active", PolicyVersion: 1, Capabilities: domain.PersonalCapabilities()}
 	if db == nil {
-		r.workspaces[unsupported.ID] = unsupported
-	} else if _, err = db.ExecContext(ctx, `INSERT INTO workspaces (id,user_id,name,kind,status,policy_version,capabilities) VALUES ($1,$2,$3,$4,$5,$6,$7)`, unsupported.ID, owner, unsupported.Name, unsupported.Kind, unsupported.Status, unsupported.PolicyVersion, marshalJSON(unsupported.Capabilities)); err != nil {
+		r.workspaces[project.ID] = project
+	} else if _, err = db.ExecContext(ctx, `INSERT INTO workspaces (id,user_id,name,kind,status,policy_version,capabilities) VALUES ($1,$2,$3,$4,$5,$6,$7)`, project.ID, owner, project.Name, project.Kind, project.Status, project.PolicyVersion, marshalJSON(project.Capabilities)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.Workspace(ctx, owner, unsupported.ID); !errors.Is(err, domain.ErrAccessNotFound) {
-		t.Fatal("unsupported scope opened", err)
+	if _, err = s.Workspace(ctx, owner, project.ID); err != nil {
+		t.Fatal("project scope unavailable", err)
 	}
 	page, err = s.Workspaces(ctx, domain.WorkspaceQuery{UserID: owner})
-	if err != nil || len(page.Items) != 1 || page.Items[0].ID != w.ID {
-		t.Fatal("unsupported scope listed", page, err)
+	if err != nil || len(page.Items) != 2 {
+		t.Fatal("project scope missing", page, err)
 	}
 }

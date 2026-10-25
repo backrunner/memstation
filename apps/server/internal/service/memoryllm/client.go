@@ -13,6 +13,7 @@ import (
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/observability"
+	"memstation/apps/server/internal/ports"
 	"memstation/apps/server/internal/provider"
 	settingsservice "memstation/apps/server/internal/service/settings"
 )
@@ -32,6 +33,7 @@ type Generator interface {
 }
 
 type Client struct {
+	runtime   ports.MemoryModelRuntime
 	providers *provider.Registry
 	settings  *settingsservice.Service
 	timeout   time.Duration
@@ -50,7 +52,7 @@ func (c *Client) Generate(ctx context.Context, input Request) (json.RawMessage, 
 	}
 	ctx, span := observability.TraceSpan(ctx, "memory.llm."+input.Task)
 	defer span.End()
-	if c == nil || c.providers == nil || c.settings == nil {
+	if c == nil || c.runtime == nil && (c.providers == nil || c.settings == nil) {
 		return nil, errors.New("memory LLM is not configured")
 	}
 	if input.Role != "summary_model" && input.Role != "analysis_model" {
@@ -58,17 +60,25 @@ func (c *Client) Generate(ctx context.Context, input Request) (json.RawMessage, 
 	}
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
-	snapshot, err := c.settings.SnapshotForUser(ctx, input.UserID)
-	if err != nil {
-		return nil, err
+	var adapter ports.ProviderAdapter
+	var modelName string
+	var err error
+	if c.runtime != nil {
+		adapter, modelName, err = c.runtime.Adapter(input.Role)
+	} else {
+		snapshot, e := c.settings.SnapshotForUser(ctx, input.UserID)
+		if e != nil {
+			return nil, e
+		}
+		model, _ := snapshot[input.Role].(string)
+		model = strings.TrimSpace(model)
+		if model == "" {
+			return nil, fmt.Errorf("%s is not configured", input.Role)
+		}
+		var providerName domain.Provider
+		providerName, modelName = ModelReference(model)
+		adapter, err = c.providers.Resolve(providerName)
 	}
-	model, _ := snapshot[input.Role].(string)
-	model = strings.TrimSpace(model)
-	if model == "" {
-		return nil, fmt.Errorf("%s is not configured", input.Role)
-	}
-	providerName, modelName := ModelReference(model)
-	adapter, err := c.providers.Resolve(providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +93,7 @@ func (c *Client) Generate(ctx context.Context, input Request) (json.RawMessage, 
 	if budget <= 0 || budget > 8192 {
 		budget = 4096
 	}
-	response, err := adapter.Complete(ctx, domain.UnifiedRequest{
+	response, err := CompleteWithBudget(ctx, adapter, domain.UnifiedRequest{
 		UserID: input.UserID, Provider: adapter.Name(), Model: modelName, Protocol: domain.ProtocolOpenAIChat,
 		Mode: domain.ModeTransparent, MaxOutputTokens: budget, JSONOutput: true, ReceivedAt: time.Now().UTC(),
 		Messages: []domain.UnifiedMessage{
@@ -166,3 +176,5 @@ func ModelReference(value string) (domain.Provider, string) {
 	}
 	return "", value
 }
+
+func (c *Client) SetRuntime(runtime ports.MemoryModelRuntime) { c.runtime = runtime }

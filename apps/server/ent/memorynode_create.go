@@ -62,6 +62,20 @@ func (_c *MemoryNodeCreate) SetNillableGenerationID(v *string) *MemoryNodeCreate
 	return _c
 }
 
+// SetSourceConversationID sets the "source_conversation_id" field.
+func (_c *MemoryNodeCreate) SetSourceConversationID(v string) *MemoryNodeCreate {
+	_c.mutation.SetSourceConversationID(v)
+	return _c
+}
+
+// SetNillableSourceConversationID sets the "source_conversation_id" field if the given value is not nil.
+func (_c *MemoryNodeCreate) SetNillableSourceConversationID(v *string) *MemoryNodeCreate {
+	if v != nil {
+		_c.SetSourceConversationID(*v)
+	}
+	return _c
+}
+
 // SetUserID sets the "user_id" field.
 func (_c *MemoryNodeCreate) SetUserID(v string) *MemoryNodeCreate {
 	_c.mutation.SetUserID(v)
@@ -71,6 +85,60 @@ func (_c *MemoryNodeCreate) SetUserID(v string) *MemoryNodeCreate {
 // SetWorkspaceID sets the "workspace_id" field.
 func (_c *MemoryNodeCreate) SetWorkspaceID(v string) *MemoryNodeCreate {
 	_c.mutation.SetWorkspaceID(v)
+	return _c
+}
+
+// SetPartitionID sets the "partition_id" field.
+func (_c *MemoryNodeCreate) SetPartitionID(v string) *MemoryNodeCreate {
+	_c.mutation.SetPartitionID(v)
+	return _c
+}
+
+// SetNillablePartitionID sets the "partition_id" field if the given value is not nil.
+func (_c *MemoryNodeCreate) SetNillablePartitionID(v *string) *MemoryNodeCreate {
+	if v != nil {
+		_c.SetPartitionID(*v)
+	}
+	return _c
+}
+
+// SetAccessStatus sets the "access_status" field.
+func (_c *MemoryNodeCreate) SetAccessStatus(v string) *MemoryNodeCreate {
+	_c.mutation.SetAccessStatus(v)
+	return _c
+}
+
+// SetNillableAccessStatus sets the "access_status" field if the given value is not nil.
+func (_c *MemoryNodeCreate) SetNillableAccessStatus(v *string) *MemoryNodeCreate {
+	if v != nil {
+		_c.SetAccessStatus(*v)
+	}
+	return _c
+}
+
+// SetSubjectActorIds sets the "subject_actor_ids" field.
+func (_c *MemoryNodeCreate) SetSubjectActorIds(v []string) *MemoryNodeCreate {
+	_c.mutation.SetSubjectActorIds(v)
+	return _c
+}
+
+// SetSourceRefs sets the "source_refs" field.
+func (_c *MemoryNodeCreate) SetSourceRefs(v []map[string]interface{}) *MemoryNodeCreate {
+	_c.mutation.SetSourceRefs(v)
+	return _c
+}
+
+// SetRevision sets the "revision" field.
+func (_c *MemoryNodeCreate) SetRevision(v int64) *MemoryNodeCreate {
+	_c.mutation.SetRevision(v)
+	return _c
+}
+
+// SetNillableRevision sets the "revision" field if the given value is not nil.
+func (_c *MemoryNodeCreate) SetNillableRevision(v *int64) *MemoryNodeCreate {
+	if v != nil {
+		_c.SetRevision(*v)
+	}
 	return _c
 }
 
@@ -217,6 +285,30 @@ func (_c *MemoryNodeCreate) defaults() {
 		v := memorynode.DefaultGenerationID
 		_c.mutation.SetGenerationID(v)
 	}
+	if _, ok := _c.mutation.SourceConversationID(); !ok {
+		v := memorynode.DefaultSourceConversationID
+		_c.mutation.SetSourceConversationID(v)
+	}
+	if _, ok := _c.mutation.PartitionID(); !ok {
+		v := memorynode.DefaultPartitionID
+		_c.mutation.SetPartitionID(v)
+	}
+	if _, ok := _c.mutation.AccessStatus(); !ok {
+		v := memorynode.DefaultAccessStatus
+		_c.mutation.SetAccessStatus(v)
+	}
+	if _, ok := _c.mutation.SubjectActorIds(); !ok {
+		v := memorynode.DefaultSubjectActorIds
+		_c.mutation.SetSubjectActorIds(v)
+	}
+	if _, ok := _c.mutation.SourceRefs(); !ok {
+		v := memorynode.DefaultSourceRefs
+		_c.mutation.SetSourceRefs(v)
+	}
+	if _, ok := _c.mutation.Revision(); !ok {
+		v := memorynode.DefaultRevision
+		_c.mutation.SetRevision(v)
+	}
 	if _, ok := _c.mutation.Importance(); !ok {
 		v := memorynode.DefaultImportance
 		_c.mutation.SetImportance(v)
@@ -250,11 +342,29 @@ func (_c *MemoryNodeCreate) check() error {
 	if _, ok := _c.mutation.GenerationID(); !ok {
 		return &ValidationError{Name: "generation_id", err: errors.New(`ent: missing required field "MemoryNode.generation_id"`)}
 	}
+	if _, ok := _c.mutation.SourceConversationID(); !ok {
+		return &ValidationError{Name: "source_conversation_id", err: errors.New(`ent: missing required field "MemoryNode.source_conversation_id"`)}
+	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "MemoryNode.user_id"`)}
 	}
 	if _, ok := _c.mutation.WorkspaceID(); !ok {
 		return &ValidationError{Name: "workspace_id", err: errors.New(`ent: missing required field "MemoryNode.workspace_id"`)}
+	}
+	if _, ok := _c.mutation.PartitionID(); !ok {
+		return &ValidationError{Name: "partition_id", err: errors.New(`ent: missing required field "MemoryNode.partition_id"`)}
+	}
+	if _, ok := _c.mutation.AccessStatus(); !ok {
+		return &ValidationError{Name: "access_status", err: errors.New(`ent: missing required field "MemoryNode.access_status"`)}
+	}
+	if _, ok := _c.mutation.SubjectActorIds(); !ok {
+		return &ValidationError{Name: "subject_actor_ids", err: errors.New(`ent: missing required field "MemoryNode.subject_actor_ids"`)}
+	}
+	if _, ok := _c.mutation.SourceRefs(); !ok {
+		return &ValidationError{Name: "source_refs", err: errors.New(`ent: missing required field "MemoryNode.source_refs"`)}
+	}
+	if _, ok := _c.mutation.Revision(); !ok {
+		return &ValidationError{Name: "revision", err: errors.New(`ent: missing required field "MemoryNode.revision"`)}
 	}
 	if _, ok := _c.mutation.NodeType(); !ok {
 		return &ValidationError{Name: "node_type", err: errors.New(`ent: missing required field "MemoryNode.node_type"`)}
@@ -320,6 +430,10 @@ func (_c *MemoryNodeCreate) createSpec() (*MemoryNode, *sqlgraph.CreateSpec) {
 		_spec.SetField(memorynode.FieldGenerationID, field.TypeString, value)
 		_node.GenerationID = value
 	}
+	if value, ok := _c.mutation.SourceConversationID(); ok {
+		_spec.SetField(memorynode.FieldSourceConversationID, field.TypeString, value)
+		_node.SourceConversationID = value
+	}
 	if value, ok := _c.mutation.UserID(); ok {
 		_spec.SetField(memorynode.FieldUserID, field.TypeString, value)
 		_node.UserID = value
@@ -327,6 +441,26 @@ func (_c *MemoryNodeCreate) createSpec() (*MemoryNode, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.WorkspaceID(); ok {
 		_spec.SetField(memorynode.FieldWorkspaceID, field.TypeString, value)
 		_node.WorkspaceID = value
+	}
+	if value, ok := _c.mutation.PartitionID(); ok {
+		_spec.SetField(memorynode.FieldPartitionID, field.TypeString, value)
+		_node.PartitionID = value
+	}
+	if value, ok := _c.mutation.AccessStatus(); ok {
+		_spec.SetField(memorynode.FieldAccessStatus, field.TypeString, value)
+		_node.AccessStatus = value
+	}
+	if value, ok := _c.mutation.SubjectActorIds(); ok {
+		_spec.SetField(memorynode.FieldSubjectActorIds, field.TypeJSON, value)
+		_node.SubjectActorIds = value
+	}
+	if value, ok := _c.mutation.SourceRefs(); ok {
+		_spec.SetField(memorynode.FieldSourceRefs, field.TypeJSON, value)
+		_node.SourceRefs = value
+	}
+	if value, ok := _c.mutation.Revision(); ok {
+		_spec.SetField(memorynode.FieldRevision, field.TypeInt64, value)
+		_node.Revision = value
 	}
 	if value, ok := _c.mutation.NodeType(); ok {
 		_spec.SetField(memorynode.FieldNodeType, field.TypeString, value)

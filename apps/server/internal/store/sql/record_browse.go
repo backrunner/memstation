@@ -9,6 +9,7 @@ import (
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/security"
+	storeaccess "memstation/apps/server/internal/store/access"
 )
 
 func recordBefore(stamp time.Time, id string, position *domain.RecordPosition) bool {
@@ -23,7 +24,7 @@ func (r *HybridConversationRepository) BrowseConversations(ctx context.Context, 
 }
 
 func (r *InMemoryConversationRepository) BrowseConversations(ctx context.Context, input domain.RecordBrowseQuery, position *domain.RecordPosition) ([]domain.ConversationListItem, error) {
-	workspace, err := security.PersonalScope(ctx, input.UserID, "")
+	workspace, err := security.DataScope(ctx, input.UserID, "")
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +52,7 @@ func (r *InMemoryConversationRepository) BrowseConversations(ctx context.Context
 }
 
 func (r *PostgresConversationRepository) BrowseConversations(ctx context.Context, input domain.RecordBrowseQuery, position *domain.RecordPosition) ([]domain.ConversationListItem, error) {
-	workspace, err := security.PersonalScope(ctx, input.UserID, "")
+	workspace, err := security.DataScope(ctx, input.UserID, "")
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +69,7 @@ func (r *PostgresConversationRepository) BrowseConversations(ctx context.Context
 	   SELECT id, user_id, workspace_id, upstream_provider, request_format, mode,
 	          finalize_status, summary_status, analysis_status, updated_at, metadata
 	   FROM conversations
-	   WHERE user_id=$1 AND workspace_id=$2
+	   WHERE user_id=$1 AND workspace_id=$2 AND `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND finalize_status<>'invalidated'
 	     AND strpos(lower(concat_ws(' ',id,upstream_provider,request_format,mode,finalize_status)),lower($3))>0
 	     AND ($4::timestamptz IS NULL OR (updated_at,id COLLATE "C") < ($4,$5 COLLATE "C"))
 	   ORDER BY updated_at DESC,id COLLATE "C" DESC LIMIT $6
@@ -105,7 +106,7 @@ func (r *HybridMemoryRepository) BrowseKeyMemories(ctx context.Context, input do
 }
 
 func (r *InMemoryMemoryRepository) BrowseKeyMemories(ctx context.Context, input domain.RecordBrowseQuery, position *domain.RecordPosition) ([]domain.KeyMemory, error) {
-	if _, err := security.PersonalScope(ctx, input.UserID, ""); err != nil {
+	if _, err := security.DataScope(ctx, input.UserID, ""); err != nil {
 		return nil, err
 	}
 	r.mu.RLock()
@@ -113,7 +114,7 @@ func (r *InMemoryMemoryRepository) BrowseKeyMemories(ctx context.Context, input 
 	items := []domain.KeyMemory{}
 	query := strings.ToLower(input.Query)
 	for _, item := range r.keyMemories {
-		if item.UserID != input.UserID || !personalMemoryWorkspace(input.UserID, item.WorkspaceID) || !recordBefore(item.UpdatedAt, item.ID, position) {
+		if item.UserID != input.UserID || !personalMemoryWorkspace(ctx, input.UserID, item.WorkspaceID) || !recordBefore(item.UpdatedAt, item.ID, position) {
 			continue
 		}
 		if !strings.Contains(strings.ToLower(strings.Join([]string{item.ID, item.Key, item.Value, item.Category, item.ReviewStatus}, " ")), query) {
@@ -132,7 +133,7 @@ func (r *InMemoryMemoryRepository) BrowseKeyMemories(ctx context.Context, input 
 }
 
 func (r *PostgresMemoryRepository) BrowseKeyMemories(ctx context.Context, input domain.RecordBrowseQuery, position *domain.RecordPosition) ([]domain.KeyMemory, error) {
-	workspace, err := security.PersonalScope(ctx, input.UserID, "")
+	workspace, err := security.DataScope(ctx, input.UserID, "")
 	if err != nil {
 		return nil, err
 	}
@@ -144,8 +145,8 @@ func (r *PostgresMemoryRepository) BrowseKeyMemories(ctx context.Context, input 
 	}
 	rows, err := r.db.QueryContext(ctx, `
 	 SELECT k.id,k.node_id,k.key,k.value,k.category,k.source,k.review_status,k.last_confirmed_at,k.created_at,k.updated_at,
-	        n.importance,n.decay_factor,coalesce(n.activity_at,k.updated_at),coalesce(n.time_tier,'')
-	 FROM key_memories k JOIN memory_nodes n ON n.user_id=k.user_id AND n.id=k.node_id AND n.workspace_id=$2
+	        n.importance,n.decay_factor,coalesce(n.activity_at,k.updated_at),coalesce(n.time_tier,''),n.partition_id
+	 FROM key_memories k JOIN memory_nodes n ON n.user_id=k.user_id AND n.id=k.node_id AND n.workspace_id=$2 AND `+storeaccess.NodeSQL(ctx, "n")+`
 	 WHERE k.user_id=$1 AND k.deleted_at IS NULL
 	   AND strpos(lower(concat_ws(' ',k.id,k.key,k.value,k.category,k.review_status)),lower($3))>0
 	   AND ($4::timestamptz IS NULL OR (k.updated_at,k.id COLLATE "C") < ($4,$5 COLLATE "C"))
@@ -157,7 +158,7 @@ func (r *PostgresMemoryRepository) BrowseKeyMemories(ctx context.Context, input 
 	defer rows.Close()
 	items := []domain.KeyMemory{}
 	for rows.Next() {
-		item, err := scanKeyMemoryRow(rows, input.UserID)
+		item, err := scanKeyMemoryRow(ctx, rows, input.UserID)
 		if err != nil {
 			return nil, err
 		}

@@ -472,7 +472,7 @@ func TestMemoryEngineIncludeConversationExpandsCompanionMemories(t *testing.T) {
 		UserID:         "user-1",
 		ConversationID: "conv-include",
 		Type:           domain.MemoryTypeFact,
-		Content:        "The freeze owner is Dana.",
+		Content:        "Dana approves release exceptions.",
 		Importance:     1,
 		DecayFactor:    1,
 	}
@@ -482,7 +482,7 @@ func TestMemoryEngineIncludeConversationExpandsCompanionMemories(t *testing.T) {
 		UserID:         "user-1",
 		ConversationID: "conv-include",
 		Type:           domain.MemoryTypeSegment,
-		Content:        "user: remind me about the deployment freeze owner | assistant: noted",
+		Content:        "user: remind me who approves release exceptions | assistant: noted",
 		Importance:     0.9,
 		DecayFactor:    0.85,
 	}

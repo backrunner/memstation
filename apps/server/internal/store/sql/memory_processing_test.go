@@ -174,11 +174,12 @@ func runSummaryCheckpoints(t *testing.T, repo ports.MemoryRepository, db *sql.DB
 }
 
 func TestMemoryEditAuditUsesTrustedWorkerActor(t *testing.T) {
-	event := memoryEditEvent("owner", "update_key_memory", "key_memory", "key", &domain.MemoryWriteCondition{ActorType: "system", ActorID: "worker"})
+	ctx := context.Background()
+	event := memoryEditEvent(ctx, "owner", "update_key_memory", "key_memory", "key", &domain.MemoryWriteCondition{ActorType: "system", ActorID: "worker"})
 	if event.ActorType != "system" || event.ActorID != "worker" {
 		t.Fatal(event)
 	}
-	event = memoryEditEvent("owner", "update_key_memory", "key_memory", "key", &domain.MemoryWriteCondition{})
+	event = memoryEditEvent(ctx, "owner", "update_key_memory", "key_memory", "key", &domain.MemoryWriteCondition{})
 	if event.ActorType != "admin" || event.ActorID != "admin" {
 		t.Fatal(event)
 	}

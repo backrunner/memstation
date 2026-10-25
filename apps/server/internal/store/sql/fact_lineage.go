@@ -3,6 +3,7 @@ package sql
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -14,6 +15,12 @@ import (
 
 func factLineageGroupID(userID string, doc domain.MemoryDocument) string {
 	if factKey := factKeyFromMetadata(doc.Metadata); factKey != "" {
+		if doc.WorkspaceID != "" && doc.WorkspaceID != domain.PersonalWorkspaceID(userID) || doc.PartitionID != "" || len(doc.SubjectActorIDs) > 0 {
+			actors := append([]string{}, doc.SubjectActorIDs...)
+			sort.Strings(actors)
+			identity, _ := json.Marshal([]any{doc.WorkspaceID, doc.PartitionID, actors, doc.Metadata["applicability"], factKey})
+			factKey = domain.AccessID("identity", string(identity))
+		}
 		return canonicalFactLineageGroupID(userID, factKey)
 	}
 	if groupID := factLineageGroupIDFromMetadata(doc.Metadata); groupID != "" && factLineageGroupBelongsToUser(userID, groupID) {

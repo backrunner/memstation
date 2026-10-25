@@ -21,6 +21,10 @@ const (
 	FieldUserID = "user_id"
 	// FieldWorkspaceID holds the string denoting the workspace_id field in the database.
 	FieldWorkspaceID = "workspace_id"
+	// FieldPartitionID holds the string denoting the partition_id field in the database.
+	FieldPartitionID = "partition_id"
+	// FieldContextMode holds the string denoting the context_mode field in the database.
+	FieldContextMode = "context_mode"
 	// FieldAgentID holds the string denoting the agent_id field in the database.
 	FieldAgentID = "agent_id"
 	// FieldWriteRevision holds the string denoting the write_revision field in the database.
@@ -50,6 +54,8 @@ var Columns = []string{
 	FieldUpdatedAt,
 	FieldUserID,
 	FieldWorkspaceID,
+	FieldPartitionID,
+	FieldContextMode,
 	FieldAgentID,
 	FieldWriteRevision,
 	FieldRequestFormat,
@@ -78,6 +84,10 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultPartitionID holds the default value on creation for the "partition_id" field.
+	DefaultPartitionID string
+	// DefaultContextMode holds the default value on creation for the "context_mode" field.
+	DefaultContextMode string
 	// DefaultWriteRevision holds the default value on creation for the "write_revision" field.
 	DefaultWriteRevision int64
 	// DefaultMode holds the default value on creation for the "mode" field.
@@ -116,6 +126,16 @@ func ByUserID(opts ...sql.OrderTermOption) OrderOption {
 // ByWorkspaceID orders the results by the workspace_id field.
 func ByWorkspaceID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldWorkspaceID, opts...).ToFunc()
+}
+
+// ByPartitionID orders the results by the partition_id field.
+func ByPartitionID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPartitionID, opts...).ToFunc()
+}
+
+// ByContextMode orders the results by the context_mode field.
+func ByContextMode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldContextMode, opts...).ToFunc()
 }
 
 // ByAgentID orders the results by the agent_id field.

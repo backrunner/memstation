@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	memorycontrolservice "memstation/apps/server/internal/service/memorycontrol"
+
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/hibiken/asynq"
@@ -25,10 +27,13 @@ import (
 	"memstation/apps/server/internal/ports"
 	"memstation/apps/server/internal/security"
 	"memstation/apps/server/internal/service/admin"
+	"memstation/apps/server/internal/service/aibroker"
 	apikeyservice "memstation/apps/server/internal/service/apikey"
 	auditsvc "memstation/apps/server/internal/service/audit"
 	connectionconfigservice "memstation/apps/server/internal/service/connectionconfig"
 	gatewayservice "memstation/apps/server/internal/service/gateway"
+	ingestionservice "memstation/apps/server/internal/service/ingestion"
+	lifecycleservice "memstation/apps/server/internal/service/lifecycle"
 	memoryservice "memstation/apps/server/internal/service/memory"
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
 	multimodalservice "memstation/apps/server/internal/service/multimodal"
@@ -43,6 +48,11 @@ import (
 )
 
 type Dependencies struct {
+	MemoryControl    *memorycontrolservice.Service
+	AIUsage          *aibroker.UsageService
+	DataReady        func(context.Context) error
+	Lifecycle        *lifecycleservice.Service
+	Ingestion        *ingestionservice.Service
 	Config           bootstrap.Config
 	Logger           *slog.Logger
 	Health           *observability.Registry
@@ -79,6 +89,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	router.Use(observability.HTTPMiddleware())
 	router.Use(chimiddleware.Recoverer)
 	router.Use(requestLogger(logger))
+	router.Use(memoryRecoveryBarrier(deps.DataReady))
 
 	router.Get("/health/live", liveHandler(deps.Config))
 	router.Get("/health/ready", readyHandler(deps.Config, deps.Health))
@@ -91,6 +102,42 @@ func NewRouter(deps Dependencies) http.Handler {
 		r.Use(proxyAuthMiddleware(deps.Auth, deps.RateLimiter))
 		r.Get("/v1/models", modelsHandler(deps.Models))
 		r.Get("/api/v1/identity", identityHandler)
+		r.Get("/api/v1/capabilities", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-store")
+			if deps.Lifecycle == nil {
+				writeError(w, 503, "memory_disabled", "independent memory unavailable")
+				return
+			}
+			writeJSON(w, 200, deps.Lifecycle.Probe(r.Context(), deps.Config.Version))
+		})
+		registerIngestionRoutes(r, deps.Ingestion)
+		registerLifecycleRoutes(r, deps.Lifecycle, "/api/v1")
+		r.Post("/api/v1/usage/{id}/reconcile", func(w http.ResponseWriter, r *http.Request) {
+			if deps.AIUsage == nil {
+				writeError(w, 503, "unavailable", "usage unavailable")
+				return
+			}
+			out, err := deps.AIUsage.Reconcile(r.Context(), chi.URLParam(r, "id"))
+			if err != nil {
+				lifecycleError(w, err)
+				return
+			}
+			writeJSON(w, 200, out)
+		})
+		r.Get("/api/v1/usage", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-store")
+			if deps.AIUsage == nil {
+				writeError(w, 503, "memory_disabled", "AI usage unavailable")
+				return
+			}
+			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+			items, err := deps.AIUsage.List(r.Context(), r.URL.Query().Get("after"), limit)
+			if err != nil {
+				lifecycleError(w, err)
+				return
+			}
+			writeJSON(w, 200, map[string]any{"items": items, "usage_authority": "broker", "additional_charge": false})
+		})
 		r.Get("/api/v1/workspaces", workspaceDiscovery(deps.APIKeys))
 		r.Post("/v1/chat/completions", chatHandler(deps.Gateway))
 		r.Post("/v1/responses", responsesHandler(deps.Gateway))
@@ -112,6 +159,7 @@ func NewRouter(deps Dependencies) http.Handler {
 		r.Get("/api/admin/overview", adminOverviewHandler(deps.Admin))
 		registerIdentityRoutes(r, deps.APIKeys)
 		registerWorkspaceReadRoutes(r, deps)
+		registerAdminLifecycleRoutes(r, deps)
 		r.Get("/api/admin/users", adminUsersHandler(deps.Admin))
 		r.Get("/api/admin/users/{id}", adminUserDetailHandler(deps.Admin))
 		r.Get("/api/admin/users/{id}/sources", adminUserSourcesHandler(deps.Generations))
@@ -565,6 +613,9 @@ func deleteFileHandler(service *multimodalservice.Service) http.HandlerFunc {
 
 func memorySearchHandler(service *memoryservice.Service) http.HandlerFunc {
 	type requestBody struct {
+		SubjectActorIDs     []string            `json:"subject_actor_ids"`
+		WorkspaceID         string              `json:"workspace_id"`
+		QueryID             string              `json:"query_id"`
 		AsOf                string              `json:"as_of"`
 		KnownAt             string              `json:"known_at"`
 		RelationMode        string              `json:"relation_mode"`
@@ -615,6 +666,7 @@ func memorySearchHandler(service *memoryservice.Service) http.HandlerFunc {
 			return
 		}
 		result, err := service.Search(r.Context(), domain.SearchInput{
+			SubjectActorIDs: body.SubjectActorIDs, WorkspaceID: body.WorkspaceID, QueryID: body.QueryID,
 			AsOf: asOf, KnownAt: knownAt, RelationMode: body.RelationMode, EntityScope: body.EntityScope,
 			UserID:              security.UserIDFromContext(r.Context()),
 			Query:               body.Query,
@@ -628,7 +680,7 @@ func memorySearchHandler(service *memoryservice.Service) http.HandlerFunc {
 			MinScore:            body.MinScore,
 		})
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "search_failed", err.Error())
+			ingestionError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, result)
@@ -1000,7 +1052,7 @@ func adminMemoryRebuildListHandler(service *memorygenservice.Service) http.Handl
 			writeError(w, http.StatusServiceUnavailable, "memory_generation_unavailable", "memory generation service is not configured")
 			return
 		}
-		userID := strings.TrimSpace(r.URL.Query().Get("user_id"))
+		userID := queryUserID(r)
 		if userID == "" {
 			writeError(w, http.StatusBadRequest, "invalid_request", "user_id is required")
 			return
@@ -1021,7 +1073,7 @@ func adminMemoryRebuildGetHandler(service *memorygenservice.Service) http.Handle
 			writeError(w, http.StatusServiceUnavailable, "memory_generation_unavailable", "memory generation service is not configured")
 			return
 		}
-		userID := strings.TrimSpace(r.URL.Query().Get("user_id"))
+		userID := queryUserID(r)
 		if userID == "" {
 			writeError(w, http.StatusBadRequest, "invalid_request", "user_id is required")
 			return
@@ -1056,7 +1108,7 @@ func adminMemoryRebuildCreateHandler(service *memorygenservice.Service, publishe
 			writeError(w, http.StatusServiceUnavailable, "memory_generation_unavailable", "memory generation service is not configured")
 			return
 		}
-		if publisher == nil {
+		if publisher == nil && !service.DurableTasks() {
 			writeError(w, http.StatusServiceUnavailable, "queue_unavailable", "task publisher is not configured")
 			return
 		}
@@ -1086,6 +1138,9 @@ func adminMemoryRebuildCreateHandler(service *memorygenservice.Service, publishe
 			return
 		}
 		for _, source := range sources {
+			if service.DurableTasks() {
+				break
+			}
 			if err := publisher.Publish(r.Context(), domain.TaskMessage{
 				Type:      worker.TypeMemoryRebuildConversation,
 				Queue:     worker.QueueBulk,
@@ -1128,7 +1183,7 @@ func adminMemoryRebuildActivateHandler(service *memorygenservice.Service, audit 
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		userID := strings.TrimSpace(body.UserID)
 		if userID == "" {
-			userID = strings.TrimSpace(r.URL.Query().Get("user_id"))
+			userID = queryUserID(r)
 		}
 		if userID == "" {
 			writeError(w, http.StatusBadRequest, "invalid_request", "user_id is required")
@@ -1152,7 +1207,7 @@ func adminMemoryRebuildDiscardHandler(service *memorygenservice.Service, audit *
 			writeError(w, http.StatusServiceUnavailable, "memory_generation_unavailable", "memory generation service is not configured")
 			return
 		}
-		userID := strings.TrimSpace(r.URL.Query().Get("user_id"))
+		userID := queryUserID(r)
 		if userID == "" {
 			writeError(w, http.StatusBadRequest, "invalid_request", "user_id is required")
 			return
@@ -2194,6 +2249,9 @@ func adminAuditHandler(service *auditsvc.Service) http.HandlerFunc {
 
 func queryUserID(r *http.Request) string {
 	userID := r.URL.Query().Get("user_id")
+	if userID == "" {
+		userID = security.UserIDFromContext(r.Context())
+	}
 	if userID == "" {
 		userID = "admin"
 	}

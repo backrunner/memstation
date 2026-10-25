@@ -96,8 +96,11 @@ func snapshotConversation(snapshot domain.MemorySourceSnapshot) domain.Conversat
 	metadata["source_snapshot_id"] = snapshot.SnapshotID
 	metadata["source_snapshot_version"] = snapshot.SnapshotVersion
 	metadata["source_hash"] = snapshot.SourceHash
+	contextMode, _ := metadata["trusted_context_mode"].(string)
+	partition, _ := metadata["trusted_partition_id"].(string)
 	return domain.ConversationRecord{
 		ConversationID: snapshot.ConversationID,
+		ContextMode:    contextMode, PartitionID: partition,
 		UserID:         snapshot.UserID,
 		WorkspaceID:    snapshot.WorkspaceID,
 		RequestFormat:  snapshot.RequestFormat,

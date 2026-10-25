@@ -8,6 +8,7 @@ import (
 	"errors"
 	"strings"
 
+	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/service/memoryllm"
 )
 
@@ -25,9 +26,11 @@ func (g Generator) Generate(ctx context.Context, request memoryllm.Request) (jso
 	raw, _ := json.Marshal(request.Input)
 	var input struct {
 		Sources []struct {
-			ID   string `json:"id"`
-			Role string `json:"role"`
-			Text string `json:"text"`
+			ID     string            `json:"id"`
+			Role   string            `json:"role"`
+			Text   string            `json:"text"`
+			Author string            `json:"author_actor_id"`
+			Ref    *domain.SourceRef `json:"source_ref"`
 		} `json:"sources"`
 		Chunks []struct {
 			Summary string `json:"summary"`
@@ -60,9 +63,11 @@ func (g Generator) Generate(ctx context.Context, request memoryllm.Request) (jso
 		return json.Marshal(map[string]any{"summary": summary, "topic_label": "Fixture topic", "keywords": []string{"fixture"}, "importance": 1, "decay_factor": 1})
 	case "analysis.extract":
 		sources := append([]struct {
-			ID   string `json:"id"`
-			Role string `json:"role"`
-			Text string `json:"text"`
+			ID     string            `json:"id"`
+			Role   string            `json:"role"`
+			Text   string            `json:"text"`
+			Author string            `json:"author_actor_id"`
+			Ref    *domain.SourceRef `json:"source_ref"`
 		}{}, input.Sources...)
 		if g.PreferLastSource {
 			for i, j := 0, len(sources)-1; i < j; i, j = i+1, j-1 {
@@ -74,6 +79,15 @@ func (g Generator) Generate(ctx context.Context, request memoryllm.Request) (jso
 				continue
 			}
 			item := map[string]any{"content": source.Text, "subject": "user", "importance": 1, "decay_factor": 1, "confidence": .9, "quotes": []any{map[string]any{"source_id": source.ID, "text": source.Text}}}
+			if source.Ref != nil {
+				item["subject_scope"] = "workspace"
+				item["subject_actor_ids"] = []string{}
+				if source.Author != "" {
+					item["subject"] = source.Author
+					item["subject_scope"] = "actor"
+					item["subject_actor_ids"] = []string{source.Author}
+				}
+			}
 			fact := map[string]any{}
 			for k, v := range item {
 				fact[k] = v
@@ -90,6 +104,10 @@ func (g Generator) Generate(ctx context.Context, request memoryllm.Request) (jso
 			task["title"] = "Fixture task"
 			task["status"] = "pending"
 			impression := map[string]any{"content": "Simulated model observation for worker contract tests.", "subject": "conversation", "importance": 1, "decay_factor": 1, "confidence": .8, "quotes": item["quotes"]}
+			if source.Ref != nil {
+				impression["subject_scope"] = "workspace"
+				impression["subject_actor_ids"] = []string{}
+			}
 			types := g.GenericTypes
 			if types == nil {
 				types = []string{"task"}

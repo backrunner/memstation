@@ -91,7 +91,7 @@ func (r *IdentityRepository) EnsurePersonal(ctx context.Context, user string) (d
 	}
 	r.workspaces[w.ID] = w
 	r.agents[a.ID] = a
-	r.grants[a.ID] = g
+	r.grants[key(a.DefaultWorkspaceID, a.ID)] = g
 	w.Capabilities = append([]string{}, w.Capabilities...)
 	return w, nil
 }
@@ -125,7 +125,7 @@ func (r *IdentityRepository) CreateAgent(ctx context.Context, a domain.Agent, g 
 	}
 	r.agents[a.ID] = a
 	g.Capabilities = append([]string{}, g.Capabilities...)
-	r.grants[a.ID] = g
+	r.grants[key(a.DefaultWorkspaceID, a.ID)] = g
 	return r.audit(ctx, nil, a.UserID, "create_agent", "agent", a.ID, map[string]any{"workspace_id": a.DefaultWorkspaceID, "name": a.Name, "revision": a.Revision, "capabilities": append([]string{}, g.Capabilities...)})
 }
 
@@ -227,7 +227,7 @@ func (r *IdentityRepository) GetGrant(ctx context.Context, user, workspace, agen
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	g, ok := r.grants[agent]
+	g, ok := r.grants[key(workspace, agent)]
 	if !ok || g.UserID != user || g.WorkspaceID != workspace {
 		return domain.WorkspaceGrant{}, domain.ErrAccessNotFound
 	}
@@ -238,7 +238,12 @@ func (r *IdentityRepository) GetGrant(ctx context.Context, user, workspace, agen
 func (r *IdentityRepository) PutGrant(ctx context.Context, g domain.WorkspaceGrant) (domain.WorkspaceGrant, error) {
 	if currentDB(r.db) != nil {
 		err := r.transaction(ctx, func(tx *sqlpkg.Tx) error {
-			err := tx.QueryRowContext(ctx, `UPDATE workspace_grants SET capabilities=$4,revision=revision+1,updated_at=now() WHERE user_id=$1 AND workspace_id=$2 AND agent_id=$3 AND revision=$5 RETURNING revision`, g.UserID, g.WorkspaceID, g.AgentID, marshalJSON(g.Capabilities), g.Revision).Scan(&g.Revision)
+			var err error
+			if g.Revision == 0 {
+				err = tx.QueryRowContext(ctx, `INSERT INTO workspace_grants(id,user_id,workspace_id,agent_id,capabilities) VALUES($1,$2,$3,$4,$5) ON CONFLICT(user_id,workspace_id,agent_id) DO NOTHING RETURNING revision`, uuid.NewString(), g.UserID, g.WorkspaceID, g.AgentID, marshalJSON(g.Capabilities)).Scan(&g.Revision)
+			} else {
+				err = tx.QueryRowContext(ctx, `UPDATE workspace_grants SET capabilities=$4,revision=revision+1,updated_at=now() WHERE user_id=$1 AND workspace_id=$2 AND agent_id=$3 AND revision=$5 RETURNING revision`, g.UserID, g.WorkspaceID, g.AgentID, marshalJSON(g.Capabilities), g.Revision).Scan(&g.Revision)
+			}
 			if errors.Is(err, sqlpkg.ErrNoRows) {
 				return domain.ErrAccessConflict
 			}
@@ -251,8 +256,17 @@ func (r *IdentityRepository) PutGrant(ctx context.Context, g domain.WorkspaceGra
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	old, ok := r.grants[g.AgentID]
-	if !ok || old.UserID != g.UserID || old.WorkspaceID != g.WorkspaceID {
+	old, ok := r.grants[key(g.WorkspaceID, g.AgentID)]
+	if !ok {
+		if g.Revision != 0 {
+			return g, domain.ErrAccessNotFound
+		}
+		w, wok := r.workspaces[g.WorkspaceID]
+		a, aok := r.agents[g.AgentID]
+		if !wok || !aok || w.UserID != g.UserID || a.UserID != g.UserID {
+			return g, domain.ErrAccessNotFound
+		}
+	} else if old.UserID != g.UserID || old.WorkspaceID != g.WorkspaceID {
 		return g, domain.ErrAccessNotFound
 	}
 	if old.Revision != g.Revision {
@@ -260,7 +274,7 @@ func (r *IdentityRepository) PutGrant(ctx context.Context, g domain.WorkspaceGra
 	}
 	g.Revision++
 	g.Capabilities = append([]string{}, g.Capabilities...)
-	r.grants[g.AgentID] = g
+	r.grants[key(g.WorkspaceID, g.AgentID)] = g
 	g.Capabilities = append([]string{}, g.Capabilities...)
 	return g, r.audit(ctx, nil, g.UserID, "update_workspace_grant", "agent", g.AgentID, map[string]any{"workspace_id": g.WorkspaceID, "capabilities": append([]string{}, g.Capabilities...), "revision": g.Revision})
 }
@@ -310,7 +324,7 @@ func (r *IdentityRepository) CreateCredential(ctx context.Context, k domain.Cred
 		return domain.ErrAccessDenied
 	}
 	w, wok := r.workspaces[k.DefaultWorkspaceID]
-	g, gok := r.grants[k.AgentID]
+	g, gok := r.grants[key(k.DefaultWorkspaceID, k.AgentID)]
 	if !wok || !gok || w.Status != "active" || g.UserID != k.UserID || g.WorkspaceID != w.ID || len(domain.EffectiveCapabilities(k.Capabilities, g.Capabilities, w.Capabilities)) != len(k.Capabilities) {
 		return domain.ErrAccessDenied
 	}
@@ -416,7 +430,7 @@ func (r *IdentityRepository) Authenticate(ctx context.Context, prefix, hash stri
 			}
 			a := r.agents[k.AgentID]
 			w := r.workspaces[k.DefaultWorkspaceID]
-			g, ok := r.grants[k.AgentID]
+			g, ok := r.grants[key(k.DefaultWorkspaceID, k.AgentID)]
 			if a.UserID != k.UserID || a.Status != "active" || w.UserID != k.UserID || w.Status != "active" || !ok || g.UserID != k.UserID || g.WorkspaceID != w.ID {
 				continue
 			}
@@ -428,10 +442,9 @@ func (r *IdentityRepository) Authenticate(ctx context.Context, prefix, hash stri
 			return result, domain.ErrAccessDenied
 		}
 	}
-	// Do not authenticate new scopes against the still user-scoped data plane.
-	if result.WorkspaceID != domain.PersonalWorkspaceID(result.UserID) {
-		return domain.AccessContext{}, domain.ErrAccessDenied
-	}
+	result.ScopeVersion = 2
+	result.PartitionIDs = []string{""}
+	result.Audience = domain.Audience{Kind: "workspace"}
 	return result, nil
 }
 

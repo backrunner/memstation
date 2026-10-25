@@ -700,3 +700,2048 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "proto/memstation/v1/api.proto",
 }
+
+const (
+	MemoryDataService_Probe_FullMethodName          = "/memstation.v1.MemoryDataService/Probe"
+	MemoryDataService_Observe_FullMethodName        = "/memstation.v1.MemoryDataService/Observe"
+	MemoryDataService_Progress_FullMethodName       = "/memstation.v1.MemoryDataService/Progress"
+	MemoryDataService_OpenWindow_FullMethodName     = "/memstation.v1.MemoryDataService/OpenWindow"
+	MemoryDataService_GetWindow_FullMethodName      = "/memstation.v1.MemoryDataService/GetWindow"
+	MemoryDataService_Finalize_FullMethodName       = "/memstation.v1.MemoryDataService/Finalize"
+	MemoryDataService_Inspect_FullMethodName        = "/memstation.v1.MemoryDataService/Inspect"
+	MemoryDataService_Source_FullMethodName         = "/memstation.v1.MemoryDataService/Source"
+	MemoryDataService_Propose_FullMethodName        = "/memstation.v1.MemoryDataService/Propose"
+	MemoryDataService_Candidates_FullMethodName     = "/memstation.v1.MemoryDataService/Candidates"
+	MemoryDataService_Retract_FullMethodName        = "/memstation.v1.MemoryDataService/Retract"
+	MemoryDataService_Forget_FullMethodName         = "/memstation.v1.MemoryDataService/Forget"
+	MemoryDataService_Export_FullMethodName         = "/memstation.v1.MemoryDataService/Export"
+	MemoryDataService_Operation_FullMethodName      = "/memstation.v1.MemoryDataService/Operation"
+	MemoryDataService_ReconcileUsage_FullMethodName = "/memstation.v1.MemoryDataService/ReconcileUsage"
+	MemoryDataService_Usage_FullMethodName          = "/memstation.v1.MemoryDataService/Usage"
+)
+
+// MemoryDataServiceClient is the client API for MemoryDataService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// Independent memory contract. Workspace and audience are selected via authenticated
+// metadata; request fields can only narrow that server-bound authorization.
+type MemoryDataServiceClient interface {
+	Probe(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*MemoryCapabilities, error)
+	Observe(ctx context.Context, in *ObserveRequest, opts ...grpc.CallOption) (*IngestionReceipt, error)
+	Progress(ctx context.Context, in *RecordRequest, opts ...grpc.CallOption) (*IngestionReceipt, error)
+	OpenWindow(ctx context.Context, in *OpenWindowRequest, opts ...grpc.CallOption) (*ConversationWindow, error)
+	GetWindow(ctx context.Context, in *RecordRequest, opts ...grpc.CallOption) (*ConversationWindow, error)
+	Finalize(ctx context.Context, in *FinalizeWindowRequest, opts ...grpc.CallOption) (*ConversationWindow, error)
+	Inspect(ctx context.Context, in *RecordRequest, opts ...grpc.CallOption) (*MemoryDocument, error)
+	Source(ctx context.Context, in *RecordRequest, opts ...grpc.CallOption) (*SourceRecord, error)
+	Propose(ctx context.Context, in *CandidateInput, opts ...grpc.CallOption) (*MemoryCandidate, error)
+	Candidates(ctx context.Context, in *RecordRequest, opts ...grpc.CallOption) (*CandidateList, error)
+	Retract(ctx context.Context, in *ForgetRequest, opts ...grpc.CallOption) (*MemoryOperation, error)
+	Forget(ctx context.Context, in *ForgetRequest, opts ...grpc.CallOption) (*MemoryOperation, error)
+	Export(ctx context.Context, in *ExportRequest, opts ...grpc.CallOption) (*MemoryOperation, error)
+	Operation(ctx context.Context, in *RecordRequest, opts ...grpc.CallOption) (*MemoryOperation, error)
+	ReconcileUsage(ctx context.Context, in *RecordRequest, opts ...grpc.CallOption) (*AICall, error)
+	Usage(ctx context.Context, in *AIUsageRequest, opts ...grpc.CallOption) (*AIUsageResponse, error)
+}
+
+type memoryDataServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewMemoryDataServiceClient(cc grpc.ClientConnInterface) MemoryDataServiceClient {
+	return &memoryDataServiceClient{cc}
+}
+
+func (c *memoryDataServiceClient) Probe(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*MemoryCapabilities, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryCapabilities)
+	err := c.cc.Invoke(ctx, MemoryDataService_Probe_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *memoryDataServiceClient) Observe(ctx context.Context, in *ObserveRequest, opts ...grpc.CallOption) (*IngestionReceipt, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IngestionReceipt)
+	err := c.cc.Invoke(ctx, MemoryDataService_Observe_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *memoryDataServiceClient) Progress(ctx context.Context, in *RecordRequest, opts ...grpc.CallOption) (*IngestionReceipt, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IngestionReceipt)
+	err := c.cc.Invoke(ctx, MemoryDataService_Progress_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *memoryDataServiceClient) OpenWindow(ctx context.Context, in *OpenWindowRequest, opts ...grpc.CallOption) (*ConversationWindow, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConversationWindow)
+	err := c.cc.Invoke(ctx, MemoryDataService_OpenWindow_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *memoryDataServiceClient) GetWindow(ctx context.Context, in *RecordRequest, opts ...grpc.CallOption) (*ConversationWindow, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConversationWindow)
+	err := c.cc.Invoke(ctx, MemoryDataService_GetWindow_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *memoryDataServiceClient) Finalize(ctx context.Context, in *FinalizeWindowRequest, opts ...grpc.CallOption) (*ConversationWindow, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConversationWindow)
+	err := c.cc.Invoke(ctx, MemoryDataService_Finalize_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *memoryDataServiceClient) Inspect(ctx context.Context, in *RecordRequest, opts ...grpc.CallOption) (*MemoryDocument, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryDocument)
+	err := c.cc.Invoke(ctx, MemoryDataService_Inspect_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *memoryDataServiceClient) Source(ctx context.Context, in *RecordRequest, opts ...grpc.CallOption) (*SourceRecord, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SourceRecord)
+	err := c.cc.Invoke(ctx, MemoryDataService_Source_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *memoryDataServiceClient) Propose(ctx context.Context, in *CandidateInput, opts ...grpc.CallOption) (*MemoryCandidate, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryCandidate)
+	err := c.cc.Invoke(ctx, MemoryDataService_Propose_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *memoryDataServiceClient) Candidates(ctx context.Context, in *RecordRequest, opts ...grpc.CallOption) (*CandidateList, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CandidateList)
+	err := c.cc.Invoke(ctx, MemoryDataService_Candidates_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *memoryDataServiceClient) Retract(ctx context.Context, in *ForgetRequest, opts ...grpc.CallOption) (*MemoryOperation, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryOperation)
+	err := c.cc.Invoke(ctx, MemoryDataService_Retract_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *memoryDataServiceClient) Forget(ctx context.Context, in *ForgetRequest, opts ...grpc.CallOption) (*MemoryOperation, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryOperation)
+	err := c.cc.Invoke(ctx, MemoryDataService_Forget_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *memoryDataServiceClient) Export(ctx context.Context, in *ExportRequest, opts ...grpc.CallOption) (*MemoryOperation, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryOperation)
+	err := c.cc.Invoke(ctx, MemoryDataService_Export_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *memoryDataServiceClient) Operation(ctx context.Context, in *RecordRequest, opts ...grpc.CallOption) (*MemoryOperation, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryOperation)
+	err := c.cc.Invoke(ctx, MemoryDataService_Operation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *memoryDataServiceClient) ReconcileUsage(ctx context.Context, in *RecordRequest, opts ...grpc.CallOption) (*AICall, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AICall)
+	err := c.cc.Invoke(ctx, MemoryDataService_ReconcileUsage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *memoryDataServiceClient) Usage(ctx context.Context, in *AIUsageRequest, opts ...grpc.CallOption) (*AIUsageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AIUsageResponse)
+	err := c.cc.Invoke(ctx, MemoryDataService_Usage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// MemoryDataServiceServer is the server API for MemoryDataService service.
+// All implementations must embed UnimplementedMemoryDataServiceServer
+// for forward compatibility.
+//
+// Independent memory contract. Workspace and audience are selected via authenticated
+// metadata; request fields can only narrow that server-bound authorization.
+type MemoryDataServiceServer interface {
+	Probe(context.Context, *emptypb.Empty) (*MemoryCapabilities, error)
+	Observe(context.Context, *ObserveRequest) (*IngestionReceipt, error)
+	Progress(context.Context, *RecordRequest) (*IngestionReceipt, error)
+	OpenWindow(context.Context, *OpenWindowRequest) (*ConversationWindow, error)
+	GetWindow(context.Context, *RecordRequest) (*ConversationWindow, error)
+	Finalize(context.Context, *FinalizeWindowRequest) (*ConversationWindow, error)
+	Inspect(context.Context, *RecordRequest) (*MemoryDocument, error)
+	Source(context.Context, *RecordRequest) (*SourceRecord, error)
+	Propose(context.Context, *CandidateInput) (*MemoryCandidate, error)
+	Candidates(context.Context, *RecordRequest) (*CandidateList, error)
+	Retract(context.Context, *ForgetRequest) (*MemoryOperation, error)
+	Forget(context.Context, *ForgetRequest) (*MemoryOperation, error)
+	Export(context.Context, *ExportRequest) (*MemoryOperation, error)
+	Operation(context.Context, *RecordRequest) (*MemoryOperation, error)
+	ReconcileUsage(context.Context, *RecordRequest) (*AICall, error)
+	Usage(context.Context, *AIUsageRequest) (*AIUsageResponse, error)
+	mustEmbedUnimplementedMemoryDataServiceServer()
+}
+
+// UnimplementedMemoryDataServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedMemoryDataServiceServer struct{}
+
+func (UnimplementedMemoryDataServiceServer) Probe(context.Context, *emptypb.Empty) (*MemoryCapabilities, error) {
+	return nil, status.Error(codes.Unimplemented, "method Probe not implemented")
+}
+
+func (UnimplementedMemoryDataServiceServer) Observe(context.Context, *ObserveRequest) (*IngestionReceipt, error) {
+	return nil, status.Error(codes.Unimplemented, "method Observe not implemented")
+}
+
+func (UnimplementedMemoryDataServiceServer) Progress(context.Context, *RecordRequest) (*IngestionReceipt, error) {
+	return nil, status.Error(codes.Unimplemented, "method Progress not implemented")
+}
+
+func (UnimplementedMemoryDataServiceServer) OpenWindow(context.Context, *OpenWindowRequest) (*ConversationWindow, error) {
+	return nil, status.Error(codes.Unimplemented, "method OpenWindow not implemented")
+}
+
+func (UnimplementedMemoryDataServiceServer) GetWindow(context.Context, *RecordRequest) (*ConversationWindow, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetWindow not implemented")
+}
+
+func (UnimplementedMemoryDataServiceServer) Finalize(context.Context, *FinalizeWindowRequest) (*ConversationWindow, error) {
+	return nil, status.Error(codes.Unimplemented, "method Finalize not implemented")
+}
+
+func (UnimplementedMemoryDataServiceServer) Inspect(context.Context, *RecordRequest) (*MemoryDocument, error) {
+	return nil, status.Error(codes.Unimplemented, "method Inspect not implemented")
+}
+
+func (UnimplementedMemoryDataServiceServer) Source(context.Context, *RecordRequest) (*SourceRecord, error) {
+	return nil, status.Error(codes.Unimplemented, "method Source not implemented")
+}
+
+func (UnimplementedMemoryDataServiceServer) Propose(context.Context, *CandidateInput) (*MemoryCandidate, error) {
+	return nil, status.Error(codes.Unimplemented, "method Propose not implemented")
+}
+
+func (UnimplementedMemoryDataServiceServer) Candidates(context.Context, *RecordRequest) (*CandidateList, error) {
+	return nil, status.Error(codes.Unimplemented, "method Candidates not implemented")
+}
+
+func (UnimplementedMemoryDataServiceServer) Retract(context.Context, *ForgetRequest) (*MemoryOperation, error) {
+	return nil, status.Error(codes.Unimplemented, "method Retract not implemented")
+}
+
+func (UnimplementedMemoryDataServiceServer) Forget(context.Context, *ForgetRequest) (*MemoryOperation, error) {
+	return nil, status.Error(codes.Unimplemented, "method Forget not implemented")
+}
+
+func (UnimplementedMemoryDataServiceServer) Export(context.Context, *ExportRequest) (*MemoryOperation, error) {
+	return nil, status.Error(codes.Unimplemented, "method Export not implemented")
+}
+
+func (UnimplementedMemoryDataServiceServer) Operation(context.Context, *RecordRequest) (*MemoryOperation, error) {
+	return nil, status.Error(codes.Unimplemented, "method Operation not implemented")
+}
+
+func (UnimplementedMemoryDataServiceServer) ReconcileUsage(context.Context, *RecordRequest) (*AICall, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReconcileUsage not implemented")
+}
+
+func (UnimplementedMemoryDataServiceServer) Usage(context.Context, *AIUsageRequest) (*AIUsageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Usage not implemented")
+}
+func (UnimplementedMemoryDataServiceServer) mustEmbedUnimplementedMemoryDataServiceServer() {}
+func (UnimplementedMemoryDataServiceServer) testEmbeddedByValue()                           {}
+
+// UnsafeMemoryDataServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to MemoryDataServiceServer will
+// result in compilation errors.
+type UnsafeMemoryDataServiceServer interface {
+	mustEmbedUnimplementedMemoryDataServiceServer()
+}
+
+func RegisterMemoryDataServiceServer(s grpc.ServiceRegistrar, srv MemoryDataServiceServer) {
+	// If the following call panics, it indicates UnimplementedMemoryDataServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&MemoryDataService_ServiceDesc, srv)
+}
+
+func _MemoryDataService_Probe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryDataServiceServer).Probe(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryDataService_Probe_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryDataServiceServer).Probe(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MemoryDataService_Observe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ObserveRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryDataServiceServer).Observe(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryDataService_Observe_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryDataServiceServer).Observe(ctx, req.(*ObserveRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MemoryDataService_Progress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryDataServiceServer).Progress(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryDataService_Progress_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryDataServiceServer).Progress(ctx, req.(*RecordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MemoryDataService_OpenWindow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(OpenWindowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryDataServiceServer).OpenWindow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryDataService_OpenWindow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryDataServiceServer).OpenWindow(ctx, req.(*OpenWindowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MemoryDataService_GetWindow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryDataServiceServer).GetWindow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryDataService_GetWindow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryDataServiceServer).GetWindow(ctx, req.(*RecordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MemoryDataService_Finalize_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FinalizeWindowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryDataServiceServer).Finalize(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryDataService_Finalize_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryDataServiceServer).Finalize(ctx, req.(*FinalizeWindowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MemoryDataService_Inspect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryDataServiceServer).Inspect(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryDataService_Inspect_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryDataServiceServer).Inspect(ctx, req.(*RecordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MemoryDataService_Source_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryDataServiceServer).Source(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryDataService_Source_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryDataServiceServer).Source(ctx, req.(*RecordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MemoryDataService_Propose_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CandidateInput)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryDataServiceServer).Propose(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryDataService_Propose_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryDataServiceServer).Propose(ctx, req.(*CandidateInput))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MemoryDataService_Candidates_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryDataServiceServer).Candidates(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryDataService_Candidates_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryDataServiceServer).Candidates(ctx, req.(*RecordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MemoryDataService_Retract_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ForgetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryDataServiceServer).Retract(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryDataService_Retract_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryDataServiceServer).Retract(ctx, req.(*ForgetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MemoryDataService_Forget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ForgetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryDataServiceServer).Forget(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryDataService_Forget_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryDataServiceServer).Forget(ctx, req.(*ForgetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MemoryDataService_Export_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExportRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryDataServiceServer).Export(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryDataService_Export_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryDataServiceServer).Export(ctx, req.(*ExportRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MemoryDataService_Operation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryDataServiceServer).Operation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryDataService_Operation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryDataServiceServer).Operation(ctx, req.(*RecordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MemoryDataService_ReconcileUsage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryDataServiceServer).ReconcileUsage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryDataService_ReconcileUsage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryDataServiceServer).ReconcileUsage(ctx, req.(*RecordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MemoryDataService_Usage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AIUsageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MemoryDataServiceServer).Usage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MemoryDataService_Usage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MemoryDataServiceServer).Usage(ctx, req.(*AIUsageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// MemoryDataService_ServiceDesc is the grpc.ServiceDesc for MemoryDataService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var MemoryDataService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "memstation.v1.MemoryDataService",
+	HandlerType: (*MemoryDataServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Probe",
+			Handler:    _MemoryDataService_Probe_Handler,
+		},
+		{
+			MethodName: "Observe",
+			Handler:    _MemoryDataService_Observe_Handler,
+		},
+		{
+			MethodName: "Progress",
+			Handler:    _MemoryDataService_Progress_Handler,
+		},
+		{
+			MethodName: "OpenWindow",
+			Handler:    _MemoryDataService_OpenWindow_Handler,
+		},
+		{
+			MethodName: "GetWindow",
+			Handler:    _MemoryDataService_GetWindow_Handler,
+		},
+		{
+			MethodName: "Finalize",
+			Handler:    _MemoryDataService_Finalize_Handler,
+		},
+		{
+			MethodName: "Inspect",
+			Handler:    _MemoryDataService_Inspect_Handler,
+		},
+		{
+			MethodName: "Source",
+			Handler:    _MemoryDataService_Source_Handler,
+		},
+		{
+			MethodName: "Propose",
+			Handler:    _MemoryDataService_Propose_Handler,
+		},
+		{
+			MethodName: "Candidates",
+			Handler:    _MemoryDataService_Candidates_Handler,
+		},
+		{
+			MethodName: "Retract",
+			Handler:    _MemoryDataService_Retract_Handler,
+		},
+		{
+			MethodName: "Forget",
+			Handler:    _MemoryDataService_Forget_Handler,
+		},
+		{
+			MethodName: "Export",
+			Handler:    _MemoryDataService_Export_Handler,
+		},
+		{
+			MethodName: "Operation",
+			Handler:    _MemoryDataService_Operation_Handler,
+		},
+		{
+			MethodName: "ReconcileUsage",
+			Handler:    _MemoryDataService_ReconcileUsage_Handler,
+		},
+		{
+			MethodName: "Usage",
+			Handler:    _MemoryDataService_Usage_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "proto/memstation/v1/api.proto",
+}
+
+const (
+	WorkspaceAdminService_Generations_FullMethodName        = "/memstation.v1.WorkspaceAdminService/Generations"
+	WorkspaceAdminService_Rebuild_FullMethodName            = "/memstation.v1.WorkspaceAdminService/Rebuild"
+	WorkspaceAdminService_ActivateGeneration_FullMethodName = "/memstation.v1.WorkspaceAdminService/ActivateGeneration"
+	WorkspaceAdminService_DiscardGeneration_FullMethodName  = "/memstation.v1.WorkspaceAdminService/DiscardGeneration"
+	WorkspaceAdminService_Capabilities_FullMethodName       = "/memstation.v1.WorkspaceAdminService/Capabilities"
+	WorkspaceAdminService_CreateAgent_FullMethodName        = "/memstation.v1.WorkspaceAdminService/CreateAgent"
+	WorkspaceAdminService_Agent_FullMethodName              = "/memstation.v1.WorkspaceAdminService/Agent"
+	WorkspaceAdminService_Workspaces_FullMethodName         = "/memstation.v1.WorkspaceAdminService/Workspaces"
+	WorkspaceAdminService_CreateWorkspace_FullMethodName    = "/memstation.v1.WorkspaceAdminService/CreateWorkspace"
+	WorkspaceAdminService_UpdateWorkspace_FullMethodName    = "/memstation.v1.WorkspaceAdminService/UpdateWorkspace"
+	WorkspaceAdminService_Integrations_FullMethodName       = "/memstation.v1.WorkspaceAdminService/Integrations"
+	WorkspaceAdminService_PutIntegration_FullMethodName     = "/memstation.v1.WorkspaceAdminService/PutIntegration"
+	WorkspaceAdminService_Partitions_FullMethodName         = "/memstation.v1.WorkspaceAdminService/Partitions"
+	WorkspaceAdminService_PutPartition_FullMethodName       = "/memstation.v1.WorkspaceAdminService/PutPartition"
+	WorkspaceAdminService_Grant_FullMethodName              = "/memstation.v1.WorkspaceAdminService/Grant"
+	WorkspaceAdminService_SetGrant_FullMethodName           = "/memstation.v1.WorkspaceAdminService/SetGrant"
+	WorkspaceAdminService_Control_FullMethodName            = "/memstation.v1.WorkspaceAdminService/Control"
+	WorkspaceAdminService_ReplayJob_FullMethodName          = "/memstation.v1.WorkspaceAdminService/ReplayJob"
+	WorkspaceAdminService_Inspect_FullMethodName            = "/memstation.v1.WorkspaceAdminService/Inspect"
+	WorkspaceAdminService_Source_FullMethodName             = "/memstation.v1.WorkspaceAdminService/Source"
+	WorkspaceAdminService_Progress_FullMethodName           = "/memstation.v1.WorkspaceAdminService/Progress"
+	WorkspaceAdminService_Candidates_FullMethodName         = "/memstation.v1.WorkspaceAdminService/Candidates"
+	WorkspaceAdminService_Propose_FullMethodName            = "/memstation.v1.WorkspaceAdminService/Propose"
+	WorkspaceAdminService_Forget_FullMethodName             = "/memstation.v1.WorkspaceAdminService/Forget"
+	WorkspaceAdminService_Retract_FullMethodName            = "/memstation.v1.WorkspaceAdminService/Retract"
+	WorkspaceAdminService_Export_FullMethodName             = "/memstation.v1.WorkspaceAdminService/Export"
+	WorkspaceAdminService_Operation_FullMethodName          = "/memstation.v1.WorkspaceAdminService/Operation"
+	WorkspaceAdminService_ReconcileUsage_FullMethodName     = "/memstation.v1.WorkspaceAdminService/ReconcileUsage"
+	WorkspaceAdminService_Usage_FullMethodName              = "/memstation.v1.WorkspaceAdminService/Usage"
+	WorkspaceAdminService_ReviewCandidate_FullMethodName    = "/memstation.v1.WorkspaceAdminService/ReviewCandidate"
+	WorkspaceAdminService_Publish_FullMethodName            = "/memstation.v1.WorkspaceAdminService/Publish"
+	WorkspaceAdminService_Publications_FullMethodName       = "/memstation.v1.WorkspaceAdminService/Publications"
+	WorkspaceAdminService_RetractPublication_FullMethodName = "/memstation.v1.WorkspaceAdminService/RetractPublication"
+)
+
+// WorkspaceAdminServiceClient is the client API for WorkspaceAdminService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type WorkspaceAdminServiceClient interface {
+	Generations(ctx context.Context, in *AdminWorkspaceScope, opts ...grpc.CallOption) (*GenerationList, error)
+	Rebuild(ctx context.Context, in *GenerationRebuildRequest, opts ...grpc.CallOption) (*MemoryGeneration, error)
+	ActivateGeneration(ctx context.Context, in *AdminRecordRequest, opts ...grpc.CallOption) (*MemoryGeneration, error)
+	DiscardGeneration(ctx context.Context, in *AdminRecordRequest, opts ...grpc.CallOption) (*MemoryGeneration, error)
+	Capabilities(ctx context.Context, in *AdminWorkspaceScope, opts ...grpc.CallOption) (*MemoryCapabilities, error)
+	CreateAgent(ctx context.Context, in *WorkspaceAgentCreate, opts ...grpc.CallOption) (*WorkspaceAgent, error)
+	Agent(ctx context.Context, in *WorkspaceGrantRequest, opts ...grpc.CallOption) (*WorkspaceAgentDetail, error)
+	Workspaces(ctx context.Context, in *WorkspaceListRequest, opts ...grpc.CallOption) (*WorkspaceListResponse, error)
+	CreateWorkspace(ctx context.Context, in *WorkspaceConfig, opts ...grpc.CallOption) (*WorkspaceConfig, error)
+	UpdateWorkspace(ctx context.Context, in *WorkspaceConfig, opts ...grpc.CallOption) (*WorkspaceConfig, error)
+	Integrations(ctx context.Context, in *AdminWorkspaceScope, opts ...grpc.CallOption) (*IntegrationList, error)
+	PutIntegration(ctx context.Context, in *IntegrationConfig, opts ...grpc.CallOption) (*IntegrationConfig, error)
+	Partitions(ctx context.Context, in *AdminWorkspaceScope, opts ...grpc.CallOption) (*PartitionList, error)
+	PutPartition(ctx context.Context, in *PartitionConfig, opts ...grpc.CallOption) (*PartitionConfig, error)
+	Grant(ctx context.Context, in *WorkspaceGrantRequest, opts ...grpc.CallOption) (*WorkspaceGrant, error)
+	SetGrant(ctx context.Context, in *WorkspaceGrant, opts ...grpc.CallOption) (*WorkspaceGrant, error)
+	Control(ctx context.Context, in *MemoryControlRequest, opts ...grpc.CallOption) (*MemoryControlOverview, error)
+	ReplayJob(ctx context.Context, in *AdminRecordRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	Inspect(ctx context.Context, in *AdminRecordRequest, opts ...grpc.CallOption) (*MemoryDocument, error)
+	Source(ctx context.Context, in *AdminRecordRequest, opts ...grpc.CallOption) (*SourceRecord, error)
+	Progress(ctx context.Context, in *AdminRecordRequest, opts ...grpc.CallOption) (*IngestionReceipt, error)
+	Candidates(ctx context.Context, in *AdminRecordRequest, opts ...grpc.CallOption) (*CandidateList, error)
+	Propose(ctx context.Context, in *AdminCandidateRequest, opts ...grpc.CallOption) (*MemoryCandidate, error)
+	Forget(ctx context.Context, in *AdminForgetRequest, opts ...grpc.CallOption) (*MemoryOperation, error)
+	Retract(ctx context.Context, in *AdminForgetRequest, opts ...grpc.CallOption) (*MemoryOperation, error)
+	Export(ctx context.Context, in *AdminExportRequest, opts ...grpc.CallOption) (*MemoryOperation, error)
+	Operation(ctx context.Context, in *AdminRecordRequest, opts ...grpc.CallOption) (*MemoryOperation, error)
+	ReconcileUsage(ctx context.Context, in *AdminRecordRequest, opts ...grpc.CallOption) (*AICall, error)
+	Usage(ctx context.Context, in *AdminUsageRequest, opts ...grpc.CallOption) (*AIUsageResponse, error)
+	ReviewCandidate(ctx context.Context, in *ReviewCandidateRequest, opts ...grpc.CallOption) (*MemoryCandidate, error)
+	Publish(ctx context.Context, in *PublishRequest, opts ...grpc.CallOption) (*MemoryPublication, error)
+	Publications(ctx context.Context, in *AdminWorkspaceScope, opts ...grpc.CallOption) (*PublicationList, error)
+	RetractPublication(ctx context.Context, in *RetractPublicationRequest, opts ...grpc.CallOption) (*MemoryPublication, error)
+}
+
+type workspaceAdminServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewWorkspaceAdminServiceClient(cc grpc.ClientConnInterface) WorkspaceAdminServiceClient {
+	return &workspaceAdminServiceClient{cc}
+}
+
+func (c *workspaceAdminServiceClient) Generations(ctx context.Context, in *AdminWorkspaceScope, opts ...grpc.CallOption) (*GenerationList, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GenerationList)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Generations_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Rebuild(ctx context.Context, in *GenerationRebuildRequest, opts ...grpc.CallOption) (*MemoryGeneration, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryGeneration)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Rebuild_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) ActivateGeneration(ctx context.Context, in *AdminRecordRequest, opts ...grpc.CallOption) (*MemoryGeneration, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryGeneration)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_ActivateGeneration_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) DiscardGeneration(ctx context.Context, in *AdminRecordRequest, opts ...grpc.CallOption) (*MemoryGeneration, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryGeneration)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_DiscardGeneration_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Capabilities(ctx context.Context, in *AdminWorkspaceScope, opts ...grpc.CallOption) (*MemoryCapabilities, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryCapabilities)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Capabilities_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) CreateAgent(ctx context.Context, in *WorkspaceAgentCreate, opts ...grpc.CallOption) (*WorkspaceAgent, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WorkspaceAgent)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_CreateAgent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Agent(ctx context.Context, in *WorkspaceGrantRequest, opts ...grpc.CallOption) (*WorkspaceAgentDetail, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WorkspaceAgentDetail)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Agent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Workspaces(ctx context.Context, in *WorkspaceListRequest, opts ...grpc.CallOption) (*WorkspaceListResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WorkspaceListResponse)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Workspaces_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) CreateWorkspace(ctx context.Context, in *WorkspaceConfig, opts ...grpc.CallOption) (*WorkspaceConfig, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WorkspaceConfig)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_CreateWorkspace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) UpdateWorkspace(ctx context.Context, in *WorkspaceConfig, opts ...grpc.CallOption) (*WorkspaceConfig, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WorkspaceConfig)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_UpdateWorkspace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Integrations(ctx context.Context, in *AdminWorkspaceScope, opts ...grpc.CallOption) (*IntegrationList, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IntegrationList)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Integrations_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) PutIntegration(ctx context.Context, in *IntegrationConfig, opts ...grpc.CallOption) (*IntegrationConfig, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IntegrationConfig)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_PutIntegration_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Partitions(ctx context.Context, in *AdminWorkspaceScope, opts ...grpc.CallOption) (*PartitionList, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PartitionList)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Partitions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) PutPartition(ctx context.Context, in *PartitionConfig, opts ...grpc.CallOption) (*PartitionConfig, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PartitionConfig)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_PutPartition_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Grant(ctx context.Context, in *WorkspaceGrantRequest, opts ...grpc.CallOption) (*WorkspaceGrant, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WorkspaceGrant)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Grant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) SetGrant(ctx context.Context, in *WorkspaceGrant, opts ...grpc.CallOption) (*WorkspaceGrant, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WorkspaceGrant)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_SetGrant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Control(ctx context.Context, in *MemoryControlRequest, opts ...grpc.CallOption) (*MemoryControlOverview, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryControlOverview)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Control_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) ReplayJob(ctx context.Context, in *AdminRecordRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_ReplayJob_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Inspect(ctx context.Context, in *AdminRecordRequest, opts ...grpc.CallOption) (*MemoryDocument, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryDocument)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Inspect_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Source(ctx context.Context, in *AdminRecordRequest, opts ...grpc.CallOption) (*SourceRecord, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SourceRecord)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Source_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Progress(ctx context.Context, in *AdminRecordRequest, opts ...grpc.CallOption) (*IngestionReceipt, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IngestionReceipt)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Progress_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Candidates(ctx context.Context, in *AdminRecordRequest, opts ...grpc.CallOption) (*CandidateList, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CandidateList)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Candidates_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Propose(ctx context.Context, in *AdminCandidateRequest, opts ...grpc.CallOption) (*MemoryCandidate, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryCandidate)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Propose_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Forget(ctx context.Context, in *AdminForgetRequest, opts ...grpc.CallOption) (*MemoryOperation, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryOperation)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Forget_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Retract(ctx context.Context, in *AdminForgetRequest, opts ...grpc.CallOption) (*MemoryOperation, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryOperation)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Retract_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Export(ctx context.Context, in *AdminExportRequest, opts ...grpc.CallOption) (*MemoryOperation, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryOperation)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Export_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Operation(ctx context.Context, in *AdminRecordRequest, opts ...grpc.CallOption) (*MemoryOperation, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryOperation)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Operation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) ReconcileUsage(ctx context.Context, in *AdminRecordRequest, opts ...grpc.CallOption) (*AICall, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AICall)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_ReconcileUsage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Usage(ctx context.Context, in *AdminUsageRequest, opts ...grpc.CallOption) (*AIUsageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AIUsageResponse)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Usage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) ReviewCandidate(ctx context.Context, in *ReviewCandidateRequest, opts ...grpc.CallOption) (*MemoryCandidate, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryCandidate)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_ReviewCandidate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Publish(ctx context.Context, in *PublishRequest, opts ...grpc.CallOption) (*MemoryPublication, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryPublication)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Publish_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) Publications(ctx context.Context, in *AdminWorkspaceScope, opts ...grpc.CallOption) (*PublicationList, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PublicationList)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_Publications_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workspaceAdminServiceClient) RetractPublication(ctx context.Context, in *RetractPublicationRequest, opts ...grpc.CallOption) (*MemoryPublication, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MemoryPublication)
+	err := c.cc.Invoke(ctx, WorkspaceAdminService_RetractPublication_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// WorkspaceAdminServiceServer is the server API for WorkspaceAdminService service.
+// All implementations must embed UnimplementedWorkspaceAdminServiceServer
+// for forward compatibility.
+type WorkspaceAdminServiceServer interface {
+	Generations(context.Context, *AdminWorkspaceScope) (*GenerationList, error)
+	Rebuild(context.Context, *GenerationRebuildRequest) (*MemoryGeneration, error)
+	ActivateGeneration(context.Context, *AdminRecordRequest) (*MemoryGeneration, error)
+	DiscardGeneration(context.Context, *AdminRecordRequest) (*MemoryGeneration, error)
+	Capabilities(context.Context, *AdminWorkspaceScope) (*MemoryCapabilities, error)
+	CreateAgent(context.Context, *WorkspaceAgentCreate) (*WorkspaceAgent, error)
+	Agent(context.Context, *WorkspaceGrantRequest) (*WorkspaceAgentDetail, error)
+	Workspaces(context.Context, *WorkspaceListRequest) (*WorkspaceListResponse, error)
+	CreateWorkspace(context.Context, *WorkspaceConfig) (*WorkspaceConfig, error)
+	UpdateWorkspace(context.Context, *WorkspaceConfig) (*WorkspaceConfig, error)
+	Integrations(context.Context, *AdminWorkspaceScope) (*IntegrationList, error)
+	PutIntegration(context.Context, *IntegrationConfig) (*IntegrationConfig, error)
+	Partitions(context.Context, *AdminWorkspaceScope) (*PartitionList, error)
+	PutPartition(context.Context, *PartitionConfig) (*PartitionConfig, error)
+	Grant(context.Context, *WorkspaceGrantRequest) (*WorkspaceGrant, error)
+	SetGrant(context.Context, *WorkspaceGrant) (*WorkspaceGrant, error)
+	Control(context.Context, *MemoryControlRequest) (*MemoryControlOverview, error)
+	ReplayJob(context.Context, *AdminRecordRequest) (*emptypb.Empty, error)
+	Inspect(context.Context, *AdminRecordRequest) (*MemoryDocument, error)
+	Source(context.Context, *AdminRecordRequest) (*SourceRecord, error)
+	Progress(context.Context, *AdminRecordRequest) (*IngestionReceipt, error)
+	Candidates(context.Context, *AdminRecordRequest) (*CandidateList, error)
+	Propose(context.Context, *AdminCandidateRequest) (*MemoryCandidate, error)
+	Forget(context.Context, *AdminForgetRequest) (*MemoryOperation, error)
+	Retract(context.Context, *AdminForgetRequest) (*MemoryOperation, error)
+	Export(context.Context, *AdminExportRequest) (*MemoryOperation, error)
+	Operation(context.Context, *AdminRecordRequest) (*MemoryOperation, error)
+	ReconcileUsage(context.Context, *AdminRecordRequest) (*AICall, error)
+	Usage(context.Context, *AdminUsageRequest) (*AIUsageResponse, error)
+	ReviewCandidate(context.Context, *ReviewCandidateRequest) (*MemoryCandidate, error)
+	Publish(context.Context, *PublishRequest) (*MemoryPublication, error)
+	Publications(context.Context, *AdminWorkspaceScope) (*PublicationList, error)
+	RetractPublication(context.Context, *RetractPublicationRequest) (*MemoryPublication, error)
+	mustEmbedUnimplementedWorkspaceAdminServiceServer()
+}
+
+// UnimplementedWorkspaceAdminServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedWorkspaceAdminServiceServer struct{}
+
+func (UnimplementedWorkspaceAdminServiceServer) Generations(context.Context, *AdminWorkspaceScope) (*GenerationList, error) {
+	return nil, status.Error(codes.Unimplemented, "method Generations not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Rebuild(context.Context, *GenerationRebuildRequest) (*MemoryGeneration, error) {
+	return nil, status.Error(codes.Unimplemented, "method Rebuild not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) ActivateGeneration(context.Context, *AdminRecordRequest) (*MemoryGeneration, error) {
+	return nil, status.Error(codes.Unimplemented, "method ActivateGeneration not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) DiscardGeneration(context.Context, *AdminRecordRequest) (*MemoryGeneration, error) {
+	return nil, status.Error(codes.Unimplemented, "method DiscardGeneration not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Capabilities(context.Context, *AdminWorkspaceScope) (*MemoryCapabilities, error) {
+	return nil, status.Error(codes.Unimplemented, "method Capabilities not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) CreateAgent(context.Context, *WorkspaceAgentCreate) (*WorkspaceAgent, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateAgent not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Agent(context.Context, *WorkspaceGrantRequest) (*WorkspaceAgentDetail, error) {
+	return nil, status.Error(codes.Unimplemented, "method Agent not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Workspaces(context.Context, *WorkspaceListRequest) (*WorkspaceListResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Workspaces not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) CreateWorkspace(context.Context, *WorkspaceConfig) (*WorkspaceConfig, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateWorkspace not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) UpdateWorkspace(context.Context, *WorkspaceConfig) (*WorkspaceConfig, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateWorkspace not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Integrations(context.Context, *AdminWorkspaceScope) (*IntegrationList, error) {
+	return nil, status.Error(codes.Unimplemented, "method Integrations not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) PutIntegration(context.Context, *IntegrationConfig) (*IntegrationConfig, error) {
+	return nil, status.Error(codes.Unimplemented, "method PutIntegration not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Partitions(context.Context, *AdminWorkspaceScope) (*PartitionList, error) {
+	return nil, status.Error(codes.Unimplemented, "method Partitions not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) PutPartition(context.Context, *PartitionConfig) (*PartitionConfig, error) {
+	return nil, status.Error(codes.Unimplemented, "method PutPartition not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Grant(context.Context, *WorkspaceGrantRequest) (*WorkspaceGrant, error) {
+	return nil, status.Error(codes.Unimplemented, "method Grant not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) SetGrant(context.Context, *WorkspaceGrant) (*WorkspaceGrant, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetGrant not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Control(context.Context, *MemoryControlRequest) (*MemoryControlOverview, error) {
+	return nil, status.Error(codes.Unimplemented, "method Control not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) ReplayJob(context.Context, *AdminRecordRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReplayJob not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Inspect(context.Context, *AdminRecordRequest) (*MemoryDocument, error) {
+	return nil, status.Error(codes.Unimplemented, "method Inspect not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Source(context.Context, *AdminRecordRequest) (*SourceRecord, error) {
+	return nil, status.Error(codes.Unimplemented, "method Source not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Progress(context.Context, *AdminRecordRequest) (*IngestionReceipt, error) {
+	return nil, status.Error(codes.Unimplemented, "method Progress not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Candidates(context.Context, *AdminRecordRequest) (*CandidateList, error) {
+	return nil, status.Error(codes.Unimplemented, "method Candidates not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Propose(context.Context, *AdminCandidateRequest) (*MemoryCandidate, error) {
+	return nil, status.Error(codes.Unimplemented, "method Propose not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Forget(context.Context, *AdminForgetRequest) (*MemoryOperation, error) {
+	return nil, status.Error(codes.Unimplemented, "method Forget not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Retract(context.Context, *AdminForgetRequest) (*MemoryOperation, error) {
+	return nil, status.Error(codes.Unimplemented, "method Retract not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Export(context.Context, *AdminExportRequest) (*MemoryOperation, error) {
+	return nil, status.Error(codes.Unimplemented, "method Export not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Operation(context.Context, *AdminRecordRequest) (*MemoryOperation, error) {
+	return nil, status.Error(codes.Unimplemented, "method Operation not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) ReconcileUsage(context.Context, *AdminRecordRequest) (*AICall, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReconcileUsage not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Usage(context.Context, *AdminUsageRequest) (*AIUsageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Usage not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) ReviewCandidate(context.Context, *ReviewCandidateRequest) (*MemoryCandidate, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReviewCandidate not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Publish(context.Context, *PublishRequest) (*MemoryPublication, error) {
+	return nil, status.Error(codes.Unimplemented, "method Publish not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) Publications(context.Context, *AdminWorkspaceScope) (*PublicationList, error) {
+	return nil, status.Error(codes.Unimplemented, "method Publications not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) RetractPublication(context.Context, *RetractPublicationRequest) (*MemoryPublication, error) {
+	return nil, status.Error(codes.Unimplemented, "method RetractPublication not implemented")
+}
+
+func (UnimplementedWorkspaceAdminServiceServer) mustEmbedUnimplementedWorkspaceAdminServiceServer() {}
+
+func (UnimplementedWorkspaceAdminServiceServer) testEmbeddedByValue() {}
+
+// UnsafeWorkspaceAdminServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to WorkspaceAdminServiceServer will
+// result in compilation errors.
+type UnsafeWorkspaceAdminServiceServer interface {
+	mustEmbedUnimplementedWorkspaceAdminServiceServer()
+}
+
+func RegisterWorkspaceAdminServiceServer(s grpc.ServiceRegistrar, srv WorkspaceAdminServiceServer) {
+	// If the following call panics, it indicates UnimplementedWorkspaceAdminServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&WorkspaceAdminService_ServiceDesc, srv)
+}
+
+func _WorkspaceAdminService_Generations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminWorkspaceScope)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Generations(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Generations_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Generations(ctx, req.(*AdminWorkspaceScope))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Rebuild_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GenerationRebuildRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Rebuild(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Rebuild_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Rebuild(ctx, req.(*GenerationRebuildRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_ActivateGeneration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminRecordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).ActivateGeneration(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_ActivateGeneration_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).ActivateGeneration(ctx, req.(*AdminRecordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_DiscardGeneration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminRecordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).DiscardGeneration(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_DiscardGeneration_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).DiscardGeneration(ctx, req.(*AdminRecordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Capabilities_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminWorkspaceScope)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Capabilities(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Capabilities_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Capabilities(ctx, req.(*AdminWorkspaceScope))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_CreateAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkspaceAgentCreate)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).CreateAgent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_CreateAgent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).CreateAgent(ctx, req.(*WorkspaceAgentCreate))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Agent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkspaceGrantRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Agent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Agent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Agent(ctx, req.(*WorkspaceGrantRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Workspaces_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkspaceListRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Workspaces(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Workspaces_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Workspaces(ctx, req.(*WorkspaceListRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_CreateWorkspace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkspaceConfig)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).CreateWorkspace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_CreateWorkspace_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).CreateWorkspace(ctx, req.(*WorkspaceConfig))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_UpdateWorkspace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkspaceConfig)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).UpdateWorkspace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_UpdateWorkspace_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).UpdateWorkspace(ctx, req.(*WorkspaceConfig))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Integrations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminWorkspaceScope)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Integrations(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Integrations_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Integrations(ctx, req.(*AdminWorkspaceScope))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_PutIntegration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IntegrationConfig)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).PutIntegration(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_PutIntegration_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).PutIntegration(ctx, req.(*IntegrationConfig))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Partitions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminWorkspaceScope)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Partitions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Partitions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Partitions(ctx, req.(*AdminWorkspaceScope))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_PutPartition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PartitionConfig)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).PutPartition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_PutPartition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).PutPartition(ctx, req.(*PartitionConfig))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Grant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkspaceGrantRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Grant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Grant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Grant(ctx, req.(*WorkspaceGrantRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_SetGrant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkspaceGrant)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).SetGrant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_SetGrant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).SetGrant(ctx, req.(*WorkspaceGrant))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Control_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MemoryControlRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Control(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Control_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Control(ctx, req.(*MemoryControlRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_ReplayJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminRecordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).ReplayJob(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_ReplayJob_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).ReplayJob(ctx, req.(*AdminRecordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Inspect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminRecordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Inspect(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Inspect_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Inspect(ctx, req.(*AdminRecordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Source_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminRecordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Source(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Source_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Source(ctx, req.(*AdminRecordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Progress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminRecordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Progress(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Progress_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Progress(ctx, req.(*AdminRecordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Candidates_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminRecordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Candidates(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Candidates_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Candidates(ctx, req.(*AdminRecordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Propose_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminCandidateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Propose(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Propose_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Propose(ctx, req.(*AdminCandidateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Forget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminForgetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Forget(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Forget_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Forget(ctx, req.(*AdminForgetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Retract_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminForgetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Retract(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Retract_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Retract(ctx, req.(*AdminForgetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Export_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminExportRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Export(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Export_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Export(ctx, req.(*AdminExportRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Operation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminRecordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Operation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Operation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Operation(ctx, req.(*AdminRecordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_ReconcileUsage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminRecordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).ReconcileUsage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_ReconcileUsage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).ReconcileUsage(ctx, req.(*AdminRecordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Usage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminUsageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Usage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Usage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Usage(ctx, req.(*AdminUsageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_ReviewCandidate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReviewCandidateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).ReviewCandidate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_ReviewCandidate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).ReviewCandidate(ctx, req.(*ReviewCandidateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Publish_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PublishRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Publish(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Publish_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Publish(ctx, req.(*PublishRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_Publications_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminWorkspaceScope)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).Publications(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_Publications_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).Publications(ctx, req.(*AdminWorkspaceScope))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkspaceAdminService_RetractPublication_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RetractPublicationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkspaceAdminServiceServer).RetractPublication(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkspaceAdminService_RetractPublication_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkspaceAdminServiceServer).RetractPublication(ctx, req.(*RetractPublicationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// WorkspaceAdminService_ServiceDesc is the grpc.ServiceDesc for WorkspaceAdminService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var WorkspaceAdminService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "memstation.v1.WorkspaceAdminService",
+	HandlerType: (*WorkspaceAdminServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Generations",
+			Handler:    _WorkspaceAdminService_Generations_Handler,
+		},
+		{
+			MethodName: "Rebuild",
+			Handler:    _WorkspaceAdminService_Rebuild_Handler,
+		},
+		{
+			MethodName: "ActivateGeneration",
+			Handler:    _WorkspaceAdminService_ActivateGeneration_Handler,
+		},
+		{
+			MethodName: "DiscardGeneration",
+			Handler:    _WorkspaceAdminService_DiscardGeneration_Handler,
+		},
+		{
+			MethodName: "Capabilities",
+			Handler:    _WorkspaceAdminService_Capabilities_Handler,
+		},
+		{
+			MethodName: "CreateAgent",
+			Handler:    _WorkspaceAdminService_CreateAgent_Handler,
+		},
+		{
+			MethodName: "Agent",
+			Handler:    _WorkspaceAdminService_Agent_Handler,
+		},
+		{
+			MethodName: "Workspaces",
+			Handler:    _WorkspaceAdminService_Workspaces_Handler,
+		},
+		{
+			MethodName: "CreateWorkspace",
+			Handler:    _WorkspaceAdminService_CreateWorkspace_Handler,
+		},
+		{
+			MethodName: "UpdateWorkspace",
+			Handler:    _WorkspaceAdminService_UpdateWorkspace_Handler,
+		},
+		{
+			MethodName: "Integrations",
+			Handler:    _WorkspaceAdminService_Integrations_Handler,
+		},
+		{
+			MethodName: "PutIntegration",
+			Handler:    _WorkspaceAdminService_PutIntegration_Handler,
+		},
+		{
+			MethodName: "Partitions",
+			Handler:    _WorkspaceAdminService_Partitions_Handler,
+		},
+		{
+			MethodName: "PutPartition",
+			Handler:    _WorkspaceAdminService_PutPartition_Handler,
+		},
+		{
+			MethodName: "Grant",
+			Handler:    _WorkspaceAdminService_Grant_Handler,
+		},
+		{
+			MethodName: "SetGrant",
+			Handler:    _WorkspaceAdminService_SetGrant_Handler,
+		},
+		{
+			MethodName: "Control",
+			Handler:    _WorkspaceAdminService_Control_Handler,
+		},
+		{
+			MethodName: "ReplayJob",
+			Handler:    _WorkspaceAdminService_ReplayJob_Handler,
+		},
+		{
+			MethodName: "Inspect",
+			Handler:    _WorkspaceAdminService_Inspect_Handler,
+		},
+		{
+			MethodName: "Source",
+			Handler:    _WorkspaceAdminService_Source_Handler,
+		},
+		{
+			MethodName: "Progress",
+			Handler:    _WorkspaceAdminService_Progress_Handler,
+		},
+		{
+			MethodName: "Candidates",
+			Handler:    _WorkspaceAdminService_Candidates_Handler,
+		},
+		{
+			MethodName: "Propose",
+			Handler:    _WorkspaceAdminService_Propose_Handler,
+		},
+		{
+			MethodName: "Forget",
+			Handler:    _WorkspaceAdminService_Forget_Handler,
+		},
+		{
+			MethodName: "Retract",
+			Handler:    _WorkspaceAdminService_Retract_Handler,
+		},
+		{
+			MethodName: "Export",
+			Handler:    _WorkspaceAdminService_Export_Handler,
+		},
+		{
+			MethodName: "Operation",
+			Handler:    _WorkspaceAdminService_Operation_Handler,
+		},
+		{
+			MethodName: "ReconcileUsage",
+			Handler:    _WorkspaceAdminService_ReconcileUsage_Handler,
+		},
+		{
+			MethodName: "Usage",
+			Handler:    _WorkspaceAdminService_Usage_Handler,
+		},
+		{
+			MethodName: "ReviewCandidate",
+			Handler:    _WorkspaceAdminService_ReviewCandidate_Handler,
+		},
+		{
+			MethodName: "Publish",
+			Handler:    _WorkspaceAdminService_Publish_Handler,
+		},
+		{
+			MethodName: "Publications",
+			Handler:    _WorkspaceAdminService_Publications_Handler,
+		},
+		{
+			MethodName: "RetractPublication",
+			Handler:    _WorkspaceAdminService_RetractPublication_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "proto/memstation/v1/api.proto",
+}

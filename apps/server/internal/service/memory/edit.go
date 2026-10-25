@@ -12,7 +12,7 @@ import (
 var ErrInvalidEdit = errors.New("invalid memory edit")
 
 func (s *Service) EditDocument(ctx context.Context, user, id string, kind domain.MemoryType, content string, condition domain.MemoryWriteCondition) (domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, user, ""); err != nil {
+	if _, err := security.DataScope(ctx, user, ""); err != nil {
 		return domain.MemoryDocument{}, err
 	}
 	if condition.UpdatedAt.IsZero() || condition.GenerationID == "" || strings.TrimSpace(content) == "" || len(content) > 128<<10 || (kind != domain.MemoryTypeSummary && kind != domain.MemoryTypeFact && kind != domain.MemoryTypeImpression && !domain.IsGenericMemoryType(kind)) {
@@ -22,7 +22,7 @@ func (s *Service) EditDocument(ctx context.Context, user, id string, kind domain
 }
 
 func (s *Service) EditKeyMemory(ctx context.Context, user, id, key, value, category, status string, condition domain.MemoryWriteCondition) (domain.KeyMemory, error) {
-	if _, err := security.PersonalScope(ctx, user, ""); err != nil {
+	if _, err := security.DataScope(ctx, user, ""); err != nil {
 		return domain.KeyMemory{}, err
 	}
 	key = strings.TrimSpace(key)

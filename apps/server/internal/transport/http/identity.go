@@ -18,8 +18,25 @@ import (
 
 func proxyCapability(r *http.Request) string {
 	switch {
-	case r.URL.Path == "/api/v1/identity", r.URL.Path == "/api/v1/workspaces":
+	case r.URL.Path == "/api/v1/identity", r.URL.Path == "/api/v1/workspaces", r.URL.Path == "/api/v1/capabilities":
 		return ""
+	case strings.HasPrefix(r.URL.Path, "/api/v1/events"), strings.HasPrefix(r.URL.Path, "/api/v1/ingestions"), strings.HasPrefix(r.URL.Path, "/api/v1/conversations"):
+		return domain.CapabilityEventsWrite
+	case strings.HasPrefix(r.URL.Path, "/api/v1/sources"):
+		if r.Method == http.MethodPost {
+			return domain.CapabilitySourcesRetract
+		}
+		return domain.CapabilitySourcesRead
+	case strings.HasPrefix(r.URL.Path, "/api/v1/exports"):
+		return domain.CapabilityMemoryExport
+	case strings.HasPrefix(r.URL.Path, "/api/v1/operations"):
+		return ""
+	case strings.HasPrefix(r.URL.Path, "/api/v1/usage"):
+		return domain.CapabilityUsageRead
+	case r.URL.Path == "/api/v1/memory/forget":
+		return domain.CapabilityMemoryForget
+	case strings.HasPrefix(r.URL.Path, "/api/v1/memory/candidates"):
+		return domain.CapabilityCandidatesWrite
 	case strings.HasPrefix(r.URL.Path, "/v1/files"):
 		if r.Method == http.MethodGet {
 			return domain.CapabilityFilesRead
@@ -204,7 +221,7 @@ func registerIdentityRoutes(r chi.Router, keys *apikeyservice.Service) {
 func identityHandler(w http.ResponseWriter, r *http.Request) {
 	access, _ := security.AccessFromContext(r.Context())
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, 200, map[string]any{"access": access, "workspace_mode": "personal_only", "private_memory": false, "event_ingestion": false})
+	writeJSON(w, 200, map[string]any{"access": access, "workspace_mode": "workspace", "contract_version": "1.0", "capabilities_url": "/api/v1/capabilities"})
 }
 
 func writeGatewayError(w http.ResponseWriter, err error) {

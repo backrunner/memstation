@@ -638,6 +638,8 @@ v1.x 后续路线：
 
 ### 14.1 已完成
 
+- 2026-10-25 独立记忆服务与 Mimic 接入契约：MemStation 侧 MS-01～10 已实现，支持 group/project、服务端 AccessContext、Agent 与输出受众共同约束的私有分区、Integration/Actor、独立事件事务与窗口、连续 receipt 水位、候选/CAS 修正、可撤回发布副本、scoped erase/export、独立签名删除清单与恢复屏障。HTTP、typed gRPC、GraphQL 管理和 Manager 接入/来源/任务重放/审核/发布/删除/用量/generation 流程复用服务层；broker 模式统一 summary/analysis/embedding/rerank，锁定 embedding 指纹并保存权威用量引用。真实 PostgreSQL/Redis 管线、DLQ 重放、旧 pg_dump/pg_restore 删除重放、Go 全量与相关 race、format/lint、生成一致性、Atlas 新增 13 项 lint 与迁移重放、前端 lint/test/build 和 Manager 110 项桌面/移动 E2E 通过。提交前复查修复历史投影、详情 revision 一致性、同 revision 删除、私有昵称展示、broker 降级追踪并同步 Ent 索引；独立检出验证不包含并行 LOCOMO/精排实验。历史条目中的 Personal-only 限制以本条及 [MS 验收表](docs/plans/workspace-agents/implementation-status.md) 为准；Run/远程调度仍不在本轮范围。实际 Mimic 适配器与 broker 联调、生产模型质量/容量和远端 CI 未由本地模拟证明，不能称两项目已正式接通。配置、契约与恢复步骤见 [接入说明](docs/independent-memory-integration.md)。
+
 - 2026-10-25 真实模型评测：新增真实 Gateway/outbox/Worker 来源回放和 PostgreSQL HTTP 容量 runner，保留全部失败分母、默认注入／仅派生／无记忆对照及实测峰值并发。修复性能评测漏传历史／过滤参数、阈值失败丢报告、provider 错误被 lexical fallback 掩盖；LLM 提示补齐通用条目字段和精确替代身份约束，严格解析改为原子替换，最多一次模型 schema 纠正且不放宽语义校验。Go 全量（独立 PostgreSQL）、相关 race、format／lint、pnpm lint／test 通过；CI 增加阻塞 production build。真实 Qwen 原生 R@3 95.83%，LOCOMO 1,532 查询 R@3 55.27%；LongMemEval 仅分层 12 条。最终来源回放默认注入 27/27、仅派生 26/27、无记忆 3/27，保留此前失败轮次；10k 重复合成文本容量测试在低到达率下满足 250ms，但真实八路并发 P95 590–660ms 不达标。不能据此称整体质量／性能验收完成；报告与后续范围见 [真实效果复核](docs/memory-quality-2026-10-25.md)。
 
 - 2026-10-25 CI 重跑复核：远端 40124703812 复现两项 WebKit 失败。折叠内容取消会裁剪表单点击区域的高度动画，保留透明度和箭头反馈；移动端清空筛选增加空值断言，旧导航迁移测试等待目标页面实际渲染后再发起下一次导航。修改前重复验证复现导航竞争，修改后两项 WebKit 共 24 次重复通过，59b33ee 完整远端 CI 40126926964 通过；后续真实模型效果／性能复核见上述独立报告。

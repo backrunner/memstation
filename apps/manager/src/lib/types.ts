@@ -695,4 +695,4 @@ export interface WorkspaceRecord {
   created_at: string;
   updated_at: string;
 }
-export interface WorkspacePage extends CursorPage<WorkspaceRecord> { workspace_mode: 'personal_only' }
+export interface WorkspacePage extends CursorPage<WorkspaceRecord> { workspace_mode: 'personal_only' | 'workspace' }

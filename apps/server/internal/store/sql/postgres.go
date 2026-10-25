@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	storeaccess "memstation/apps/server/internal/store/access"
+
 	"github.com/google/uuid"
 
 	"memstation/apps/server/internal/domain"
@@ -211,14 +213,14 @@ func (r *PostgresConversationRepository) GetConversation(ctx context.Context, us
 }
 
 func (r *PostgresConversationRepository) GetConversationInGeneration(ctx context.Context, userID, conversationID, generationID string) (domain.ConversationRecord, error) {
-	workspace, err := security.PersonalScope(ctx, userID, "")
+	workspace, err := security.DataScope(ctx, userID, "")
 	if err != nil {
 		return domain.ConversationRecord{}, err
 	}
 	row := r.db.QueryRowContext(ctx, `
-        SELECT request_format, upstream_provider, mode, finalize_status, summary_status, analysis_status, metadata, created_at, updated_at, write_revision, workspace_id, agent_id
+        SELECT request_format, COALESCE(upstream_provider,''), mode, finalize_status, summary_status, analysis_status, metadata, created_at, updated_at, write_revision, workspace_id, agent_id,partition_id,context_mode
         FROM conversations
-        WHERE id = $1 AND user_id = $2 AND workspace_id=$3
+        WHERE id = $1 AND user_id = $2 AND workspace_id=$3 AND `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND finalize_status<>'invalidated'
     `, conversationID, userID, workspace)
 
 	var record domain.ConversationRecord
@@ -230,7 +232,7 @@ func (r *PostgresConversationRepository) GetConversationInGeneration(ctx context
 	var metadataBytes []byte
 	record.ConversationID = conversationID
 	record.UserID = userID
-	if err := row.Scan(&record.RequestFormat, &provider, &mode, &finalizeStatus, &summaryStatus, &analysisStatus, &metadataBytes, &record.CreatedAt, &record.UpdatedAt, &record.Revision, &record.WorkspaceID, &record.AgentID); err != nil {
+	if err := row.Scan(&record.RequestFormat, &provider, &mode, &finalizeStatus, &summaryStatus, &analysisStatus, &metadataBytes, &record.CreatedAt, &record.UpdatedAt, &record.Revision, &record.WorkspaceID, &record.AgentID, &record.PartitionID, &record.ContextMode); err != nil {
 		if errors.Is(err, sqlpkg.ErrNoRows) {
 			return domain.ConversationRecord{}, domain.ErrConversationNotFound
 		}
@@ -246,6 +248,12 @@ func (r *PostgresConversationRepository) GetConversationInGeneration(ctx context
 	messages, err := r.loadMessages(ctx, userID, conversationID)
 	if err != nil {
 		return domain.ConversationRecord{}, err
+	}
+	if record.ContextMode == "events" {
+		messages, err = r.loadIngestMessages(ctx, record)
+		if err != nil {
+			return domain.ConversationRecord{}, err
+		}
 	}
 	record.Messages = messages
 	resolvedGenerationID := strings.TrimSpace(generationID)
@@ -288,14 +296,14 @@ func (r *PostgresConversationRepository) GetConversationInGeneration(ctx context
 }
 
 func (r *PostgresConversationRepository) ListConversations(ctx context.Context, userID string) ([]domain.ConversationRecord, error) {
-	workspace, err := security.PersonalScope(ctx, userID, "")
+	workspace, err := security.DataScope(ctx, userID, "")
 	if err != nil {
 		return nil, err
 	}
 	rows, err := r.db.QueryContext(ctx, `
-        SELECT id, request_format, upstream_provider, mode, finalize_status, summary_status, analysis_status, metadata, created_at, updated_at, workspace_id, agent_id, write_revision
+        SELECT id, request_format, COALESCE(upstream_provider,''), mode, finalize_status, summary_status, analysis_status, metadata, created_at, updated_at, workspace_id, agent_id, write_revision
         FROM conversations
-        WHERE user_id = $1 AND workspace_id=$2
+        WHERE user_id = $1 AND workspace_id=$2 AND `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND finalize_status<>'invalidated'
         ORDER BY updated_at DESC
     `, userID, workspace)
 	if err != nil {
@@ -313,7 +321,7 @@ func (r *PostgresConversationRepository) ListConversations(ctx context.Context, 
 		var analysisStatus string
 		var metadataBytes []byte
 		item.UserID = userID
-		item.WorkspaceID = domain.PersonalWorkspaceID(userID)
+		item.WorkspaceID = security.WorkspaceID(ctx, userID)
 		if err := rows.Scan(&item.ConversationID, &item.RequestFormat, &provider, &mode, &finalizeStatus, &summaryStatus, &analysisStatus, &metadataBytes, &item.CreatedAt, &item.UpdatedAt, &item.WorkspaceID, &item.AgentID, &item.Revision); err != nil {
 			return nil, err
 		}
@@ -333,9 +341,9 @@ func (r *PostgresConversationRepository) ListTimedOutConversations(ctx context.C
 		limit = 100
 	}
 	rows, err := r.db.QueryContext(ctx, `
-        SELECT id, user_id, request_format, upstream_provider, mode, finalize_status, summary_status, analysis_status, metadata, created_at, updated_at, workspace_id, agent_id, write_revision
+        SELECT id, user_id, request_format, COALESCE(upstream_provider,''), mode, finalize_status, summary_status, analysis_status, metadata, created_at, updated_at, workspace_id, agent_id, write_revision
         FROM conversations
-        WHERE finalize_status = 'active' AND updated_at < $1 AND workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex')
+        WHERE finalize_status = 'active' AND updated_at < $1 AND workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+`
         ORDER BY updated_at ASC
         LIMIT $2
     `, before, limit)
@@ -584,10 +592,10 @@ func NewPostgresMemoryRepository(db *sqlpkg.DB) *PostgresMemoryRepository {
 }
 
 func (r *PostgresMemoryRepository) Search(ctx context.Context, input domain.SearchInput) (domain.SearchResult, error) {
-	if _, err := security.PersonalScope(ctx, input.UserID, input.WorkspaceID); err != nil {
+	if _, err := security.DataScope(ctx, input.UserID, input.WorkspaceID); err != nil {
 		return domain.SearchResult{}, err
 	}
-	input.WorkspaceID = domain.PersonalWorkspaceID(input.UserID)
+	input.WorkspaceID = security.WorkspaceID(ctx, input.UserID)
 	docs, err := r.ListDocumentsInGeneration(ctx, input.UserID, input.GenerationID, input.MemoryTypes, 200)
 	if err != nil {
 		return domain.SearchResult{}, err
@@ -630,12 +638,19 @@ func (r *PostgresMemoryRepository) Search(ctx context.Context, input domain.Sear
 }
 
 func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain.MemoryDocument) error {
-	if _, err := security.PersonalScope(ctx, doc.UserID, doc.WorkspaceID); err != nil {
+	return r.storeDocumentTx(ctx, doc, nil)
+}
+
+func (r *PostgresMemoryRepository) storeDocumentTx(ctx context.Context, doc domain.MemoryDocument, external *sqlpkg.Tx) error {
+	if _, err := security.DataScope(ctx, doc.UserID, doc.WorkspaceID); err != nil {
 		return err
 	}
-	doc.WorkspaceID = domain.PersonalWorkspaceID(doc.UserID)
+	doc.WorkspaceID = security.WorkspaceID(ctx, doc.UserID)
+	if err := prepareDocumentAccess(ctx, &doc); err != nil {
+		return err
+	}
 	if doc.Type != domain.MemoryTypeKeyMemory && strings.TrimSpace(doc.GenerationID) == "" {
-		doc.GenerationID = currentGenerationIDForSQL(doc.UserID)
+		doc.GenerationID = currentGenerationIDForSQL(security.WorkspaceIdentity(ctx, doc.UserID))
 	}
 	hadExplicitID := strings.TrimSpace(doc.ID) != ""
 	hadExplicitNodeID := strings.TrimSpace(doc.NodeID) != ""
@@ -685,12 +700,25 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 		return nil
 	}
 
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
+	tx := external
+	var err error
+	if tx == nil {
+		tx, err = r.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer rollback(tx)
+	}
+	commit := func() error {
+		if external != nil {
+			return nil
+		}
+		return tx.Commit()
+	}
+	if writable, err := memorygeneration.LockWritableGeneration(ctx, tx, doc.UserID, doc.WorkspaceID, doc.GenerationID); err != nil || !writable {
 		return err
 	}
-	defer rollback(tx)
-	if writable, err := memorygeneration.LockWritableGeneration(ctx, tx, doc.UserID, doc.WorkspaceID, doc.GenerationID); err != nil || !writable {
+	if err = bindIngestEvidenceTx(ctx, tx, &doc); err != nil {
 		return err
 	}
 	if err = lockMemoryIdentityTx(ctx, tx, doc.UserID, doc.WorkspaceID, doc.NodeID, doc.ID, string(doc.Type)); err != nil {
@@ -724,16 +752,18 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 			}
 		}
 		if sameProcessingCheckpoint(previous["_llm_summary_checkpoint"], doc.Metadata["_llm_summary_checkpoint"]) {
-			return tx.Commit()
+			return commit()
 		}
 	}
 
 	_, err = tx.ExecContext(ctx, `
-	        INSERT INTO memory_nodes (id, generation_id, user_id, node_type, entity_id, importance, decay_factor, activity_at, time_tier, embedding_status, created_at, updated_at, workspace_id)
-	        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+	        INSERT INTO memory_nodes (id, generation_id, user_id, node_type, entity_id, importance, decay_factor, activity_at, time_tier, embedding_status, created_at, updated_at, workspace_id,partition_id,subject_actor_ids,source_refs,revision,source_conversation_id)
+	        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
 	        ON CONFLICT (id) DO UPDATE SET
 	            generation_id = EXCLUDED.generation_id,
-	            node_type = EXCLUDED.node_type,
+             node_type = EXCLUDED.node_type,
+             subject_actor_ids=EXCLUDED.subject_actor_ids,source_refs=EXCLUDED.source_refs,revision=memory_nodes.revision+1,
+             source_conversation_id=EXCLUDED.source_conversation_id,
 	            entity_id = EXCLUDED.entity_id,
 	            importance = EXCLUDED.importance,
 	            decay_factor = EXCLUDED.decay_factor,
@@ -742,8 +772,12 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 	            embedding_status = EXCLUDED.embedding_status,
 	            updated_at = EXCLUDED.updated_at
 	        WHERE memory_nodes.user_id = EXCLUDED.user_id AND memory_nodes.workspace_id = EXCLUDED.workspace_id
-	    `, doc.NodeID, doc.GenerationID, doc.UserID, string(doc.Type), doc.ID, doc.Importance, doc.DecayFactor, doc.ActivityAt, string(doc.TimeTier), "pending", doc.CreatedAt, doc.UpdatedAt, doc.WorkspaceID)
+	    `, doc.NodeID, doc.GenerationID, doc.UserID, string(doc.Type), doc.ID, doc.Importance, doc.DecayFactor, doc.ActivityAt, string(doc.TimeTier), "pending", doc.CreatedAt, doc.UpdatedAt, doc.WorkspaceID, doc.PartitionID, marshalJSON(doc.SubjectActorIDs), marshalJSON(doc.SourceRefs), doc.Revision, doc.ConversationID)
 	if err != nil {
+		return err
+	}
+
+	if err = persistIngestDependenciesTx(ctx, tx, doc); err != nil {
 		return err
 	}
 
@@ -965,7 +999,7 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 			if effectiveSupersededByID != "" {
 				var supersedingNodeID string
 				switch scanErr := tx.QueryRowContext(ctx, `
-                    SELECT node_id FROM facts WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=facts.user_id AND scope_node.id=facts.node_id AND scope_node.workspace_id='personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND user_id = $1 AND generation_id = $2 AND id = $3 AND COALESCE(lineage_group_id, '') = $4
+                    SELECT node_id FROM facts WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=facts.user_id AND scope_node.id=facts.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND user_id = $1 AND generation_id = $2 AND id = $3 AND COALESCE(lineage_group_id, '') = $4
                 `, doc.UserID, doc.GenerationID, effectiveSupersededByID, lineageGroupID).Scan(&supersedingNodeID); scanErr {
 				case nil:
 					if _, err = tx.ExecContext(ctx, `
@@ -996,7 +1030,7 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 				rows, queryErr := tx.QueryContext(ctx, `
                     SELECT id, node_id
                     FROM facts
-                    WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=facts.user_id AND scope_node.id=facts.node_id AND scope_node.workspace_id='personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND user_id = $1 AND generation_id = $2 AND superseded_by_id = $3 AND id <> $4
+                    WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=facts.user_id AND scope_node.id=facts.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND user_id = $1 AND generation_id = $2 AND superseded_by_id = $3 AND id <> $4
                       AND COALESCE(lineage_group_id, '') = $5
                 `, doc.UserID, doc.GenerationID, doc.ID, doc.ID, lineageGroupID)
 				if queryErr != nil {
@@ -1088,21 +1122,21 @@ func (r *PostgresMemoryRepository) StoreDocument(ctx context.Context, doc domain
 	if err != nil {
 		return err
 	}
-	if err = syncTemporalRelationsTx(tx, doc.UserID, doc.GenerationID, doc.NodeID, doc.ActivityAt, doc.TimeTier, doc.UpdatedAt); err != nil {
+	if err = syncTemporalRelationsTx(ctx, tx, doc.UserID, doc.GenerationID, doc.NodeID, doc.ActivityAt, doc.TimeTier, doc.UpdatedAt); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return commit()
 }
 
 func (r *PostgresMemoryRepository) DeleteDocument(ctx context.Context, userID, id string, kind domain.MemoryType) error {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return err
 	}
 	var nodeID string
 	if err := r.db.QueryRowContext(ctx, `
         SELECT id
         FROM memory_nodes
-        WHERE memory_nodes.workspace_id = 'personal-' || encode(sha256(convert_to(memory_nodes.user_id,'UTF8')),'hex') AND user_id = $1 AND entity_id = $2 AND node_type = $3
+        WHERE `+storeaccess.NodeSQL(ctx, "memory_nodes")+` AND user_id = $1 AND entity_id = $2 AND node_type = $3
     `, userID, id, string(kind)).Scan(&nodeID); err != nil {
 		if errors.Is(err, sqlpkg.ErrNoRows) {
 			return nil
@@ -1124,7 +1158,7 @@ func (r *PostgresMemoryRepository) DeleteDocument(ctx context.Context, userID, i
 	}
 	if _, err := tx.ExecContext(ctx, `
         DELETE FROM memory_evidences
-        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=memory_evidences.user_id AND scope_node.id=memory_evidences.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND user_id = $1 AND node_id = $2
+        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=memory_evidences.user_id AND scope_node.id=memory_evidences.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND user_id = $1 AND node_id = $2
     `, userID, nodeID); err != nil {
 		return err
 	}
@@ -1149,7 +1183,7 @@ func (r *PostgresMemoryRepository) DeleteDocument(ctx context.Context, userID, i
 			return err
 		}
 	case domain.MemoryTypeFact:
-		if _, err := tx.ExecContext(ctx, `DELETE FROM facts WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=facts.user_id AND scope_node.id=facts.node_id AND scope_node.workspace_id='personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND user_id = $1 AND id = $2`, userID, id); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM facts WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=facts.user_id AND scope_node.id=facts.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND user_id = $1 AND id = $2`, userID, id); err != nil {
 			return err
 		}
 	case domain.MemoryTypeEvent,
@@ -1169,7 +1203,7 @@ func (r *PostgresMemoryRepository) DeleteDocument(ctx context.Context, userID, i
 		return fmt.Errorf("unsupported memory type: %s", kind)
 	}
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM memory_nodes WHERE memory_nodes.workspace_id = 'personal-' || encode(sha256(convert_to(memory_nodes.user_id,'UTF8')),'hex') AND user_id = $1 AND id = $2`, userID, nodeID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM memory_nodes WHERE `+storeaccess.NodeSQL(ctx, "memory_nodes")+` AND user_id = $1 AND id = $2`, userID, nodeID); err != nil {
 		return err
 	}
 
@@ -1177,14 +1211,14 @@ func (r *PostgresMemoryRepository) DeleteDocument(ctx context.Context, userID, i
 }
 
 func (r *PostgresMemoryRepository) DeleteSegmentsByConversation(ctx context.Context, userID, conversationID string, keepIDs []string) ([]string, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	return r.DeleteSegmentsByConversationInGeneration(ctx, userID, "", conversationID, keepIDs)
 }
 
 func (r *PostgresMemoryRepository) DeleteSegmentsByConversationInGeneration(ctx context.Context, userID, generationID, conversationID string, keepIDs []string) ([]string, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	if userID == "" || conversationID == "" {
@@ -1199,7 +1233,7 @@ func (r *PostgresMemoryRepository) DeleteSegmentsByConversationInGeneration(ctx 
 	rows, err := r.db.QueryContext(ctx, `
         SELECT id, entity_id
         FROM memory_nodes
-        WHERE memory_nodes.workspace_id = 'personal-' || encode(sha256(convert_to(memory_nodes.user_id,'UTF8')),'hex') AND user_id = $1 AND node_type = $2 AND entity_id LIKE $3 ESCAPE '\'
+        WHERE `+storeaccess.NodeSQL(ctx, "memory_nodes")+` AND user_id = $1 AND node_type = $2 AND entity_id LIKE $3 ESCAPE '\'
     `+generationFilterClause("generation_id", 4, userID, generationID, false), generationFilterArgs(userID, generationID, userID, string(domain.MemoryTypeSegment), segmentEntityPrefixPattern(conversationID))...)
 	if err != nil {
 		return nil, err
@@ -1260,14 +1294,14 @@ func (r *PostgresMemoryRepository) DeleteSegmentsByConversationInGeneration(ctx 
 }
 
 func (r *PostgresMemoryRepository) GetDocument(ctx context.Context, userID, id string, kind domain.MemoryType) (domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemoryDocument{}, err
 	}
 	return r.GetDocumentInGeneration(ctx, userID, "", id, kind)
 }
 
 func (r *PostgresMemoryRepository) GetDocumentInGeneration(ctx context.Context, userID, generationID, id string, kind domain.MemoryType) (domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemoryDocument{}, err
 	}
 	docs, err := r.listByEntityIDsInGeneration(ctx, userID, generationID, kind, []string{id})
@@ -1281,7 +1315,7 @@ func (r *PostgresMemoryRepository) GetDocumentInGeneration(ctx context.Context, 
 }
 
 func (r *PostgresMemoryRepository) ListDocuments(ctx context.Context, userID string, memoryTypes []domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	return r.ListDocumentsInGeneration(ctx, userID, "", memoryTypes, limit)
@@ -1292,7 +1326,7 @@ func (r *PostgresMemoryRepository) ListDocumentsInGeneration(ctx context.Context
 }
 
 func (r *PostgresMemoryRepository) listDocumentsInGeneration(ctx context.Context, userID, generationID string, memoryTypes []domain.MemoryType, limit int, browse *domain.MemoryBrowseQuery, position *domain.MemoryPosition) ([]domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	types := memoryTypes
@@ -1354,11 +1388,11 @@ func (r *PostgresMemoryRepository) listDocumentsInGeneration(ctx context.Context
                                FROM memory_keywords k
                                WHERE k.summary_id = s.id AND k.user_id = s.user_id
                            ), '[]'::json)
-                       ) AS metadata,
+                       ) || `+nodeAccessMetadataSQL()+` AS metadata,
                        'summary' AS memory_type
                 FROM memory_summaries s
                 LEFT JOIN memory_nodes n ON n.user_id = s.user_id AND n.id = s.node_id
-                WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=s.user_id AND scope_node.id=s.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND s.user_id = $1%s
+                WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=s.user_id AND scope_node.id=s.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND s.user_id = $1%s
             `, generationClauseSummary))
 		case domain.MemoryTypeSegment:
 			branches = append(branches, fmt.Sprintf(`
@@ -1376,14 +1410,14 @@ func (r *PostgresMemoryRepository) listDocumentsInGeneration(ctx context.Context
                            'overlap_from_sequence', cs.overlap_from_sequence,
                            'overlap_message_count', cs.overlap_message_count,
                            'content_hash', cs.content_hash
-                       ) || COALESCE(cs.metadata, '{}'::jsonb) AS metadata,
+                       ) || COALESCE(cs.metadata, '{}'::jsonb) || `+nodeAccessMetadataSQL()+` AS metadata,
                        'segment' AS memory_type
                 FROM conversation_segments cs
                 JOIN memory_nodes n
                   ON n.user_id = cs.user_id
                  AND n.entity_id = cs.id
                  AND n.node_type = 'segment'
-                WHERE n.workspace_id = 'personal-' || encode(sha256(convert_to(n.user_id,'UTF8')),'hex') AND cs.user_id = $1%s
+                WHERE `+storeaccess.NodeSQL(ctx, "n")+` AND cs.user_id = $1%s
             `, generationClauseSegment))
 		case domain.MemoryTypeImpression:
 			branches = append(branches, fmt.Sprintf(`
@@ -1393,11 +1427,11 @@ func (r *PostgresMemoryRepository) listDocumentsInGeneration(ctx context.Context
                        COALESCE(n.activity_at, i.updated_at) AS activity_at,
                        COALESCE(n.time_tier, '') AS time_tier,
                        i.created_at, i.updated_at,
-                       COALESCE(i.metadata, '{}'::jsonb) || jsonb_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity) AS metadata,
+                       COALESCE(i.metadata, '{}'::jsonb) || jsonb_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity) || `+nodeAccessMetadataSQL()+` AS metadata,
                        'impression' AS memory_type
                 FROM impressions i
                 LEFT JOIN memory_nodes n ON n.user_id = i.user_id AND n.id = i.node_id
-                WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=i.user_id AND scope_node.id=i.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND i.user_id = $1%s
+                WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=i.user_id AND scope_node.id=i.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND i.user_id = $1%s
             `, generationClauseImpression))
 		case domain.MemoryTypeFact:
 			branches = append(branches, fmt.Sprintf(`
@@ -1423,11 +1457,11 @@ func (r *PostgresMemoryRepository) listDocumentsInGeneration(ctx context.Context
                                FROM memory_keywords k
                                WHERE k.summary_id = f.id AND k.user_id = f.user_id
                            ), '[]'::json)
-                       ) AS metadata,
+                       ) || `+nodeAccessMetadataSQL()+` AS metadata,
                        'fact' AS memory_type
                 FROM facts f
                 LEFT JOIN memory_nodes n ON n.user_id = f.user_id AND n.id = f.node_id
-                WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=f.user_id AND scope_node.id=f.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND f.user_id = $1%s
+                WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=f.user_id AND scope_node.id=f.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND f.user_id = $1%s
             `, generationClauseFact))
 		case domain.MemoryTypeKeyMemory:
 			branches = append(branches, `
@@ -1437,11 +1471,11 @@ func (r *PostgresMemoryRepository) listDocumentsInGeneration(ctx context.Context
                        COALESCE(n.activity_at, k.updated_at) AS activity_at,
                        COALESCE(n.time_tier, '') AS time_tier,
                        k.created_at, k.updated_at,
-                       jsonb_build_object('key', k.key, 'value', k.value, 'category', k.category, 'source', k.source, 'review_status', k.review_status, 'last_confirmed_at', k.last_confirmed_at) AS metadata,
+                       jsonb_build_object('key', k.key, 'value', k.value, 'category', k.category, 'source', k.source, 'review_status', k.review_status, 'last_confirmed_at', k.last_confirmed_at) || `+nodeAccessMetadataSQL()+` AS metadata,
                        'key_memory' AS memory_type
                 FROM key_memories k
                 LEFT JOIN memory_nodes n ON n.user_id = k.user_id AND n.id = k.node_id
-                WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=k.user_id AND scope_node.id=k.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND k.user_id = $1 AND k.deleted_at IS NULL
+                WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=k.user_id AND scope_node.id=k.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND k.user_id = $1 AND k.deleted_at IS NULL
             `)
 		case domain.MemoryTypeEvent,
 			domain.MemoryTypeTask,
@@ -1464,11 +1498,11 @@ func (r *PostgresMemoryRepository) listDocumentsInGeneration(ctx context.Context
                            'valid_from', mi.valid_from,
                            'valid_to', mi.valid_to,
                            'review_status', mi.review_status
-                       ) || COALESCE(mi.metadata, '{}'::jsonb) AS metadata,
+                       ) || COALESCE(mi.metadata, '{}'::jsonb) || `+nodeAccessMetadataSQL()+` AS metadata,
                        mi.item_type AS memory_type
                 FROM memory_items mi
                 LEFT JOIN memory_nodes n ON n.user_id = mi.user_id AND n.id = mi.node_id
-                WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=mi.user_id AND scope_node.id=mi.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND mi.user_id = $1 AND mi.item_type = '%s' AND mi.deleted_at IS NULL%s
+                WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=mi.user_id AND scope_node.id=mi.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND mi.user_id = $1 AND mi.item_type = '%s' AND mi.deleted_at IS NULL%s
             `, string(kind), generationClauseItem))
 		}
 	}
@@ -1503,18 +1537,18 @@ func (r *PostgresMemoryRepository) listDocumentsInGeneration(ctx context.Context
 		return nil, err
 	}
 	defer rows.Close()
-	return scanTypedMemoryDocumentRows(rows, userID)
+	return scanTypedMemoryDocumentRows(ctx, rows, userID)
 }
 
 func (r *PostgresMemoryRepository) ListDocumentsByNodeIDs(ctx context.Context, userID string, nodeIDs []string) ([]domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	return r.ListDocumentsByNodeIDsInGeneration(ctx, userID, "", nodeIDs)
 }
 
 func (r *PostgresMemoryRepository) ListDocumentsByNodeIDsInGeneration(ctx context.Context, userID, generationID string, nodeIDs []string) ([]domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	nodeIDs = uniqueNonEmptyStrings(nodeIDs)
@@ -1548,11 +1582,11 @@ func (r *PostgresMemoryRepository) ListDocumentsByNodeIDsInGeneration(ctx contex
                            FROM memory_keywords k
                            WHERE k.summary_id = s.id AND k.user_id = s.user_id
                        ), '[]'::jsonb)
-                   ) AS metadata,
+                   ) || `+nodeAccessMetadataSQL()+` AS metadata,
                    'summary' AS memory_type
             FROM memory_nodes n
             JOIN memory_summaries s ON s.user_id = n.user_id AND s.node_id = n.id
-            WHERE n.workspace_id = 'personal-' || encode(sha256(convert_to(n.user_id,'UTF8')),'hex') AND n.user_id = $1 AND n.id IN (%[1]s) AND n.node_type = 'summary'%[2]s
+            WHERE `+storeaccess.NodeSQL(ctx, "n")+` AND n.user_id = $1 AND n.id IN (%[1]s) AND n.node_type = 'summary'%[2]s
 
             UNION ALL
 
@@ -1570,14 +1604,14 @@ func (r *PostgresMemoryRepository) ListDocumentsByNodeIDsInGeneration(ctx contex
                        'overlap_from_sequence', cs.overlap_from_sequence,
                        'overlap_message_count', cs.overlap_message_count,
                        'content_hash', cs.content_hash
-                   ) || COALESCE(cs.metadata, '{}'::jsonb) AS metadata,
+                   ) || COALESCE(cs.metadata, '{}'::jsonb) || `+nodeAccessMetadataSQL()+` AS metadata,
                    'segment' AS memory_type
             FROM memory_nodes n
             JOIN conversation_segments cs
               ON cs.user_id = n.user_id
              AND cs.id = n.entity_id
              AND n.node_type = 'segment'
-            WHERE n.workspace_id = 'personal-' || encode(sha256(convert_to(n.user_id,'UTF8')),'hex') AND n.user_id = $1 AND n.id IN (%[1]s)%[2]s
+            WHERE `+storeaccess.NodeSQL(ctx, "n")+` AND n.user_id = $1 AND n.id IN (%[1]s)%[2]s
 
             UNION ALL
 
@@ -1587,11 +1621,11 @@ func (r *PostgresMemoryRepository) ListDocumentsByNodeIDsInGeneration(ctx contex
                    COALESCE(n.activity_at, i.updated_at) AS activity_at,
                    COALESCE(n.time_tier, '') AS time_tier,
                    i.created_at, i.updated_at,
-                   COALESCE(i.metadata, '{}'::jsonb) || jsonb_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity) AS metadata,
+                   COALESCE(i.metadata, '{}'::jsonb) || jsonb_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity) || `+nodeAccessMetadataSQL()+` AS metadata,
                    'impression' AS memory_type
             FROM memory_nodes n
             JOIN impressions i ON i.user_id = n.user_id AND i.node_id = n.id
-            WHERE n.workspace_id = 'personal-' || encode(sha256(convert_to(n.user_id,'UTF8')),'hex') AND n.user_id = $1 AND n.id IN (%[1]s) AND n.node_type = 'impression'%[2]s
+            WHERE `+storeaccess.NodeSQL(ctx, "n")+` AND n.user_id = $1 AND n.id IN (%[1]s) AND n.node_type = 'impression'%[2]s
 
             UNION ALL
 
@@ -1617,11 +1651,11 @@ func (r *PostgresMemoryRepository) ListDocumentsByNodeIDsInGeneration(ctx contex
                            FROM memory_keywords k
                            WHERE k.summary_id = f.id AND k.user_id = f.user_id
                        ), '[]'::jsonb)
-                   ) AS metadata,
+                   ) || `+nodeAccessMetadataSQL()+` AS metadata,
                    'fact' AS memory_type
             FROM memory_nodes n
             JOIN facts f ON f.user_id = n.user_id AND f.node_id = n.id
-            WHERE n.workspace_id = 'personal-' || encode(sha256(convert_to(n.user_id,'UTF8')),'hex') AND n.user_id = $1 AND n.id IN (%[1]s) AND n.node_type = 'fact'%[2]s
+            WHERE `+storeaccess.NodeSQL(ctx, "n")+` AND n.user_id = $1 AND n.id IN (%[1]s) AND n.node_type = 'fact'%[2]s
 
             UNION ALL
 
@@ -1639,11 +1673,11 @@ func (r *PostgresMemoryRepository) ListDocumentsByNodeIDsInGeneration(ctx contex
                        'valid_from', mi.valid_from,
                        'valid_to', mi.valid_to,
                        'review_status', mi.review_status
-                   ) || COALESCE(mi.metadata, '{}'::jsonb) AS metadata,
+                   ) || COALESCE(mi.metadata, '{}'::jsonb) || `+nodeAccessMetadataSQL()+` AS metadata,
                    mi.item_type AS memory_type
             FROM memory_nodes n
             JOIN memory_items mi ON mi.user_id = n.user_id AND mi.node_id = n.id
-            WHERE n.workspace_id = 'personal-' || encode(sha256(convert_to(n.user_id,'UTF8')),'hex') AND n.user_id = $1
+            WHERE `+storeaccess.NodeSQL(ctx, "n")+` AND n.user_id = $1
               AND n.id IN (%[1]s)
               AND n.node_type IN ('event', 'task', 'procedure', 'artifact', 'entity', 'agent_action')
               AND mi.deleted_at IS NULL%[2]s
@@ -1656,11 +1690,11 @@ func (r *PostgresMemoryRepository) ListDocumentsByNodeIDsInGeneration(ctx contex
                    COALESCE(n.activity_at, k.updated_at) AS activity_at,
                    COALESCE(n.time_tier, '') AS time_tier,
                    k.created_at, k.updated_at,
-                   jsonb_build_object('key', k.key, 'value', k.value, 'category', k.category, 'source', k.source, 'review_status', k.review_status, 'last_confirmed_at', k.last_confirmed_at) AS metadata,
+                   jsonb_build_object('key', k.key, 'value', k.value, 'category', k.category, 'source', k.source, 'review_status', k.review_status, 'last_confirmed_at', k.last_confirmed_at) || `+nodeAccessMetadataSQL()+` AS metadata,
                    'key_memory' AS memory_type
             FROM memory_nodes n
             JOIN key_memories k ON k.user_id = n.user_id AND k.node_id = n.id
-            WHERE n.workspace_id = 'personal-' || encode(sha256(convert_to(n.user_id,'UTF8')),'hex') AND n.user_id = $1 AND n.id IN (%[1]s) AND n.node_type = 'key_memory' AND k.deleted_at IS NULL
+            WHERE `+storeaccess.NodeSQL(ctx, "n")+` AND n.user_id = $1 AND n.id IN (%[1]s) AND n.node_type = 'key_memory' AND k.deleted_at IS NULL
         ) docs
         ORDER BY updated_at DESC
     `, inClause, generationClause)
@@ -1669,7 +1703,7 @@ func (r *PostgresMemoryRepository) ListDocumentsByNodeIDsInGeneration(ctx contex
 		return nil, err
 	}
 	defer rows.Close()
-	return scanTypedMemoryDocumentRows(rows, userID)
+	return scanTypedMemoryDocumentRows(ctx, rows, userID)
 }
 
 func (r *PostgresMemoryRepository) listByEntityIDsInGeneration(ctx context.Context, userID, generationID string, kind domain.MemoryType, ids []string) ([]domain.MemoryDocument, error) {
@@ -1703,11 +1737,11 @@ func (r *PostgresMemoryRepository) listByEntityIDsInGeneration(ctx context.Conte
                            FROM memory_keywords k
                            WHERE k.summary_id = s.id AND k.user_id = s.user_id
                        ), '[]'::json)
-                   ),
+                   ) || `+nodeAccessMetadataSQL()+`,
                    'summary'
             FROM memory_summaries s
             JOIN memory_nodes n ON n.user_id = s.user_id AND n.id = s.node_id
-            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=s.user_id AND scope_node.id=s.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND s.user_id = $1 AND s.id IN (%s)%s
+            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=s.user_id AND scope_node.id=s.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND s.user_id = $1 AND s.id IN (%s)%s
             ORDER BY s.updated_at DESC
         `, inClause, generationClause)
 	case domain.MemoryTypeSegment:
@@ -1726,14 +1760,14 @@ func (r *PostgresMemoryRepository) listByEntityIDsInGeneration(ctx context.Conte
                        'overlap_from_sequence', cs.overlap_from_sequence,
                        'overlap_message_count', cs.overlap_message_count,
                        'content_hash', cs.content_hash
-                   ) || COALESCE(cs.metadata, '{}'::jsonb),
+                   ) || COALESCE(cs.metadata, '{}'::jsonb) || `+nodeAccessMetadataSQL()+`,
                    'segment'
             FROM conversation_segments cs
             JOIN memory_nodes n
               ON n.user_id = cs.user_id
              AND n.entity_id = cs.id
              AND n.node_type = 'segment'
-            WHERE n.workspace_id = 'personal-' || encode(sha256(convert_to(n.user_id,'UTF8')),'hex') AND cs.user_id = $1 AND cs.id IN (%s)%s
+            WHERE `+storeaccess.NodeSQL(ctx, "n")+` AND cs.user_id = $1 AND cs.id IN (%s)%s
             ORDER BY cs.updated_at DESC, cs.segment_index DESC
         `, inClause, generationClause)
 	case domain.MemoryTypeImpression:
@@ -1744,11 +1778,11 @@ func (r *PostgresMemoryRepository) listByEntityIDsInGeneration(ctx context.Conte
                    COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1),
                    COALESCE(n.activity_at, i.updated_at), COALESCE(n.time_tier, ''),
                    i.created_at, i.updated_at,
-                   COALESCE(i.metadata, '{}'::jsonb) || jsonb_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity),
+                   COALESCE(i.metadata, '{}'::jsonb) || jsonb_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity) || `+nodeAccessMetadataSQL()+`,
                    'impression'
             FROM impressions i
             JOIN memory_nodes n ON n.user_id = i.user_id AND n.id = i.node_id
-            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=i.user_id AND scope_node.id=i.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND i.user_id = $1 AND i.id IN (%s)%s
+            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=i.user_id AND scope_node.id=i.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND i.user_id = $1 AND i.id IN (%s)%s
             ORDER BY i.updated_at DESC
         `, inClause, generationClause)
 	case domain.MemoryTypeFact:
@@ -1775,11 +1809,11 @@ func (r *PostgresMemoryRepository) listByEntityIDsInGeneration(ctx context.Conte
                            FROM memory_keywords k
                            WHERE k.summary_id = f.id AND k.user_id = f.user_id
                        ), '[]'::json)
-                   ),
+                   ) || `+nodeAccessMetadataSQL()+`,
                    'fact'
             FROM facts f
             JOIN memory_nodes n ON n.user_id = f.user_id AND n.id = f.node_id
-            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=f.user_id AND scope_node.id=f.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND f.user_id = $1 AND f.id IN (%s)%s
+            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=f.user_id AND scope_node.id=f.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND f.user_id = $1 AND f.id IN (%s)%s
             ORDER BY f.updated_at DESC
         `, inClause, generationClause)
 	case domain.MemoryTypeKeyMemory:
@@ -1788,11 +1822,11 @@ func (r *PostgresMemoryRepository) listByEntityIDsInGeneration(ctx context.Conte
                    COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1),
                    COALESCE(n.activity_at, k.updated_at), COALESCE(n.time_tier, ''),
                    k.created_at, k.updated_at,
-                   jsonb_build_object('key', k.key, 'value', k.value, 'category', k.category, 'source', k.source, 'review_status', k.review_status, 'last_confirmed_at', k.last_confirmed_at),
+                   jsonb_build_object('key', k.key, 'value', k.value, 'category', k.category, 'source', k.source, 'review_status', k.review_status, 'last_confirmed_at', k.last_confirmed_at) || `+nodeAccessMetadataSQL()+`,
                    'key_memory'
             FROM key_memories k
             JOIN memory_nodes n ON n.user_id = k.user_id AND n.id = k.node_id
-            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=k.user_id AND scope_node.id=k.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND k.user_id = $1 AND k.id IN (%s) AND k.deleted_at IS NULL
+            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=k.user_id AND scope_node.id=k.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND k.user_id = $1 AND k.id IN (%s) AND k.deleted_at IS NULL
             ORDER BY k.updated_at DESC
         `, inClause)
 	case domain.MemoryTypeEvent,
@@ -1816,11 +1850,11 @@ func (r *PostgresMemoryRepository) listByEntityIDsInGeneration(ctx context.Conte
                        'valid_from', mi.valid_from,
                        'valid_to', mi.valid_to,
                        'review_status', mi.review_status
-                   ) || COALESCE(mi.metadata, '{}'::jsonb),
+                   ) || COALESCE(mi.metadata, '{}'::jsonb) || `+nodeAccessMetadataSQL()+`,
                    mi.item_type
             FROM memory_items mi
             JOIN memory_nodes n ON n.user_id = mi.user_id AND n.id = mi.node_id
-            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=mi.user_id AND scope_node.id=mi.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND mi.user_id = $1 AND mi.id IN (%s) AND mi.item_type = '%s' AND mi.deleted_at IS NULL%s
+            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=mi.user_id AND scope_node.id=mi.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND mi.user_id = $1 AND mi.id IN (%s) AND mi.item_type = '%s' AND mi.deleted_at IS NULL%s
             ORDER BY mi.updated_at DESC
         `, inClause, string(kind), generationClause)
 	default:
@@ -1832,25 +1866,25 @@ func (r *PostgresMemoryRepository) listByEntityIDsInGeneration(ctx context.Conte
 		return nil, err
 	}
 	defer rows.Close()
-	return scanTypedMemoryDocumentRows(rows, userID)
+	return scanTypedMemoryDocumentRows(ctx, rows, userID)
 }
 
 func (r *PostgresMemoryRepository) ListDocumentsByConversation(ctx context.Context, userID, conversationID string) ([]domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	return r.ListDocumentsByConversationInGeneration(ctx, userID, "", conversationID)
 }
 
 func (r *PostgresMemoryRepository) ListDocumentsByConversationInGeneration(ctx context.Context, userID, generationID, conversationID string) ([]domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	return r.ListConversationDocumentsInGeneration(ctx, userID, generationID, conversationID, false)
 }
 
 func (r *PostgresMemoryRepository) ListConversationDocumentsInGeneration(ctx context.Context, userID, generationID, conversationID string, includeSegments bool) ([]domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	limit := 500
@@ -1876,11 +1910,11 @@ func (r *PostgresMemoryRepository) ListConversationDocumentsInGeneration(ctx con
                            FROM memory_keywords k
                            WHERE k.summary_id = s.id AND k.user_id = s.user_id
                        ), '[]'::jsonb)
-                   ) AS metadata,
+                   ) || `+nodeAccessMetadataSQL()+` AS metadata,
                    'summary' AS memory_type
             FROM memory_summaries s
             LEFT JOIN memory_nodes n ON n.user_id = s.user_id AND n.id = s.node_id
-            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=s.user_id AND scope_node.id=s.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND s.user_id = $1 AND s.conversation_id = $2%s
+            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=s.user_id AND scope_node.id=s.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND s.user_id = $1 AND s.conversation_id = $2%s
             ORDER BY s.updated_at DESC
             LIMIT $3
         `, summaryClause),
@@ -1889,11 +1923,11 @@ func (r *PostgresMemoryRepository) ListConversationDocumentsInGeneration(ctx con
                    COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1),
                    COALESCE(n.activity_at, i.updated_at), COALESCE(n.time_tier, ''),
                    i.created_at, i.updated_at,
-                   COALESCE(i.metadata, '{}'::jsonb) || jsonb_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity),
+                   COALESCE(i.metadata, '{}'::jsonb) || jsonb_build_object('subject', i.subject, 'subject_type', i.subject_type, 'evaluation', i.evaluation, 'sentiment', i.sentiment, 'familiarity', i.familiarity) || `+nodeAccessMetadataSQL()+`,
                    'impression'
             FROM impressions i
             LEFT JOIN memory_nodes n ON n.user_id = i.user_id AND n.id = i.node_id
-            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=i.user_id AND scope_node.id=i.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND i.user_id = $1 AND i.conversation_id = $2%s
+            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=i.user_id AND scope_node.id=i.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND i.user_id = $1 AND i.conversation_id = $2%s
             ORDER BY i.updated_at DESC
             LIMIT $3
         `, impressionClause),
@@ -1918,11 +1952,11 @@ func (r *PostgresMemoryRepository) ListConversationDocumentsInGeneration(ctx con
                            FROM memory_keywords k
                            WHERE k.summary_id = f.id AND k.user_id = f.user_id
                        ), '[]'::jsonb)
-                   ),
+                   ) || `+nodeAccessMetadataSQL()+`,
                    'fact'
             FROM facts f
             LEFT JOIN memory_nodes n ON n.user_id = f.user_id AND n.id = f.node_id
-            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=f.user_id AND scope_node.id=f.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND f.user_id = $1 AND f.conversation_id = $2%s
+            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=f.user_id AND scope_node.id=f.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND f.user_id = $1 AND f.conversation_id = $2%s
             ORDER BY f.updated_at DESC
             LIMIT $3
         `, factClause),
@@ -1939,11 +1973,11 @@ func (r *PostgresMemoryRepository) ListConversationDocumentsInGeneration(ctx con
                        'valid_from', mi.valid_from,
                        'valid_to', mi.valid_to,
                        'review_status', mi.review_status
-                   ) || COALESCE(mi.metadata, '{}'::jsonb),
+                   ) || COALESCE(mi.metadata, '{}'::jsonb) || `+nodeAccessMetadataSQL()+`,
                    mi.item_type
             FROM memory_items mi
             LEFT JOIN memory_nodes n ON n.user_id = mi.user_id AND n.id = mi.node_id
-            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=mi.user_id AND scope_node.id=mi.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND mi.user_id = $1 AND mi.conversation_id = $2 AND mi.deleted_at IS NULL%s
+            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=mi.user_id AND scope_node.id=mi.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND mi.user_id = $1 AND mi.conversation_id = $2 AND mi.deleted_at IS NULL%s
             ORDER BY mi.updated_at DESC
             LIMIT $3
         `, itemClause),
@@ -1962,14 +1996,14 @@ func (r *PostgresMemoryRepository) ListConversationDocumentsInGeneration(ctx con
                        'overlap_from_sequence', cs.overlap_from_sequence,
                        'overlap_message_count', cs.overlap_message_count,
                        'content_hash', cs.content_hash
-                   ) || COALESCE(cs.metadata, '{}'::jsonb),
+                   ) || COALESCE(cs.metadata, '{}'::jsonb) || `+nodeAccessMetadataSQL()+`,
                    'segment'
             FROM conversation_segments cs
             JOIN memory_nodes n
               ON n.user_id = cs.user_id
              AND n.entity_id = cs.id
              AND n.node_type = 'segment'
-            WHERE n.workspace_id = 'personal-' || encode(sha256(convert_to(n.user_id,'UTF8')),'hex') AND cs.user_id = $1 AND cs.conversation_id = $2%s
+            WHERE `+storeaccess.NodeSQL(ctx, "n")+` AND cs.user_id = $1 AND cs.conversation_id = $2%s
             ORDER BY cs.updated_at DESC, cs.segment_index DESC
             LIMIT $3
         `, segmentClause))
@@ -1994,11 +2028,11 @@ func (r *PostgresMemoryRepository) ListConversationDocumentsInGeneration(ctx con
 		return nil, err
 	}
 	defer rows.Close()
-	return scanTypedMemoryDocumentRows(rows, userID)
+	return scanTypedMemoryDocumentRows(ctx, rows, userID)
 }
 
 func (r *PostgresMemoryRepository) SearchKeywordMatches(ctx context.Context, userID, generationID, query string, limit int) ([]domain.KeywordMatch, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	terms := normalizeKeywordTerms(query)
@@ -2067,7 +2101,7 @@ func (r *PostgresMemoryRepository) SearchKeywordMatches(ctx context.Context, use
                 ), '[]'::json) AS keywords,
                 s.updated_at AS sort_time
             FROM memory_summaries s
-            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=s.user_id AND scope_node.id=s.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND s.user_id = $1
+            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=s.user_id AND scope_node.id=s.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND s.user_id = $1
               %s
               AND ((%s) OR (%s))
             UNION ALL
@@ -2084,7 +2118,7 @@ func (r *PostgresMemoryRepository) SearchKeywordMatches(ctx context.Context, use
                 END) AS keywords,
                 f.updated_at AS sort_time
             FROM facts f
-            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=f.user_id AND scope_node.id=f.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND f.user_id = $1
+            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=f.user_id AND scope_node.id=f.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND f.user_id = $1
               %s
               AND ((%s) OR EXISTS (
                   SELECT 1
@@ -2148,25 +2182,25 @@ func (r *PostgresMemoryRepository) UpdateDocumentConditional(ctx context.Context
 }
 
 func (r *PostgresMemoryRepository) updateDocument(ctx context.Context, userID, id string, kind domain.MemoryType, content string, condition *domain.MemoryWriteCondition) (domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemoryDocument{}, err
 	}
 	now := time.Now().UTC()
 	var query string
 	switch kind {
 	case domain.MemoryTypeSummary:
-		query = `UPDATE memory_summaries SET summary = $1, updated_at = $2 WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=memory_summaries.user_id AND scope_node.id=memory_summaries.node_id AND scope_node.workspace_id='personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND id = $3 AND user_id = $4`
+		query = `UPDATE memory_summaries SET summary = $1, updated_at = $2 WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=memory_summaries.user_id AND scope_node.id=memory_summaries.node_id AND ` + storeaccess.NodeSQL(ctx, "scope_node") + `) AND id = $3 AND user_id = $4`
 	case domain.MemoryTypeImpression:
-		query = `UPDATE impressions SET description = $1, updated_at = $2 WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=impressions.user_id AND scope_node.id=impressions.node_id AND scope_node.workspace_id='personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND id = $3 AND user_id = $4`
+		query = `UPDATE impressions SET description = $1, updated_at = $2 WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=impressions.user_id AND scope_node.id=impressions.node_id AND ` + storeaccess.NodeSQL(ctx, "scope_node") + `) AND id = $3 AND user_id = $4`
 	case domain.MemoryTypeFact:
-		query = `UPDATE facts SET content = $1, updated_at = $2 WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=facts.user_id AND scope_node.id=facts.node_id AND scope_node.workspace_id='personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND id = $3 AND user_id = $4`
+		query = `UPDATE facts SET content = $1, updated_at = $2 WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=facts.user_id AND scope_node.id=facts.node_id AND ` + storeaccess.NodeSQL(ctx, "scope_node") + `) AND id = $3 AND user_id = $4`
 	case domain.MemoryTypeEvent,
 		domain.MemoryTypeTask,
 		domain.MemoryTypeProcedure,
 		domain.MemoryTypeArtifact,
 		domain.MemoryTypeEntity,
 		domain.MemoryTypeAgentAction:
-		query = `UPDATE memory_items SET content = $1, updated_at = $2 WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=memory_items.user_id AND scope_node.id=memory_items.node_id AND scope_node.workspace_id='personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND id = $3 AND user_id = $4 AND item_type = $5 AND deleted_at IS NULL`
+		query = `UPDATE memory_items SET content = $1, updated_at = $2 WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=memory_items.user_id AND scope_node.id=memory_items.node_id AND ` + storeaccess.NodeSQL(ctx, "scope_node") + `) AND id = $3 AND user_id = $4 AND item_type = $5 AND deleted_at IS NULL`
 	default:
 		return domain.MemoryDocument{}, fmt.Errorf("unsupported memory type: %s", kind)
 	}
@@ -2187,7 +2221,7 @@ func (r *PostgresMemoryRepository) updateDocument(ctx context.Context, userID, i
 	}
 	defer rollback(tx)
 	if condition != nil {
-		writable, err := memorygeneration.LockWritableGeneration(ctx, tx, userID, domain.PersonalWorkspaceID(userID), generation)
+		writable, err := memorygeneration.LockWritableGeneration(ctx, tx, userID, security.WorkspaceID(ctx, userID), generation)
 		if err != nil {
 			return domain.MemoryDocument{}, err
 		}
@@ -2195,7 +2229,7 @@ func (r *PostgresMemoryRepository) updateDocument(ctx context.Context, userID, i
 			return domain.MemoryDocument{}, domain.ErrAccessConflict
 		}
 	}
-	if err := lockMemoryIdentityTx(ctx, tx, userID, domain.PersonalWorkspaceID(userID), nodeID, id, string(kind)); err != nil {
+	if err := lockMemoryIdentityTx(ctx, tx, userID, security.WorkspaceID(ctx, userID), nodeID, id, string(kind)); err != nil {
 		return domain.MemoryDocument{}, err
 	}
 	args := []any{content, now, id, userID}
@@ -2228,9 +2262,10 @@ func (r *PostgresMemoryRepository) updateDocument(ctx context.Context, userID, i
 	        SET activity_at = $1,
 	            time_tier = $2,
 	            embedding_status = 'pending',
-	            embedding_revision = $6,
+             embedding_revision = $6,
+             revision=revision+1,
 	            updated_at = $1
-	        WHERE user_id = $3 AND entity_id = $4 AND node_type = $5 AND workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex')
+	        WHERE user_id = $3 AND entity_id = $4 AND node_type = $5 AND workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+`
 	    `, now, string(domain.ClassifyTimeTier(now, now)), userID, id, string(kind), embeddingRevision); err != nil {
 		return domain.MemoryDocument{}, err
 	}
@@ -2265,7 +2300,7 @@ func (r *PostgresMemoryRepository) updateDocument(ctx context.Context, userID, i
 func (r *PostgresMemoryRepository) HasTransactionalMemoryOutbox() bool { return true }
 
 func (r *PostgresMemoryRepository) ListFactLineage(ctx context.Context, userID, generationID, factID string) (domain.FactLineage, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.FactLineage{}, err
 	}
 	anchor, err := r.GetDocumentInGeneration(ctx, userID, generationID, factID, domain.MemoryTypeFact)
@@ -2289,7 +2324,7 @@ func (r *PostgresMemoryRepository) ListFactLineage(ctx context.Context, userID, 
 }
 
 func (r *PostgresMemoryRepository) ListFactLineageByKey(ctx context.Context, userID, generationID, factKey string) (domain.FactLineage, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.FactLineage{}, err
 	}
 	lineageGroupID := strings.TrimSpace(factKey)
@@ -2333,10 +2368,10 @@ func (r *PostgresMemoryRepository) listFactsByLineageGroup(ctx context.Context, 
                        FROM memory_keywords k
                        WHERE k.summary_id = f.id AND k.user_id = f.user_id
                    ), '[]'::json)
-               )
+               ) || ` + nodeAccessMetadataSQL() + `
         FROM facts f
         LEFT JOIN memory_nodes n ON n.user_id = f.user_id AND n.id = f.node_id
-        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=f.user_id AND scope_node.id=f.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND f.user_id = $1 AND COALESCE(f.lineage_group_id, '') = $2` + generationFilterClause("f.generation_id", 3, userID, generationID, false) + `
+        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=f.user_id AND scope_node.id=f.node_id AND ` + storeaccess.NodeSQL(ctx, "scope_node") + `) AND f.user_id = $1 AND COALESCE(f.lineage_group_id, '') = $2` + generationFilterClause("f.generation_id", 3, userID, generationID, false) + `
         ORDER BY f.revision_seq ASC, f.created_at ASC, f.id ASC
     `
 	args := []any{userID, lineageGroupID}
@@ -2353,7 +2388,7 @@ func (r *PostgresMemoryRepository) listFactsByLineageGroup(ctx context.Context, 
 		var metadataBytes []byte
 		var timeTier string
 		item.UserID = userID
-		item.WorkspaceID = domain.PersonalWorkspaceID(userID)
+		item.WorkspaceID = security.WorkspaceID(ctx, userID)
 		item.Type = domain.MemoryTypeFact
 		if err := rows.Scan(&item.ID, &item.NodeID, &item.GenerationID, &item.ConversationID, &item.Content, &item.Importance, &item.DecayFactor, &item.ActivityAt, &timeTier, &item.CreatedAt, &item.UpdatedAt, &metadataBytes); err != nil {
 			return nil, err
@@ -2365,7 +2400,7 @@ func (r *PostgresMemoryRepository) listFactsByLineageGroup(ctx context.Context, 
 			}
 		}
 		item.TimeTier = domain.ParseTimeTier(timeTier)
-		item = attachDocumentRuntimeMetadata(item)
+		item = attachDocumentRuntimeMetadata(ctx, item)
 		out = append(out, item)
 	}
 	return out, rows.Err()
@@ -2379,7 +2414,7 @@ func nextFactRevisionSeqTx(ctx context.Context, tx *sqlpkg.Tx, userID, generatio
 	switch err := tx.QueryRowContext(ctx, `
         SELECT COALESCE(revision_seq, 0)
         FROM facts
-        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=facts.user_id AND scope_node.id=facts.node_id AND scope_node.workspace_id='personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND user_id = $1 AND generation_id = $2 AND id = $3 AND COALESCE(lineage_group_id, '') = $4
+        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=facts.user_id AND scope_node.id=facts.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND user_id = $1 AND generation_id = $2 AND id = $3 AND COALESCE(lineage_group_id, '') = $4
     `, userID, generationID, factID, lineageGroupID).Scan(&existingSeq); err {
 	case nil:
 		if existingSeq > 0 {
@@ -2394,7 +2429,7 @@ func nextFactRevisionSeqTx(ctx context.Context, tx *sqlpkg.Tx, userID, generatio
 	if err := tx.QueryRowContext(ctx, `
         SELECT COALESCE(MAX(revision_seq), 0)
         FROM facts
-        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=facts.user_id AND scope_node.id=facts.node_id AND scope_node.workspace_id='personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND user_id = $1 AND generation_id = $2 AND COALESCE(lineage_group_id, '') = $3
+        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=facts.user_id AND scope_node.id=facts.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND user_id = $1 AND generation_id = $2 AND COALESCE(lineage_group_id, '') = $3
     `, userID, generationID, lineageGroupID).Scan(&maxSeq); err != nil {
 		return 0, err
 	}
@@ -2420,7 +2455,7 @@ func existingFactSupersessionStateTx(ctx context.Context, tx *sqlpkg.Tx, userID,
 	switch err := tx.QueryRowContext(ctx, `
         SELECT is_superseded, COALESCE(superseded_by_id, '')
         FROM facts
-        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=facts.user_id AND scope_node.id=facts.node_id AND scope_node.workspace_id='personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND user_id = $1 AND generation_id = $2 AND id = $3
+        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=facts.user_id AND scope_node.id=facts.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND user_id = $1 AND generation_id = $2 AND id = $3
     `, userID, generationID, factID).Scan(&isSuperseded, &supersededByID); err {
 	case nil:
 		return isSuperseded, supersededByID, nil
@@ -2445,12 +2480,12 @@ func factSupersessionWouldCycleTx(ctx context.Context, tx *sqlpkg.Tx, userID, ge
         WITH RECURSIVE chain(id, superseded_by_id, depth) AS (
             SELECT id, superseded_by_id, 0
             FROM facts
-            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=facts.user_id AND scope_node.id=facts.node_id AND scope_node.workspace_id='personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND user_id = $1 AND generation_id = $2 AND id = $3
+            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=facts.user_id AND scope_node.id=facts.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND user_id = $1 AND generation_id = $2 AND id = $3
             UNION ALL
             SELECT f.id, f.superseded_by_id, chain.depth + 1
             FROM facts f
             JOIN chain ON f.id = chain.superseded_by_id
-            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=f.user_id AND scope_node.id=f.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND f.user_id = $1
+            WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=f.user_id AND scope_node.id=f.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND f.user_id = $1
               AND f.generation_id = $2
               AND chain.depth < 128
               AND chain.superseded_by_id IS NOT NULL
@@ -2468,7 +2503,7 @@ func currentFactLineageHeadIDsTx(ctx context.Context, tx *sqlpkg.Tx, userID, gen
 	rows, err := tx.QueryContext(ctx, `
         SELECT id
         FROM facts
-        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=facts.user_id AND scope_node.id=facts.node_id AND scope_node.workspace_id='personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND user_id = $1
+        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=facts.user_id AND scope_node.id=facts.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND user_id = $1
           AND generation_id = $2
           AND COALESCE(lineage_group_id, '') = $3
           AND id <> $4
@@ -2609,13 +2644,14 @@ func insertMemoryEvidencesTx(ctx context.Context, tx *sqlpkg.Tx, evidences []dom
 	return nil
 }
 
-func attachDocumentRuntimeMetadata(item domain.MemoryDocument) domain.MemoryDocument {
-	item.WorkspaceID = domain.PersonalWorkspaceID(item.UserID)
+func attachDocumentRuntimeMetadata(ctx context.Context, item domain.MemoryDocument) domain.MemoryDocument {
+	item.WorkspaceID = security.WorkspaceID(ctx, item.UserID)
 	// Reads decorate a snapshot, never the repository's shared metadata map.
 	item.Metadata = cloneMetadata(item.Metadata)
+	hydrateDocumentAccess(&item)
 	item.Metadata["activity_at"] = item.ActivityAt.Format(time.RFC3339)
 	item.Metadata["time_tier"] = item.TimeTier
-	item.Metadata["temporal"] = temporalMetadata(item.UserID, item.ActivityAt, item.TimeTier)
+	item.Metadata["temporal"] = temporalMetadata(ctx, item.UserID, item.ActivityAt, item.TimeTier)
 	if item.GenerationID != "" {
 		item.Metadata["generation_id"] = item.GenerationID
 	}
@@ -2632,7 +2668,7 @@ func attachDocumentRuntimeMetadata(item domain.MemoryDocument) domain.MemoryDocu
 }
 
 func (r *PostgresMemoryRepository) ListKeyMemories(ctx context.Context, userID string, limit int) ([]domain.KeyMemory, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	if limit <= 0 {
@@ -2640,10 +2676,10 @@ func (r *PostgresMemoryRepository) ListKeyMemories(ctx context.Context, userID s
 	}
 	rows, err := r.db.QueryContext(ctx, `
 	        SELECT k.id, k.node_id, k.key, k.value, k.category, k.source, k.review_status, k.last_confirmed_at, k.created_at, k.updated_at,
-	               COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, k.updated_at), COALESCE(n.time_tier, '')
+	               COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, k.updated_at), COALESCE(n.time_tier, ''),n.partition_id
 	        FROM key_memories k
 	        LEFT JOIN memory_nodes n ON n.user_id = k.user_id AND n.id = k.node_id
-	        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=k.user_id AND scope_node.id=k.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND k.user_id = $1 AND k.deleted_at IS NULL
+	        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=k.user_id AND scope_node.id=k.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND k.user_id = $1 AND k.deleted_at IS NULL
 	        ORDER BY k.updated_at DESC
 	        LIMIT $2
 	    `, userID, limit)
@@ -2654,7 +2690,7 @@ func (r *PostgresMemoryRepository) ListKeyMemories(ctx context.Context, userID s
 
 	out := make([]domain.KeyMemory, 0)
 	for rows.Next() {
-		item, err := scanKeyMemoryRow(rows, userID)
+		item, err := scanKeyMemoryRow(ctx, rows, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -2664,17 +2700,17 @@ func (r *PostgresMemoryRepository) ListKeyMemories(ctx context.Context, userID s
 }
 
 func (r *PostgresMemoryRepository) GetKeyMemory(ctx context.Context, userID, memoryKey string) (domain.KeyMemory, bool, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.KeyMemory{}, false, err
 	}
 	row := r.db.QueryRowContext(ctx, `
 	        SELECT k.id, k.node_id, k.key, k.value, k.category, k.source, k.review_status, k.last_confirmed_at, k.created_at, k.updated_at,
-	               COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, k.updated_at), COALESCE(n.time_tier, '')
+	               COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, k.updated_at), COALESCE(n.time_tier, ''),n.partition_id
 	        FROM key_memories k
 	        LEFT JOIN memory_nodes n ON n.user_id = k.user_id AND n.id = k.node_id
-	        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=k.user_id AND scope_node.id=k.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND k.user_id = $1 AND k.key = $2 AND k.deleted_at IS NULL
+	        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=k.user_id AND scope_node.id=k.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND k.user_id = $1 AND k.key = $2 AND k.deleted_at IS NULL
 	    `, userID, strings.TrimSpace(memoryKey))
-	item, err := scanKeyMemoryRow(row, userID)
+	item, err := scanKeyMemoryRow(ctx, row, userID)
 	if errors.Is(err, sqlpkg.ErrNoRows) {
 		return domain.KeyMemory{}, false, nil
 	}
@@ -2685,17 +2721,17 @@ func (r *PostgresMemoryRepository) GetKeyMemory(ctx context.Context, userID, mem
 }
 
 func (r *PostgresMemoryRepository) GetKeyMemoryByID(ctx context.Context, userID, id string) (domain.KeyMemory, bool, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.KeyMemory{}, false, err
 	}
 	row := r.db.QueryRowContext(ctx, `
 	        SELECT k.id, k.node_id, k.key, k.value, k.category, k.source, k.review_status, k.last_confirmed_at, k.created_at, k.updated_at,
-	               COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, k.updated_at), COALESCE(n.time_tier, '')
+	               COALESCE(n.importance, 1), COALESCE(n.decay_factor, 1), COALESCE(n.activity_at, k.updated_at), COALESCE(n.time_tier, ''),n.partition_id
 	        FROM key_memories k
 	        LEFT JOIN memory_nodes n ON n.user_id = k.user_id AND n.id = k.node_id
-	        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=k.user_id AND scope_node.id=k.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND k.user_id = $1 AND k.id = $2 AND k.deleted_at IS NULL
+	        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=k.user_id AND scope_node.id=k.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND k.user_id = $1 AND k.id = $2 AND k.deleted_at IS NULL
 	    `, userID, strings.TrimSpace(id))
-	item, err := scanKeyMemoryRow(row, userID)
+	item, err := scanKeyMemoryRow(ctx, row, userID)
 	if errors.Is(err, sqlpkg.ErrNoRows) {
 		return domain.KeyMemory{}, false, nil
 	}
@@ -2706,14 +2742,14 @@ func (r *PostgresMemoryRepository) GetKeyMemoryByID(ctx context.Context, userID,
 }
 
 func (r *PostgresMemoryRepository) CountKeyMemories(ctx context.Context, userID string) (int, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return 0, err
 	}
 	var count int
 	if err := r.db.QueryRowContext(ctx, `
 	        SELECT COUNT(*)
 	        FROM key_memories
-	        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=key_memories.user_id AND scope_node.id=key_memories.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND user_id = $1 AND deleted_at IS NULL
+	        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=key_memories.user_id AND scope_node.id=key_memories.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND user_id = $1 AND deleted_at IS NULL
 	    `, userID).Scan(&count); err != nil {
 		return 0, err
 	}
@@ -2721,10 +2757,10 @@ func (r *PostgresMemoryRepository) CountKeyMemories(ctx context.Context, userID 
 }
 
 func (r *PostgresMemoryRepository) SearchKeyMemories(ctx context.Context, input domain.KeyMemoryQuery) ([]domain.KeyMemory, error) {
-	if _, err := security.PersonalScope(ctx, input.UserID, input.WorkspaceID); err != nil {
+	if _, err := security.DataScope(ctx, input.UserID, input.WorkspaceID); err != nil {
 		return nil, err
 	}
-	input.WorkspaceID = domain.PersonalWorkspaceID(input.UserID)
+	input.WorkspaceID = security.WorkspaceID(ctx, input.UserID)
 	items, err := r.ListKeyMemories(ctx, input.UserID, max(input.TopK*10, 200))
 	if err != nil {
 		return nil, err
@@ -2770,14 +2806,14 @@ type keyMemoryScanner interface {
 	Scan(dest ...any) error
 }
 
-func scanKeyMemoryRow(row keyMemoryScanner, userID string) (domain.KeyMemory, error) {
+func scanKeyMemoryRow(ctx context.Context, row keyMemoryScanner, userID string) (domain.KeyMemory, error) {
 	var item domain.KeyMemory
 	var nodeID string
 	var lastConfirmedAt sqlpkg.NullTime
 	var timeTier string
 	item.UserID = userID
-	item.WorkspaceID = domain.PersonalWorkspaceID(userID)
-	if err := row.Scan(&item.ID, &nodeID, &item.Key, &item.Value, &item.Category, &item.Source, &item.ReviewStatus, &lastConfirmedAt, &item.CreatedAt, &item.UpdatedAt, &item.Importance, &item.DecayFactor, &item.ActivityAt, &timeTier); err != nil {
+	item.WorkspaceID = security.WorkspaceID(ctx, userID)
+	if err := row.Scan(&item.ID, &nodeID, &item.Key, &item.Value, &item.Category, &item.Source, &item.ReviewStatus, &lastConfirmedAt, &item.CreatedAt, &item.UpdatedAt, &item.Importance, &item.DecayFactor, &item.ActivityAt, &timeTier, &item.PartitionID); err != nil {
 		return domain.KeyMemory{}, err
 	}
 	item.Metadata = map[string]any{"node_id": nodeID}
@@ -2798,10 +2834,11 @@ func (r *PostgresMemoryRepository) UpsertKeyMemoryConditional(ctx context.Contex
 }
 
 func (r *PostgresMemoryRepository) upsertKeyMemory(ctx context.Context, km domain.KeyMemory, condition *domain.MemoryWriteCondition) error {
-	if _, err := security.PersonalScope(ctx, km.UserID, km.WorkspaceID); err != nil {
+	if _, err := security.DataScope(ctx, km.UserID, km.WorkspaceID); err != nil {
 		return err
 	}
-	km.WorkspaceID = domain.PersonalWorkspaceID(km.UserID)
+	km.WorkspaceID = security.WorkspaceID(ctx, km.UserID)
+	km.PartitionID = security.WritePartition(ctx)
 	km.Key = strings.TrimSpace(km.Key)
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -2823,7 +2860,7 @@ func (r *PostgresMemoryRepository) upsertKeyMemory(ctx context.Context, km domai
 	switch err := tx.QueryRowContext(ctx, `
         SELECT id, node_id, created_at, category, source, review_status, last_confirmed_at, updated_at, deleted_at
         FROM key_memories
-        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=key_memories.user_id AND scope_node.id=key_memories.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND user_id = $1 AND key = $2
+        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=key_memories.user_id AND scope_node.id=key_memories.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND user_id = $1 AND key = $2
     `, km.UserID, km.Key).Scan(&existingID, &existingNodeID, &existingCreatedAt, &existingCategory, &existingSource, &existingReviewStatus, &existingLastConfirmedAt, &existingUpdatedAt, &deletedAt); err {
 	case nil:
 		if condition != nil {
@@ -2866,7 +2903,7 @@ func (r *PostgresMemoryRepository) upsertKeyMemory(ctx context.Context, km domai
 		nodeID = existingNodeID
 	}
 	if nodeID == "" {
-		nodeID = keyMemoryNodeID(km.UserID, km.Key)
+		nodeID = keyMemoryNodeID(ctx, km.UserID, km.Key)
 	}
 	if km.Importance == 0 {
 		km.Importance = 1
@@ -2881,6 +2918,10 @@ func (r *PostgresMemoryRepository) upsertKeyMemory(ctx context.Context, km domai
 		km.TimeTier = domain.ClassifyTimeTier(km.ActivityAt, time.Now().UTC())
 	}
 
+	sourceDoc := domain.MemoryDocument{UserID: km.UserID, WorkspaceID: km.WorkspaceID, PartitionID: km.PartitionID, NodeID: nodeID, Type: domain.MemoryTypeKeyMemory, ConversationID: stringValue(km.Metadata, "conversation_id"), SourceRefs: km.SourceRefs, SubjectActorIDs: km.SubjectActorIDs}
+	if err = bindIngestEvidenceTx(ctx, tx, &sourceDoc); err != nil {
+		return err
+	}
 	if err = lockMemoryIdentityTx(ctx, tx, km.UserID, km.WorkspaceID, nodeID, km.ID, string(domain.MemoryTypeKeyMemory)); err != nil {
 		return err
 	}
@@ -2915,8 +2956,8 @@ func (r *PostgresMemoryRepository) upsertKeyMemory(ctx context.Context, km domai
 	}
 	embeddingRevision := now.UnixNano()
 	_, err = tx.ExecContext(ctx, `
-		        INSERT INTO memory_nodes (id, generation_id, user_id, node_type, entity_id, importance, decay_factor, activity_at, time_tier, embedding_status, embedding_revision, created_at, updated_at, workspace_id)
-		        VALUES ($1,'',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+		        INSERT INTO memory_nodes (id, generation_id, user_id, node_type, entity_id, importance, decay_factor, activity_at, time_tier, embedding_status, embedding_revision, created_at, updated_at, workspace_id,partition_id)
+		        VALUES ($1,'',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 		        ON CONFLICT (id) DO UPDATE SET
 		            importance = EXCLUDED.importance,
 		            decay_factor = EXCLUDED.decay_factor,
@@ -2926,15 +2967,22 @@ func (r *PostgresMemoryRepository) upsertKeyMemory(ctx context.Context, km domai
 		            embedding_revision = EXCLUDED.embedding_revision,
 		            updated_at = EXCLUDED.updated_at
 		        WHERE memory_nodes.user_id = EXCLUDED.user_id AND memory_nodes.workspace_id = EXCLUDED.workspace_id
-		`, nodeID, km.UserID, string(domain.MemoryTypeKeyMemory), km.ID, km.Importance, km.DecayFactor, km.ActivityAt, string(km.TimeTier), "pending", embeddingRevision, km.CreatedAt, now, km.WorkspaceID)
+		`, nodeID, km.UserID, string(domain.MemoryTypeKeyMemory), km.ID, km.Importance, km.DecayFactor, km.ActivityAt, string(km.TimeTier), "pending", embeddingRevision, km.CreatedAt, now, km.WorkspaceID, km.PartitionID)
 	if err != nil {
+		return err
+	}
+
+	if _, err = tx.ExecContext(ctx, `UPDATE memory_nodes SET source_conversation_id=$2,source_refs=$3,subject_actor_ids=$4 WHERE id=$1`, nodeID, sourceDoc.ConversationID, marshalJSON(sourceDoc.SourceRefs), marshalJSON(sourceDoc.SubjectActorIDs)); err != nil {
+		return err
+	}
+	if err = persistIngestDependenciesTx(ctx, tx, sourceDoc); err != nil {
 		return err
 	}
 
 	keyResult, err := tx.ExecContext(ctx, `
         INSERT INTO key_memories (id, user_id, node_id, key, value, category, source, review_status, last_confirmed_at, created_at, updated_at)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-	        ON CONFLICT (user_id, key) DO UPDATE SET
+	        ON CONFLICT (user_id, workspace_id, partition_id, key) DO UPDATE SET
 	            value = EXCLUDED.value,
 	            category = EXCLUDED.category,
 	            source = EXCLUDED.source,
@@ -2952,7 +3000,7 @@ func (r *PostgresMemoryRepository) upsertKeyMemory(ctx context.Context, km domai
 	} else if count != 1 {
 		return domain.ErrAccessDenied
 	}
-	if err = syncTemporalRelationsTx(tx, km.UserID, "", nodeID, km.ActivityAt, km.TimeTier, now); err != nil {
+	if err = syncTemporalRelationsTx(ctx, tx, km.UserID, "", nodeID, km.ActivityAt, km.TimeTier, now); err != nil {
 		return err
 	}
 	for _, event := range []domain.OutboxEvent{
@@ -3008,7 +3056,7 @@ func (r *PostgresMemoryRepository) DeleteKeyMemoryConditional(ctx context.Contex
 }
 
 func (r *PostgresMemoryRepository) deleteKeyMemory(ctx context.Context, userID, key string, condition *domain.MemoryWriteCondition) error {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return err
 	}
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -3021,7 +3069,7 @@ func (r *PostgresMemoryRepository) deleteKeyMemory(ctx context.Context, userID, 
 	}
 	var nodeID, id string
 	var updatedAt time.Time
-	if err = tx.QueryRowContext(ctx, `SELECT node_id, id, updated_at FROM key_memories WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=key_memories.user_id AND scope_node.id=key_memories.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND user_id = $1 AND key = $2 AND deleted_at IS NULL`, userID, key).Scan(&nodeID, &id, &updatedAt); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT node_id, id, updated_at FROM key_memories WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=key_memories.user_id AND scope_node.id=key_memories.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND user_id = $1 AND key = $2 AND deleted_at IS NULL`, userID, key).Scan(&nodeID, &id, &updatedAt); err != nil {
 		if errors.Is(err, sqlpkg.ErrNoRows) {
 			if condition != nil {
 				return domain.ErrAccessConflict
@@ -3069,10 +3117,10 @@ func (r *PostgresMemoryRepository) deleteKeyMemory(ctx context.Context, userID, 
 }
 
 func (r *PostgresMemoryRepository) LinkDocuments(ctx context.Context, relation domain.MemoryRelation) error {
-	if _, err := security.PersonalScope(ctx, relation.UserID, relation.WorkspaceID); err != nil {
+	if _, err := security.DataScope(ctx, relation.UserID, relation.WorkspaceID); err != nil {
 		return err
 	}
-	relation.WorkspaceID = domain.PersonalWorkspaceID(relation.UserID)
+	relation.WorkspaceID = security.WorkspaceID(ctx, relation.UserID)
 	relation.SrcNodeID = strings.TrimSpace(relation.SrcNodeID)
 	relation.DstNodeID = strings.TrimSpace(relation.DstNodeID)
 	relation.RelationType = strings.TrimSpace(relation.RelationType)
@@ -3100,7 +3148,7 @@ func (r *PostgresMemoryRepository) LinkDocuments(ctx context.Context, relation d
 	if err := r.db.QueryRowContext(ctx, `
 		SELECT src.generation_id, dst.generation_id
 		FROM memory_nodes src JOIN memory_nodes dst ON dst.user_id = src.user_id
-		WHERE src.user_id = $1 AND src.id = $2 AND dst.id = $3 AND src.workspace_id=dst.workspace_id AND src.workspace_id='personal-' || encode(sha256(convert_to(src.user_id,'UTF8')),'hex')
+		WHERE src.user_id = $1 AND src.id = $2 AND dst.id = $3 AND src.workspace_id=dst.workspace_id AND `+storeaccess.NodeSQL(ctx, "src")+` AND `+storeaccess.NodeSQL(ctx, "dst")+`
 	`, relation.UserID, relation.SrcNodeID, relation.DstNodeID).Scan(&srcGeneration, &dstGeneration); err != nil {
 		if errors.Is(err, sqlpkg.ErrNoRows) {
 			return domain.ErrAccessDenied
@@ -3126,18 +3174,18 @@ func (r *PostgresMemoryRepository) LinkDocuments(ctx context.Context, relation d
 }
 
 func (r *PostgresMemoryRepository) DeleteRelationsByTarget(ctx context.Context, userID, targetNodeID, relationType string) error {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return err
 	}
 	_, err := r.db.ExecContext(ctx, `
         DELETE FROM memory_relations
-        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=memory_relations.user_id AND scope_node.id=memory_relations.dst_node_id AND scope_node.workspace_id='personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND user_id = $1 AND dst_node_id = $2 AND relation_type = $3
+        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=memory_relations.user_id AND scope_node.id=memory_relations.dst_node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND user_id = $1 AND dst_node_id = $2 AND relation_type = $3
     `, userID, targetNodeID, relationType)
 	return err
 }
 
 func (r *PostgresMemoryRepository) ListRelations(ctx context.Context, userID, generationID string, nodeIDs []string, depth int) ([]domain.MemoryRelation, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	if len(nodeIDs) == 0 {
@@ -3155,7 +3203,7 @@ func (r *PostgresMemoryRepository) ListRelations(ctx context.Context, userID, ge
 	collected := make([]domain.MemoryRelation, 0)
 	frontier := append([]string{}, nodeIDs...)
 	for hop := 0; hop < depth && len(frontier) > 0; hop++ {
-		query, args := relationQuery(userID, generationID, frontier)
+		query, args := relationQuery(ctx, userID, generationID, frontier)
 		rows, err := r.db.QueryContext(ctx, query, args...)
 		if err != nil {
 			return nil, err
@@ -3173,7 +3221,7 @@ func (r *PostgresMemoryRepository) ListRelations(ctx context.Context, userID, ge
 			}
 			_ = json.Unmarshal(metadataBytes, &item.Metadata)
 			seenRelations[item.ID] = struct{}{}
-			item.WorkspaceID = domain.PersonalWorkspaceID(item.UserID)
+			item.WorkspaceID = security.WorkspaceID(ctx, item.UserID)
 			collected = append(collected, item)
 			if isTemporalRelationType(item.RelationType) {
 				continue
@@ -3201,7 +3249,7 @@ func (r *PostgresMemoryRepository) ReplaceEvidences(ctx context.Context, userID,
 	if err := validateEvidenceIdentity(userID, nodeID, evidences); err != nil {
 		return err
 	}
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return err
 	}
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -3215,7 +3263,7 @@ func (r *PostgresMemoryRepository) ReplaceEvidences(ctx context.Context, userID,
 
 	if _, err = tx.ExecContext(ctx, `
         DELETE FROM memory_evidences
-        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=memory_evidences.user_id AND scope_node.id=memory_evidences.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND user_id = $1 AND node_id = $2
+        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=memory_evidences.user_id AND scope_node.id=memory_evidences.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND user_id = $1 AND node_id = $2
     `, userID, nodeID); err != nil {
 		return err
 	}
@@ -3253,7 +3301,7 @@ func (r *PostgresMemoryRepository) MergeEvidences(ctx context.Context, userID, n
 	if err := validateEvidenceIdentity(userID, nodeID, evidences); err != nil {
 		return err
 	}
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return err
 	}
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -3272,14 +3320,14 @@ func (r *PostgresMemoryRepository) MergeEvidences(ctx context.Context, userID, n
 }
 
 func (r *PostgresMemoryRepository) ListEvidences(ctx context.Context, userID, nodeID string) ([]domain.MemoryEvidence, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	rows, err := r.db.QueryContext(ctx, `
         SELECT id, generation_id, user_id, node_id, conversation_id, sequence_num, part_id, artifact_id, page_index,
                start_ms, end_ms, evidence_kind, excerpt_text, weight, metadata, created_at
         FROM memory_evidences
-        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=memory_evidences.user_id AND scope_node.id=memory_evidences.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND user_id = $1 AND node_id = $2
+        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=memory_evidences.user_id AND scope_node.id=memory_evidences.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND user_id = $1 AND node_id = $2
         ORDER BY sequence_num ASC, start_ms ASC, created_at ASC
     `, userID, nodeID)
 	if err != nil {
@@ -3290,7 +3338,7 @@ func (r *PostgresMemoryRepository) ListEvidences(ctx context.Context, userID, no
 }
 
 func (r *PostgresMemoryRepository) ListEvidencesByNodeIDs(ctx context.Context, userID string, nodeIDs []string) ([]domain.MemoryEvidence, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	nodeIDs = uniqueNonEmptyStrings(nodeIDs)
@@ -3307,7 +3355,7 @@ func (r *PostgresMemoryRepository) ListEvidencesByNodeIDs(ctx context.Context, u
         SELECT id, generation_id, user_id, node_id, conversation_id, sequence_num, part_id, artifact_id, page_index,
                start_ms, end_ms, evidence_kind, excerpt_text, weight, metadata, created_at
         FROM memory_evidences
-        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=memory_evidences.user_id AND scope_node.id=memory_evidences.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND user_id = $1 AND node_id IN (%s)
+        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=memory_evidences.user_id AND scope_node.id=memory_evidences.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND user_id = $1 AND node_id IN (%s)
         ORDER BY node_id ASC, sequence_num ASC, start_ms ASC, created_at ASC
     `, inClause), args...)
 	if err != nil {
@@ -3343,7 +3391,7 @@ func scanMemoryEvidenceRows(rows *sqlpkg.Rows) ([]domain.MemoryEvidence, error) 
 	return items, rows.Err()
 }
 
-func scanTypedMemoryDocumentRows(rows *sqlpkg.Rows, userID string) ([]domain.MemoryDocument, error) {
+func scanTypedMemoryDocumentRows(ctx context.Context, rows *sqlpkg.Rows, userID string) ([]domain.MemoryDocument, error) {
 	out := make([]domain.MemoryDocument, 0)
 	for rows.Next() {
 		var item domain.MemoryDocument
@@ -3351,7 +3399,7 @@ func scanTypedMemoryDocumentRows(rows *sqlpkg.Rows, userID string) ([]domain.Mem
 		var timeTier string
 		var memoryType string
 		item.UserID = userID
-		item.WorkspaceID = domain.PersonalWorkspaceID(userID)
+		item.WorkspaceID = security.WorkspaceID(ctx, userID)
 		if err := rows.Scan(&item.ID, &item.NodeID, &item.GenerationID, &item.ConversationID, &item.Content, &item.Importance, &item.DecayFactor, &item.ActivityAt, &timeTier, &item.CreatedAt, &item.UpdatedAt, &metadataBytes, &memoryType); err != nil {
 			return nil, err
 		}
@@ -3363,13 +3411,13 @@ func scanTypedMemoryDocumentRows(rows *sqlpkg.Rows, userID string) ([]domain.Mem
 		}
 		item.Type = domain.MemoryType(memoryType)
 		item.TimeTier = domain.ParseTimeTier(timeTier)
-		item = attachDocumentRuntimeMetadata(item)
+		item = attachDocumentRuntimeMetadata(ctx, item)
 		out = append(out, item)
 	}
 	return out, rows.Err()
 }
 
-func syncTemporalRelationsTx(tx *sqlpkg.Tx, userID, generationID, nodeID string, activityAt time.Time, tier domain.TimeTier, updatedAt time.Time) error {
+func syncTemporalRelationsTx(ctx context.Context, tx *sqlpkg.Tx, userID, generationID, nodeID string, activityAt time.Time, tier domain.TimeTier, updatedAt time.Time) error {
 	if tx == nil || userID == "" || nodeID == "" {
 		return nil
 	}
@@ -3386,20 +3434,20 @@ func syncTemporalRelationsTx(tx *sqlpkg.Tx, userID, generationID, nodeID string,
 	    `, userID, generationID, nodeID); err != nil {
 		return err
 	}
-	tierNodeID := temporalTierNodeID(userID, tier)
-	dayNodeID := temporalDayNodeID(userID, activityAt)
-	monthNodeID := temporalMonthNodeID(userID, activityAt)
-	yearNodeID := temporalYearNodeID(userID, activityAt)
-	if err := upsertTemporalNodeTx(tx, tierNodeID, userID, generationID, "time_tier", string(tier), activityAt, updatedAt); err != nil {
+	tierNodeID := temporalTierNodeID(ctx, userID, tier)
+	dayNodeID := temporalDayNodeID(ctx, userID, activityAt)
+	monthNodeID := temporalMonthNodeID(ctx, userID, activityAt)
+	yearNodeID := temporalYearNodeID(ctx, userID, activityAt)
+	if err := upsertTemporalNodeTx(ctx, tx, tierNodeID, userID, generationID, "time_tier", string(tier), activityAt, updatedAt); err != nil {
 		return err
 	}
-	if err := upsertTemporalNodeTx(tx, dayNodeID, userID, generationID, "calendar_day", activityAt.UTC().Format("2006-01-02"), activityAt, updatedAt); err != nil {
+	if err := upsertTemporalNodeTx(ctx, tx, dayNodeID, userID, generationID, "calendar_day", activityAt.UTC().Format("2006-01-02"), activityAt, updatedAt); err != nil {
 		return err
 	}
-	if err := upsertTemporalNodeTx(tx, monthNodeID, userID, generationID, "calendar_month", activityAt.UTC().Format("2006-01"), activityAt, updatedAt); err != nil {
+	if err := upsertTemporalNodeTx(ctx, tx, monthNodeID, userID, generationID, "calendar_month", activityAt.UTC().Format("2006-01"), activityAt, updatedAt); err != nil {
 		return err
 	}
-	if err := upsertTemporalNodeTx(tx, yearNodeID, userID, generationID, "calendar_year", activityAt.UTC().Format("2006"), activityAt, updatedAt); err != nil {
+	if err := upsertTemporalNodeTx(ctx, tx, yearNodeID, userID, generationID, "calendar_year", activityAt.UTC().Format("2006"), activityAt, updatedAt); err != nil {
 		return err
 	}
 	for _, relation := range []domain.MemoryRelation{
@@ -3471,7 +3519,7 @@ func deleteMemoryEvidencesByNodeIDsTx(ctx context.Context, tx *sqlpkg.Tx, userID
 	}
 	query := fmt.Sprintf(`
         DELETE FROM memory_evidences
-        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=memory_evidences.user_id AND scope_node.id=memory_evidences.node_id AND scope_node.workspace_id = 'personal-' || encode(sha256(convert_to(scope_node.user_id,'UTF8')),'hex')) AND user_id = $1 AND node_id IN (%s)
+        WHERE EXISTS (SELECT 1 FROM memory_nodes scope_node WHERE scope_node.user_id=memory_evidences.user_id AND scope_node.id=memory_evidences.node_id AND `+storeaccess.NodeSQL(ctx, "scope_node")+`) AND user_id = $1 AND node_id IN (%s)
     `, placeholders(2, len(nodeIDs)))
 	_, err := tx.ExecContext(ctx, query, args...)
 	return err
@@ -3503,36 +3551,36 @@ func deleteMemoryNodesByIDsTx(ctx context.Context, tx *sqlpkg.Tx, userID string,
 	}
 	query := fmt.Sprintf(`
         DELETE FROM memory_nodes
-        WHERE memory_nodes.workspace_id = 'personal-' || encode(sha256(convert_to(memory_nodes.user_id,'UTF8')),'hex') AND user_id = $1 AND id IN (%s)
+        WHERE `+storeaccess.NodeSQL(ctx, "memory_nodes")+` AND user_id = $1 AND id IN (%s)
     `, placeholders(2, len(nodeIDs)))
 	_, err := tx.ExecContext(ctx, query, args...)
 	return err
 }
 
-func upsertTemporalNodeTx(tx *sqlpkg.Tx, nodeID, userID, generationID, nodeType, entityID string, activityAt, updatedAt time.Time) error {
+func upsertTemporalNodeTx(ctx context.Context, tx *sqlpkg.Tx, nodeID, userID, generationID, nodeType, entityID string, activityAt, updatedAt time.Time) error {
 	_, err := tx.Exec(`
-	        INSERT INTO memory_nodes (id, generation_id, user_id, node_type, entity_id, importance, decay_factor, activity_at, time_tier, embedding_status, created_at, updated_at, workspace_id)
-	        VALUES ($1,$2,$3,$4,$5,1,1,$6,'',$7,$8,$8,$9)
+	        INSERT INTO memory_nodes (id, generation_id, user_id, node_type, entity_id, importance, decay_factor, activity_at, time_tier, embedding_status, created_at, updated_at, workspace_id,partition_id)
+	        VALUES ($1,$2,$3,$4,$5,1,1,$6,'',$7,$8,$8,$9,$10)
 	        ON CONFLICT (id) DO UPDATE SET
 	            generation_id = EXCLUDED.generation_id,
 	            activity_at = EXCLUDED.activity_at,
 	            updated_at = EXCLUDED.updated_at
 	        WHERE memory_nodes.user_id = EXCLUDED.user_id AND memory_nodes.workspace_id = EXCLUDED.workspace_id
-	    `, nodeID, generationID, userID, nodeType, entityID, activityAt, "ready", updatedAt, domain.PersonalWorkspaceID(userID))
+	    `, nodeID, generationID, userID, nodeType, entityID, activityAt, "ready", updatedAt, security.WorkspaceID(ctx, userID), security.WritePartition(ctx))
 	return err
 }
 
-func temporalMetadata(userID string, activityAt time.Time, tier domain.TimeTier) map[string]any {
+func temporalMetadata(ctx context.Context, userID string, activityAt time.Time, tier domain.TimeTier) map[string]any {
 	activityAt = domain.DeriveActivityAt(activityAt, time.Time{}, time.Now().UTC())
 	if tier == "" {
 		tier = domain.ClassifyTimeTier(activityAt, time.Now().UTC())
 	}
 	return map[string]any{
 		"time_tier":     tier,
-		"tier_node_id":  temporalTierNodeID(userID, tier),
-		"day_node_id":   temporalDayNodeID(userID, activityAt),
-		"month_node_id": temporalMonthNodeID(userID, activityAt),
-		"year_node_id":  temporalYearNodeID(userID, activityAt),
+		"tier_node_id":  temporalTierNodeID(ctx, userID, tier),
+		"day_node_id":   temporalDayNodeID(ctx, userID, activityAt),
+		"month_node_id": temporalMonthNodeID(ctx, userID, activityAt),
+		"year_node_id":  temporalYearNodeID(ctx, userID, activityAt),
 	}
 }
 
@@ -3541,6 +3589,18 @@ type PostgresOutboxRepository struct {
 }
 
 func insertMemoryMutationOutboxTx(ctx context.Context, tx *sqlpkg.Tx, event domain.OutboxEvent) error {
+	payload := cloneMetadata(event.Payload)
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	payload["user_id"] = event.UserID
+	payload["workspace_id"] = security.WorkspaceID(ctx, event.UserID)
+	payload["partition_id"] = security.WritePartition(ctx)
+	payload["schema_version"] = 1
+	if security.WorkspaceID(ctx, event.UserID) != domain.PersonalWorkspaceID(event.UserID) || security.WritePartition(ctx) != "" {
+		payload["schema_version"] = 2
+	}
+	event.Payload = payload
 	if event.ID == "" {
 		event.ID = uuid.NewString()
 	}
@@ -3963,7 +4023,7 @@ func stringSlice(metadata map[string]any, key string) []string {
 	}
 }
 
-func relationQuery(userID, generationID string, nodeIDs []string) (string, []any) {
+func relationQuery(ctx context.Context, userID, generationID string, nodeIDs []string) (string, []any) {
 	args := make([]any, 0, len(nodeIDs)*2+2)
 	args = append(args, userID)
 	placeholders := make([]string, 0, len(nodeIDs))
@@ -3977,8 +4037,8 @@ func relationQuery(userID, generationID string, nodeIDs []string) (string, []any
 	// active generation boundary. Key-memory edges are written with their
 	// resolved generation as well, so strict matching is safe.
 	generationClause := generationFilterClause("generation_id", generationArgIndex, userID, generationID, false)
-	generationClause += ` AND EXISTS (SELECT 1 FROM memory_nodes scope_src WHERE scope_src.user_id=memory_relations.user_id AND scope_src.id=memory_relations.src_node_id AND scope_src.workspace_id='personal-' || encode(sha256(convert_to(scope_src.user_id,'UTF8')),'hex'))
- AND EXISTS (SELECT 1 FROM memory_nodes scope_dst WHERE scope_dst.user_id=memory_relations.user_id AND scope_dst.id=memory_relations.dst_node_id AND scope_dst.workspace_id='personal-' || encode(sha256(convert_to(scope_dst.user_id,'UTF8')),'hex'))`
+	generationClause += ` AND EXISTS (SELECT 1 FROM memory_nodes scope_src WHERE scope_src.user_id=memory_relations.user_id AND scope_src.id=memory_relations.src_node_id AND scope_src.workspace_id = ` + storeaccess.WorkspaceSQL(ctx, "scope_src.user_id") + `)
+ AND EXISTS (SELECT 1 FROM memory_nodes scope_dst WHERE scope_dst.user_id=memory_relations.user_id AND scope_dst.id=memory_relations.dst_node_id AND scope_dst.workspace_id = ` + storeaccess.WorkspaceSQL(ctx, "scope_dst.user_id") + `)`
 	if strings.TrimSpace(generationID) != "" {
 		// Legacy conflicting edges remain available for unscoped inspection,
 		// but must not carry retrieval across either endpoint's generation.
@@ -4139,7 +4199,7 @@ func sourceSnapshotVersionSQL(metadata map[string]any) int {
 }
 
 func isMemoryDocumentNotFound(err error) bool {
-	return err != nil && err.Error() == "memory document not found"
+	return errors.Is(err, domain.ErrAccessNotFound) || err != nil && err.Error() == "memory document not found"
 }
 
 func segmentEntityPrefixPattern(conversationID string) string {

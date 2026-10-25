@@ -32,6 +32,18 @@ func (f ActorFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ActorMutation", m)
 }
 
+// The ActorIdentityFunc type is an adapter to allow the use of ordinary
+// function as ActorIdentity mutator.
+type ActorIdentityFunc func(context.Context, *ent.ActorIdentityMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ActorIdentityFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ActorIdentityMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ActorIdentityMutation", m)
+}
+
 // The AgentFunc type is an adapter to allow the use of ordinary
 // function as Agent mutator.
 type AgentFunc func(context.Context, *ent.AgentMutation) (ent.Value, error)
@@ -68,6 +80,54 @@ func (f ConversationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ConversationMutation", m)
 }
 
+// The DeletionJournalEntryFunc type is an adapter to allow the use of ordinary
+// function as DeletionJournalEntry mutator.
+type DeletionJournalEntryFunc func(context.Context, *ent.DeletionJournalEntryMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f DeletionJournalEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.DeletionJournalEntryMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.DeletionJournalEntryMutation", m)
+}
+
+// The DeletionJournalStateFunc type is an adapter to allow the use of ordinary
+// function as DeletionJournalState mutator.
+type DeletionJournalStateFunc func(context.Context, *ent.DeletionJournalStateMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f DeletionJournalStateFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.DeletionJournalStateMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.DeletionJournalStateMutation", m)
+}
+
+// The EmbeddingIndexProfileFunc type is an adapter to allow the use of ordinary
+// function as EmbeddingIndexProfile mutator.
+type EmbeddingIndexProfileFunc func(context.Context, *ent.EmbeddingIndexProfileMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f EmbeddingIndexProfileFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.EmbeddingIndexProfileMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.EmbeddingIndexProfileMutation", m)
+}
+
+// The EventConversationRequestFunc type is an adapter to allow the use of ordinary
+// function as EventConversationRequest mutator.
+type EventConversationRequestFunc func(context.Context, *ent.EventConversationRequestMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f EventConversationRequestFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.EventConversationRequestMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.EventConversationRequestMutation", m)
+}
+
 // The FactFunc type is an adapter to allow the use of ordinary
 // function as Fact mutator.
 type FactFunc func(context.Context, *ent.FactMutation) (ent.Value, error)
@@ -92,6 +152,54 @@ func (f ImpressionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ImpressionMutation", m)
 }
 
+// The IngestionReceiptFunc type is an adapter to allow the use of ordinary
+// function as IngestionReceipt mutator.
+type IngestionReceiptFunc func(context.Context, *ent.IngestionReceiptMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f IngestionReceiptFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.IngestionReceiptMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.IngestionReceiptMutation", m)
+}
+
+// The IngestionWindowSourceFunc type is an adapter to allow the use of ordinary
+// function as IngestionWindowSource mutator.
+type IngestionWindowSourceFunc func(context.Context, *ent.IngestionWindowSourceMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f IngestionWindowSourceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.IngestionWindowSourceMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.IngestionWindowSourceMutation", m)
+}
+
+// The IntegrationFunc type is an adapter to allow the use of ordinary
+// function as Integration mutator.
+type IntegrationFunc func(context.Context, *ent.IntegrationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f IntegrationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.IntegrationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.IntegrationMutation", m)
+}
+
+// The IntegrationAgentGrantFunc type is an adapter to allow the use of ordinary
+// function as IntegrationAgentGrant mutator.
+type IntegrationAgentGrantFunc func(context.Context, *ent.IntegrationAgentGrantMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f IntegrationAgentGrantFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.IntegrationAgentGrantMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.IntegrationAgentGrantMutation", m)
+}
+
 // The KeyMemoryFunc type is an adapter to allow the use of ordinary
 // function as KeyMemory mutator.
 type KeyMemoryFunc func(context.Context, *ent.KeyMemoryMutation) (ent.Value, error)
@@ -102,6 +210,30 @@ func (f KeyMemoryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, e
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.KeyMemoryMutation", m)
+}
+
+// The MemoryAICallFunc type is an adapter to allow the use of ordinary
+// function as MemoryAICall mutator.
+type MemoryAICallFunc func(context.Context, *ent.MemoryAICallMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f MemoryAICallFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.MemoryAICallMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MemoryAICallMutation", m)
+}
+
+// The MemoryCandidateFunc type is an adapter to allow the use of ordinary
+// function as MemoryCandidate mutator.
+type MemoryCandidateFunc func(context.Context, *ent.MemoryCandidateMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f MemoryCandidateFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.MemoryCandidateMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MemoryCandidateMutation", m)
 }
 
 // The MemoryEmbeddingFunc type is an adapter to allow the use of ordinary
@@ -116,6 +248,18 @@ func (f MemoryEmbeddingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Va
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MemoryEmbeddingMutation", m)
 }
 
+// The MemoryGenerationCarryFunc type is an adapter to allow the use of ordinary
+// function as MemoryGenerationCarry mutator.
+type MemoryGenerationCarryFunc func(context.Context, *ent.MemoryGenerationCarryMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f MemoryGenerationCarryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.MemoryGenerationCarryMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MemoryGenerationCarryMutation", m)
+}
+
 // The MemoryItemFunc type is an adapter to allow the use of ordinary
 // function as MemoryItem mutator.
 type MemoryItemFunc func(context.Context, *ent.MemoryItemMutation) (ent.Value, error)
@@ -126,6 +270,18 @@ func (f MemoryItemFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MemoryItemMutation", m)
+}
+
+// The MemoryJobFunc type is an adapter to allow the use of ordinary
+// function as MemoryJob mutator.
+type MemoryJobFunc func(context.Context, *ent.MemoryJobMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f MemoryJobFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.MemoryJobMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MemoryJobMutation", m)
 }
 
 // The MemoryKeywordFunc type is an adapter to allow the use of ordinary
@@ -152,6 +308,42 @@ func (f MemoryNodeFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, 
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MemoryNodeMutation", m)
 }
 
+// The MemoryOperationFunc type is an adapter to allow the use of ordinary
+// function as MemoryOperation mutator.
+type MemoryOperationFunc func(context.Context, *ent.MemoryOperationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f MemoryOperationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.MemoryOperationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MemoryOperationMutation", m)
+}
+
+// The MemoryPartitionFunc type is an adapter to allow the use of ordinary
+// function as MemoryPartition mutator.
+type MemoryPartitionFunc func(context.Context, *ent.MemoryPartitionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f MemoryPartitionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.MemoryPartitionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MemoryPartitionMutation", m)
+}
+
+// The MemoryPublicationFunc type is an adapter to allow the use of ordinary
+// function as MemoryPublication mutator.
+type MemoryPublicationFunc func(context.Context, *ent.MemoryPublicationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f MemoryPublicationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.MemoryPublicationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MemoryPublicationMutation", m)
+}
+
 // The MemoryRelationFunc type is an adapter to allow the use of ordinary
 // function as MemoryRelation mutator.
 type MemoryRelationFunc func(context.Context, *ent.MemoryRelationMutation) (ent.Value, error)
@@ -164,6 +356,30 @@ func (f MemoryRelationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Val
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MemoryRelationMutation", m)
 }
 
+// The MemorySourceDependencyFunc type is an adapter to allow the use of ordinary
+// function as MemorySourceDependency mutator.
+type MemorySourceDependencyFunc func(context.Context, *ent.MemorySourceDependencyMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f MemorySourceDependencyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.MemorySourceDependencyMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MemorySourceDependencyMutation", m)
+}
+
+// The MemoryStreamFunc type is an adapter to allow the use of ordinary
+// function as MemoryStream mutator.
+type MemoryStreamFunc func(context.Context, *ent.MemoryStreamMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f MemoryStreamFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.MemoryStreamMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MemoryStreamMutation", m)
+}
+
 // The MemorySummaryFunc type is an adapter to allow the use of ordinary
 // function as MemorySummary mutator.
 type MemorySummaryFunc func(context.Context, *ent.MemorySummaryMutation) (ent.Value, error)
@@ -174,6 +390,18 @@ func (f MemorySummaryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Valu
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MemorySummaryMutation", m)
+}
+
+// The MemoryTombstoneFunc type is an adapter to allow the use of ordinary
+// function as MemoryTombstone mutator.
+type MemoryTombstoneFunc func(context.Context, *ent.MemoryTombstoneMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f MemoryTombstoneFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.MemoryTombstoneMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MemoryTombstoneMutation", m)
 }
 
 // The MessageFunc type is an adapter to allow the use of ordinary
@@ -198,6 +426,42 @@ func (f OutboxEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value,
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.OutboxEventMutation", m)
+}
+
+// The SourceEventFunc type is an adapter to allow the use of ordinary
+// function as SourceEvent mutator.
+type SourceEventFunc func(context.Context, *ent.SourceEventMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SourceEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SourceEventMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SourceEventMutation", m)
+}
+
+// The SourceLinkFunc type is an adapter to allow the use of ordinary
+// function as SourceLink mutator.
+type SourceLinkFunc func(context.Context, *ent.SourceLinkMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SourceLinkFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SourceLinkMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SourceLinkMutation", m)
+}
+
+// The SourceMessageFunc type is an adapter to allow the use of ordinary
+// function as SourceMessage mutator.
+type SourceMessageFunc func(context.Context, *ent.SourceMessageMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SourceMessageFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SourceMessageMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SourceMessageMutation", m)
 }
 
 // The TokenUsageFunc type is an adapter to allow the use of ordinary
@@ -258,6 +522,30 @@ func (f WorkspaceGrantFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Val
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkspaceGrantMutation", m)
+}
+
+// The WorkspaceMemberFunc type is an adapter to allow the use of ordinary
+// function as WorkspaceMember mutator.
+type WorkspaceMemberFunc func(context.Context, *ent.WorkspaceMemberMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f WorkspaceMemberFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.WorkspaceMemberMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkspaceMemberMutation", m)
+}
+
+// The WorkspaceSourceFunc type is an adapter to allow the use of ordinary
+// function as WorkspaceSource mutator.
+type WorkspaceSourceFunc func(context.Context, *ent.WorkspaceSourceMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f WorkspaceSourceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.WorkspaceSourceMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkspaceSourceMutation", m)
 }
 
 // Condition is a hook condition function.

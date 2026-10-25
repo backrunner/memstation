@@ -1,157 +1,123 @@
-# 工作区与多 Agent 接入契约
+# 独立记忆服务接入契约 1.0
 
-以下均为拟实现契约。原有 `/v1/chat/completions`、`/v1/responses`、`/v1/messages`、`/v1/models` 保留协议兼容；新增控制字段不会原样转发给上游模型服务。
+本文描述当前实现的 MemStation 数据面和管理面。完整 Run 调度、context handle 和网关自动补群历史仍属于 [Workspace 架构方案](architecture.md) 的后续范围，不是本契约的可调用接口。Mimic 保留自己的 AI Runtime、短期窗口、参与判断、发送状态和上下文预算，独立摄取与检索不会再次代理经过 MemStation Gateway。
 
-## 1. 认证与作用域
+实现与验证记录见 [MS 验收表](implementation-status.md)，部署、broker 和恢复步骤见 [接入说明](../../independent-memory-integration.md)。
 
-API Key 认证返回 owner user、agent、credential 及权限上限。调用方不能通过 `user_id`、`agent_id`、model 参数或消息中的文字切换身份。Agent 多把凭据支持独立撤销和默认 Workspace。
+## 认证与范围
 
-标准协议扩展头：
+数据面使用 MemStation Agent API Key：`Authorization: Bearer <memory service credential>`。它与 MemStation 调用外部 AI broker 的凭据不同，两者均不是模型厂商密钥。数据面不接受 admin token。
 
-| Header | 含义 |
+| 字段 | 实际语义 |
 | --- | --- |
-| `X-MemStation-Workspace` | 内部 Workspace ID；必须通过授权校验 |
-| `X-MemStation-Session` | 保留现有语义，映射 Conversation；省略时按默认创建策略生成 |
-| `X-MemStation-Run` | 本次执行 ID；存在时须与当前 Agent／空间／会话匹配 |
-| `X-MemStation-Context` | 可选的服务端上下文准备结果 ID，绑定作用域、源版本、协议与有效期 |
-| `Idempotency-Key` | Gateway／原生写接口的幂等标识；同键异 payload 返回 409 |
-| `If-Match` | 修改型接口的 expected revision；缺失或过期不能无条件覆盖 |
+| `X-MemStation-Workspace` | 已授权 Workspace ID；省略时使用凭据或 Agent 默认值。不能通过 body 指定 owner |
+| `X-MemStation-Audience` | 可选 JSON：`{"kind":"workspace"}` 或 `{"kind":"direct","actor_ids":["actor-id"]}`。由宿主核心填写，不交给 LLM |
+| `Idempotency-Key` | events batch、创建窗口、forget、retract、export 的稳定请求标识 |
+| `partition_id` | 已绑定空间内的分区选择；空串为 Workspace 受众。私有分区同时要求被授权 Agent 和完整输出受众均匹配 |
+| `expected_revision` | finalize、候选审核、发布撤回和管理修正的 CAS；不是任意覆盖开关 |
 
-原有 Mode、Inject-Context、Inject-Tools、Memory-Persist、Source-Retain、Tool-Write 和 End-Conversation 继续有效，不能扩大权限。Workspace 选择顺序为显式参数 → 凭据默认 → Agent 默认；没有可用默认时返回 `workspace_required`，不能任意取第一个或搜索整个账号。只有迁移生成的 legacy key 有自动个人默认映射。
+HTTP Header 同名多值和非法受众 JSON 均拒绝。gRPC 使用小写同名 metadata；授权先于读取，消息中的昵称、role、metadata 和任意 workspace/actor 文本不授予权限。候选在 top-k 之前按空间、分区和查询条件过滤；精排后重读来源/记录与当前授权。Admin 私有读取需要显式 partition，记录审计。
 
-普通 JSON API 在 URL／body 中携带 workspace_id，若同时提供 Header 则必须一致。服务端先授权再查对象；客户端传 actor_id 是来源身份或被描述主体，不是认证身份。外部 sender 只能通过已授权 Integration 映射。
+成员 Actor 与 Agent 权限分别建模；外部 Actor 身份由管理员绑定的 Integration 命名空间映射。相同人物跨空间不产生共享查询权限。独立记忆查询只读当前范围；`GET /api/v1/capabilities` 不枚举别的空间。
 
-## 2. 原生 API 清单
+## 数据面接口
 
-| 接口 | 作用 | 主要契约 |
+| HTTP | 权限 | 返回与语义 |
 | --- | --- | --- |
-| `GET /api/v1/workspaces` | 列出当前 Agent 可访问空间 | 返回有效能力、默认空间和 cursor；不返回其他账号目录 |
-| `POST /api/v1/conversations` | 创建会话 | workspace、context_mode、可选 source_thread；内部 ID 服务端生成 |
-| `POST /api/v1/conversations/{id}/finalize` | 封存当前处理版本 | expected revision／最后 sequence；重试幂等 |
-| `POST /api/v1/runs` | 创建执行 | workspace、conversation、可选 parent／external ID |
-| `PATCH /api/v1/runs/{id}` | 上报状态／完成／心跳 | 状态转移和 revision 校验；不等于控制远程进程 |
-| `POST /api/v1/events/batch` | 批量摄取消息与执行事件 | 同空间、同来源、事务提交、逐条 accepted/duplicate |
-| `GET /api/v1/ingestions/{id}` | 查看已提交摄取与派生处理进度 | accepted watermark、indexed watermark、失败阶段 |
-| `POST /api/v1/memory/search` | 扩展现有检索 | 空间、主体、适用条件；访问范围由服务端解析 |
-| `POST /api/v1/memory/context` | 准备有界上下文 | 返回上下文 handle、来源版本、协议输入投影和 token 估算 |
-| `POST /api/v1/memory/candidates` | 提交候选记忆 | subject、证据、visibility、expected revision；非直接写事实 |
-| `GET /api/v1/memory/candidates/{id}` | 查询处理结果 | pending/accepted/conflict/rejected 及可见原因 |
-| `GET/PUT/DELETE /api/v1/memory/keys[/{key}]` | 扩展现有 Key Memory | 必带解析后的空间／subject／partition；写入开关及白名单继续生效 |
-| `/v1/files` 及关联读写 | 扩展原始素材接口 | 记录所属 Workspace／partition，签名 URL 和下载也受权限约束 |
+| `GET /api/v1/capabilities` | 有效业务凭据 | 版本、有效能力、当前 access、runtime、限制；`ready` 或 `memory-disabled` |
+| `POST /api/v1/events/batch` | `events.write` + Integration grant | 202 receipt；源事件、消息投影和 outbox 同事务，不调用文本模型 |
+| `POST /api/v1/conversations` | `events.write` | 201 窗口；body 为 workspace/integration/external_space/thread/partition |
+| `GET /api/v1/conversations/{id}` | `events.write` | 窗口 ID、stream、revision 和状态 |
+| `POST /api/v1/conversations/{id}/finalize` | `events.write` | `{"expected_revision":n}`；202，重复版本封存幂等 |
+| `GET /api/v1/ingestions/{id}` | `events.write` | 连续水位、generation、阶段、重试、DLQ；accepted 不表示 embedding 完成 |
+| `POST /api/v1/memory/search` | `memory.read` | query、subject_actor_ids、date_from/date_to、top_n 等已有过滤；返回 records 和 trace |
+| `GET /api/v1/memory/records/{node_id}` | `memory.read` | 节点对应业务记录及 generation/revision；隐藏的 ID 返回 404 |
+| `GET /api/v1/sources/{message_id}` | `sources.read` | 当前有效 revision 的正文、主体和引用；失效正文不可读取 |
+| `POST /api/v1/memory/candidates` | `candidates.write` | 工具候选，不直接写事实；明确 kind/content/subject_actor_ids/source_refs |
+| `GET /api/v1/memory/candidates[/{id}]` | `candidates.write` | 候选及处理结果；列表 `after` 为上一页最后 ID，最多 100 条 |
+| `POST /api/v1/sources/retract` | `sources.retract` | `{"source_refs":[...]}`，返回可追踪删除 operation |
+| `POST /api/v1/memory/forget` | `memory.forget` | source_refs/node_ids/actor_id/workspace + partition_id；先阻断读取，再异步清理 |
+| `POST /api/v1/exports` | `memory.export` | 当前选定分区导出 operation；结果保留 24 小时，下载再次复核来源 |
+| `GET /api/v1/operations/{id}` | 对应删除/撤回/导出权限 | read_blocked、online_cleaned、journal_persisted、backup_status、失败、到期时间及结果 |
+| `GET /api/v1/usage` | `usage.read` | 当前范围 broker 调用；`after` 为上一页最后 ID，最多 100 条 |
+| `POST /api/v1/usage/{id}/reconcile` | `usage.read` | 向 broker 对账 unknown 调用；结果未知不宣称零费用 |
 
-Space／Agent／Integration 创建、授权、身份合并、候选批准、共享发布、generation 激活、归档和删除采用 Admin REST 与 GraphQL Mutation。API 路由表及 GraphQL schema 在 P0 固定，不能到 UI 开发阶段才临时添加无鉴权端点。
+`workspace:true` 的 forget 指整个选定 partition，不隐式擦除不可见私有分区。删除所有分区需要逐分区显式管理操作。导出权限不自动包含原文读取：缺少 `sources.read` 时剔除原文 segment、证据正文和源 metadata，保留派生内容与 sourceRefs。普通 recall/inspect 同样遵守这个边界。
 
-所有列表使用 cursor 和 limit，默认 50、上限 200。批次上限及上下文 token budget 由服务配置约束；不能用超大请求绕过单事件限制。
+能力键包括 `server_isolation`、`multi_workspace`、`private_audience`、`independent_ingestion`、`actor_attribution`、`batch_idempotency`、`source_retraction`、`forget`、`source_read`、`processing_watermarks`、`candidates`、`candidate_review`、`memory_inspect`、`recall_explanation`、`usage`、`broker`、`export`、`publishing`。隔离粒度为服务端 owner + Workspace + partition；发布和批准只对有管理权限的入口声明。存储或删除恢复不可用时全部关闭。直连模式不虚报 broker 用量能力。
 
-## 3. 群消息摄取示例
+## 事件、来源与窗口
 
-Integration 与 WorkspaceSource 由管理员预先绑定；key 授权机器人向目标空间摄取。发送者的 external ID 属于 Integration 的身份命名空间。
+管理员先配置 Integration、外部空间绑定、观察 Agent 和允许的事件类型。一次 batch 只能使用一个 Workspace、Integration、来源流和 partition。
 
 ```json
 {
-  "workspace_id": "ws_group_a",
-  "integration_id": "int_chat",
-  "events": [
-    {
-      "event_id": "evt_9001",
-      "type": "message.created",
-      "source_message_id": "msg_501",
-      "source_revision": 1,
-      "sender_external_id": "member_42",
-      "occurred_at": "2026-10-23T10:00:00Z",
-      "content_blocks": [{ "type": "text", "text": "我最近开始学习摄影" }]
-    },
-    {
-      "event_id": "evt_9002",
-      "type": "message.created",
-      "source_message_id": "msg_502",
-      "source_revision": 1,
-      "sender_external_id": "member_57",
-      "reply_to_source_message_id": "msg_501",
-      "occurred_at": "2026-10-23T10:00:03Z",
-      "content_blocks": [{ "type": "text", "text": "我更喜欢画画" }]
-    }
-  ]
+  "workspace_id": "ws-group-a",
+  "integration_id": "integration-chat",
+  "external_space_id": "platform-room-a",
+  "thread_id": "topic-1",
+  "events": [{
+    "event_id": "event-9001",
+    "type": "message.created",
+    "source_message_id": "platform-message-501",
+    "source_revision": 1,
+    "speaker": {"kind":"human","external_id":"member-42","display_name":"小林"},
+    "occurred_at": "2026-10-25T10:00:00Z",
+    "parts": [{"type":"text","text":"我最近开始学习摄影"}]
+  }]
 }
 ```
 
-事务提交后返回 202，表示源消息已接受，不表示画像或 embedding 已完成：
+`parts.type` 当前为 text/quote/mention。quote 可以带 `author`（同 speaker 结构）或 `source`；mention 使用已验证 `actor_id`；`reply_to` 使用 SourceRef。未知作者保持 `kind:unknown`，不能提供伪 Actor。已知 quote source 必须在同空间和可读分区内，引用文本和原作者从可信来源校验，不能用 A 的昵称把 B 的事实归给 A。尚未摄取的引用须等待来源就绪，不能猜测跨空间 ID。
+
+SourceRef 是 `workspace_id/message_id/revision/part_index/span`。span 为单个内容块内 Unicode code point 的 `[start,end)`，不是 UTF-8 字节或 JavaScript UTF-16 索引。模型抽取使用有效原文片段，并验证 subject_actor_ids；原话、引用和 model_inference/human_attestation 通过 support_kind 区分。
+
+消息身份不包含观察 Agent。相同 Integration 的多个观察者重投同 event ID + payload 返回 duplicate；同键不同 payload 整批 409，没有部分提交。每批 1–100 个事件，至多 64 个 parts/事件、64 KiB/part、1 MiB 文本；HTTP 整体 2 MiB。source revision 单调，旧编辑不倒退当前投影。删除先于创建会留下 tombstone，迟到消息不复活。
+
+`message.edited` 提供新的完整投影和 event_id。`message.deleted` 不带正文，事务直接失效源与派生记录；不依赖语义模型可用性。bot speaker 必须携带 `delivery_status:"confirmed"` 和 `delivery_receipt`；草稿、unknown 发送和内部计划不能作为 utterance。工具/人工观察通过 candidate 提议，不伪造群消息。
+
+窗口默认 5 分钟空闲或 100 条消息封存，还受 `MEMSTATION_INGESTION_WINDOW_BUDGET` 约束；目前预算采用包含结构字段的 UTF-8 序列化字节上界，保守限制模型输入，而非宣称精确 tokenizer 计数。封存后的新消息进入新窗口。编辑/撤回会隔离旧窗口，剩余有效来源进入修复窗口重新验证。
 
 ```json
 {
-  "ingestion_id": "ing_701",
-  "workspace_id": "ws_group_a",
-  "conversation_id": "conv_801",
-  "accepted_through_sequence": 12,
-  "memory_indexed_through_sequence": 8,
-  "events": [
-    { "event_id": "evt_9001", "status": "accepted", "message_id": "m_501" },
-    { "event_id": "evt_9002", "status": "accepted", "message_id": "m_502" }
-  ]
+  "id":"receipt-id","workspace_id":"ws-group-a","stream_id":"stream-id",
+  "generation_id":"generation-id","accepted_sequence":12,"indexed_sequence":8,
+  "status":"processing","stage":"analysis.generate","retry_count":0,"dead_letter":false,
+  "events":[{"event_id":"event-9001","status":"accepted","message_id":"internal-source-id","sequence":12,"conversation_id":"window-id"}]
 }
 ```
 
-`message.edited` 指向同一个 source_message_id，携带新 source_revision、完整替换内容和新的 event_id；`message.deleted` 创建 tombstone。已观察到更高 revision 时，迟到旧事件保留审计但不倒退投影。未知 reply_to 先作为待解析引用，不能跨空间猜测或绑定。
+水位是 stream + partition + generation 下连续完成的前缀，不能跨过失败任务。状态为 accepted/processing/complete/failed；故障包含 next_retry_at、failure_code、dead_letter。重试退避从 5 秒指数增长、上限 1 小时；DLQ 在管理端重放原任务 ID。来源过期的任务终态为 skipped，不继续重试。最新原消息可通过授权 source 读取，不需等异步索引。
 
-工具事件使用 `tool.started`／`tool.completed`，包含 run_id、tool_call_id、执行状态、允许保留的输出摘要和产物引用。工具命令中可能存在密钥，应在连接器和服务端两层执行日志／存储策略；不把整段 stdout 自动复制成事实。
+## 记忆、检索与生命周期
 
-## 4. 网关模式
+统一记录返回 `workspace_id/subject_actor_ids/kind/content/source_refs/visibility/valid_from/valid_to/revision/status`，保留原有 `type`、`node_id`、`generation_id`。kind 优先使用明确的候选业务类型，旧记录保留原有业务 type；不重新推断历史人的归属。visibility 为 workspace/private，具体受众政策通过管理接口读取。现有 summary/fact/impression/key_memory 和扩展条目继续使用同一 MemoryNode、版本替代链与向量引擎。
 
-### 4.1 普通客户端历史
+检索支持 query_id、明确 query、subject_actor_ids 和时间过滤。trace 包含 query_id/provider_request_id/provider_calls/latency_ms/returned_count/eligible_count/watermarks/watermarks_partial/degraded/failure_code/score_definition。provider 分数保留其原始语义；相似度和精排分数不是事实可信度。injected_count、usedRefs 和回答效果由 Mimic 记录。失败允许宿主使用自己的短窗；不能扩大 scope 搜索。
 
-客户端继续发送标准协议 body，通过 headers 选择 Workspace／Conversation／Run。没有新字段的老客户端使用 legacy key 的默认个人空间，原有工具、流式事件和返回格式保持兼容。
+candidate 的 kind 为 fact/preference/event/relationship/group_habit/summary/inference。待确认 inference 需要管理员给 confirmed_kind 才能批准进入正式记录。批准/拒绝使用 expected_revision；修正候选同时携带 target_node_id/target_revision。相互冲突的 CAS 不覆盖用户草稿。
 
-旧版依靠 session 名称持续写入的客户端需内部维护版本／串行化：服务端绑定外部 session 到 `(user,workspace,agent,external_session_id)`；新的协作 Conversation 由创建 API 返回内部 ID。相同 session 文本不能导致另一个 owner 或 Agent 的 Conversation 被 upsert 改归属。
+发布由管理员明确批准目标副本。目标不继承源原文/Actor 档案/图访问权；没有显式 actor_mapping 时主体为目标 Workspace。来源变化暂停副本，使用 replaces_publication_id 和 expected_publication_revision 重新批准。发布副本不能再次发布；撤回副本也有独立删除 operation 和恢复清单。
 
-### 4.2 由事件日志准备上下文
+forget/retract 首先阻断源、派生节点、发布副本和相关导出；后台清理向量、关系、别名、快照、附件和缓存。多来源记录先整体隔离，剩余来源重新抽取后才恢复。Actor 删除清除该范围贡献及不用的展示名/外部身份，保留其他空间或分区仍使用的身份。迟到 worker、索引重建和恢复都检查权威失效状态。
 
-1. 先摄取触发消息，等待源写入成功。
-2. 调用 `POST /api/v1/memory/context`，提供 workspace、conversation、run、trigger_message_ids、协议和 token budget。
-3. 服务端按输出受众和权限加载近期源消息与可用记忆，返回 `context_id`、有效期、source watermark、`protocol_input` 与 `input_digest`。
-4. 客户端将返回的协议输入字段传给对应 `/v1/*`，附 `X-MemStation-Context`；模型等非内容参数仍可按允许配置选择。
-5. Gateway 重新验证权限、来源存活和 digest，复用准备结果，不重复追加已摄取的人类消息；保存新的助手输出、工具事件和 usage。
+## 管理与 transport
 
-Context handle 绑定 owner/agent/workspace/run/protocol/policy_version 和源 revision，默认有效期 60 秒，可配置上限；过期或被撤回来源使其失效。`input_digest` 覆盖协议投影中的消息／输入字段。客户端更改这些字段必须重新准备 context，不能用一个旧 handle 为任意新历史背书。
+HTTP 管理根为 `/api/admin/workspaces/{workspace}/lifecycle`：records/sources/ingestions/candidates/review、publications/retract、forget、exports、operations、usage/reconcile、overview、jobs/{id}/replay、capabilities、generations/rebuild/activate/discard。Integration、partition 和 Agent/grant 在 `/api/admin/workspaces/{workspace}` 下。全部复用业务 service，管理登录采用服务端 session。
 
-上下文准备对异步索引采用清晰的一致性语义：近期源消息必须覆盖触发 sequence，长期记忆可落后并返回 indexed watermark。默认不无限等待 Worker；需要等候时客户端显式传有限超时。新消息进入近期上下文不代表已经完成长期画像。
+管理 overview 使用独立集合位置编码的 `after`，返回 `next_cursor`，不会用某一列表的 ID 跳过另一列表。候选、发布和用量使用 `after=最后ID`。配置目录返回本空间的 Integration/partition 绑定，不列出他人空间。Manager 包含分区选择、接入配置、Actor/来源、水位/失败重放、候选/CAS、发布预览/撤回、删除/导出与 broker/generation。
 
-Context response 的协议输入投影让没有“自动补历史”能力的 SDK 也能使用，三个协议各自保持合法格式。显式私有／共享标记、成员昵称和来源由服务端渲染为普通内容；用户消息不会升级为 system 指令。
+gRPC 使用增量 `MemoryDataService` 与 `WorkspaceAdminService`；已有 `MemoryService.Search` 复用检索链。消息、receipt、revision、水位均用正式 protobuf 字段；SearchResponse 的 `recall_trace` 保留精确 int64，旧 `trace` Struct 仅作兼容展示，客户端不要从浮点 Struct 读取水位。管理 schema 为 `graph/schema/memory_admin.graphqls`，Query/Mutation 复用相同服务；GraphQL Long 承载 revision/sequence。
 
-## 5. 独立记忆模式
-
-代码／个人 Agent 可以保留自己的模型调用路径：创建或恢复 Run → 发送消息和工具事件 → 调用 memory search/context → 自行组织模型请求 → 将结果和产物继续作为事件上报。可直接使用 REST／gRPC，不强制经过 MemStation Gateway。
-
-接入包必须提供以下可运行示例，模型名称从环境或配置读取：
-
-- 两个独立 Agent 凭据访问同一项目 Workspace，执行与审查互相交接。
-- 单机器人向两个群 Workspace 摄取多人消息，只有触发消息需要回复。
-- 个人 Agent 发布一条明确批准的偏好到项目空间。
-- 老 OpenAI-compatible 客户端只改 Base URL 和 key，不发送新 headers。
-
-首版不增加公共 memstation benchmark CLI 子命令，也不要求专用 SDK 或 MCP 才能接入。若追加 MCP 适配器，它只能复用相同 AccessContext 和业务接口，不能形成额外的全账号记忆通道。
-
-## 6. 修改与错误语义
-
-| HTTP／gRPC | 代码／语义 | 客户端行为 |
+| HTTP | gRPC | 稳定含义 |
 | --- | --- | --- |
-| 400 / InvalidArgument | `workspace_required`、无效 subject、body/header 不一致 | 修正输入，不自动换空间 |
-| 401 / Unauthenticated | key 失效、过期、已撤销 | 重新配置凭据 |
-| 403 / PermissionDenied | 能力不足或禁止的目标 | 显示有效范围，不重试扩权 |
-| 404 / NotFound | 对象不存在或调用方不可见 | 不泄露跨空间对象存在性 |
-| 409 / Aborted | `revision_conflict`、`idempotency_conflict`、会话模式冲突 | 获取可见的新版本／重新准备 context；保留用户草稿 |
-| 412 / FailedPrecondition | Context 失效、来源已撤回、空间归档 | 重新解析上下文或停止操作 |
-| 429 / ResourceExhausted | 限流／并发预算耗尽 | 遵循 Retry-After 和抖动退避 |
-| 503 / Unavailable | 存储／权限源不可用 | 有界重试；不能退回不带空间的查询 |
+| 400 | InvalidArgument | 无效事件/字段/候选 |
+| 401 | Unauthenticated | 无效业务凭据 |
+| 403 | PermissionDenied | 无权限或不可用受众 |
+| 404 | NotFound | 不存在或当前不可见 |
+| 409 | AlreadyExists | idempotency_conflict |
+| 409 | Aborted | revision_conflict |
+| 429 | ResourceExhausted | 限流 |
+| 503 | Unavailable | memory_unavailable / memory_recovery_pending |
 
-GraphQL 使用等价稳定 `extensions.code` 与 request_id，不能把错误吞为成功空列表。普通权限错误不泄露当前服务内部堆栈。批处理结构错误返回事件索引和安全字段名，不回显完整消息。
-
-管理员编辑 Fact／Key Memory／授权／空间配置必须携带 expected revision。冲突返回有权查看的 current revision 和差异信息，UI 保留未保存输入；覆盖需要重新审查并提交，不提供无版本的快捷绕过。
-
-## 7. Transport 与 DTO 同步
-
-- 扩展 UnifiedRequest、UnifiedMessage、SearchInput、VectorSearchInput、RelationQuery、KeyMemoryQuery 和所有 repository 方法，明确区分解析前请求与已授权上下文。
-- gRPC 在现有 Gateway/Memory/Admin 服务中追加类型与 RPC；protobuf 增量使用新 field numbers，不复用旧字段。上下文可放 typed message 或 metadata，但多处同时声明必须一致。
-- GraphQL 增加 Workspace、Agent、Actor、Run、Grant、Candidate、Publication 及 cursor connections；resolver 保持薄层。
-- Admin DTO 返回 `effective_permissions`、`capabilities`、`revision`、分页和明确更新时间，方便 Manager 在旧服务或禁用能力下正确降级。
-- 旧服务没有 Workspace capability 时，Manager 显示“个人模式／需要升级”，保留旧查看流程，不显示虚构 Workspace，也不发送未支持写操作。
-- Manager 服务端会话与 gRPC admin bootstrap 规则沿用 AGENTS.md；Agent 数据面不能携带 admin token。
+GraphQL 使用对应 `extensions.code`，不以空列表掩盖权限或处理错误。旧 Personal Gateway 协议继续兼容；旧数据只归原 Personal 空间，不猜测群、Actor 或私有受众。新的来源读取与独立摄取必须显式授权。

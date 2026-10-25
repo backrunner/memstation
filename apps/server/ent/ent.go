@@ -7,26 +7,50 @@ import (
 	"errors"
 	"fmt"
 	"memstation/apps/server/ent/actor"
+	"memstation/apps/server/ent/actoridentity"
 	"memstation/apps/server/ent/agent"
 	"memstation/apps/server/ent/apikey"
 	"memstation/apps/server/ent/auditevent"
 	"memstation/apps/server/ent/conversation"
+	"memstation/apps/server/ent/deletionjournalentry"
+	"memstation/apps/server/ent/deletionjournalstate"
+	"memstation/apps/server/ent/embeddingindexprofile"
+	"memstation/apps/server/ent/eventconversationrequest"
 	"memstation/apps/server/ent/fact"
 	"memstation/apps/server/ent/impression"
+	"memstation/apps/server/ent/ingestionreceipt"
+	"memstation/apps/server/ent/ingestionwindowsource"
+	"memstation/apps/server/ent/integration"
+	"memstation/apps/server/ent/integrationagentgrant"
 	"memstation/apps/server/ent/keymemory"
+	"memstation/apps/server/ent/memoryaicall"
+	"memstation/apps/server/ent/memorycandidate"
 	"memstation/apps/server/ent/memoryembedding"
+	"memstation/apps/server/ent/memorygenerationcarry"
 	"memstation/apps/server/ent/memoryitem"
+	"memstation/apps/server/ent/memoryjob"
 	"memstation/apps/server/ent/memorykeyword"
 	"memstation/apps/server/ent/memorynode"
+	"memstation/apps/server/ent/memoryoperation"
+	"memstation/apps/server/ent/memorypartition"
+	"memstation/apps/server/ent/memorypublication"
 	"memstation/apps/server/ent/memoryrelation"
+	"memstation/apps/server/ent/memorysourcedependency"
+	"memstation/apps/server/ent/memorystream"
 	"memstation/apps/server/ent/memorysummary"
+	"memstation/apps/server/ent/memorytombstone"
 	"memstation/apps/server/ent/message"
 	"memstation/apps/server/ent/outboxevent"
+	"memstation/apps/server/ent/sourceevent"
+	"memstation/apps/server/ent/sourcelink"
+	"memstation/apps/server/ent/sourcemessage"
 	"memstation/apps/server/ent/tokenusage"
 	"memstation/apps/server/ent/user"
 	"memstation/apps/server/ent/usersetting"
 	"memstation/apps/server/ent/workspace"
 	"memstation/apps/server/ent/workspacegrant"
+	"memstation/apps/server/ent/workspacemember"
+	"memstation/apps/server/ent/workspacesource"
 	"reflect"
 	"sync"
 
@@ -93,27 +117,51 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			apikey.Table:          apikey.ValidColumn,
-			actor.Table:           actor.ValidColumn,
-			agent.Table:           agent.ValidColumn,
-			auditevent.Table:      auditevent.ValidColumn,
-			conversation.Table:    conversation.ValidColumn,
-			fact.Table:            fact.ValidColumn,
-			impression.Table:      impression.ValidColumn,
-			keymemory.Table:       keymemory.ValidColumn,
-			memoryembedding.Table: memoryembedding.ValidColumn,
-			memoryitem.Table:      memoryitem.ValidColumn,
-			memorykeyword.Table:   memorykeyword.ValidColumn,
-			memorynode.Table:      memorynode.ValidColumn,
-			memoryrelation.Table:  memoryrelation.ValidColumn,
-			memorysummary.Table:   memorysummary.ValidColumn,
-			message.Table:         message.ValidColumn,
-			outboxevent.Table:     outboxevent.ValidColumn,
-			tokenusage.Table:      tokenusage.ValidColumn,
-			user.Table:            user.ValidColumn,
-			usersetting.Table:     usersetting.ValidColumn,
-			workspace.Table:       workspace.ValidColumn,
-			workspacegrant.Table:  workspacegrant.ValidColumn,
+			apikey.Table:                   apikey.ValidColumn,
+			actor.Table:                    actor.ValidColumn,
+			actoridentity.Table:            actoridentity.ValidColumn,
+			agent.Table:                    agent.ValidColumn,
+			auditevent.Table:               auditevent.ValidColumn,
+			conversation.Table:             conversation.ValidColumn,
+			deletionjournalentry.Table:     deletionjournalentry.ValidColumn,
+			deletionjournalstate.Table:     deletionjournalstate.ValidColumn,
+			embeddingindexprofile.Table:    embeddingindexprofile.ValidColumn,
+			eventconversationrequest.Table: eventconversationrequest.ValidColumn,
+			fact.Table:                     fact.ValidColumn,
+			impression.Table:               impression.ValidColumn,
+			ingestionreceipt.Table:         ingestionreceipt.ValidColumn,
+			ingestionwindowsource.Table:    ingestionwindowsource.ValidColumn,
+			integration.Table:              integration.ValidColumn,
+			integrationagentgrant.Table:    integrationagentgrant.ValidColumn,
+			keymemory.Table:                keymemory.ValidColumn,
+			memoryaicall.Table:             memoryaicall.ValidColumn,
+			memorycandidate.Table:          memorycandidate.ValidColumn,
+			memoryembedding.Table:          memoryembedding.ValidColumn,
+			memorygenerationcarry.Table:    memorygenerationcarry.ValidColumn,
+			memoryitem.Table:               memoryitem.ValidColumn,
+			memoryjob.Table:                memoryjob.ValidColumn,
+			memorykeyword.Table:            memorykeyword.ValidColumn,
+			memorynode.Table:               memorynode.ValidColumn,
+			memoryoperation.Table:          memoryoperation.ValidColumn,
+			memorypartition.Table:          memorypartition.ValidColumn,
+			memorypublication.Table:        memorypublication.ValidColumn,
+			memoryrelation.Table:           memoryrelation.ValidColumn,
+			memorysourcedependency.Table:   memorysourcedependency.ValidColumn,
+			memorystream.Table:             memorystream.ValidColumn,
+			memorysummary.Table:            memorysummary.ValidColumn,
+			memorytombstone.Table:          memorytombstone.ValidColumn,
+			message.Table:                  message.ValidColumn,
+			outboxevent.Table:              outboxevent.ValidColumn,
+			sourceevent.Table:              sourceevent.ValidColumn,
+			sourcelink.Table:               sourcelink.ValidColumn,
+			sourcemessage.Table:            sourcemessage.ValidColumn,
+			tokenusage.Table:               tokenusage.ValidColumn,
+			user.Table:                     user.ValidColumn,
+			usersetting.Table:              usersetting.ValidColumn,
+			workspace.Table:                workspace.ValidColumn,
+			workspacegrant.Table:           workspacegrant.ValidColumn,
+			workspacemember.Table:          workspacemember.ValidColumn,
+			workspacesource.Table:          workspacesource.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

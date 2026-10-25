@@ -12,6 +12,9 @@ type APIKey func(*sql.Selector)
 // Actor is the predicate function for actor builders.
 type Actor func(*sql.Selector)
 
+// ActorIdentity is the predicate function for actoridentity builders.
+type ActorIdentity func(*sql.Selector)
+
 // Agent is the predicate function for agent builders.
 type Agent func(*sql.Selector)
 
@@ -21,20 +24,56 @@ type AuditEvent func(*sql.Selector)
 // Conversation is the predicate function for conversation builders.
 type Conversation func(*sql.Selector)
 
+// DeletionJournalEntry is the predicate function for deletionjournalentry builders.
+type DeletionJournalEntry func(*sql.Selector)
+
+// DeletionJournalState is the predicate function for deletionjournalstate builders.
+type DeletionJournalState func(*sql.Selector)
+
+// EmbeddingIndexProfile is the predicate function for embeddingindexprofile builders.
+type EmbeddingIndexProfile func(*sql.Selector)
+
+// EventConversationRequest is the predicate function for eventconversationrequest builders.
+type EventConversationRequest func(*sql.Selector)
+
 // Fact is the predicate function for fact builders.
 type Fact func(*sql.Selector)
 
 // Impression is the predicate function for impression builders.
 type Impression func(*sql.Selector)
 
+// IngestionReceipt is the predicate function for ingestionreceipt builders.
+type IngestionReceipt func(*sql.Selector)
+
+// IngestionWindowSource is the predicate function for ingestionwindowsource builders.
+type IngestionWindowSource func(*sql.Selector)
+
+// Integration is the predicate function for integration builders.
+type Integration func(*sql.Selector)
+
+// IntegrationAgentGrant is the predicate function for integrationagentgrant builders.
+type IntegrationAgentGrant func(*sql.Selector)
+
 // KeyMemory is the predicate function for keymemory builders.
 type KeyMemory func(*sql.Selector)
+
+// MemoryAICall is the predicate function for memoryaicall builders.
+type MemoryAICall func(*sql.Selector)
+
+// MemoryCandidate is the predicate function for memorycandidate builders.
+type MemoryCandidate func(*sql.Selector)
 
 // MemoryEmbedding is the predicate function for memoryembedding builders.
 type MemoryEmbedding func(*sql.Selector)
 
+// MemoryGenerationCarry is the predicate function for memorygenerationcarry builders.
+type MemoryGenerationCarry func(*sql.Selector)
+
 // MemoryItem is the predicate function for memoryitem builders.
 type MemoryItem func(*sql.Selector)
+
+// MemoryJob is the predicate function for memoryjob builders.
+type MemoryJob func(*sql.Selector)
 
 // MemoryKeyword is the predicate function for memorykeyword builders.
 type MemoryKeyword func(*sql.Selector)
@@ -42,17 +81,44 @@ type MemoryKeyword func(*sql.Selector)
 // MemoryNode is the predicate function for memorynode builders.
 type MemoryNode func(*sql.Selector)
 
+// MemoryOperation is the predicate function for memoryoperation builders.
+type MemoryOperation func(*sql.Selector)
+
+// MemoryPartition is the predicate function for memorypartition builders.
+type MemoryPartition func(*sql.Selector)
+
+// MemoryPublication is the predicate function for memorypublication builders.
+type MemoryPublication func(*sql.Selector)
+
 // MemoryRelation is the predicate function for memoryrelation builders.
 type MemoryRelation func(*sql.Selector)
 
+// MemorySourceDependency is the predicate function for memorysourcedependency builders.
+type MemorySourceDependency func(*sql.Selector)
+
+// MemoryStream is the predicate function for memorystream builders.
+type MemoryStream func(*sql.Selector)
+
 // MemorySummary is the predicate function for memorysummary builders.
 type MemorySummary func(*sql.Selector)
+
+// MemoryTombstone is the predicate function for memorytombstone builders.
+type MemoryTombstone func(*sql.Selector)
 
 // Message is the predicate function for message builders.
 type Message func(*sql.Selector)
 
 // OutboxEvent is the predicate function for outboxevent builders.
 type OutboxEvent func(*sql.Selector)
+
+// SourceEvent is the predicate function for sourceevent builders.
+type SourceEvent func(*sql.Selector)
+
+// SourceLink is the predicate function for sourcelink builders.
+type SourceLink func(*sql.Selector)
+
+// SourceMessage is the predicate function for sourcemessage builders.
+type SourceMessage func(*sql.Selector)
 
 // TokenUsage is the predicate function for tokenusage builders.
 type TokenUsage func(*sql.Selector)
@@ -68,3 +134,9 @@ type Workspace func(*sql.Selector)
 
 // WorkspaceGrant is the predicate function for workspacegrant builders.
 type WorkspaceGrant func(*sql.Selector)
+
+// WorkspaceMember is the predicate function for workspacemember builders.
+type WorkspaceMember func(*sql.Selector)
+
+// WorkspaceSource is the predicate function for workspacesource builders.
+type WorkspaceSource func(*sql.Selector)

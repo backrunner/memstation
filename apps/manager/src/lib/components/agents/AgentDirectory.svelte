@@ -16,6 +16,8 @@
   export let userId: string;
   export let basePath = '';
   export let workspaceName = '';
+  export let workspaceId = '';
+  export let allowedCapabilities: string[] | undefined = undefined;
   let items: AgentRecord[] = [];
   let query = '';
   let status = '';
@@ -59,7 +61,7 @@
     busy = true;
     createError = '';
     try {
-      const agent = await createAgent(target, userId, name.trim(), capabilities);
+      const agent = await createAgent(target, userId, name.trim(), capabilities, workspaceId);
       if (!alive) return;
       open = false;
       await goto(`${base}/${encodeURIComponent(agent.id)}`);
@@ -72,10 +74,10 @@
 <section class="page-stack">
   <PageHeader title="Agents" subtitle={workspaceName || userId}>
     <svelte:fragment slot="actions">
-      <Button class="btn-primary" onclick={() => { name = ''; capabilities = [...defaultCapabilities]; createError = ''; open = true; }}>Create agent</Button>
+      <Button class="btn-primary" onclick={() => { name = ''; capabilities = defaultCapabilities.filter(cap => !allowedCapabilities || allowedCapabilities.includes(cap)); createError = ''; open = true; }}>Create agent</Button>
     </svelte:fragment>
   </PageHeader>
-  <p class="panel-meta">Agents share this account’s Personal memory. Each agent has its own permissions, credentials and conversation sessions.</p>
+  <p class="panel-meta">Agents belong to this owner. Open an agent to inspect or grant its access to the selected workspace.</p>
   <form class="agent-search" on:submit|preventDefault={() => load()}>
     <TextInputField label="Search agents" bind:value={query} placeholder="Name or agent ID" maxlength={120} />
     <SelectField label="Status" bind:value={status} items={[{ value: '', label: 'All statuses' }, { value: 'active', label: 'Active' }, { value: 'disabled', label: 'Disabled' }]} />
@@ -101,10 +103,10 @@
     <Dialog.Overlay class="dialog-overlay" />
     <Dialog.Content class="dialog-card agent-create-dialog" escapeKeydownBehavior={busy ? 'ignore' : 'close'} interactOutsideBehavior={busy ? 'ignore' : 'close'}>
       <Dialog.Title class="section-title">Create agent</Dialog.Title>
-      <Dialog.Description class="panel-meta">Choose access to Personal memory. You can issue a credential after creating the agent.</Dialog.Description>
+      <Dialog.Description class="panel-meta">Choose access to this workspace. You can issue a credential after creating the agent.</Dialog.Description>
       <form class="page-stack" on:submit|preventDefault={create}>
         <TextInputField label="Agent name" bind:value={name} maxlength={120} required disabled={busy} placeholder="e.g. Coding assistant" />
-        <fieldset disabled={busy}><legend>Permissions</legend><CapabilityFields bind:value={capabilities} disabled={busy} /></fieldset>
+        <fieldset disabled={busy}><legend>Permissions</legend><CapabilityFields bind:value={capabilities} allowed={allowedCapabilities} disabled={busy} /></fieldset>
         {#if createError}<div class="error-state" role="alert">{createError}</div>{/if}
         <div class="dialog-actions"><Button class="btn-secondary" disabled={busy} onclick={() => open = false}>Cancel</Button><Button class="btn-primary" type="submit" disabled={busy || !name.trim()}>{busy ? 'Creating…' : 'Create agent'}</Button></div>
       </form>

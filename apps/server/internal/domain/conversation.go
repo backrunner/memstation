@@ -25,6 +25,8 @@ const (
 )
 
 type ConversationRecord struct {
+	PartitionID      string                `json:"partition_id,omitempty"`
+	ContextMode      string                `json:"context_mode"`
 	WorkspaceID      string                `json:"workspace_id"`
 	AgentID          string                `json:"agent_id"`
 	Revision         int64                 `json:"revision"`

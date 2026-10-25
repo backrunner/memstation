@@ -25,7 +25,7 @@ type memoryCursor struct {
 }
 
 func (s *Service) BrowseDocuments(ctx context.Context, input domain.MemoryBrowseQuery) (domain.MemoryDocumentPage, error) {
-	if _, err := security.PersonalScope(ctx, input.UserID, ""); err != nil {
+	if _, err := security.DataScope(ctx, input.UserID, ""); err != nil {
 		return domain.MemoryDocumentPage{}, err
 	}
 	input.Query = strings.TrimSpace(input.Query)
@@ -63,7 +63,7 @@ func (s *Service) BrowseDocuments(ctx context.Context, input domain.MemoryBrowse
 	}
 	// Bind cursor to owner, workspace, generation, normalized filter and kinds.
 	// It is a position hint, never authorization; every store query still scopes rows.
-	encoded, _ := json.Marshal([]any{input.UserID, domain.PersonalWorkspaceID(input.UserID), input.GenerationID, input.Query, input.Kinds})
+	encoded, _ := json.Marshal([]any{input.UserID, security.WorkspaceID(ctx, input.UserID), input.GenerationID, input.Query, input.Kinds, security.Partitions(ctx)})
 	hash := sha256.Sum256(encoded)
 	scope := hex.EncodeToString(hash[:])
 	if position != nil && cursor.Scope != scope {
@@ -89,5 +89,6 @@ func (s *Service) BrowseDocuments(ctx context.Context, input domain.MemoryBrowse
 	if page.Items == nil {
 		page.Items = []domain.MemoryDocument{}
 	}
+	page.Items = security.MemoryContents(ctx, page.Items)
 	return page, nil
 }

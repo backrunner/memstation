@@ -12,6 +12,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 )
 
@@ -48,6 +49,20 @@ func (_u *MemoryNodeUpdate) SetNillableGenerationID(v *string) *MemoryNodeUpdate
 	return _u
 }
 
+// SetSourceConversationID sets the "source_conversation_id" field.
+func (_u *MemoryNodeUpdate) SetSourceConversationID(v string) *MemoryNodeUpdate {
+	_u.mutation.SetSourceConversationID(v)
+	return _u
+}
+
+// SetNillableSourceConversationID sets the "source_conversation_id" field if the given value is not nil.
+func (_u *MemoryNodeUpdate) SetNillableSourceConversationID(v *string) *MemoryNodeUpdate {
+	if v != nil {
+		_u.SetSourceConversationID(*v)
+	}
+	return _u
+}
+
 // SetUserID sets the "user_id" field.
 func (_u *MemoryNodeUpdate) SetUserID(v string) *MemoryNodeUpdate {
 	_u.mutation.SetUserID(v)
@@ -59,6 +74,65 @@ func (_u *MemoryNodeUpdate) SetNillableUserID(v *string) *MemoryNodeUpdate {
 	if v != nil {
 		_u.SetUserID(*v)
 	}
+	return _u
+}
+
+// SetAccessStatus sets the "access_status" field.
+func (_u *MemoryNodeUpdate) SetAccessStatus(v string) *MemoryNodeUpdate {
+	_u.mutation.SetAccessStatus(v)
+	return _u
+}
+
+// SetNillableAccessStatus sets the "access_status" field if the given value is not nil.
+func (_u *MemoryNodeUpdate) SetNillableAccessStatus(v *string) *MemoryNodeUpdate {
+	if v != nil {
+		_u.SetAccessStatus(*v)
+	}
+	return _u
+}
+
+// SetSubjectActorIds sets the "subject_actor_ids" field.
+func (_u *MemoryNodeUpdate) SetSubjectActorIds(v []string) *MemoryNodeUpdate {
+	_u.mutation.SetSubjectActorIds(v)
+	return _u
+}
+
+// AppendSubjectActorIds appends value to the "subject_actor_ids" field.
+func (_u *MemoryNodeUpdate) AppendSubjectActorIds(v []string) *MemoryNodeUpdate {
+	_u.mutation.AppendSubjectActorIds(v)
+	return _u
+}
+
+// SetSourceRefs sets the "source_refs" field.
+func (_u *MemoryNodeUpdate) SetSourceRefs(v []map[string]interface{}) *MemoryNodeUpdate {
+	_u.mutation.SetSourceRefs(v)
+	return _u
+}
+
+// AppendSourceRefs appends value to the "source_refs" field.
+func (_u *MemoryNodeUpdate) AppendSourceRefs(v []map[string]interface{}) *MemoryNodeUpdate {
+	_u.mutation.AppendSourceRefs(v)
+	return _u
+}
+
+// SetRevision sets the "revision" field.
+func (_u *MemoryNodeUpdate) SetRevision(v int64) *MemoryNodeUpdate {
+	_u.mutation.ResetRevision()
+	_u.mutation.SetRevision(v)
+	return _u
+}
+
+// SetNillableRevision sets the "revision" field if the given value is not nil.
+func (_u *MemoryNodeUpdate) SetNillableRevision(v *int64) *MemoryNodeUpdate {
+	if v != nil {
+		_u.SetRevision(*v)
+	}
+	return _u
+}
+
+// AddRevision adds value to the "revision" field.
+func (_u *MemoryNodeUpdate) AddRevision(v int64) *MemoryNodeUpdate {
+	_u.mutation.AddRevision(v)
 	return _u
 }
 
@@ -270,8 +344,36 @@ func (_u *MemoryNodeUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if value, ok := _u.mutation.GenerationID(); ok {
 		_spec.SetField(memorynode.FieldGenerationID, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.SourceConversationID(); ok {
+		_spec.SetField(memorynode.FieldSourceConversationID, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(memorynode.FieldUserID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.AccessStatus(); ok {
+		_spec.SetField(memorynode.FieldAccessStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SubjectActorIds(); ok {
+		_spec.SetField(memorynode.FieldSubjectActorIds, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedSubjectActorIds(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, memorynode.FieldSubjectActorIds, value)
+		})
+	}
+	if value, ok := _u.mutation.SourceRefs(); ok {
+		_spec.SetField(memorynode.FieldSourceRefs, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedSourceRefs(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, memorynode.FieldSourceRefs, value)
+		})
+	}
+	if value, ok := _u.mutation.Revision(); ok {
+		_spec.SetField(memorynode.FieldRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedRevision(); ok {
+		_spec.AddField(memorynode.FieldRevision, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.NodeType(); ok {
 		_spec.SetField(memorynode.FieldNodeType, field.TypeString, value)
@@ -349,6 +451,20 @@ func (_u *MemoryNodeUpdateOne) SetNillableGenerationID(v *string) *MemoryNodeUpd
 	return _u
 }
 
+// SetSourceConversationID sets the "source_conversation_id" field.
+func (_u *MemoryNodeUpdateOne) SetSourceConversationID(v string) *MemoryNodeUpdateOne {
+	_u.mutation.SetSourceConversationID(v)
+	return _u
+}
+
+// SetNillableSourceConversationID sets the "source_conversation_id" field if the given value is not nil.
+func (_u *MemoryNodeUpdateOne) SetNillableSourceConversationID(v *string) *MemoryNodeUpdateOne {
+	if v != nil {
+		_u.SetSourceConversationID(*v)
+	}
+	return _u
+}
+
 // SetUserID sets the "user_id" field.
 func (_u *MemoryNodeUpdateOne) SetUserID(v string) *MemoryNodeUpdateOne {
 	_u.mutation.SetUserID(v)
@@ -360,6 +476,65 @@ func (_u *MemoryNodeUpdateOne) SetNillableUserID(v *string) *MemoryNodeUpdateOne
 	if v != nil {
 		_u.SetUserID(*v)
 	}
+	return _u
+}
+
+// SetAccessStatus sets the "access_status" field.
+func (_u *MemoryNodeUpdateOne) SetAccessStatus(v string) *MemoryNodeUpdateOne {
+	_u.mutation.SetAccessStatus(v)
+	return _u
+}
+
+// SetNillableAccessStatus sets the "access_status" field if the given value is not nil.
+func (_u *MemoryNodeUpdateOne) SetNillableAccessStatus(v *string) *MemoryNodeUpdateOne {
+	if v != nil {
+		_u.SetAccessStatus(*v)
+	}
+	return _u
+}
+
+// SetSubjectActorIds sets the "subject_actor_ids" field.
+func (_u *MemoryNodeUpdateOne) SetSubjectActorIds(v []string) *MemoryNodeUpdateOne {
+	_u.mutation.SetSubjectActorIds(v)
+	return _u
+}
+
+// AppendSubjectActorIds appends value to the "subject_actor_ids" field.
+func (_u *MemoryNodeUpdateOne) AppendSubjectActorIds(v []string) *MemoryNodeUpdateOne {
+	_u.mutation.AppendSubjectActorIds(v)
+	return _u
+}
+
+// SetSourceRefs sets the "source_refs" field.
+func (_u *MemoryNodeUpdateOne) SetSourceRefs(v []map[string]interface{}) *MemoryNodeUpdateOne {
+	_u.mutation.SetSourceRefs(v)
+	return _u
+}
+
+// AppendSourceRefs appends value to the "source_refs" field.
+func (_u *MemoryNodeUpdateOne) AppendSourceRefs(v []map[string]interface{}) *MemoryNodeUpdateOne {
+	_u.mutation.AppendSourceRefs(v)
+	return _u
+}
+
+// SetRevision sets the "revision" field.
+func (_u *MemoryNodeUpdateOne) SetRevision(v int64) *MemoryNodeUpdateOne {
+	_u.mutation.ResetRevision()
+	_u.mutation.SetRevision(v)
+	return _u
+}
+
+// SetNillableRevision sets the "revision" field if the given value is not nil.
+func (_u *MemoryNodeUpdateOne) SetNillableRevision(v *int64) *MemoryNodeUpdateOne {
+	if v != nil {
+		_u.SetRevision(*v)
+	}
+	return _u
+}
+
+// AddRevision adds value to the "revision" field.
+func (_u *MemoryNodeUpdateOne) AddRevision(v int64) *MemoryNodeUpdateOne {
+	_u.mutation.AddRevision(v)
 	return _u
 }
 
@@ -601,8 +776,36 @@ func (_u *MemoryNodeUpdateOne) sqlSave(ctx context.Context) (_node *MemoryNode, 
 	if value, ok := _u.mutation.GenerationID(); ok {
 		_spec.SetField(memorynode.FieldGenerationID, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.SourceConversationID(); ok {
+		_spec.SetField(memorynode.FieldSourceConversationID, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(memorynode.FieldUserID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.AccessStatus(); ok {
+		_spec.SetField(memorynode.FieldAccessStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SubjectActorIds(); ok {
+		_spec.SetField(memorynode.FieldSubjectActorIds, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedSubjectActorIds(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, memorynode.FieldSubjectActorIds, value)
+		})
+	}
+	if value, ok := _u.mutation.SourceRefs(); ok {
+		_spec.SetField(memorynode.FieldSourceRefs, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedSourceRefs(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, memorynode.FieldSourceRefs, value)
+		})
+	}
+	if value, ok := _u.mutation.Revision(); ok {
+		_spec.SetField(memorynode.FieldRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedRevision(); ok {
+		_spec.AddField(memorynode.FieldRevision, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.NodeType(); ok {
 		_spec.SetField(memorynode.FieldNodeType, field.TypeString, value)

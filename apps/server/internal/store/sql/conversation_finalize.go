@@ -21,7 +21,7 @@ func (r *HybridConversationRepository) RequestFinalization(ctx context.Context, 
 }
 
 func (r *InMemoryConversationRepository) RequestFinalization(ctx context.Context, input domain.ConversationFinalization, outbox ports.OutboxRepository) error {
-	workspace, err := security.PersonalScope(ctx, input.UserID, input.WorkspaceID)
+	workspace, err := security.DataScope(ctx, input.UserID, input.WorkspaceID)
 	if err != nil {
 		return err
 	}
@@ -72,7 +72,7 @@ func (r *InMemoryConversationRepository) RequestFinalization(ctx context.Context
 }
 
 func (r *PostgresConversationRepository) RequestFinalization(ctx context.Context, input domain.ConversationFinalization, outbox ports.OutboxRepository) error {
-	workspace, err := security.PersonalScope(ctx, input.UserID, input.WorkspaceID)
+	workspace, err := security.DataScope(ctx, input.UserID, input.WorkspaceID)
 	if err != nil {
 		return err
 	}

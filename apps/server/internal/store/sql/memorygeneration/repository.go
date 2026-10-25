@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	storeaccess "memstation/apps/server/internal/store/access"
+
 	"github.com/google/uuid"
 
 	"memstation/apps/server/internal/domain"
@@ -62,8 +64,10 @@ func CurrentGenerationID(userID string) string {
 	return "gen:current:" + userID
 }
 
+func (s *Repository) DurableTasks() bool { return s.currentDB() != nil }
+
 func (s *Repository) EnsureActiveGeneration(ctx context.Context, userID string) (domain.MemoryGeneration, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemoryGeneration{}, err
 	}
 	if strings.TrimSpace(userID) == "" {
@@ -73,14 +77,14 @@ func (s *Repository) EnsureActiveGeneration(ctx context.Context, userID string) 
 	if db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		if generationID := s.activeGenerations[userID]; generationID != "" {
+		if generationID := s.activeGenerations[security.WorkspaceID(ctx, userID)]; generationID != "" {
 			return s.generations[generationID], nil
 		}
 		now := time.Now().UTC()
 		generation := domain.MemoryGeneration{
-			GenerationID:      CurrentGenerationID(userID),
+			GenerationID:      CurrentGenerationID(security.WorkspaceIdentity(ctx, userID)),
 			UserID:            userID,
-			WorkspaceID:       domain.PersonalWorkspaceID(userID),
+			WorkspaceID:       security.WorkspaceID(ctx, userID),
 			Status:            domain.MemoryGenerationStatusActivated,
 			Scope:             "current",
 			IsActive:          true,
@@ -93,7 +97,7 @@ func (s *Repository) EnsureActiveGeneration(ctx context.Context, userID string) 
 			ActivatedAt:       timePtr(now),
 		}
 		s.generations[generation.GenerationID] = generation
-		s.activeGenerations[userID] = generation.GenerationID
+		s.activeGenerations[security.WorkspaceID(ctx, userID)] = generation.GenerationID
 		return generation, nil
 	}
 
@@ -112,7 +116,7 @@ func (s *Repository) EnsureActiveGeneration(ctx context.Context, userID string) 
 		return domain.MemoryGeneration{}, err
 	}
 	var exists bool
-	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM memory_generations WHERE user_id=$1 AND workspace_id=$2 AND is_active)`, userID, domain.PersonalWorkspaceID(userID)).Scan(&exists); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM memory_generations WHERE user_id=$1 AND workspace_id=$2 AND is_active)`, userID, security.WorkspaceID(ctx, userID)).Scan(&exists); err != nil {
 		return domain.MemoryGeneration{}, err
 	}
 	if exists {
@@ -127,10 +131,10 @@ func (s *Repository) EnsureActiveGeneration(ctx context.Context, userID string) 
             generation_id, user_id, status, scope, conversation_id, is_active, structure_version,
             embedding_version, embedding_model, activate_on_success, source_count, processed_count,
             embedding_count, failure_count, metadata, created_at, updated_at, activated_at
-        , workspace_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,0,0,0,$11,$12,$12,$12, 'personal-' || encode(sha256(convert_to($2::text,'UTF8')),'hex'))
+        , workspace_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,0,0,0,$11,$12,$12,$12, `+storeaccess.WorkspaceSQL(ctx, "$2::text")+`)
         ON CONFLICT (generation_id) DO NOTHING
     `,
-		CurrentGenerationID(userID),
+		CurrentGenerationID(security.WorkspaceIdentity(ctx, userID)),
 		userID,
 		string(domain.MemoryGenerationStatusActivated),
 		"current",
@@ -153,7 +157,7 @@ func (s *Repository) EnsureActiveGeneration(ctx context.Context, userID string) 
 }
 
 func (s *Repository) ResolveGeneration(ctx context.Context, userID, generationID string) (domain.MemoryGeneration, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemoryGeneration{}, err
 	}
 	if strings.TrimSpace(generationID) != "" {
@@ -163,14 +167,14 @@ func (s *Repository) ResolveGeneration(ctx context.Context, userID, generationID
 }
 
 func (s *Repository) GetActiveGeneration(ctx context.Context, userID string) (domain.MemoryGeneration, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemoryGeneration{}, err
 	}
 	return s.EnsureActiveGeneration(ctx, userID)
 }
 
 func (s *Repository) GetInProgressGeneration(ctx context.Context, userID string) (domain.MemoryGeneration, bool, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemoryGeneration{}, false, err
 	}
 	db := s.currentDB()
@@ -179,7 +183,7 @@ func (s *Repository) GetInProgressGeneration(ctx context.Context, userID string)
 		defer s.mu.RUnlock()
 		var items []domain.MemoryGeneration
 		for _, generation := range s.generations {
-			if !sameScope(userID, generation.UserID, generation.WorkspaceID) || generation.IsActive {
+			if !sameScope(ctx, userID, generation.UserID, generation.WorkspaceID) || generation.IsActive {
 				continue
 			}
 			if generation.Status != domain.MemoryGenerationStatusQueued &&
@@ -199,11 +203,11 @@ func (s *Repository) GetInProgressGeneration(ctx context.Context, userID string)
                embedding_version, embedding_model, activate_on_success, source_count, processed_count,
                embedding_count, failure_count, last_error, metadata, created_at, updated_at, activated_at
         FROM memory_generations
-	        WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND user_id = $1 AND is_active = FALSE AND status IN ('queued', 'running')
+	        WHERE workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND user_id = $1 AND is_active = FALSE AND status IN ('queued', 'running')
         ORDER BY created_at DESC
         LIMIT 1
     `, userID)
-	generation, err := scanGeneration(row)
+	generation, err := scanGeneration(ctx, row)
 	if err != nil {
 		if errors.Is(err, sqlpkg.ErrNoRows) {
 			return domain.MemoryGeneration{}, false, nil
@@ -214,7 +218,7 @@ func (s *Repository) GetInProgressGeneration(ctx context.Context, userID string)
 }
 
 func (s *Repository) GetGeneration(ctx context.Context, userID, generationID string) (domain.MemoryGeneration, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemoryGeneration{}, err
 	}
 	if strings.TrimSpace(generationID) == "" {
@@ -225,7 +229,7 @@ func (s *Repository) GetGeneration(ctx context.Context, userID, generationID str
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 		generation, ok := s.generations[generationID]
-		if !ok || !sameScope(userID, generation.UserID, generation.WorkspaceID) {
+		if !ok || !sameScope(ctx, userID, generation.UserID, generation.WorkspaceID) {
 			return domain.MemoryGeneration{}, errors.New("memory generation not found")
 		}
 		return generation, nil
@@ -235,9 +239,9 @@ func (s *Repository) GetGeneration(ctx context.Context, userID, generationID str
                embedding_version, embedding_model, activate_on_success, source_count, processed_count,
                embedding_count, failure_count, last_error, metadata, created_at, updated_at, activated_at
         FROM memory_generations
-        WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND generation_id = $1 AND user_id = $2
+        WHERE workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND generation_id = $1 AND user_id = $2
     `, generationID, userID)
-	generation, err := scanGeneration(row)
+	generation, err := scanGeneration(ctx, row)
 	if err != nil {
 		if errors.Is(err, sqlpkg.ErrNoRows) {
 			return domain.MemoryGeneration{}, errors.New("memory generation not found")
@@ -248,7 +252,7 @@ func (s *Repository) GetGeneration(ctx context.Context, userID, generationID str
 }
 
 func (s *Repository) ListGenerations(ctx context.Context, userID string, limit int) ([]domain.MemoryGeneration, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	if limit <= 0 {
@@ -260,7 +264,7 @@ func (s *Repository) ListGenerations(ctx context.Context, userID string, limit i
 		defer s.mu.RUnlock()
 		items := make([]domain.MemoryGeneration, 0)
 		for _, generation := range s.generations {
-			if sameScope(userID, generation.UserID, generation.WorkspaceID) {
+			if sameScope(ctx, userID, generation.UserID, generation.WorkspaceID) {
 				items = append(items, generation)
 			}
 		}
@@ -275,7 +279,7 @@ func (s *Repository) ListGenerations(ctx context.Context, userID string, limit i
                embedding_version, embedding_model, activate_on_success, source_count, processed_count,
                embedding_count, failure_count, last_error, metadata, created_at, updated_at, activated_at
         FROM memory_generations
-        WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND user_id = $1
+        WHERE workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND user_id = $1
         ORDER BY created_at DESC
         LIMIT $2
     `, userID, limit)
@@ -285,7 +289,7 @@ func (s *Repository) ListGenerations(ctx context.Context, userID string, limit i
 	defer rows.Close()
 	items := make([]domain.MemoryGeneration, 0)
 	for rows.Next() {
-		generation, err := scanGeneration(rows)
+		generation, err := scanGeneration(ctx, rows)
 		if err != nil {
 			return nil, err
 		}
@@ -295,7 +299,7 @@ func (s *Repository) ListGenerations(ctx context.Context, userID string, limit i
 }
 
 func (s *Repository) ListGenerationSources(ctx context.Context, userID, generationID string) ([]domain.MemoryGenerationSource, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	if strings.TrimSpace(generationID) == "" {
@@ -308,7 +312,7 @@ func (s *Repository) ListGenerationSources(ctx context.Context, userID, generati
 		items := make([]domain.MemoryGenerationSource, 0)
 		for _, id := range s.sourcesByGeneration[generationID] {
 			item := s.generationSources[id]
-			if sameScope(userID, item.UserID, item.WorkspaceID) {
+			if sameScope(ctx, userID, item.UserID, item.WorkspaceID) {
 				items = append(items, item)
 			}
 		}
@@ -318,7 +322,7 @@ func (s *Repository) ListGenerationSources(ctx context.Context, userID, generati
 	rows, err := db.QueryContext(ctx, `
         SELECT id, generation_id, user_id, snapshot_id, conversation_id, source_hash, status, last_error, created_at, updated_at, processed_at
         FROM memory_generation_sources
-        WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND generation_id = $1 AND user_id = $2
+        WHERE `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND generation_id = $1 AND user_id = $2
         ORDER BY created_at ASC
     `, generationID, userID)
 	if err != nil {
@@ -327,7 +331,7 @@ func (s *Repository) ListGenerationSources(ctx context.Context, userID, generati
 	defer rows.Close()
 	items := make([]domain.MemoryGenerationSource, 0)
 	for rows.Next() {
-		item, err := scanGenerationSource(rows)
+		item, err := scanGenerationSource(ctx, rows)
 		if err != nil {
 			return nil, err
 		}
@@ -337,7 +341,7 @@ func (s *Repository) ListGenerationSources(ctx context.Context, userID, generati
 }
 
 func (s *Repository) IsCurrentGenerationSource(ctx context.Context, userID, generationID, snapshotID string) (bool, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return false, err
 	}
 	if strings.TrimSpace(userID) == "" || strings.TrimSpace(generationID) == "" || strings.TrimSpace(snapshotID) == "" {
@@ -348,14 +352,14 @@ func (s *Repository) IsCurrentGenerationSource(ctx context.Context, userID, gene
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 		generation, ok := s.generations[generationID]
-		if !ok || !sameScope(userID, generation.UserID, generation.WorkspaceID) || generation.Status == domain.MemoryGenerationStatusDiscarded {
+		if !ok || !sameScope(ctx, userID, generation.UserID, generation.WorkspaceID) || generation.Status == domain.MemoryGenerationStatusDiscarded {
 			return false, nil
 		}
 		var target domain.MemoryGenerationSource
 		found := false
 		for _, id := range s.sourcesByGeneration[generationID] {
 			item := s.generationSources[id]
-			if sameScope(userID, item.UserID, item.WorkspaceID) && item.SnapshotID == snapshotID {
+			if sameScope(ctx, userID, item.UserID, item.WorkspaceID) && item.SnapshotID == snapshotID {
 				target = item
 				found = true
 				break
@@ -368,7 +372,7 @@ func (s *Repository) IsCurrentGenerationSource(ctx context.Context, userID, gene
 		targetVersion := s.sourceSnapshots[target.SnapshotID].SnapshotVersion
 		for _, id := range s.sourcesByGeneration[generationID] {
 			item := s.generationSources[id]
-			if !sameScope(userID, item.UserID, item.WorkspaceID) || item.ConversationID != target.ConversationID {
+			if !sameScope(ctx, userID, item.UserID, item.WorkspaceID) || item.ConversationID != target.ConversationID {
 				continue
 			}
 			version := s.sourceSnapshots[item.SnapshotID].SnapshotVersion
@@ -384,7 +388,7 @@ func (s *Repository) IsCurrentGenerationSource(ctx context.Context, userID, gene
         WITH target AS (
             SELECT gs.conversation_id
             FROM memory_generation_sources gs
-            WHERE gs.workspace_id='personal-' || encode(sha256(convert_to(gs.user_id,'UTF8')),'hex') AND gs.generation_id = $1 AND gs.user_id = $2 AND gs.snapshot_id = $3
+            WHERE `+storeaccess.PartitionSQL(ctx, "gs.partition_id")+` AND gs.workspace_id = `+storeaccess.WorkspaceSQL(ctx, "gs.user_id")+` AND gs.generation_id = $1 AND gs.user_id = $2 AND gs.snapshot_id = $3
             LIMIT 1
         )
 	        SELECT gs.snapshot_id
@@ -397,7 +401,7 @@ func (s *Repository) IsCurrentGenerationSource(ctx context.Context, userID, gene
          AND ss.user_id = gs.user_id
         JOIN target t
           ON t.conversation_id = gs.conversation_id
-	        WHERE gs.workspace_id='personal-' || encode(sha256(convert_to(gs.user_id,'UTF8')),'hex') AND gs.generation_id = $1 AND gs.user_id = $2 AND generation.status <> 'discarded'
+	        WHERE `+storeaccess.PartitionSQL(ctx, "gs.partition_id")+` AND gs.workspace_id = `+storeaccess.WorkspaceSQL(ctx, "gs.user_id")+` AND gs.generation_id = $1 AND gs.user_id = $2 AND generation.status <> 'discarded'
         ORDER BY ss.snapshot_version DESC, gs.updated_at DESC, gs.created_at DESC
         LIMIT 1
     `, generationID, userID, snapshotID)
@@ -412,10 +416,10 @@ func (s *Repository) IsCurrentGenerationSource(ctx context.Context, userID, gene
 }
 
 func (s *Repository) CaptureSourceSnapshot(ctx context.Context, snapshot domain.MemorySourceSnapshot) (domain.MemorySourceSnapshot, bool, error) {
-	if _, err := security.PersonalScope(ctx, snapshot.UserID, snapshot.WorkspaceID); err != nil {
+	if _, err := security.DataScope(ctx, snapshot.UserID, snapshot.WorkspaceID); err != nil {
 		return domain.MemorySourceSnapshot{}, false, err
 	}
-	snapshot.WorkspaceID = domain.PersonalWorkspaceID(snapshot.UserID)
+	snapshot.WorkspaceID = security.WorkspaceID(ctx, snapshot.UserID)
 	var normalizeErr error
 	snapshot.Parts, normalizeErr = domain.NormalizeMessageParts(snapshot.UserID, snapshot.WorkspaceID, snapshot.ConversationID, snapshot.Parts)
 	if normalizeErr != nil {
@@ -432,7 +436,7 @@ func (s *Repository) CaptureSourceSnapshot(ctx context.Context, snapshot domain.
 	if db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		key := sourceConversationKey(snapshot.UserID, snapshot.ConversationID)
+		key := sourceConversationKey(ctx, snapshot.UserID, snapshot.ConversationID)
 		ids := append([]string(nil), s.sourceByConversation[key]...)
 		if len(ids) > 0 {
 			latest := s.sourceSnapshots[ids[len(ids)-1]]
@@ -457,25 +461,30 @@ func (s *Repository) CaptureSourceSnapshot(ctx context.Context, snapshot domain.
 		return domain.MemorySourceSnapshot{}, false, err
 	}
 	defer rollback(tx)
-	if err = ensureWorkspaceTx(ctx, tx, snapshot.UserID); err != nil {
+	if err = lockWorkspaceTx(ctx, tx, snapshot.UserID); err != nil {
 		return domain.MemorySourceSnapshot{}, false, err
 	}
-	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, sourceConversationKey(snapshot.UserID, snapshot.ConversationID)); err != nil {
+	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, sourceConversationKey(ctx, snapshot.UserID, snapshot.ConversationID)); err != nil {
 		return domain.MemorySourceSnapshot{}, false, err
 	}
-	var owner, workspace string
-	err = tx.QueryRowContext(ctx, `SELECT user_id,workspace_id FROM conversations WHERE id=$1 FOR SHARE`, snapshot.ConversationID).Scan(&owner, &workspace)
+	var owner, workspace, partition, state, contextMode string
+	err = tx.QueryRowContext(ctx, `SELECT user_id,workspace_id,partition_id,finalize_status,context_mode FROM conversations WHERE id=$1 FOR SHARE`, snapshot.ConversationID).Scan(&owner, &workspace, &partition, &state, &contextMode)
 	if err != nil && !errors.Is(err, sqlpkg.ErrNoRows) {
 		return domain.MemorySourceSnapshot{}, false, err
 	}
-	if err == nil && !sameScope(snapshot.UserID, owner, workspace) {
+	if err == nil && (!sameScope(ctx, snapshot.UserID, owner, workspace) || !security.CanReadPartition(ctx, partition) || state == "invalidated") {
 		return domain.MemorySourceSnapshot{}, false, domain.ErrAccessDenied
 	}
+	if snapshot.Metadata == nil {
+		snapshot.Metadata = map[string]any{}
+	}
+	snapshot.Metadata["trusted_context_mode"] = contextMode
+	snapshot.Metadata["trusted_partition_id"] = partition
 	// A retained source must not race blob cleanup or refer to another scope.
 	for _, part := range snapshot.Parts {
 		if part.BlobID != "" {
 			var id string
-			err = tx.QueryRowContext(ctx, `SELECT blob_id FROM blob_objects WHERE blob_id=$1 AND user_id=$2 AND workspace_id=$3 AND deleted_at IS NULL FOR SHARE`, part.BlobID, snapshot.UserID, snapshot.WorkspaceID).Scan(&id)
+			err = tx.QueryRowContext(ctx, `SELECT blob_id FROM blob_objects WHERE blob_id=$1 AND user_id=$2 AND workspace_id=$3 AND `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND deleted_at IS NULL FOR SHARE`, part.BlobID, snapshot.UserID, snapshot.WorkspaceID).Scan(&id)
 			if err != nil {
 				return domain.MemorySourceSnapshot{}, false, domain.ErrAccessDenied
 			}
@@ -507,7 +516,7 @@ func (s *Repository) CaptureSourceSnapshot(ctx context.Context, snapshot domain.
             snapshot_id, user_id, conversation_id, snapshot_version, source_hash, request_format,
             upstream_provider, mode, finalize_status, metadata, usage, message_count,
             message_parts, part_artifacts, created_at, updated_at
-        , workspace_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15, 'personal-' || encode(sha256(convert_to($2::text,'UTF8')),'hex'))
+        , workspace_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$15, `+storeaccess.WorkspaceSQL(ctx, "$2::text")+`)
     `,
 		snapshot.SnapshotID,
 		snapshot.UserID,
@@ -533,7 +542,7 @@ func (s *Repository) CaptureSourceSnapshot(ctx context.Context, snapshot domain.
             INSERT INTO memory_source_messages (
                 id, snapshot_id, user_id, conversation_id, snapshot_version, sequence_num, role,
                 content_blocks, text_content, tool_calls, tool_result, provider_payload, created_at, updated_at
-            , workspace_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13, 'personal-' || encode(sha256(convert_to($3::text,'UTF8')),'hex'))
+            , workspace_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13, `+storeaccess.WorkspaceSQL(ctx, "$3::text")+`)
         `,
 			fmt.Sprintf("%s:%03d", snapshot.SnapshotID, idx),
 			snapshot.SnapshotID,
@@ -546,7 +555,7 @@ func (s *Repository) CaptureSourceSnapshot(ctx context.Context, snapshot domain.
 			message.Text,
 			marshalJSON(message.ToolCalls),
 			marshalJSON(domain.StoredToolResultPayload(message.ToolResults)),
-			marshalJSON(message.Metadata),
+			marshalJSON(snapshotMessageMetadata(message)),
 			now,
 		)
 		if err != nil {
@@ -560,7 +569,7 @@ func (s *Repository) CaptureSourceSnapshot(ctx context.Context, snapshot domain.
 }
 
 func (s *Repository) GetSourceSnapshot(ctx context.Context, userID, snapshotID string) (domain.MemorySourceSnapshot, bool, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemorySourceSnapshot{}, false, err
 	}
 	if strings.TrimSpace(snapshotID) == "" {
@@ -571,7 +580,7 @@ func (s *Repository) GetSourceSnapshot(ctx context.Context, userID, snapshotID s
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 		snapshot, ok := s.sourceSnapshots[snapshotID]
-		if !ok || !sameScope(userID, snapshot.UserID, snapshot.WorkspaceID) {
+		if !ok || !sameScope(ctx, userID, snapshot.UserID, snapshot.WorkspaceID) {
 			return domain.MemorySourceSnapshot{}, false, nil
 		}
 		return snapshot, true, nil
@@ -581,9 +590,9 @@ func (s *Repository) GetSourceSnapshot(ctx context.Context, userID, snapshotID s
                upstream_provider, mode, finalize_status, metadata, usage, message_count,
                message_parts, part_artifacts, created_at, updated_at
         FROM memory_source_snapshots
-        WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND snapshot_id = $1 AND user_id = $2
+        WHERE content_status='active' AND `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND snapshot_id = $1 AND user_id = $2
     `, snapshotID, userID)
-	snapshot, err := scanSnapshot(row)
+	snapshot, err := scanSnapshot(ctx, row)
 	if err != nil {
 		if errors.Is(err, sqlpkg.ErrNoRows) {
 			return domain.MemorySourceSnapshot{}, false, nil
@@ -599,13 +608,13 @@ func (s *Repository) GetSourceSnapshot(ctx context.Context, userID, snapshotID s
 }
 
 func (s *Repository) GetLatestSourceSnapshot(ctx context.Context, userID, conversationID string) (domain.MemorySourceSnapshot, bool, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemorySourceSnapshot{}, false, err
 	}
 	if s.currentDB() == nil {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
-		ids := s.sourceByConversation[sourceConversationKey(userID, conversationID)]
+		ids := s.sourceByConversation[sourceConversationKey(ctx, userID, conversationID)]
 		if len(ids) == 0 {
 			return domain.MemorySourceSnapshot{}, false, nil
 		}
@@ -619,7 +628,7 @@ func (s *Repository) GetLatestSourceSnapshot(ctx context.Context, userID, conver
 }
 
 func (s *Repository) ListSourceSnapshots(ctx context.Context, userID, conversationID string, limit int) ([]domain.MemorySourceSnapshot, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	if limit <= 0 {
@@ -629,7 +638,7 @@ func (s *Repository) ListSourceSnapshots(ctx context.Context, userID, conversati
 	if db == nil {
 		s.mu.RLock()
 		defer s.mu.RUnlock()
-		ids := append([]string(nil), s.sourceByConversation[sourceConversationKey(userID, conversationID)]...)
+		ids := append([]string(nil), s.sourceByConversation[sourceConversationKey(ctx, userID, conversationID)]...)
 		items := make([]domain.MemorySourceSnapshot, 0, len(ids))
 		for i := len(ids) - 1; i >= 0; i-- {
 			items = append(items, s.sourceSnapshots[ids[i]])
@@ -644,7 +653,7 @@ func (s *Repository) ListSourceSnapshots(ctx context.Context, userID, conversati
                upstream_provider, mode, finalize_status, metadata, usage, message_count,
                message_parts, part_artifacts, created_at, updated_at
         FROM memory_source_snapshots
-        WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND user_id = $1 AND conversation_id = $2
+        WHERE content_status='active' AND `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND user_id = $1 AND conversation_id = $2
         ORDER BY snapshot_version DESC
         LIMIT $3
     `, userID, conversationID, limit)
@@ -654,7 +663,7 @@ func (s *Repository) ListSourceSnapshots(ctx context.Context, userID, conversati
 	defer rows.Close()
 	items := make([]domain.MemorySourceSnapshot, 0)
 	for rows.Next() {
-		item, err := scanSnapshot(rows)
+		item, err := scanSnapshot(ctx, rows)
 		if err != nil {
 			return nil, err
 		}
@@ -664,7 +673,7 @@ func (s *Repository) ListSourceSnapshots(ctx context.Context, userID, conversati
 }
 
 func (s *Repository) SourceStatsForUser(ctx context.Context, userID string) (domain.MemorySourceStats, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemorySourceStats{}, err
 	}
 	db := s.currentDB()
@@ -673,7 +682,7 @@ func (s *Repository) SourceStatsForUser(ctx context.Context, userID string) (dom
 		defer s.mu.RUnlock()
 		stats := domain.MemorySourceStats{}
 		for _, snapshot := range s.sourceSnapshots {
-			if !sameScope(userID, snapshot.UserID, snapshot.WorkspaceID) {
+			if !sameScope(ctx, userID, snapshot.UserID, snapshot.WorkspaceID) {
 				continue
 			}
 			stats.SnapshotCount++
@@ -687,7 +696,7 @@ func (s *Repository) SourceStatsForUser(ctx context.Context, userID string) (dom
 	row := db.QueryRowContext(ctx, `
         SELECT COUNT(*), MAX(created_at)
         FROM memory_source_snapshots
-        WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND user_id = $1
+        WHERE content_status='active' AND `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND user_id = $1
     `, userID)
 	var count int
 	var latest sqlpkg.NullTime
@@ -702,10 +711,10 @@ func (s *Repository) SourceStatsForUser(ctx context.Context, userID string) (dom
 }
 
 func (s *Repository) CreateRebuildGeneration(ctx context.Context, input domain.CreateMemoryRebuildInput) (domain.MemoryGeneration, []domain.MemoryGenerationSource, error) {
-	if _, err := security.PersonalScope(ctx, input.UserID, input.WorkspaceID); err != nil {
+	if _, err := security.DataScope(ctx, input.UserID, input.WorkspaceID); err != nil {
 		return domain.MemoryGeneration{}, nil, err
 	}
-	input.WorkspaceID = domain.PersonalWorkspaceID(input.UserID)
+	input.WorkspaceID = security.WorkspaceID(ctx, input.UserID)
 	if strings.TrimSpace(input.UserID) == "" {
 		return domain.MemoryGeneration{}, nil, errors.New("user id is required")
 	}
@@ -740,7 +749,7 @@ func (s *Repository) CreateRebuildGeneration(ctx context.Context, input domain.C
 	if err != nil {
 		return domain.MemoryGeneration{}, nil, err
 	}
-	if len(snapshots) == 0 {
+	if len(snapshots) == 0 && s.currentDB() == nil {
 		return domain.MemoryGeneration{}, nil, errors.New("no retained source snapshots are available for rebuild")
 	}
 
@@ -748,7 +757,7 @@ func (s *Repository) CreateRebuildGeneration(ctx context.Context, input domain.C
 	generation := domain.MemoryGeneration{
 		GenerationID:      uuid.NewString(),
 		UserID:            input.UserID,
-		WorkspaceID:       domain.PersonalWorkspaceID(input.UserID),
+		WorkspaceID:       security.WorkspaceID(ctx, input.UserID),
 		Status:            domain.MemoryGenerationStatusQueued,
 		Scope:             input.Scope,
 		ConversationID:    strings.TrimSpace(input.ConversationID),
@@ -774,7 +783,7 @@ func (s *Repository) CreateRebuildGeneration(ctx context.Context, input domain.C
 			ID:             uuid.NewString(),
 			GenerationID:   generation.GenerationID,
 			UserID:         input.UserID,
-			WorkspaceID:    domain.PersonalWorkspaceID(input.UserID),
+			WorkspaceID:    security.WorkspaceID(ctx, input.UserID),
 			SnapshotID:     snapshot.SnapshotID,
 			ConversationID: snapshot.ConversationID,
 			SourceHash:     snapshot.SourceHash,
@@ -789,7 +798,7 @@ func (s *Repository) CreateRebuildGeneration(ctx context.Context, input domain.C
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		for _, existing := range s.generations {
-			if sameScope(input.UserID, existing.UserID, existing.WorkspaceID) && !existing.IsActive && (existing.Status == domain.MemoryGenerationStatusQueued || existing.Status == domain.MemoryGenerationStatusRunning) {
+			if sameScope(ctx, input.UserID, existing.UserID, existing.WorkspaceID) && !existing.IsActive && (existing.Status == domain.MemoryGenerationStatusQueued || existing.Status == domain.MemoryGenerationStatusRunning) {
 				return domain.MemoryGeneration{}, nil, errors.New("memory rebuild already in progress")
 			}
 		}
@@ -821,7 +830,7 @@ func (s *Repository) CreateRebuildGeneration(ctx context.Context, input domain.C
             generation_id, user_id, status, scope, conversation_id, is_active, structure_version,
             embedding_version, embedding_model, activate_on_success, source_count, processed_count,
             embedding_count, failure_count, last_error, metadata, created_at, updated_at, activated_at
-        , workspace_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,0,0,'',$12,$13,$13,NULL, 'personal-' || encode(sha256(convert_to($2::text,'UTF8')),'hex'))
+        , workspace_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,0,0,'',$12,$13,$13,NULL, `+storeaccess.WorkspaceSQL(ctx, "$2::text")+`)
     `,
 		generation.GenerationID,
 		generation.UserID,
@@ -840,12 +849,18 @@ func (s *Repository) CreateRebuildGeneration(ctx context.Context, input domain.C
 	if err != nil {
 		return domain.MemoryGeneration{}, nil, err
 	}
+	if err = prepareCarriesTx(ctx, tx, &generation, active.GenerationID); err != nil {
+		return domain.MemoryGeneration{}, nil, err
+	}
+	if generation.SourceCount == 0 {
+		return domain.MemoryGeneration{}, nil, errors.New("no retained source snapshots or authoritative records available")
+	}
 	for _, item := range sourceItems {
 		_, err = tx.ExecContext(ctx, `
             INSERT INTO memory_generation_sources (
                 id, generation_id, user_id, snapshot_id, conversation_id, source_hash, status,
                 last_error, created_at, updated_at, processed_at
-            , workspace_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9,NULL, 'personal-' || encode(sha256(convert_to($3::text,'UTF8')),'hex'))
+            , workspace_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9,NULL, `+storeaccess.WorkspaceSQL(ctx, "$3::text")+`)
         `,
 			item.ID,
 			item.GenerationID,
@@ -858,6 +873,9 @@ func (s *Repository) CreateRebuildGeneration(ctx context.Context, input domain.C
 			now,
 		)
 		if err != nil {
+			return domain.MemoryGeneration{}, nil, err
+		}
+		if err = enqueueRebuildSourceTx(ctx, tx, item); err != nil {
 			return domain.MemoryGeneration{}, nil, err
 		}
 	}
@@ -878,7 +896,7 @@ func (s *Repository) ActivateCompletedGeneration(ctx context.Context, userID, ge
 }
 
 func (s *Repository) activateGeneration(ctx context.Context, userID, generationID string, automatic bool) (domain.MemoryGeneration, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemoryGeneration{}, err
 	}
 	if strings.TrimSpace(generationID) == "" {
@@ -903,7 +921,7 @@ func (s *Repository) activateGeneration(ctx context.Context, userID, generationI
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		generation, ok := s.generations[generationID]
-		if !ok || !sameScope(userID, generation.UserID, generation.WorkspaceID) {
+		if !ok || !sameScope(ctx, userID, generation.UserID, generation.WorkspaceID) {
 			return domain.MemoryGeneration{}, errors.New("memory generation not found")
 		}
 		if automatic && (generation.Status != domain.MemoryGenerationStatusCompleted || !generation.ActivateOnSuccess) {
@@ -913,7 +931,7 @@ func (s *Repository) activateGeneration(ctx context.Context, userID, generationI
 			return domain.MemoryGeneration{}, errors.New("memory generation is not ready for activation")
 		}
 		for id, item := range s.generations {
-			if !sameScope(userID, item.UserID, item.WorkspaceID) {
+			if !sameScope(ctx, userID, item.UserID, item.WorkspaceID) {
 				continue
 			}
 			item.IsActive = id == generationID
@@ -924,8 +942,8 @@ func (s *Repository) activateGeneration(ctx context.Context, userID, generationI
 			item.UpdatedAt = now
 			s.generations[id] = item
 		}
-		s.activeGenerations[userID] = generationID
-		s.pruneInMemoryHistoryLocked(userID, generationID, defaultRetainedInactiveGenerations, defaultRetainedSnapshotsPerDialogue)
+		s.activeGenerations[security.WorkspaceID(ctx, userID)] = generationID
+		s.pruneInMemoryHistoryLocked(ctx, userID, generationID, defaultRetainedInactiveGenerations, defaultRetainedSnapshotsPerDialogue)
 		return s.generations[generationID], nil
 	}
 	tx, err := db.BeginTx(ctx, nil)
@@ -946,27 +964,43 @@ func (s *Repository) activateGeneration(ctx context.Context, userID, generationI
 	if !canActivateGeneration(generation) {
 		return domain.MemoryGeneration{}, errors.New("memory generation is not ready for activation")
 	}
+	// Serialize against writes to the current generation before validating coverage.
+	rows, err := tx.QueryContext(ctx, `SELECT generation_id FROM memory_generations WHERE user_id=$1 AND workspace_id=$2 AND is_active AND generation_id<>$3 FOR UPDATE`, userID, generation.WorkspaceID, generationID)
+	if err != nil {
+		return domain.MemoryGeneration{}, err
+	}
+	if err = rows.Close(); err != nil {
+		return domain.MemoryGeneration{}, err
+	}
+	if !generation.IsActive {
+		if err = validateActivationTx(ctx, tx, generation); err != nil {
+			return domain.MemoryGeneration{}, err
+		}
+	}
+	if err = activateCarriesTx(ctx, tx, generation); err != nil {
+		return domain.MemoryGeneration{}, err
+	}
 	if _, err = tx.ExecContext(ctx, `
         UPDATE memory_generations
         SET is_active = FALSE, updated_at = $1
-        WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND user_id = $2 AND is_active = TRUE
+        WHERE workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND user_id = $2 AND is_active = TRUE
     `, now, userID); err != nil {
 		return domain.MemoryGeneration{}, err
 	}
 	if _, err = tx.ExecContext(ctx, `
         UPDATE memory_generations
         SET is_active = TRUE, status = $1, activated_at = $2, updated_at = $2
-        WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND generation_id = $3 AND user_id = $4
+        WHERE workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND generation_id = $3 AND user_id = $4
     `, string(domain.MemoryGenerationStatusActivated), now, generationID, userID); err != nil {
 		return domain.MemoryGeneration{}, err
 	}
 	conversationMetadata := string(marshalJSON(map[string]any{"memory_generation_id": generationID}))
-	if generation.GenerationID == CurrentGenerationID(userID) || generation.SourceCount == 0 {
+	if generation.GenerationID == CurrentGenerationID(security.WorkspaceIdentity(ctx, userID)) || generation.SourceCount == 0 {
 		if _, err = tx.ExecContext(ctx, `
         UPDATE conversations
         SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb,
             updated_at = $2
-        WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND user_id = $3
+        WHERE workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND user_id = $3
     `, conversationMetadata, now, userID); err != nil {
 			return domain.MemoryGeneration{}, err
 		}
@@ -974,11 +1008,11 @@ func (s *Repository) activateGeneration(ctx context.Context, userID, generationI
         UPDATE conversations
         SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb,
             updated_at = $2
-        WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND user_id = $3
+        WHERE workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND user_id = $3
           AND id IN (
               SELECT DISTINCT conversation_id
               FROM memory_generation_sources
-              WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND generation_id = $4 AND user_id = $3
+              WHERE workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND generation_id = $4 AND user_id = $3
           )
 	`, conversationMetadata, now, userID, generationID); err != nil {
 		return domain.MemoryGeneration{}, err
@@ -996,14 +1030,14 @@ func (s *Repository) activateGeneration(ctx context.Context, userID, generationI
 }
 
 func (s *Repository) DiscardGeneration(ctx context.Context, userID, generationID string) (domain.MemoryGeneration, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemoryGeneration{}, err
 	}
 	generationID = strings.TrimSpace(generationID)
 	if userID == "" || generationID == "" {
 		return domain.MemoryGeneration{}, errors.New("user id and generation id are required")
 	}
-	if generationID == CurrentGenerationID(userID) {
+	if generationID == CurrentGenerationID(security.WorkspaceIdentity(ctx, userID)) {
 		return domain.MemoryGeneration{}, errors.New("the bootstrap generation cannot be discarded")
 	}
 	generation, err := s.GetGeneration(ctx, userID, generationID)
@@ -1045,7 +1079,7 @@ func (s *Repository) DiscardGeneration(ctx context.Context, userID, generationID
 	var active bool
 	if err = tx.QueryRowContext(ctx, `
 		SELECT is_active FROM memory_generations
-		WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND generation_id = $1 AND user_id = $2
+		WHERE workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND generation_id = $1 AND user_id = $2
 		FOR UPDATE
 	`, generationID, userID).Scan(&active); err != nil {
 		return domain.MemoryGeneration{}, err
@@ -1056,7 +1090,7 @@ func (s *Repository) DiscardGeneration(ctx context.Context, userID, generationID
 	if err = deleteGenerationDataTx(ctx, tx, userID, generationID); err != nil {
 		return domain.MemoryGeneration{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `DELETE FROM memory_generation_sources WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND generation_id = $1 AND user_id = $2`, generationID, userID); err != nil {
+	if _, err = tx.ExecContext(ctx, `DELETE FROM memory_generation_sources WHERE workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND generation_id = $1 AND user_id = $2`, generationID, userID); err != nil {
 		return domain.MemoryGeneration{}, err
 	}
 	if _, err = tx.ExecContext(ctx, `
@@ -1064,7 +1098,7 @@ func (s *Repository) DiscardGeneration(ctx context.Context, userID, generationID
 		SET status = $1,
 		    metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('discarded_at', $2::timestamptz),
 		    updated_at = $2
-		WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND generation_id = $3 AND user_id = $4
+		WHERE workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND generation_id = $3 AND user_id = $4
 	`, string(domain.MemoryGenerationStatusDiscarded), now, generationID, userID); err != nil {
 		return domain.MemoryGeneration{}, err
 	}
@@ -1077,10 +1111,10 @@ func (s *Repository) DiscardGeneration(ctx context.Context, userID, generationID
 	return s.GetGeneration(ctx, userID, generationID)
 }
 
-func (s *Repository) pruneInMemoryHistoryLocked(userID, activeGenerationID string, retainGenerations, retainSnapshots int) {
+func (s *Repository) pruneInMemoryHistoryLocked(ctx context.Context, userID, activeGenerationID string, retainGenerations, retainSnapshots int) {
 	items := make([]domain.MemoryGeneration, 0)
 	for _, generation := range s.generations {
-		if sameScope(userID, generation.UserID, generation.WorkspaceID) && generation.GenerationID != activeGenerationID && !generation.IsActive && generation.Status == domain.MemoryGenerationStatusActivated {
+		if sameScope(ctx, userID, generation.UserID, generation.WorkspaceID) && generation.GenerationID != activeGenerationID && !generation.IsActive && generation.Status == domain.MemoryGenerationStatusActivated {
 			items = append(items, generation)
 		}
 	}
@@ -1114,7 +1148,7 @@ func (s *Repository) pruneInMemoryHistoryLocked(userID, activeGenerationID strin
 		referenced[source.SnapshotID] = struct{}{}
 	}
 	for key, ids := range s.sourceByConversation {
-		if len(ids) <= retainSnapshots || !sameScope(userID, s.sourceSnapshots[ids[0]].UserID, s.sourceSnapshots[ids[0]].WorkspaceID) {
+		if len(ids) <= retainSnapshots || !sameScope(ctx, userID, s.sourceSnapshots[ids[0]].UserID, s.sourceSnapshots[ids[0]].WorkspaceID) {
 			continue
 		}
 		keepFrom := len(ids) - retainSnapshots
@@ -1134,7 +1168,7 @@ func pruneGenerationHistoryTx(ctx context.Context, tx *sqlpkg.Tx, userID, active
 	rows, err := tx.QueryContext(ctx, `
 		SELECT generation_id
 		FROM memory_generations
-		WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND user_id = $1 AND generation_id <> $2 AND is_active = FALSE AND status = 'activated'
+		WHERE workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND user_id = $1 AND generation_id <> $2 AND is_active = FALSE AND status = 'activated'
 		ORDER BY activated_at DESC NULLS LAST, created_at DESC
 		OFFSET $3
 	`, userID, activeGenerationID, max(retain, 0))
@@ -1160,7 +1194,7 @@ func pruneGenerationHistoryTx(ctx context.Context, tx *sqlpkg.Tx, userID, active
 		if err = deleteGenerationDataTx(ctx, tx, userID, generationID); err != nil {
 			return err
 		}
-		if _, err = tx.ExecContext(ctx, `DELETE FROM memory_generation_sources WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND generation_id = $1 AND user_id = $2`, generationID, userID); err != nil {
+		if _, err = tx.ExecContext(ctx, `DELETE FROM memory_generation_sources WHERE workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND generation_id = $1 AND user_id = $2`, generationID, userID); err != nil {
 			return err
 		}
 		if _, err = tx.ExecContext(ctx, `
@@ -1168,7 +1202,7 @@ func pruneGenerationHistoryTx(ctx context.Context, tx *sqlpkg.Tx, userID, active
 			SET status = $1,
 			    metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('discarded_at', $2::timestamptz, 'discard_reason', 'retention'),
 			    updated_at = $2
-			WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND generation_id = $3 AND user_id = $4
+			WHERE workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND generation_id = $3 AND user_id = $4
 		`, string(domain.MemoryGenerationStatusDiscarded), now, generationID, userID); err != nil {
 			return err
 		}
@@ -1177,8 +1211,10 @@ func pruneGenerationHistoryTx(ctx context.Context, tx *sqlpkg.Tx, userID, active
 }
 
 func deleteGenerationDataTx(ctx context.Context, tx *sqlpkg.Tx, userID, generationID string) error {
-	nodeSet := `SELECT id FROM memory_nodes WHERE user_id=$1 AND generation_id=$2 AND workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex')`
+	nodeSet := `SELECT id FROM memory_nodes WHERE user_id=$1 AND generation_id=$2 AND workspace_id=` + storeaccess.WorkspaceSQL(ctx, "user_id") + ``
 	queries := []string{
+		`DELETE FROM memory_embeddings WHERE user_id=$1 AND generation_id=$2 AND workspace_id=` + storeaccess.WorkspaceSQL(ctx, "user_id"),
+		`DELETE FROM memory_generation_carries WHERE user_id=$1 AND generation_id=$2 AND workspace_id=` + storeaccess.WorkspaceSQL(ctx, "user_id"),
 		`DELETE FROM memory_keywords WHERE user_id=$1 AND summary_id IN (SELECT entity_id FROM memory_nodes WHERE id IN (` + nodeSet + `))`,
 		`DELETE FROM memory_evidences WHERE user_id=$1 AND node_id IN (` + nodeSet + `)`,
 		`DELETE FROM memory_relations WHERE user_id=$1 AND (src_node_id IN (` + nodeSet + `) OR dst_node_id IN (` + nodeSet + `))`,
@@ -1187,7 +1223,7 @@ func deleteGenerationDataTx(ctx context.Context, tx *sqlpkg.Tx, userID, generati
 		`DELETE FROM facts WHERE user_id=$1 AND node_id IN (` + nodeSet + `)`,
 		`DELETE FROM impressions WHERE user_id=$1 AND node_id IN (` + nodeSet + `)`,
 		`DELETE FROM memory_summaries WHERE user_id=$1 AND node_id IN (` + nodeSet + `)`,
-		`DELETE FROM conversation_segments WHERE user_id=$1 AND generation_id=$2 AND EXISTS (SELECT 1 FROM conversations c WHERE c.user_id=conversation_segments.user_id AND c.id=conversation_segments.conversation_id AND c.workspace_id='personal-' || encode(sha256(convert_to(c.user_id,'UTF8')),'hex'))`,
+		`DELETE FROM conversation_segments WHERE user_id=$1 AND generation_id=$2 AND EXISTS (SELECT 1 FROM conversations c WHERE c.user_id=conversation_segments.user_id AND c.id=conversation_segments.conversation_id AND c.workspace_id = ` + storeaccess.WorkspaceSQL(ctx, "c.user_id") + `)`,
 		`DELETE FROM memory_nodes WHERE id IN (` + nodeSet + `)`,
 	}
 	for _, query := range queries {
@@ -1207,17 +1243,17 @@ func pruneSourceSnapshotsTx(ctx context.Context, tx *sqlpkg.Tx, userID string, r
 			SELECT snapshot_id,
 			       ROW_NUMBER() OVER (PARTITION BY conversation_id ORDER BY snapshot_version DESC, updated_at DESC) AS snapshot_rank
 			FROM memory_source_snapshots
-			WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND user_id = $1
+			WHERE content_status='active' AND ` + storeaccess.PartitionSQL(ctx, "partition_id") + ` AND workspace_id=` + storeaccess.WorkspaceSQL(ctx, "user_id") + ` AND user_id = $1
 		) ranked
 		WHERE snapshot_rank > $2
 		  AND NOT EXISTS (
 			SELECT 1 FROM memory_generation_sources source
-			WHERE source.workspace_id='personal-' || encode(sha256(convert_to(source.user_id,'UTF8')),'hex') AND source.snapshot_id = ranked.snapshot_id AND source.user_id = $1
+			WHERE source.workspace_id = ` + storeaccess.WorkspaceSQL(ctx, "source.user_id") + ` AND source.snapshot_id = ranked.snapshot_id AND source.user_id = $1
 		  )`
-	if _, err := tx.ExecContext(ctx, `DELETE FROM memory_source_messages WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND snapshot_id IN (`+candidates+`)`, userID, retain); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM memory_source_messages WHERE workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND snapshot_id IN (`+candidates+`)`, userID, retain); err != nil {
 		return err
 	}
-	_, err := tx.ExecContext(ctx, `DELETE FROM memory_source_snapshots WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND snapshot_id IN (`+candidates+`)`, userID, retain)
+	_, err := tx.ExecContext(ctx, `DELETE FROM memory_source_snapshots WHERE workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND snapshot_id IN (`+candidates+`)`, userID, retain)
 	return err
 }
 
@@ -1236,7 +1272,7 @@ func (s *Repository) latestSnapshotsForScope(ctx context.Context, userID, scope,
 			defer s.mu.RUnlock()
 			items := make([]domain.MemorySourceSnapshot, 0)
 			for _, ids := range s.sourceByConversation {
-				if len(ids) == 0 || !sameScope(userID, s.sourceSnapshots[ids[0]].UserID, s.sourceSnapshots[ids[0]].WorkspaceID) {
+				if len(ids) == 0 || !sameScope(ctx, userID, s.sourceSnapshots[ids[0]].UserID, s.sourceSnapshots[ids[0]].WorkspaceID) {
 					continue
 				}
 				items = append(items, s.sourceSnapshots[ids[len(ids)-1]])
@@ -1250,7 +1286,7 @@ func (s *Repository) latestSnapshotsForScope(ctx context.Context, userID, scope,
                 upstream_provider, mode, finalize_status, metadata, usage, message_count,
                 message_parts, part_artifacts, created_at, updated_at
             FROM memory_source_snapshots
-            WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND user_id = $1
+            WHERE content_status='active' AND `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND user_id = $1
             ORDER BY conversation_id, snapshot_version DESC
         `, userID)
 		if err != nil {
@@ -1259,7 +1295,7 @@ func (s *Repository) latestSnapshotsForScope(ctx context.Context, userID, scope,
 		defer rows.Close()
 		items := make([]domain.MemorySourceSnapshot, 0)
 		for rows.Next() {
-			item, err := scanSnapshot(rows)
+			item, err := scanSnapshot(ctx, rows)
 			if err != nil {
 				return nil, err
 			}
@@ -1280,10 +1316,10 @@ func (s *Repository) activeGenerationFromDB(ctx context.Context, userID string) 
                embedding_version, embedding_model, activate_on_success, source_count, processed_count,
                embedding_count, failure_count, last_error, metadata, created_at, updated_at, activated_at
         FROM memory_generations
-        WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND user_id = $1 AND is_active = TRUE
+        WHERE workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND user_id = $1 AND is_active = TRUE
         LIMIT 1
     `, userID)
-	generation, err := scanGeneration(row)
+	generation, err := scanGeneration(ctx, row)
 	if err != nil {
 		if errors.Is(err, sqlpkg.ErrNoRows) {
 			return domain.MemoryGeneration{}, false, nil
@@ -1318,11 +1354,11 @@ func latestSnapshotHeader(ctx context.Context, db rowQueryer, userID, conversati
                upstream_provider, mode, finalize_status, metadata, usage, message_count,
                message_parts, part_artifacts, created_at, updated_at
         FROM memory_source_snapshots
-        WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND user_id = $1 AND conversation_id = $2
+        WHERE content_status='active' AND `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND user_id = $1 AND conversation_id = $2
         ORDER BY snapshot_version DESC
         LIMIT 1
     `, userID, conversationID)
-	snapshot, err := scanSnapshot(row)
+	snapshot, err := scanSnapshot(ctx, row)
 	if err != nil {
 		if errors.Is(err, sqlpkg.ErrNoRows) {
 			return domain.MemorySourceSnapshot{}, false, nil
@@ -1340,7 +1376,7 @@ func (s *Repository) loadSnapshotMessages(ctx context.Context, userID, snapshotI
 	rows, err := db.QueryContext(ctx, `
         SELECT role, text_content, content_blocks, tool_calls, tool_result, provider_payload
         FROM memory_source_messages
-        WHERE workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex') AND snapshot_id = $1 AND user_id=$2
+        WHERE `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND workspace_id=`+storeaccess.WorkspaceSQL(ctx, "user_id")+` AND snapshot_id = $1 AND user_id=$2 AND EXISTS(SELECT 1 FROM memory_source_snapshots parent WHERE parent.snapshot_id=$1 AND parent.user_id=$2 AND parent.content_status='active')
         ORDER BY sequence_num ASC
     `, snapshotID, userID)
 	if err != nil {
@@ -1365,12 +1401,28 @@ func (s *Repository) loadSnapshotMessages(ctx context.Context, userID, snapshotI
 			message.ToolResults = []domain.ToolResult{toolResult}
 		}
 		_ = json.Unmarshal(metadataBytes, &message.Metadata)
+		if raw, ok := message.Metadata["trusted_source"]; ok {
+			payload, err := json.Marshal(raw)
+			if err != nil {
+				return nil, err
+			}
+			var source domain.MessageSource
+			if err = json.Unmarshal(payload, &source); err != nil {
+				return nil, err
+			}
+			if source.WorkspaceID != security.WorkspaceID(ctx, userID) {
+				return nil, domain.ErrAccessDenied
+			}
+			message.Source = &source
+			delete(message.Metadata, "trusted_source")
+		}
+
 		items = append(items, message)
 	}
 	return items, rows.Err()
 }
 
-func scanGeneration(scanner interface{ Scan(dest ...any) error }) (domain.MemoryGeneration, error) {
+func scanGeneration(ctx context.Context, scanner interface{ Scan(dest ...any) error }) (domain.MemoryGeneration, error) {
 	var generation domain.MemoryGeneration
 	var conversationID sqlpkg.NullString
 	var lastError sqlpkg.NullString
@@ -1410,11 +1462,11 @@ func scanGeneration(scanner interface{ Scan(dest ...any) error }) (domain.Memory
 	if activatedAt.Valid {
 		generation.ActivatedAt = &activatedAt.Time
 	}
-	generation.WorkspaceID = domain.PersonalWorkspaceID(generation.UserID)
+	generation.WorkspaceID = security.WorkspaceID(ctx, generation.UserID)
 	return generation, nil
 }
 
-func scanSnapshot(scanner interface{ Scan(dest ...any) error }) (domain.MemorySourceSnapshot, error) {
+func scanSnapshot(ctx context.Context, scanner interface{ Scan(dest ...any) error }) (domain.MemorySourceSnapshot, error) {
 	var snapshot domain.MemorySourceSnapshot
 	var provider string
 	var mode string
@@ -1455,7 +1507,7 @@ func scanSnapshot(scanner interface{ Scan(dest ...any) error }) (domain.MemorySo
 	if err = json.Unmarshal(artifactsBytes, &snapshot.Artifacts); err != nil {
 		return domain.MemorySourceSnapshot{}, err
 	}
-	snapshot.WorkspaceID = domain.PersonalWorkspaceID(snapshot.UserID)
+	snapshot.WorkspaceID = security.WorkspaceID(ctx, snapshot.UserID)
 	snapshot.Parts, err = domain.NormalizeMessageParts(snapshot.UserID, snapshot.WorkspaceID, snapshot.ConversationID, snapshot.Parts)
 	if err != nil {
 		return domain.MemorySourceSnapshot{}, err
@@ -1467,7 +1519,7 @@ func scanSnapshot(scanner interface{ Scan(dest ...any) error }) (domain.MemorySo
 	return snapshot, nil
 }
 
-func scanGenerationSource(scanner interface{ Scan(dest ...any) error }) (domain.MemoryGenerationSource, error) {
+func scanGenerationSource(ctx context.Context, scanner interface{ Scan(dest ...any) error }) (domain.MemoryGenerationSource, error) {
 	var item domain.MemoryGenerationSource
 	var lastError sqlpkg.NullString
 	var processedAt sqlpkg.NullTime
@@ -1493,12 +1545,12 @@ func scanGenerationSource(scanner interface{ Scan(dest ...any) error }) (domain.
 	if processedAt.Valid {
 		item.ProcessedAt = &processedAt.Time
 	}
-	item.WorkspaceID = domain.PersonalWorkspaceID(item.UserID)
+	item.WorkspaceID = security.WorkspaceID(ctx, item.UserID)
 	return item, nil
 }
 
-func sourceConversationKey(userID, conversationID string) string {
-	return string(marshalJSON([]string{userID, domain.PersonalWorkspaceID(userID), conversationID}))
+func sourceConversationKey(ctx context.Context, userID, conversationID string) string {
+	return string(marshalJSON([]string{userID, security.WorkspaceID(ctx, userID), conversationID}))
 }
 
 func marshalJSON(value any) []byte {
@@ -1561,12 +1613,24 @@ func max(left, right int) int {
 	return right
 }
 
-func sameScope(user, owner, workspace string) bool {
-	return owner == user && workspace == domain.PersonalWorkspaceID(user)
+func sameScope(ctx context.Context, user, owner, workspace string) bool {
+	return owner == user && workspace == security.WorkspaceID(ctx, user)
 }
 
 func ensureWorkspaceTx(ctx context.Context, tx *sqlpkg.Tx, user string) error {
-	_, err := tx.ExecContext(ctx, `INSERT INTO workspaces(id,user_id,name,capabilities) VALUES($1,$2,'Personal','["gateway.invoke","memory.read","memory.edit","files.read","files.write"]') ON CONFLICT DO NOTHING`, domain.PersonalWorkspaceID(user), user)
+	workspace, err := security.DataScope(ctx, user, "")
+	if err != nil {
+		return err
+	}
+	if workspace != domain.PersonalWorkspaceID(user) {
+		var id string
+		err := tx.QueryRowContext(ctx, `SELECT id FROM workspaces WHERE user_id=$1 AND id=$2 AND status='active' FOR SHARE`, user, workspace).Scan(&id)
+		if errors.Is(err, sqlpkg.ErrNoRows) {
+			return domain.ErrAccessDenied
+		}
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO workspaces(id,user_id,name,capabilities) VALUES($1,$2,'Personal','["gateway.invoke","memory.read","memory.edit","files.read","files.write"]') ON CONFLICT DO NOTHING`, security.WorkspaceID(ctx, user), user)
 	return err
 }
 
@@ -1574,12 +1638,12 @@ func lockWorkspaceTx(ctx context.Context, tx *sqlpkg.Tx, user string) error {
 	if err := ensureWorkspaceTx(ctx, tx, user); err != nil {
 		return err
 	}
-	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "generation:"+domain.PersonalWorkspaceID(user))
+	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "generation:"+security.WorkspaceID(ctx, user))
 	return err
 }
 
 const generationColumns = `generation_id,user_id,status,scope,conversation_id,is_active,structure_version,embedding_version,embedding_model,activate_on_success,source_count,processed_count,embedding_count,failure_count,last_error,metadata,created_at,updated_at,activated_at`
 
 func lockGenerationTx(ctx context.Context, tx *sqlpkg.Tx, user, id string) (domain.MemoryGeneration, error) {
-	return scanGeneration(tx.QueryRowContext(ctx, `SELECT `+generationColumns+` FROM memory_generations WHERE user_id=$1 AND workspace_id=$2 AND generation_id=$3 FOR UPDATE`, user, domain.PersonalWorkspaceID(user), id))
+	return scanGeneration(ctx, tx.QueryRowContext(ctx, `SELECT `+generationColumns+` FROM memory_generations WHERE user_id=$1 AND workspace_id=$2 AND generation_id=$3 FOR UPDATE`, user, security.WorkspaceID(ctx, user), id))
 }

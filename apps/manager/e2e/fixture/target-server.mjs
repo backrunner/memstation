@@ -1,3 +1,4 @@
+import { memoryServiceFixture } from './memory-service.mjs';
 import http from 'node:http';
 import { argon2Sync, randomUUID, timingSafeEqual } from 'node:crypto';
 
@@ -1966,6 +1967,8 @@ const server = http.createServer(async (req, res) => {
     const pageItems = items.slice(0,limit), last = pageItems.at(-1);
     json(req,res,{items:clone(pageItems),next_cursor:items.length>limit ? Buffer.from(JSON.stringify({scope,id:id(last),updated_at:last.updated_at})).toString('base64url') : ''}); return;
   }
+
+  if (await memoryServiceFixture(req,res,url,state,{json,readJSON,nowISO})) return;
 
   const workspaceMatch = url.pathname.match(/^\/api\/admin\/workspaces(?:\/([^/]+))?$/);
   if (workspaceMatch) {

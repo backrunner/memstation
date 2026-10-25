@@ -106,7 +106,7 @@ func (r *InMemoryConversationRepository) GetConversation(ctx context.Context, us
 }
 
 func (r *InMemoryConversationRepository) GetConversationInGeneration(ctx context.Context, userID, conversationID, generationID string) (domain.ConversationRecord, error) {
-	workspace, err := security.PersonalScope(ctx, userID, "")
+	workspace, err := security.DataScope(ctx, userID, "")
 	if err != nil {
 		return domain.ConversationRecord{}, err
 	}
@@ -134,7 +134,7 @@ func (r *InMemoryConversationRepository) GetConversationInGeneration(ctx context
 }
 
 func (r *InMemoryConversationRepository) ListConversations(ctx context.Context, userID string) ([]domain.ConversationRecord, error) {
-	workspace, err := security.PersonalScope(ctx, userID, "")
+	workspace, err := security.DataScope(ctx, userID, "")
 	if err != nil {
 		return nil, err
 	}
@@ -150,12 +150,12 @@ func (r *InMemoryConversationRepository) ListConversations(ctx context.Context, 
 	return out, nil
 }
 
-func (r *InMemoryConversationRepository) ListTimedOutConversations(_ context.Context, before time.Time, limit int) ([]domain.ConversationRecord, error) {
+func (r *InMemoryConversationRepository) ListTimedOutConversations(ctx context.Context, before time.Time, limit int) ([]domain.ConversationRecord, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make([]domain.ConversationRecord, 0)
 	for _, conversation := range r.conversations {
-		if conversation.FinalizeStatus == domain.FinalizeStatusActive && conversation.WorkspaceID == domain.PersonalWorkspaceID(conversation.UserID) && conversation.UpdatedAt.Before(before) {
+		if conversation.FinalizeStatus == domain.FinalizeStatusActive && conversation.WorkspaceID == security.WorkspaceID(ctx, conversation.UserID) && conversation.UpdatedAt.Before(before) {
 			out = append(out, conversation)
 		}
 	}
@@ -223,7 +223,7 @@ func (r *InMemoryConversationRepository) FinalizeConversation(ctx context.Contex
 }
 
 func (r *InMemoryConversationRepository) UpdateConversationState(ctx context.Context, input domain.ConversationStateUpdate) error {
-	workspace, err := security.PersonalScope(ctx, input.UserID, "")
+	workspace, err := security.DataScope(ctx, input.UserID, "")
 	if err != nil {
 		return err
 	}
@@ -284,10 +284,10 @@ func NewInMemoryMemoryRepository() *InMemoryMemoryRepository {
 }
 
 func (r *InMemoryMemoryRepository) Search(ctx context.Context, input domain.SearchInput) (domain.SearchResult, error) {
-	if _, err := security.PersonalScope(ctx, input.UserID, input.WorkspaceID); err != nil {
+	if _, err := security.DataScope(ctx, input.UserID, input.WorkspaceID); err != nil {
 		return domain.SearchResult{}, err
 	}
-	input.WorkspaceID = domain.PersonalWorkspaceID(input.UserID)
+	input.WorkspaceID = security.WorkspaceID(ctx, input.UserID)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	query := strings.ToLower(strings.TrimSpace(input.Query))
@@ -297,7 +297,7 @@ func (r *InMemoryMemoryRepository) Search(ctx context.Context, input domain.Sear
 		if doc.UserID != input.UserID {
 			continue
 		}
-		if !matchesDocumentGeneration(input.UserID, input.GenerationID, doc) {
+		if !matchesDocumentGeneration(ctx, input.UserID, input.GenerationID, doc) {
 			continue
 		}
 		if len(input.MemoryTypes) > 0 {
@@ -337,15 +337,18 @@ func (r *InMemoryMemoryRepository) Search(ctx context.Context, input domain.Sear
 }
 
 func (r *InMemoryMemoryRepository) StoreDocument(ctx context.Context, doc domain.MemoryDocument) error {
-	if _, err := security.PersonalScope(ctx, doc.UserID, doc.WorkspaceID); err != nil {
+	if _, err := security.DataScope(ctx, doc.UserID, doc.WorkspaceID); err != nil {
 		return err
 	}
-	doc.WorkspaceID = domain.PersonalWorkspaceID(doc.UserID)
+	doc.WorkspaceID = security.WorkspaceID(ctx, doc.UserID)
+	if err := prepareDocumentAccess(ctx, &doc); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := time.Now().UTC()
 	if doc.Type != domain.MemoryTypeKeyMemory && strings.TrimSpace(doc.GenerationID) == "" {
-		doc.GenerationID = currentGenerationID(doc.UserID)
+		doc.GenerationID = currentGenerationID(security.WorkspaceIdentity(ctx, doc.UserID))
 	}
 	hadExplicitID := strings.TrimSpace(doc.ID) != ""
 	hadExplicitNodeID := strings.TrimSpace(doc.NodeID) != ""
@@ -380,18 +383,18 @@ func (r *InMemoryMemoryRepository) StoreDocument(ctx context.Context, doc domain
 			}
 		}
 		if seq := factLineageRevisionSeqFromMetadata(doc.Metadata); seq <= 0 {
-			doc.Metadata["revision_seq"] = r.nextFactRevisionSeqLocked(doc)
+			doc.Metadata["revision_seq"] = r.nextFactRevisionSeqLocked(ctx, doc)
 		}
 	}
 	if doc.NodeID == "" {
 		doc.NodeID = defaultMemoryNodeID(doc.UserID, doc.Type, doc.ID)
 	}
-	if r.nodeOutsidePersonalLocked(doc.UserID, doc.NodeID) {
+	if r.nodeOutsidePersonalLocked(ctx, doc.UserID, doc.NodeID) {
 		return domain.ErrAccessDenied
 	}
 	documentKey := key(doc.UserID, doc.ID)
 	existing, existed := r.documents[documentKey]
-	if existed && (!personalMemoryWorkspace(doc.UserID, existing.WorkspaceID) || existing.UserID != doc.UserID || existing.NodeID != doc.NodeID || existing.Type != doc.Type) {
+	if existed && (!documentVisible(ctx, existing) || existing.UserID != doc.UserID || existing.NodeID != doc.NodeID || existing.Type != doc.Type) {
 		return domain.ErrAccessDenied
 	}
 	if existed {
@@ -410,7 +413,7 @@ func (r *InMemoryMemoryRepository) StoreDocument(ctx context.Context, doc domain
 		supersessionStateSpecified := metadataContainsKey(doc.Metadata, "superseded_by_id") || metadataContainsKey(doc.Metadata, "is_superseded")
 		temporal := metadataTimePtr(doc.Metadata, "valid_from") != nil && factLineageGroupIDFromMetadata(doc.Metadata) != ""
 		if temporal && !metadataContainsKey(doc.Metadata, "supersedes_fact_ids") && !supersessionStateSpecified && len(supersededFactIDsFromMetadata(doc.Metadata)) == 0 {
-			previous, next, nextTime := r.factTemporalNeighborsLocked(doc)
+			previous, next, nextTime := r.factTemporalNeighborsLocked(ctx, doc)
 			if previous != "" {
 				doc.Metadata["supersedes_fact_ids"] = []string{previous}
 			}
@@ -421,7 +424,7 @@ func (r *InMemoryMemoryRepository) StoreDocument(ctx context.Context, doc domain
 			}
 		}
 		if !temporal && !metadataContainsKey(doc.Metadata, "supersedes_fact_ids") && !supersessionStateSpecified && !boolMetadataValue(doc.Metadata, "is_superseded") && stringMetadataValue(doc.Metadata, "superseded_by_id") == "" && len(supersededFactIDsFromMetadata(doc.Metadata)) == 0 {
-			if heads := r.currentFactLineageHeadIDsLocked(doc); len(heads) > 0 {
+			if heads := r.currentFactLineageHeadIDsLocked(ctx, doc); len(heads) > 0 {
 				doc.Metadata["supersedes_fact_ids"] = heads
 			}
 		}
@@ -433,7 +436,7 @@ func (r *InMemoryMemoryRepository) StoreDocument(ctx context.Context, doc domain
 	}
 	r.documents[documentKey] = doc
 	if doc.Type == domain.MemoryTypeFact {
-		if err := r.syncFactSupersedesLocked(doc); err != nil {
+		if err := r.syncFactSupersedesLocked(ctx, doc); err != nil {
 			if existed {
 				r.documents[documentKey] = existing
 			} else {
@@ -442,22 +445,22 @@ func (r *InMemoryMemoryRepository) StoreDocument(ctx context.Context, doc domain
 			return err
 		}
 	}
-	r.syncTemporalRelationsLocked(doc.UserID, doc.GenerationID, doc.NodeID, doc.ActivityAt)
+	r.syncTemporalRelationsLocked(ctx, doc.UserID, doc.GenerationID, doc.NodeID, doc.ActivityAt)
 	if doc.Type == domain.MemoryTypeFact {
-		r.captureFactHistoryLocked(doc.UserID)
+		r.captureFactHistoryLocked(ctx, doc.UserID)
 	}
 	return nil
 }
 
 func (r *InMemoryMemoryRepository) DeleteDocument(ctx context.Context, userID, id string, kind domain.MemoryType) error {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	doc, ok := r.documents[key(userID, id)]
-	if !ok || doc.Type != kind || !personalMemoryWorkspace(userID, doc.WorkspaceID) {
+	if !ok || doc.Type != kind || !documentVisible(ctx, doc) {
 		return nil
 	}
 	delete(r.documents, key(userID, id))
@@ -476,14 +479,14 @@ func (r *InMemoryMemoryRepository) DeleteDocument(ctx context.Context, userID, i
 }
 
 func (r *InMemoryMemoryRepository) DeleteSegmentsByConversation(ctx context.Context, userID, conversationID string, keepIDs []string) ([]string, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	return r.DeleteSegmentsByConversationInGeneration(ctx, userID, "", conversationID, keepIDs)
 }
 
 func (r *InMemoryMemoryRepository) DeleteSegmentsByConversationInGeneration(ctx context.Context, userID, generationID, conversationID string, keepIDs []string) ([]string, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	r.mu.Lock()
@@ -504,7 +507,7 @@ func (r *InMemoryMemoryRepository) DeleteSegmentsByConversationInGeneration(ctx 
 		if doc.UserID != userID || doc.Type != domain.MemoryTypeSegment || doc.ConversationID != conversationID {
 			continue
 		}
-		if !matchesDocumentGeneration(userID, generationID, doc) {
+		if !matchesDocumentGeneration(ctx, userID, generationID, doc) {
 			continue
 		}
 		if _, ok := keep[doc.ID]; ok {
@@ -539,34 +542,34 @@ func (r *InMemoryMemoryRepository) DeleteSegmentsByConversationInGeneration(ctx 
 }
 
 func (r *InMemoryMemoryRepository) GetDocument(ctx context.Context, userID, id string, kind domain.MemoryType) (domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemoryDocument{}, err
 	}
 	return r.GetDocumentInGeneration(ctx, userID, "", id, kind)
 }
 
 func (r *InMemoryMemoryRepository) GetDocumentInGeneration(ctx context.Context, userID, generationID, id string, kind domain.MemoryType) (domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemoryDocument{}, err
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	doc, ok := r.documents[key(userID, id)]
-	if !ok || doc.Type != kind || !matchesDocumentGeneration(userID, generationID, doc) {
+	if !ok || doc.Type != kind || !matchesDocumentGeneration(ctx, userID, generationID, doc) {
 		return domain.MemoryDocument{}, errors.New("memory document not found")
 	}
-	return attachDocumentRuntimeMetadata(doc), nil
+	return attachDocumentRuntimeMetadata(ctx, doc), nil
 }
 
 func (r *InMemoryMemoryRepository) ListDocuments(ctx context.Context, userID string, memoryTypes []domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	return r.ListDocumentsInGeneration(ctx, userID, "", memoryTypes, limit)
 }
 
 func (r *InMemoryMemoryRepository) ListDocumentsInGeneration(ctx context.Context, userID, generationID string, memoryTypes []domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	r.mu.RLock()
@@ -576,13 +579,13 @@ func (r *InMemoryMemoryRepository) ListDocumentsInGeneration(ctx context.Context
 		if doc.UserID != userID {
 			continue
 		}
-		if !matchesDocumentGeneration(userID, generationID, doc) {
+		if !matchesDocumentGeneration(ctx, userID, generationID, doc) {
 			continue
 		}
 		if !matchesMemoryType(doc.Type, memoryTypes) {
 			continue
 		}
-		out = append(out, attachDocumentRuntimeMetadata(doc))
+		out = append(out, attachDocumentRuntimeMetadata(ctx, doc))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })
 	if limit > 0 && len(out) > limit {
@@ -592,14 +595,14 @@ func (r *InMemoryMemoryRepository) ListDocumentsInGeneration(ctx context.Context
 }
 
 func (r *InMemoryMemoryRepository) ListDocumentsByNodeIDs(ctx context.Context, userID string, nodeIDs []string) ([]domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	return r.ListDocumentsByNodeIDsInGeneration(ctx, userID, "", nodeIDs)
 }
 
 func (r *InMemoryMemoryRepository) ListDocumentsByNodeIDsInGeneration(ctx context.Context, userID, generationID string, nodeIDs []string) ([]domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	r.mu.RLock()
@@ -616,11 +619,11 @@ func (r *InMemoryMemoryRepository) ListDocumentsByNodeIDsInGeneration(ctx contex
 		if doc.UserID != userID {
 			continue
 		}
-		if !matchesDocumentGeneration(userID, generationID, doc) {
+		if !matchesDocumentGeneration(ctx, userID, generationID, doc) {
 			continue
 		}
 		if _, ok := allowed[doc.NodeID]; ok {
-			out = append(out, attachDocumentRuntimeMetadata(doc))
+			out = append(out, attachDocumentRuntimeMetadata(ctx, doc))
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })
@@ -628,7 +631,7 @@ func (r *InMemoryMemoryRepository) ListDocumentsByNodeIDsInGeneration(ctx contex
 }
 
 func (r *InMemoryMemoryRepository) SearchKeywordMatches(ctx context.Context, userID, generationID, query string, limit int) ([]domain.KeywordMatch, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	r.mu.RLock()
@@ -643,10 +646,10 @@ func (r *InMemoryMemoryRepository) SearchKeywordMatches(ctx context.Context, use
 
 	matches := make([]domain.KeywordMatch, 0)
 	for _, doc := range r.documents {
-		if doc.UserID != userID || (doc.Type != domain.MemoryTypeSummary && doc.Type != domain.MemoryTypeFact) {
+		if doc.UserID != userID || !documentVisible(ctx, doc) || (doc.Type != domain.MemoryTypeSummary && doc.Type != domain.MemoryTypeFact) {
 			continue
 		}
-		if !matchesDocumentGeneration(userID, generationID, doc) {
+		if !matchesDocumentGeneration(ctx, userID, generationID, doc) {
 			continue
 		}
 		keywords := stringSliceMetadataValue(doc.Metadata, "keywords")
@@ -675,21 +678,21 @@ func (r *InMemoryMemoryRepository) SearchKeywordMatches(ctx context.Context, use
 }
 
 func (r *InMemoryMemoryRepository) ListDocumentsByConversation(ctx context.Context, userID, conversationID string) ([]domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	return r.ListDocumentsByConversationInGeneration(ctx, userID, "", conversationID)
 }
 
 func (r *InMemoryMemoryRepository) ListDocumentsByConversationInGeneration(ctx context.Context, userID, generationID, conversationID string) ([]domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	return r.ListConversationDocumentsInGeneration(ctx, userID, generationID, conversationID, false)
 }
 
 func (r *InMemoryMemoryRepository) ListConversationDocumentsInGeneration(ctx context.Context, userID, generationID, conversationID string, includeSegments bool) ([]domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	r.mu.RLock()
@@ -702,10 +705,10 @@ func (r *InMemoryMemoryRepository) ListConversationDocumentsInGeneration(ctx con
 		if doc.Type == domain.MemoryTypeSegment && !includeSegments {
 			continue
 		}
-		if !matchesDocumentGeneration(userID, generationID, doc) {
+		if !matchesDocumentGeneration(ctx, userID, generationID, doc) {
 			continue
 		}
-		out = append(out, attachDocumentRuntimeMetadata(doc))
+		out = append(out, attachDocumentRuntimeMetadata(ctx, doc))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })
 	return out, nil
@@ -720,13 +723,13 @@ func (r *InMemoryMemoryRepository) UpdateDocumentConditional(ctx context.Context
 }
 
 func (r *InMemoryMemoryRepository) updateDocument(ctx context.Context, userID, id string, kind domain.MemoryType, content string, condition *domain.MemoryWriteCondition) (domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemoryDocument{}, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	doc, ok := r.documents[key(userID, id)]
-	if !ok || doc.Type != kind || !personalMemoryWorkspace(userID, doc.WorkspaceID) {
+	if !ok || doc.Type != kind || !documentVisible(ctx, doc) {
 		return domain.MemoryDocument{}, domain.ErrAccessNotFound
 	}
 	if condition != nil && (!condition.UpdatedAt.Equal(doc.UpdatedAt) || condition.GenerationID != doc.GenerationID || kind == domain.MemoryTypeSegment || (kind == domain.MemoryTypeFact && (doc.Metadata["is_superseded"] == true || stringMetadataValue(doc.Metadata, "superseded_by_id") != ""))) {
@@ -744,20 +747,20 @@ func (r *InMemoryMemoryRepository) updateDocument(ctx context.Context, userID, i
 	doc.Metadata["manually_edited"] = true
 	r.documents[key(userID, id)] = doc
 	if kind == domain.MemoryTypeFact {
-		r.captureFactHistoryLocked(userID)
+		r.captureFactHistoryLocked(ctx, userID)
 	}
 	r.editAudit(ctx, userID, "update_memory_document", string(kind), id, condition)
-	return attachDocumentRuntimeMetadata(doc), nil
+	return attachDocumentRuntimeMetadata(ctx, doc), nil
 }
 
 func (r *InMemoryMemoryRepository) ListFactLineage(ctx context.Context, userID, generationID, factID string) (domain.FactLineage, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.FactLineage{}, err
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	doc, ok := r.documents[key(userID, factID)]
-	if !ok || doc.Type != domain.MemoryTypeFact || !matchesDocumentGeneration(userID, generationID, doc) {
+	if !ok || doc.Type != domain.MemoryTypeFact || !matchesDocumentGeneration(ctx, userID, generationID, doc) {
 		return domain.FactLineage{}, errors.New("memory document not found")
 	}
 	lineageGroupID := factLineageGroupIDFromMetadata(doc.Metadata)
@@ -773,11 +776,11 @@ func (r *InMemoryMemoryRepository) ListFactLineage(ctx context.Context, userID, 
 			LineagePath:    []string{doc.ID},
 		}, nil
 	}
-	return r.factLineageByGroupLocked(userID, generationID, lineageGroupID), nil
+	return r.factLineageByGroupLocked(ctx, userID, generationID, lineageGroupID), nil
 }
 
 func (r *InMemoryMemoryRepository) ListFactLineageByKey(ctx context.Context, userID, generationID, factKey string) (domain.FactLineage, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.FactLineage{}, err
 	}
 	r.mu.RLock()
@@ -786,13 +789,13 @@ func (r *InMemoryMemoryRepository) ListFactLineageByKey(ctx context.Context, use
 	if !strings.HasPrefix(lineageGroupID, "fact-lineage:") {
 		lineageGroupID = "fact-lineage:" + strings.TrimSpace(userID) + ":" + sanitizeLineageKey(factKey)
 	}
-	return r.factLineageByGroupLocked(userID, generationID, lineageGroupID), nil
+	return r.factLineageByGroupLocked(ctx, userID, generationID, lineageGroupID), nil
 }
 
-func (r *InMemoryMemoryRepository) factLineageByGroupLocked(userID, generationID, lineageGroupID string) domain.FactLineage {
+func (r *InMemoryMemoryRepository) factLineageByGroupLocked(ctx context.Context, userID, generationID, lineageGroupID string) domain.FactLineage {
 	entries := make([]domain.FactLineageEntry, 0)
 	for _, doc := range r.documents {
-		if doc.UserID != userID || doc.Type != domain.MemoryTypeFact || !matchesDocumentGeneration(userID, generationID, doc) {
+		if doc.UserID != userID || doc.Type != domain.MemoryTypeFact || !matchesDocumentGeneration(ctx, userID, generationID, doc) {
 			continue
 		}
 		if lineageGroupID != "" && factLineageGroupIDFromMetadata(doc.Metadata) != lineageGroupID {
@@ -808,14 +811,14 @@ func (r *InMemoryMemoryRepository) factLineageByGroupLocked(userID, generationID
 }
 
 func (r *InMemoryMemoryRepository) ListKeyMemories(ctx context.Context, userID string, limit int) ([]domain.KeyMemory, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make([]domain.KeyMemory, 0)
 	for _, km := range r.keyMemories {
-		if km.UserID == userID && personalMemoryWorkspace(userID, km.WorkspaceID) {
+		if km.UserID == userID && (personalMemoryWorkspace(ctx, userID, km.WorkspaceID) && security.CanReadPartition(ctx, km.PartitionID)) {
 			km.Importance = domain.ClampImportance(km.Importance)
 			km.DecayFactor = domain.ClampDecayFactor(km.DecayFactor)
 			km.ActivityAt = domain.DeriveActivityAt(km.ActivityAt, km.UpdatedAt, km.CreatedAt)
@@ -832,26 +835,26 @@ func (r *InMemoryMemoryRepository) ListKeyMemories(ctx context.Context, userID s
 }
 
 func (r *InMemoryMemoryRepository) GetKeyMemory(ctx context.Context, userID, memoryKey string) (domain.KeyMemory, bool, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.KeyMemory{}, false, err
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	km, ok := r.keyMemories[key(userID, strings.TrimSpace(memoryKey))]
-	if !ok || !personalMemoryWorkspace(userID, km.WorkspaceID) {
+	km, ok := r.keyMemories[key(security.ScopedIdentity(ctx, userID), strings.TrimSpace(memoryKey))]
+	if !ok || (!personalMemoryWorkspace(ctx, userID, km.WorkspaceID) || !security.CanReadPartition(ctx, km.PartitionID)) {
 		return domain.KeyMemory{}, false, nil
 	}
 	return hydrateKeyMemory(km), true, nil
 }
 
 func (r *InMemoryMemoryRepository) GetKeyMemoryByID(ctx context.Context, userID, id string) (domain.KeyMemory, bool, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.KeyMemory{}, false, err
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, km := range r.keyMemories {
-		if km.UserID == userID && personalMemoryWorkspace(userID, km.WorkspaceID) && km.ID == strings.TrimSpace(id) {
+		if km.UserID == userID && (personalMemoryWorkspace(ctx, userID, km.WorkspaceID) && security.CanReadPartition(ctx, km.PartitionID)) && km.ID == strings.TrimSpace(id) {
 			return hydrateKeyMemory(km), true, nil
 		}
 	}
@@ -859,14 +862,14 @@ func (r *InMemoryMemoryRepository) GetKeyMemoryByID(ctx context.Context, userID,
 }
 
 func (r *InMemoryMemoryRepository) CountKeyMemories(ctx context.Context, userID string) (int, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return 0, err
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	count := 0
 	for _, km := range r.keyMemories {
-		if km.UserID == userID && personalMemoryWorkspace(userID, km.WorkspaceID) {
+		if km.UserID == userID && (personalMemoryWorkspace(ctx, userID, km.WorkspaceID) && security.CanReadPartition(ctx, km.PartitionID)) {
 			count++
 		}
 	}
@@ -874,10 +877,10 @@ func (r *InMemoryMemoryRepository) CountKeyMemories(ctx context.Context, userID 
 }
 
 func (r *InMemoryMemoryRepository) SearchKeyMemories(ctx context.Context, input domain.KeyMemoryQuery) ([]domain.KeyMemory, error) {
-	if _, err := security.PersonalScope(ctx, input.UserID, input.WorkspaceID); err != nil {
+	if _, err := security.DataScope(ctx, input.UserID, input.WorkspaceID); err != nil {
 		return nil, err
 	}
-	input.WorkspaceID = domain.PersonalWorkspaceID(input.UserID)
+	input.WorkspaceID = security.WorkspaceID(ctx, input.UserID)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if input.TopK <= 0 {
@@ -887,7 +890,7 @@ func (r *InMemoryMemoryRepository) SearchKeyMemories(ctx context.Context, input 
 	now := time.Now().UTC()
 	out := make([]domain.KeyMemory, 0)
 	for _, km := range r.keyMemories {
-		if km.UserID != input.UserID || !personalMemoryWorkspace(input.UserID, km.WorkspaceID) {
+		if km.UserID != input.UserID || (!personalMemoryWorkspace(ctx, input.UserID, km.WorkspaceID) || !security.CanReadPartition(ctx, km.PartitionID)) {
 			continue
 		}
 		km.ActivityAt = domain.DeriveActivityAt(km.ActivityAt, km.UpdatedAt, km.CreatedAt)
@@ -940,15 +943,16 @@ func (r *InMemoryMemoryRepository) UpsertKeyMemoryConditional(ctx context.Contex
 }
 
 func (r *InMemoryMemoryRepository) upsertKeyMemory(ctx context.Context, km domain.KeyMemory, condition *domain.MemoryWriteCondition) error {
-	if _, err := security.PersonalScope(ctx, km.UserID, km.WorkspaceID); err != nil {
+	if _, err := security.DataScope(ctx, km.UserID, km.WorkspaceID); err != nil {
 		return err
 	}
-	km.WorkspaceID = domain.PersonalWorkspaceID(km.UserID)
+	km.WorkspaceID = security.WorkspaceID(ctx, km.UserID)
+	km.PartitionID = security.WritePartition(ctx)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := time.Now().UTC()
-	existing, existed := r.keyMemories[key(km.UserID, km.Key)]
-	if existed && !personalMemoryWorkspace(km.UserID, existing.WorkspaceID) {
+	existing, existed := r.keyMemories[key(security.ScopedIdentity(ctx, km.UserID), km.Key)]
+	if existed && !personalMemoryWorkspace(ctx, km.UserID, existing.WorkspaceID) {
 		return domain.ErrAccessDenied
 	}
 	if condition != nil {
@@ -1027,12 +1031,12 @@ func (r *InMemoryMemoryRepository) upsertKeyMemory(ctx context.Context, km domai
 		nodeID = existingNodeID
 	}
 	if nodeID == "" {
-		nodeID = keyMemoryNodeID(km.UserID, km.Key)
+		nodeID = keyMemoryNodeID(ctx, km.UserID, km.Key)
 		if km.Metadata == nil {
 			km.Metadata = map[string]any{}
 		}
 	}
-	if r.nodeOutsidePersonalLocked(km.UserID, nodeID) {
+	if r.nodeOutsidePersonalLocked(ctx, km.UserID, nodeID) {
 		return domain.ErrAccessDenied
 	}
 	km.Metadata["node_id"] = nodeID
@@ -1042,7 +1046,7 @@ func (r *InMemoryMemoryRepository) upsertKeyMemory(ctx context.Context, km domai
 			r.removeRelationsForNodeLocked(km.UserID, existingNodeID)
 		}
 	}
-	r.keyMemories[key(km.UserID, km.Key)] = km
+	r.keyMemories[key(security.ScopedIdentity(ctx, km.UserID), km.Key)] = km
 	r.documents[key(km.UserID, km.ID)] = domain.MemoryDocument{
 		ID:          km.ID,
 		NodeID:      nodeID,
@@ -1066,7 +1070,7 @@ func (r *InMemoryMemoryRepository) upsertKeyMemory(ctx context.Context, km domai
 		CreatedAt: km.CreatedAt,
 		UpdatedAt: km.UpdatedAt,
 	}
-	r.syncTemporalRelationsLocked(km.UserID, "", nodeID, km.ActivityAt)
+	r.syncTemporalRelationsLocked(ctx, km.UserID, "", nodeID, km.ActivityAt)
 	if condition != nil {
 		action := "update_key_memory"
 		if condition.Create {
@@ -1086,17 +1090,17 @@ func (r *InMemoryMemoryRepository) DeleteKeyMemoryConditional(ctx context.Contex
 }
 
 func (r *InMemoryMemoryRepository) deleteKeyMemory(ctx context.Context, userID, memoryKey string, condition *domain.MemoryWriteCondition) error {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	km, ok := r.keyMemories[key(userID, memoryKey)]
+	km, ok := r.keyMemories[key(security.ScopedIdentity(ctx, userID), memoryKey)]
 	if condition != nil && (!ok || condition.ID != km.ID || !condition.UpdatedAt.Equal(km.UpdatedAt)) {
 		return domain.ErrAccessConflict
 	}
 	if ok {
-		if !personalMemoryWorkspace(userID, km.WorkspaceID) {
+		if !personalMemoryWorkspace(ctx, userID, km.WorkspaceID) || !security.CanReadPartition(ctx, km.PartitionID) {
 			return nil
 		}
 		nodeID := stringMetadataValue(km.Metadata, "node_id")
@@ -1105,7 +1109,7 @@ func (r *InMemoryMemoryRepository) deleteKeyMemory(ctx context.Context, userID, 
 			r.removeRelationsForNodeLocked(userID, nodeID)
 		}
 	}
-	delete(r.keyMemories, key(userID, memoryKey))
+	delete(r.keyMemories, key(security.ScopedIdentity(ctx, userID), memoryKey))
 	r.editAudit(ctx, userID, "delete_key_memory", "key_memory", km.ID, condition)
 	return nil
 }
@@ -1122,10 +1126,10 @@ func (r *InMemoryMemoryRepository) removeRelationsForNodeLocked(userID, nodeID s
 }
 
 func (r *InMemoryMemoryRepository) LinkDocuments(ctx context.Context, relation domain.MemoryRelation) error {
-	if _, err := security.PersonalScope(ctx, relation.UserID, relation.WorkspaceID); err != nil {
+	if _, err := security.DataScope(ctx, relation.UserID, relation.WorkspaceID); err != nil {
 		return err
 	}
-	relation.WorkspaceID = domain.PersonalWorkspaceID(relation.UserID)
+	relation.WorkspaceID = security.WorkspaceID(ctx, relation.UserID)
 	relation.SrcNodeID = strings.TrimSpace(relation.SrcNodeID)
 	relation.DstNodeID = strings.TrimSpace(relation.DstNodeID)
 	relation.RelationType = strings.TrimSpace(relation.RelationType)
@@ -1142,7 +1146,7 @@ func (r *InMemoryMemoryRepository) LinkDocuments(ctx context.Context, relation d
 	defer r.mu.Unlock()
 	var srcGeneration, dstGeneration string
 	for _, doc := range r.documents {
-		if doc.UserID != relation.UserID || !personalMemoryWorkspace(doc.UserID, doc.WorkspaceID) {
+		if doc.UserID != relation.UserID || !documentVisible(ctx, doc) {
 			if doc.NodeID == relation.SrcNodeID || doc.NodeID == relation.DstNodeID {
 				return domain.ErrAccessDenied
 			}
@@ -1200,14 +1204,14 @@ func resolveRelationGeneration(requested, src, dst string) (string, error) {
 }
 
 func (r *InMemoryMemoryRepository) DeleteRelationsByTarget(ctx context.Context, userID, targetNodeID, relationType string) error {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	filtered := r.relations[:0]
 	for _, relation := range r.relations {
-		if relation.UserID == userID && !r.nodeOutsidePersonalLocked(userID, targetNodeID) && relation.DstNodeID == targetNodeID && relation.RelationType == relationType {
+		if relation.UserID == userID && !r.nodeOutsidePersonalLocked(ctx, userID, targetNodeID) && relation.DstNodeID == targetNodeID && relation.RelationType == relationType {
 			continue
 		}
 		filtered = append(filtered, relation)
@@ -1217,7 +1221,7 @@ func (r *InMemoryMemoryRepository) DeleteRelationsByTarget(ctx context.Context, 
 }
 
 func (r *InMemoryMemoryRepository) ListRelations(ctx context.Context, userID, generationID string, nodeIDs []string, depth int) ([]domain.MemoryRelation, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	r.mu.RLock()
@@ -1228,7 +1232,7 @@ func (r *InMemoryMemoryRepository) ListRelations(ctx context.Context, userID, ge
 	nodeGenerations := make(map[string]string)
 	if strings.TrimSpace(generationID) != "" {
 		for _, doc := range r.documents {
-			if doc.UserID == userID && personalMemoryWorkspace(userID, doc.WorkspaceID) {
+			if doc.UserID == userID && documentVisible(ctx, doc) {
 				nodeGenerations[doc.NodeID] = doc.GenerationID
 			}
 		}
@@ -1248,7 +1252,7 @@ func (r *InMemoryMemoryRepository) ListRelations(ctx context.Context, userID, ge
 	for hop := 0; hop < limitDepth; hop++ {
 		nextFrontier := map[string]struct{}{}
 		for _, relation := range r.relations {
-			if relation.UserID != userID || !personalMemoryWorkspace(userID, relation.WorkspaceID) || r.nodeOutsidePersonalLocked(userID, relation.SrcNodeID) || r.nodeOutsidePersonalLocked(userID, relation.DstNodeID) {
+			if relation.UserID != userID || !personalMemoryWorkspace(ctx, userID, relation.WorkspaceID) || r.nodeOutsidePersonalLocked(ctx, userID, relation.SrcNodeID) || r.nodeOutsidePersonalLocked(ctx, userID, relation.DstNodeID) {
 				continue
 			}
 			if !matchesGenerationValue(userID, generationID, relation.GenerationID, false) {
@@ -1265,7 +1269,7 @@ func (r *InMemoryMemoryRepository) ListRelations(ctx context.Context, userID, ge
 			if _, seen := visitedRelations[relation.ID]; seen {
 				continue
 			}
-			relation.WorkspaceID = domain.PersonalWorkspaceID(relation.UserID)
+			relation.WorkspaceID = security.WorkspaceID(ctx, relation.UserID)
 			collected = append(collected, relation)
 			visitedRelations[relation.ID] = struct{}{}
 			if isTemporalRelationType(relation.RelationType) {
@@ -1283,12 +1287,12 @@ func (r *InMemoryMemoryRepository) ReplaceEvidences(ctx context.Context, userID,
 	if err := validateEvidenceIdentity(userID, nodeID, evidences); err != nil {
 		return err
 	}
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.nodeOutsidePersonalLocked(userID, nodeID) {
+	if r.nodeOutsidePersonalLocked(ctx, userID, nodeID) {
 		return domain.ErrAccessDenied
 	}
 	if strings.TrimSpace(userID) == "" || strings.TrimSpace(nodeID) == "" {
@@ -1322,12 +1326,12 @@ func (r *InMemoryMemoryRepository) MergeEvidences(ctx context.Context, userID, n
 	if err := validateEvidenceIdentity(userID, nodeID, evidences); err != nil {
 		return err
 	}
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.nodeOutsidePersonalLocked(userID, nodeID) {
+	if r.nodeOutsidePersonalLocked(ctx, userID, nodeID) {
 		return domain.ErrAccessDenied
 	}
 	if strings.TrimSpace(userID) == "" || strings.TrimSpace(nodeID) == "" {
@@ -1367,12 +1371,12 @@ func (r *InMemoryMemoryRepository) MergeEvidences(ctx context.Context, userID, n
 }
 
 func (r *InMemoryMemoryRepository) ListEvidences(ctx context.Context, userID, nodeID string) ([]domain.MemoryEvidence, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if r.nodeOutsidePersonalLocked(userID, nodeID) {
+	if r.nodeOutsidePersonalLocked(ctx, userID, nodeID) {
 		return nil, nil
 	}
 	items := append([]domain.MemoryEvidence(nil), r.evidences[key(userID, nodeID)]...)
@@ -1389,7 +1393,7 @@ func (r *InMemoryMemoryRepository) ListEvidences(ctx context.Context, userID, no
 }
 
 func (r *InMemoryMemoryRepository) ListEvidencesByNodeIDs(ctx context.Context, userID string, nodeIDs []string) ([]domain.MemoryEvidence, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	r.mu.RLock()
@@ -1410,7 +1414,7 @@ func (r *InMemoryMemoryRepository) ListEvidencesByNodeIDs(ctx context.Context, u
 	}
 	items := make([]domain.MemoryEvidence, 0)
 	for nodeID := range allowed {
-		if r.nodeOutsidePersonalLocked(userID, nodeID) {
+		if r.nodeOutsidePersonalLocked(ctx, userID, nodeID) {
 			continue
 		}
 		items = append(items, r.evidences[key(userID, nodeID)]...)
@@ -1430,7 +1434,7 @@ func (r *InMemoryMemoryRepository) ListEvidencesByNodeIDs(ctx context.Context, u
 	return items, nil
 }
 
-func (r *InMemoryMemoryRepository) syncFactSupersedesLocked(doc domain.MemoryDocument) error {
+func (r *InMemoryMemoryRepository) syncFactSupersedesLocked(ctx context.Context, doc domain.MemoryDocument) error {
 	factKey := factKeyFromMetadata(doc.Metadata)
 	lineageGroupID := factLineageGroupIDFromMetadata(doc.Metadata)
 	if lineageGroupID == "" && (stringMetadataValue(doc.Metadata, "superseded_by_id") != "" || len(supersededFactIDsFromMetadata(doc.Metadata)) > 0) {
@@ -1450,11 +1454,11 @@ func (r *InMemoryMemoryRepository) syncFactSupersedesLocked(doc domain.MemoryDoc
 	r.documents[key(doc.UserID, doc.ID)] = doc
 
 	if supersededByID != "" {
-		supersedingNodeID := r.resolveFactNodeIDLocked(doc.UserID, doc.GenerationID, lineageGroupID, supersededByID)
+		supersedingNodeID := r.resolveFactNodeIDLocked(ctx, doc.UserID, doc.GenerationID, lineageGroupID, supersededByID)
 		if supersedingNodeID == "" {
 			return fmt.Errorf("fact supersession target %q not found in lineage %q", supersededByID, lineageGroupID)
 		}
-		if r.factSupersessionWouldCycleLocked(doc.UserID, doc.GenerationID, supersededByID, doc.ID) {
+		if r.factSupersessionWouldCycleLocked(ctx, doc.UserID, doc.GenerationID, supersededByID, doc.ID) {
 			return errors.New("fact supersession cycle detected")
 		}
 		r.upsertRelationLocked(domain.MemoryRelation{
@@ -1481,11 +1485,11 @@ func (r *InMemoryMemoryRepository) syncFactSupersedesLocked(doc domain.MemoryDoc
 		if supersededID == doc.ID {
 			return errors.New("fact supersession cycle detected")
 		}
-		if r.factSupersessionWouldCycleLocked(doc.UserID, doc.GenerationID, doc.ID, supersededID) {
+		if r.factSupersessionWouldCycleLocked(ctx, doc.UserID, doc.GenerationID, doc.ID, supersededID) {
 			return errors.New("fact supersession cycle detected")
 		}
 		candidate, ok := r.documents[key(doc.UserID, supersededID)]
-		if !ok || !personalMemoryWorkspace(doc.UserID, candidate.WorkspaceID) || candidate.Type != domain.MemoryTypeFact || candidate.GenerationID != doc.GenerationID {
+		if !ok || !documentVisible(ctx, candidate) || candidate.Type != domain.MemoryTypeFact || candidate.GenerationID != doc.GenerationID {
 			return fmt.Errorf("fact supersession target %q not found in generation %q", supersededID, doc.GenerationID)
 		}
 		if lineageGroupID != "" && factLineageGroupIDFromMetadata(candidate.Metadata) != lineageGroupID {
@@ -1521,7 +1525,7 @@ func (r *InMemoryMemoryRepository) syncFactSupersedesLocked(doc domain.MemoryDoc
 		return nil
 	}
 	for _, candidate := range r.documents {
-		if candidate.UserID != doc.UserID || !personalMemoryWorkspace(doc.UserID, candidate.WorkspaceID) || candidate.Type != domain.MemoryTypeFact {
+		if candidate.UserID != doc.UserID || !documentVisible(ctx, candidate) || candidate.Type != domain.MemoryTypeFact {
 			continue
 		}
 		if candidate.GenerationID != doc.GenerationID {
@@ -1607,12 +1611,12 @@ func metadataContainsKey(metadata map[string]any, key string) bool {
 	return ok
 }
 
-func (r *InMemoryMemoryRepository) resolveFactNodeIDLocked(userID, generationID, lineageGroupID, factID string) string {
+func (r *InMemoryMemoryRepository) resolveFactNodeIDLocked(ctx context.Context, userID, generationID, lineageGroupID, factID string) string {
 	if factID == "" {
 		return ""
 	}
 	doc, ok := r.documents[key(userID, factID)]
-	if !ok || !personalMemoryWorkspace(userID, doc.WorkspaceID) || doc.Type != domain.MemoryTypeFact {
+	if !ok || !documentVisible(ctx, doc) || doc.Type != domain.MemoryTypeFact {
 		return ""
 	}
 	if doc.GenerationID != generationID || factLineageGroupIDFromMetadata(doc.Metadata) != lineageGroupID {
@@ -1621,7 +1625,7 @@ func (r *InMemoryMemoryRepository) resolveFactNodeIDLocked(userID, generationID,
 	return doc.NodeID
 }
 
-func (r *InMemoryMemoryRepository) factSupersessionWouldCycleLocked(userID, generationID, newerFactID, olderFactID string) bool {
+func (r *InMemoryMemoryRepository) factSupersessionWouldCycleLocked(ctx context.Context, userID, generationID, newerFactID, olderFactID string) bool {
 	newerFactID = strings.TrimSpace(newerFactID)
 	olderFactID = strings.TrimSpace(olderFactID)
 	if newerFactID == "" || olderFactID == "" {
@@ -1641,7 +1645,7 @@ func (r *InMemoryMemoryRepository) factSupersessionWouldCycleLocked(userID, gene
 		}
 		seen[current] = struct{}{}
 		doc, ok := r.documents[key(userID, current)]
-		if !ok || !personalMemoryWorkspace(userID, doc.WorkspaceID) || doc.Type != domain.MemoryTypeFact || doc.GenerationID != generationID {
+		if !ok || !documentVisible(ctx, doc) || doc.Type != domain.MemoryTypeFact || doc.GenerationID != generationID {
 			return false
 		}
 		current = stringMetadataValue(doc.Metadata, "superseded_by_id")
@@ -1649,19 +1653,19 @@ func (r *InMemoryMemoryRepository) factSupersessionWouldCycleLocked(userID, gene
 	return current != ""
 }
 
-func (r *InMemoryMemoryRepository) nextFactRevisionSeqLocked(doc domain.MemoryDocument) int {
+func (r *InMemoryMemoryRepository) nextFactRevisionSeqLocked(ctx context.Context, doc domain.MemoryDocument) int {
 	lineageGroupID := factLineageGroupIDFromMetadata(doc.Metadata)
 	if lineageGroupID == "" {
 		return 1
 	}
-	if existing, ok := r.documents[key(doc.UserID, doc.ID)]; ok && personalMemoryWorkspace(doc.UserID, existing.WorkspaceID) {
+	if existing, ok := r.documents[key(doc.UserID, doc.ID)]; ok && documentVisible(ctx, existing) {
 		if seq := factLineageRevisionSeqFromMetadata(existing.Metadata); seq > 0 {
 			return seq
 		}
 	}
 	maxSeq := 0
 	for _, candidate := range r.documents {
-		if candidate.UserID != doc.UserID || !personalMemoryWorkspace(doc.UserID, candidate.WorkspaceID) || candidate.GenerationID != doc.GenerationID || candidate.Type != domain.MemoryTypeFact {
+		if candidate.UserID != doc.UserID || !documentVisible(ctx, candidate) || candidate.GenerationID != doc.GenerationID || candidate.Type != domain.MemoryTypeFact {
 			continue
 		}
 		if factLineageGroupIDFromMetadata(candidate.Metadata) != lineageGroupID {
@@ -1674,7 +1678,7 @@ func (r *InMemoryMemoryRepository) nextFactRevisionSeqLocked(doc domain.MemoryDo
 	return maxSeq + 1
 }
 
-func (r *InMemoryMemoryRepository) currentFactLineageHeadIDsLocked(doc domain.MemoryDocument) []string {
+func (r *InMemoryMemoryRepository) currentFactLineageHeadIDsLocked(ctx context.Context, doc domain.MemoryDocument) []string {
 	lineageGroupID := factLineageGroupIDFromMetadata(doc.Metadata)
 	if lineageGroupID == "" {
 		return nil
@@ -1685,7 +1689,7 @@ func (r *InMemoryMemoryRepository) currentFactLineageHeadIDsLocked(doc domain.Me
 	}
 	heads := make([]head, 0)
 	for _, candidate := range r.documents {
-		if candidate.UserID != doc.UserID || !personalMemoryWorkspace(doc.UserID, candidate.WorkspaceID) || candidate.GenerationID != doc.GenerationID || candidate.Type != domain.MemoryTypeFact || candidate.ID == doc.ID {
+		if candidate.UserID != doc.UserID || !documentVisible(ctx, candidate) || candidate.GenerationID != doc.GenerationID || candidate.Type != domain.MemoryTypeFact || candidate.ID == doc.ID {
 			continue
 		}
 		if factLineageGroupIDFromMetadata(candidate.Metadata) != lineageGroupID {
@@ -1730,7 +1734,7 @@ func (r *InMemoryMemoryRepository) upsertRelationLocked(relation domain.MemoryRe
 	r.relations = append(r.relations, relation)
 }
 
-func (r *InMemoryMemoryRepository) syncTemporalRelationsLocked(userID, generationID, nodeID string, activityAt time.Time) {
+func (r *InMemoryMemoryRepository) syncTemporalRelationsLocked(ctx context.Context, userID, generationID, nodeID string, activityAt time.Time) {
 	if userID == "" || nodeID == "" {
 		return
 	}
@@ -1745,10 +1749,10 @@ func (r *InMemoryMemoryRepository) syncTemporalRelationsLocked(userID, generatio
 	}
 	r.relations = filtered
 
-	tierNodeID := temporalTierNodeID(userID, tier)
-	dayNodeID := temporalDayNodeID(userID, activityAt)
-	monthNodeID := temporalMonthNodeID(userID, activityAt)
-	yearNodeID := temporalYearNodeID(userID, activityAt)
+	tierNodeID := temporalTierNodeID(ctx, userID, tier)
+	dayNodeID := temporalDayNodeID(ctx, userID, activityAt)
+	monthNodeID := temporalMonthNodeID(ctx, userID, activityAt)
+	yearNodeID := temporalYearNodeID(ctx, userID, activityAt)
 
 	r.upsertRelationLocked(domain.MemoryRelation{GenerationID: generationID, UserID: userID, SrcNodeID: nodeID, DstNodeID: tierNodeID, RelationType: "indexed_in_tier", Weight: 1, Source: "temporal"})
 	r.upsertRelationLocked(domain.MemoryRelation{GenerationID: generationID, UserID: userID, SrcNodeID: nodeID, DstNodeID: dayNodeID, RelationType: "occurred_on_day", Weight: 1, Source: "temporal"})
@@ -1834,20 +1838,20 @@ func isTemporalIndexRelationType(relationType string) bool {
 	}
 }
 
-func temporalTierNodeID(userID string, tier domain.TimeTier) string {
-	return "time:tier:" + userID + ":" + string(tier)
+func temporalTierNodeID(ctx context.Context, userID string, tier domain.TimeTier) string {
+	return "time:tier:" + security.ScopedIdentity(ctx, userID) + ":" + string(tier)
 }
 
-func temporalDayNodeID(userID string, at time.Time) string {
-	return "time:day:" + userID + ":" + at.UTC().Format("2006-01-02")
+func temporalDayNodeID(ctx context.Context, userID string, at time.Time) string {
+	return "time:day:" + security.ScopedIdentity(ctx, userID) + ":" + at.UTC().Format("2006-01-02")
 }
 
-func temporalMonthNodeID(userID string, at time.Time) string {
-	return "time:month:" + userID + ":" + at.UTC().Format("2006-01")
+func temporalMonthNodeID(ctx context.Context, userID string, at time.Time) string {
+	return "time:month:" + security.ScopedIdentity(ctx, userID) + ":" + at.UTC().Format("2006-01")
 }
 
-func temporalYearNodeID(userID string, at time.Time) string {
-	return "time:year:" + userID + ":" + at.UTC().Format("2006")
+func temporalYearNodeID(ctx context.Context, userID string, at time.Time) string {
+	return "time:year:" + security.ScopedIdentity(ctx, userID) + ":" + at.UTC().Format("2006")
 }
 
 type InMemoryOutboxRepository struct {
@@ -1913,8 +1917,8 @@ func key(parts ...string) string {
 	return string(encoded)
 }
 
-func keyMemoryNodeID(userID, memoryKey string) string {
-	return "node:keymemory:" + userID + ":" + memoryKey
+func keyMemoryNodeID(ctx context.Context, userID, memoryKey string) string {
+	return "node:keymemory:" + security.ScopedIdentity(ctx, userID) + ":" + memoryKey
 }
 
 func defaultMemoryNodeID(userID string, kind domain.MemoryType, documentID string) string {
@@ -1941,8 +1945,8 @@ func matchesMemoryType(value domain.MemoryType, filters []domain.MemoryType) boo
 	return false
 }
 
-func matchesDocumentGeneration(userID, requestedGenerationID string, doc domain.MemoryDocument) bool {
-	if doc.UserID != userID || !personalMemoryWorkspace(userID, doc.WorkspaceID) {
+func matchesDocumentGeneration(ctx context.Context, userID, requestedGenerationID string, doc domain.MemoryDocument) bool {
+	if doc.UserID != userID || !documentVisible(ctx, doc) {
 		return false
 	}
 	if doc.Type == domain.MemoryTypeKeyMemory {

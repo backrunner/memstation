@@ -2,10 +2,15 @@ package memory
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"memstation/apps/server/internal/aicall"
 
 	"github.com/google/uuid"
 
@@ -17,6 +22,7 @@ import (
 )
 
 type Service struct {
+	watermarks  ports.RecallWatermarkReader
 	engine      ports.MemoryEngine
 	repo        ports.MemoryRepository
 	cache       *cache.JSONStore
@@ -24,6 +30,8 @@ type Service struct {
 	scorer      *Scorer
 	generations *memorygenservice.Service
 }
+
+func (s *Service) SetWatermarks(reader ports.RecallWatermarkReader) { s.watermarks = reader }
 
 func NewService(engine ports.MemoryEngine, repo ports.MemoryRepository) *Service {
 	return &Service{engine: engine, repo: repo}
@@ -46,10 +54,28 @@ func (s *Service) SetGenerationService(service *memorygenservice.Service) {
 }
 
 func (s *Service) Search(ctx context.Context, input domain.SearchInput) (domain.SearchResult, error) {
-	if _, err := security.PersonalScope(ctx, input.UserID, input.WorkspaceID); err != nil {
+	started := time.Now()
+	ctx, calls := aicall.WithTrace(ctx)
+	if err := security.RequireCapability(ctx, domain.CapabilityMemoryRead); err != nil {
 		return domain.SearchResult{}, err
 	}
-	input.WorkspaceID = domain.PersonalWorkspaceID(input.UserID)
+	if len(input.SubjectActorIDs) > 64 || len(input.QueryID) > 256 {
+		return domain.SearchResult{}, domain.ErrAccessDenied
+	}
+	ctx = security.WithMemoryFilter(ctx, security.MemoryFilter{SubjectActorIDs: input.SubjectActorIDs, From: input.DateFrom, To: input.DateTo})
+	if _, err := security.DataScope(ctx, input.UserID, input.WorkspaceID); err != nil {
+		return domain.SearchResult{}, err
+	}
+	input.WorkspaceID = security.WorkspaceID(ctx, input.UserID)
+	if security.RequireCapability(ctx, domain.CapabilitySourcesRead) != nil {
+		if len(input.MemoryTypes) == 0 {
+			input.MemoryTypes = domain.DefaultSearchMemoryTypes(false)
+		}
+		input.MemoryTypes = slices.DeleteFunc(slices.Clone(input.MemoryTypes), func(v domain.MemoryType) bool { return v == domain.MemoryTypeSegment })
+		if len(input.MemoryTypes) == 0 {
+			return domain.SearchResult{Memories: []domain.MemoryDocument{}}, nil
+		}
+	}
 	result, err := s.engine.Search(ctx, input)
 	if err != nil {
 		return domain.SearchResult{}, err
@@ -57,18 +83,55 @@ func (s *Service) Search(ctx context.Context, input domain.SearchInput) (domain.
 	if input.AsOf == nil && input.KnownAt == nil {
 		s.hydrateRelatedDocumentsBatch(ctx, memoryDocumentPointers(result.Memories))
 	}
+	returned := len(result.Memories)
+	if err = s.filterLiveSearch(ctx, input.UserID, &result, input.AsOf != nil || input.KnownAt != nil); err != nil {
+		return domain.SearchResult{}, err
+	}
+	if err = security.RequireCapability(ctx, domain.CapabilityMemoryRead); err != nil {
+		return domain.SearchResult{}, err
+	}
+	queryID := input.QueryID
+	if queryID == "" {
+		queryID = domain.AccessID("query", fmt.Sprint(started.UnixNano()))
+	}
+	result.Trace = &domain.RecallTrace{QueryID: queryID, LatencyMS: time.Since(started).Milliseconds(), ReturnedCount: returned, EligibleCount: len(result.Memories), ScoreDefinition: "provider semantic score retained in metadata; effective score combines semantic relevance, importance, time decay and configured relation/reranking adjustments; not factual confidence"}
+	result.Trace.ProviderCalls = calls.Calls()
+	result.Trace.FailureCode = calls.FailureCode()
+	result.Trace.Degraded = result.Trace.FailureCode != ""
+	for _, call := range result.Trace.ProviderCalls {
+		if call.ProviderRequestID != "" && result.Trace.ProviderRequestID == "" {
+			result.Trace.ProviderRequestID = call.ProviderRequestID
+		}
+	}
+	result.Trace.Watermarks = []domain.StreamWatermark{}
+	if s.watermarks != nil {
+		result.Trace.Watermarks, result.Trace.WatermarksPartial, err = s.watermarks.Watermarks(ctx)
+		if err != nil {
+			result.Trace.Degraded = true
+			if result.Trace.FailureCode == "" {
+				result.Trace.FailureCode = "watermarks_unavailable"
+			}
+		}
+	}
+	if err = security.RequireCapability(ctx, domain.CapabilityMemoryRead); err != nil {
+		return domain.SearchResult{}, err
+	}
+	result.Trace.LatencyMS = time.Since(started).Milliseconds()
+	result.Memories = security.MemoryContents(ctx, result.Memories)
+	result.Total = len(result.Memories)
+	result.Trace.EligibleCount = len(result.Memories)
 	return result, nil
 }
 
 func (s *Service) GetDocument(ctx context.Context, userID, id string, kind domain.MemoryType) (domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemoryDocument{}, err
 	}
 	return s.GetDocumentInGeneration(ctx, userID, "", id, kind)
 }
 
 func (s *Service) GetDocumentInGeneration(ctx context.Context, userID, generationID, id string, kind domain.MemoryType) (domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemoryDocument{}, err
 	}
 	resolvedGenerationID, err := s.resolveGenerationID(ctx, userID, generationID)
@@ -80,18 +143,21 @@ func (s *Service) GetDocumentInGeneration(ctx context.Context, userID, generatio
 		return domain.MemoryDocument{}, err
 	}
 	s.hydrateRelatedDocuments(ctx, &item)
-	return item, nil
+	if visible, ok := security.MemoryContent(ctx, item); ok {
+		return visible, nil
+	}
+	return domain.MemoryDocument{}, domain.ErrAccessNotFound
 }
 
 func (s *Service) ListDocuments(ctx context.Context, userID string, kinds []domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	return s.ListDocumentsInGeneration(ctx, userID, "", kinds, limit)
 }
 
 func (s *Service) ListDocumentsInGeneration(ctx context.Context, userID, generationID string, kinds []domain.MemoryType, limit int) ([]domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	resolvedGenerationID, err := s.resolveGenerationID(ctx, userID, generationID)
@@ -103,11 +169,11 @@ func (s *Service) ListDocumentsInGeneration(ctx context.Context, userID, generat
 		return nil, err
 	}
 	s.hydrateRelatedDocumentsBatch(ctx, memoryDocumentPointers(items))
-	return items, nil
+	return security.MemoryContents(ctx, items), nil
 }
 
 func (s *Service) ListDocumentsByConversationInGeneration(ctx context.Context, userID, generationID, conversationID string) ([]domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	resolvedGenerationID, err := s.resolveGenerationID(ctx, userID, generationID)
@@ -119,7 +185,7 @@ func (s *Service) ListDocumentsByConversationInGeneration(ctx context.Context, u
 		return nil, err
 	}
 	s.hydrateRelatedDocumentsBatch(ctx, memoryDocumentPointers(items))
-	return items, nil
+	return security.MemoryContents(ctx, items), nil
 }
 
 func memoryDocumentPointers(items []domain.MemoryDocument) []*domain.MemoryDocument {
@@ -147,7 +213,7 @@ func (s *Service) UpdateDocument(ctx context.Context, userID, id string, kind do
 }
 
 func (s *Service) updateDocument(ctx context.Context, userID, id string, kind domain.MemoryType, content string, condition *domain.MemoryWriteCondition) (domain.MemoryDocument, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.MemoryDocument{}, err
 	}
 	var item domain.MemoryDocument
@@ -172,22 +238,48 @@ func (s *Service) updateDocument(ctx context.Context, userID, id string, kind do
 }
 
 func (s *Service) ListKeyMemories(ctx context.Context, userID string, limit int) ([]domain.KeyMemory, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return nil, err
 	}
 	if s.cache != nil {
 		var cached []domain.KeyMemory
-		ok, err := s.cache.Get(ctx, keyMemoryCacheKey(userID, limit), &cached)
+		ok, err := s.cache.Get(ctx, keyMemoryCacheKey(ctx, userID, limit), &cached)
 		if err == nil && ok {
 			valid := true
 			for _, item := range cached {
-				if item.UserID != userID || item.WorkspaceID != domain.PersonalWorkspaceID(userID) {
+				if item.UserID != userID || item.WorkspaceID != security.WorkspaceID(ctx, userID) {
 					valid = false
 					break
 				}
 			}
 			if valid {
-				return cached, nil
+				ids := make([]string, 0, len(cached))
+				for _, item := range cached {
+					if node, ok := item.Metadata["node_id"].(string); ok {
+						ids = append(ids, node)
+					}
+				}
+				live, err := s.repo.ListDocumentsByNodeIDs(ctx, userID, ids)
+				if err != nil {
+					return nil, err
+				}
+				values := map[string]string{}
+				for _, doc := range live {
+					values[doc.NodeID] = doc.Content
+				}
+				for _, item := range cached {
+					node, _ := item.Metadata["node_id"].(string)
+					if node == "" || values[node] != item.Key+": "+item.Value {
+						valid = false
+						break
+					}
+				}
+				if valid {
+					if err = security.RequireCapability(ctx, domain.CapabilityMemoryRead); err != nil {
+						return nil, err
+					}
+					return cached, nil
+				}
 			}
 		}
 	}
@@ -209,16 +301,16 @@ func (s *Service) ListKeyMemories(ctx context.Context, userID string, limit int)
 		memories = memories[:limit]
 	}
 	if s.cache != nil {
-		_ = s.cache.Set(ctx, keyMemoryCacheKey(userID, limit), memories)
+		_ = s.cache.Set(ctx, keyMemoryCacheKey(ctx, userID, limit), memories)
 	}
 	return memories, nil
 }
 
 func (s *Service) SearchKeyMemories(ctx context.Context, input domain.KeyMemoryQuery) ([]domain.KeyMemory, error) {
-	if _, err := security.PersonalScope(ctx, input.UserID, input.WorkspaceID); err != nil {
+	if _, err := security.DataScope(ctx, input.UserID, input.WorkspaceID); err != nil {
 		return nil, err
 	}
-	input.WorkspaceID = domain.PersonalWorkspaceID(input.UserID)
+	input.WorkspaceID = security.WorkspaceID(ctx, input.UserID)
 	if s.repo == nil {
 		return nil, nil
 	}
@@ -270,7 +362,7 @@ func (s *Service) SearchKeyMemories(ctx context.Context, input domain.KeyMemoryQ
 }
 
 func (s *Service) GetKeyMemory(ctx context.Context, userID, memoryKey string) (domain.KeyMemory, bool, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.KeyMemory{}, false, err
 	}
 	if s == nil || s.repo == nil || strings.TrimSpace(userID) == "" || strings.TrimSpace(memoryKey) == "" {
@@ -280,7 +372,7 @@ func (s *Service) GetKeyMemory(ctx context.Context, userID, memoryKey string) (d
 }
 
 func (s *Service) GetKeyMemoryByID(ctx context.Context, userID, id string) (domain.KeyMemory, bool, error) {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return domain.KeyMemory{}, false, err
 	}
 	if s == nil || s.repo == nil || strings.TrimSpace(userID) == "" || strings.TrimSpace(id) == "" {
@@ -294,10 +386,10 @@ func (s *Service) UpsertKeyMemory(ctx context.Context, km domain.KeyMemory) (dom
 }
 
 func (s *Service) upsertKeyMemory(ctx context.Context, km domain.KeyMemory, condition *domain.MemoryWriteCondition) (domain.KeyMemory, error) {
-	if _, err := security.PersonalScope(ctx, km.UserID, km.WorkspaceID); err != nil {
+	if _, err := security.DataScope(ctx, km.UserID, km.WorkspaceID); err != nil {
 		return domain.KeyMemory{}, err
 	}
-	km.WorkspaceID = domain.PersonalWorkspaceID(km.UserID)
+	km.WorkspaceID = security.WorkspaceID(ctx, km.UserID)
 	km.Key = strings.TrimSpace(km.Key)
 	existing, hasExisting, err := s.GetKeyMemory(ctx, km.UserID, km.Key)
 	if err != nil {
@@ -341,7 +433,7 @@ func (s *Service) upsertKeyMemory(ctx context.Context, km domain.KeyMemory, cond
 	}
 	nodeID := stringMetadataValue(km.Metadata, "node_id")
 	if nodeID == "" {
-		nodeID = keyMemoryNodeID(km.UserID, km.Key)
+		nodeID = keyMemoryNodeID(ctx, km.UserID, km.Key)
 		km.Metadata["node_id"] = nodeID
 	}
 	now := time.Now().UTC()
@@ -396,7 +488,7 @@ func (s *Service) DeleteKeyMemory(ctx context.Context, userID, memoryKey string)
 }
 
 func (s *Service) deleteKeyMemory(ctx context.Context, userID, memoryKey string, condition *domain.MemoryWriteCondition) error {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return err
 	}
 	memoryKey = strings.TrimSpace(memoryKey)
@@ -415,7 +507,7 @@ func (s *Service) deleteKeyMemory(ctx context.Context, userID, memoryKey string,
 		return err
 	}
 	if s.vectors != nil && !hasTransactionalMemoryOutbox(s.repo) {
-		nodeID := keyMemoryNodeID(userID, memoryKey)
+		nodeID := keyMemoryNodeID(ctx, userID, memoryKey)
 		if hasExisting {
 			if existingNodeID := stringMetadataValue(existing.Metadata, "node_id"); existingNodeID != "" {
 				nodeID = existingNodeID
@@ -430,7 +522,7 @@ func (s *Service) deleteKeyMemory(ctx context.Context, userID, memoryKey string,
 }
 
 func (s *Service) SyncKeyMemoryGraph(ctx context.Context, userID, memoryKey string) error {
-	if _, err := security.PersonalScope(ctx, userID, ""); err != nil {
+	if _, err := security.DataScope(ctx, userID, ""); err != nil {
 		return err
 	}
 	km, ok, err := s.GetKeyMemory(ctx, userID, strings.TrimSpace(memoryKey))
@@ -439,7 +531,7 @@ func (s *Service) SyncKeyMemoryGraph(ctx context.Context, userID, memoryKey stri
 	}
 	nodeID := stringMetadataValue(km.Metadata, "node_id")
 	if nodeID == "" {
-		nodeID = keyMemoryNodeID(userID, km.Key)
+		nodeID = keyMemoryNodeID(ctx, userID, km.Key)
 	}
 	return s.syncKeyMemoryRelations(ctx, km, nodeID)
 }
@@ -497,28 +589,29 @@ func (s *Service) invalidateKeyMemoryCache(ctx context.Context, userID string) {
 	if s.cache == nil {
 		return
 	}
-	_ = s.cache.DeletePrefix(ctx, keyMemoryCachePrefix(userID))
+	_ = s.cache.DeletePrefix(ctx, keyMemoryCachePrefix(ctx, userID))
 }
 
-func keyMemoryCacheKey(userID string, limit int) string {
+func keyMemoryCacheKey(ctx context.Context, userID string, limit int) string {
 	if limit < 0 {
 		limit = 0
 	}
-	return keyMemoryCachePrefix(userID) + "limit:" + itoa(limit)
+	partition, _ := json.Marshal(security.Partitions(ctx))
+	return keyMemoryCachePrefix(ctx, userID) + domain.AccessID("partitions", string(partition)) + ":limit:" + itoa(limit)
 }
 
-func keyMemoryCachePrefix(userID string) string {
+func keyMemoryCachePrefix(ctx context.Context, userID string) string {
 	// Versioned scope encoding prevents old user-only entries and separator
 	// collisions from crossing a workspace boundary during lookup/invalidation.
-	return "memory:keymemories:v2:" + domain.AccessID("scope", userID+"\x00"+domain.PersonalWorkspaceID(userID)) + ":"
+	return "memory:keymemories:v2:" + domain.AccessID("scope", userID+"\x00"+security.WorkspaceID(ctx, userID)) + ":"
 }
 
 func itoa(value int) string {
 	return strconv.Itoa(value)
 }
 
-func keyMemoryNodeID(userID, memoryKey string) string {
-	return "node:keymemory:" + userID + ":" + memoryKey
+func keyMemoryNodeID(ctx context.Context, userID, memoryKey string) string {
+	return "node:keymemory:" + security.ScopedIdentity(ctx, userID) + ":" + memoryKey
 }
 
 func keyMemoryEmbeddingContent(km domain.KeyMemory) string {

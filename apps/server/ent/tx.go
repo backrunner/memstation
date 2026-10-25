@@ -16,34 +16,78 @@ type Tx struct {
 	APIKey *APIKeyClient
 	// Actor is the client for interacting with the Actor builders.
 	Actor *ActorClient
+	// ActorIdentity is the client for interacting with the ActorIdentity builders.
+	ActorIdentity *ActorIdentityClient
 	// Agent is the client for interacting with the Agent builders.
 	Agent *AgentClient
 	// AuditEvent is the client for interacting with the AuditEvent builders.
 	AuditEvent *AuditEventClient
 	// Conversation is the client for interacting with the Conversation builders.
 	Conversation *ConversationClient
+	// DeletionJournalEntry is the client for interacting with the DeletionJournalEntry builders.
+	DeletionJournalEntry *DeletionJournalEntryClient
+	// DeletionJournalState is the client for interacting with the DeletionJournalState builders.
+	DeletionJournalState *DeletionJournalStateClient
+	// EmbeddingIndexProfile is the client for interacting with the EmbeddingIndexProfile builders.
+	EmbeddingIndexProfile *EmbeddingIndexProfileClient
+	// EventConversationRequest is the client for interacting with the EventConversationRequest builders.
+	EventConversationRequest *EventConversationRequestClient
 	// Fact is the client for interacting with the Fact builders.
 	Fact *FactClient
 	// Impression is the client for interacting with the Impression builders.
 	Impression *ImpressionClient
+	// IngestionReceipt is the client for interacting with the IngestionReceipt builders.
+	IngestionReceipt *IngestionReceiptClient
+	// IngestionWindowSource is the client for interacting with the IngestionWindowSource builders.
+	IngestionWindowSource *IngestionWindowSourceClient
+	// Integration is the client for interacting with the Integration builders.
+	Integration *IntegrationClient
+	// IntegrationAgentGrant is the client for interacting with the IntegrationAgentGrant builders.
+	IntegrationAgentGrant *IntegrationAgentGrantClient
 	// KeyMemory is the client for interacting with the KeyMemory builders.
 	KeyMemory *KeyMemoryClient
+	// MemoryAICall is the client for interacting with the MemoryAICall builders.
+	MemoryAICall *MemoryAICallClient
+	// MemoryCandidate is the client for interacting with the MemoryCandidate builders.
+	MemoryCandidate *MemoryCandidateClient
 	// MemoryEmbedding is the client for interacting with the MemoryEmbedding builders.
 	MemoryEmbedding *MemoryEmbeddingClient
+	// MemoryGenerationCarry is the client for interacting with the MemoryGenerationCarry builders.
+	MemoryGenerationCarry *MemoryGenerationCarryClient
 	// MemoryItem is the client for interacting with the MemoryItem builders.
 	MemoryItem *MemoryItemClient
+	// MemoryJob is the client for interacting with the MemoryJob builders.
+	MemoryJob *MemoryJobClient
 	// MemoryKeyword is the client for interacting with the MemoryKeyword builders.
 	MemoryKeyword *MemoryKeywordClient
 	// MemoryNode is the client for interacting with the MemoryNode builders.
 	MemoryNode *MemoryNodeClient
+	// MemoryOperation is the client for interacting with the MemoryOperation builders.
+	MemoryOperation *MemoryOperationClient
+	// MemoryPartition is the client for interacting with the MemoryPartition builders.
+	MemoryPartition *MemoryPartitionClient
+	// MemoryPublication is the client for interacting with the MemoryPublication builders.
+	MemoryPublication *MemoryPublicationClient
 	// MemoryRelation is the client for interacting with the MemoryRelation builders.
 	MemoryRelation *MemoryRelationClient
+	// MemorySourceDependency is the client for interacting with the MemorySourceDependency builders.
+	MemorySourceDependency *MemorySourceDependencyClient
+	// MemoryStream is the client for interacting with the MemoryStream builders.
+	MemoryStream *MemoryStreamClient
 	// MemorySummary is the client for interacting with the MemorySummary builders.
 	MemorySummary *MemorySummaryClient
+	// MemoryTombstone is the client for interacting with the MemoryTombstone builders.
+	MemoryTombstone *MemoryTombstoneClient
 	// Message is the client for interacting with the Message builders.
 	Message *MessageClient
 	// OutboxEvent is the client for interacting with the OutboxEvent builders.
 	OutboxEvent *OutboxEventClient
+	// SourceEvent is the client for interacting with the SourceEvent builders.
+	SourceEvent *SourceEventClient
+	// SourceLink is the client for interacting with the SourceLink builders.
+	SourceLink *SourceLinkClient
+	// SourceMessage is the client for interacting with the SourceMessage builders.
+	SourceMessage *SourceMessageClient
 	// TokenUsage is the client for interacting with the TokenUsage builders.
 	TokenUsage *TokenUsageClient
 	// User is the client for interacting with the User builders.
@@ -54,6 +98,10 @@ type Tx struct {
 	Workspace *WorkspaceClient
 	// WorkspaceGrant is the client for interacting with the WorkspaceGrant builders.
 	WorkspaceGrant *WorkspaceGrantClient
+	// WorkspaceMember is the client for interacting with the WorkspaceMember builders.
+	WorkspaceMember *WorkspaceMemberClient
+	// WorkspaceSource is the client for interacting with the WorkspaceSource builders.
+	WorkspaceSource *WorkspaceSourceClient
 
 	// lazily loaded.
 	client     *Client
@@ -187,25 +235,49 @@ func (tx *Tx) Client() *Client {
 func (tx *Tx) init() {
 	tx.APIKey = NewAPIKeyClient(tx.config)
 	tx.Actor = NewActorClient(tx.config)
+	tx.ActorIdentity = NewActorIdentityClient(tx.config)
 	tx.Agent = NewAgentClient(tx.config)
 	tx.AuditEvent = NewAuditEventClient(tx.config)
 	tx.Conversation = NewConversationClient(tx.config)
+	tx.DeletionJournalEntry = NewDeletionJournalEntryClient(tx.config)
+	tx.DeletionJournalState = NewDeletionJournalStateClient(tx.config)
+	tx.EmbeddingIndexProfile = NewEmbeddingIndexProfileClient(tx.config)
+	tx.EventConversationRequest = NewEventConversationRequestClient(tx.config)
 	tx.Fact = NewFactClient(tx.config)
 	tx.Impression = NewImpressionClient(tx.config)
+	tx.IngestionReceipt = NewIngestionReceiptClient(tx.config)
+	tx.IngestionWindowSource = NewIngestionWindowSourceClient(tx.config)
+	tx.Integration = NewIntegrationClient(tx.config)
+	tx.IntegrationAgentGrant = NewIntegrationAgentGrantClient(tx.config)
 	tx.KeyMemory = NewKeyMemoryClient(tx.config)
+	tx.MemoryAICall = NewMemoryAICallClient(tx.config)
+	tx.MemoryCandidate = NewMemoryCandidateClient(tx.config)
 	tx.MemoryEmbedding = NewMemoryEmbeddingClient(tx.config)
+	tx.MemoryGenerationCarry = NewMemoryGenerationCarryClient(tx.config)
 	tx.MemoryItem = NewMemoryItemClient(tx.config)
+	tx.MemoryJob = NewMemoryJobClient(tx.config)
 	tx.MemoryKeyword = NewMemoryKeywordClient(tx.config)
 	tx.MemoryNode = NewMemoryNodeClient(tx.config)
+	tx.MemoryOperation = NewMemoryOperationClient(tx.config)
+	tx.MemoryPartition = NewMemoryPartitionClient(tx.config)
+	tx.MemoryPublication = NewMemoryPublicationClient(tx.config)
 	tx.MemoryRelation = NewMemoryRelationClient(tx.config)
+	tx.MemorySourceDependency = NewMemorySourceDependencyClient(tx.config)
+	tx.MemoryStream = NewMemoryStreamClient(tx.config)
 	tx.MemorySummary = NewMemorySummaryClient(tx.config)
+	tx.MemoryTombstone = NewMemoryTombstoneClient(tx.config)
 	tx.Message = NewMessageClient(tx.config)
 	tx.OutboxEvent = NewOutboxEventClient(tx.config)
+	tx.SourceEvent = NewSourceEventClient(tx.config)
+	tx.SourceLink = NewSourceLinkClient(tx.config)
+	tx.SourceMessage = NewSourceMessageClient(tx.config)
 	tx.TokenUsage = NewTokenUsageClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 	tx.UserSetting = NewUserSettingClient(tx.config)
 	tx.Workspace = NewWorkspaceClient(tx.config)
 	tx.WorkspaceGrant = NewWorkspaceGrantClient(tx.config)
+	tx.WorkspaceMember = NewWorkspaceMemberClient(tx.config)
+	tx.WorkspaceSource = NewWorkspaceSourceClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.

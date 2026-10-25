@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"memstation/apps/server/internal/security"
+
 	"github.com/hibiken/asynq"
 
 	"memstation/apps/server/internal/domain"
@@ -23,6 +25,11 @@ import (
 )
 
 type Services struct {
+	AcknowledgeReceipt   func(context.Context, string) error
+	DataReady            func(context.Context) error
+	ProcessOperation     func(context.Context, string) error
+	TaskAuthority        ports.MemoryTaskAuthority
+	Jobs                 ports.MemoryJobRecorder
 	Conversations        ports.ConversationRepository
 	MediaStore           ports.MediaRepository
 	Memories             ports.MemoryRepository
@@ -41,6 +48,9 @@ type Services struct {
 
 func NewServeMux(logger *slog.Logger, services Services) *asynq.ServeMux {
 	mux := asynq.NewServeMux()
+	mux.Use(trackMemoryJob(services))
+	mux.HandleFunc("memory.lifecycle", handleMemoryLifecycle(services))
+	mux.HandleFunc("ingestion.accepted", handleIngestionAccepted(services))
 	mux.HandleFunc(TypeConversationFinalize, handleConversationFinalize(logger, services))
 	mux.HandleFunc(TypeMediaExtract, handleMediaExtract(logger, services))
 	mux.HandleFunc(TypeSummaryGenerate, handleSummaryGenerate(logger, services))
@@ -50,6 +60,7 @@ func NewServeMux(logger *slog.Logger, services Services) *asynq.ServeMux {
 	mux.HandleFunc(TypeAnalysisExtract, handleAnalysisExtract(logger, services))
 	mux.HandleFunc(TypeKeyMemoryReconcile, handleKeyMemoryReconcile(logger, services))
 	mux.HandleFunc(TypeMemoryRebuildConversation, handleMemoryRebuildConversation(logger, services))
+	mux.HandleFunc("memory.rebuild.carry", handleMemoryRebuildCarry(services))
 	mux.HandleFunc(TypeMemoryRebuildActivate, handleMemoryRebuildActivate(logger, services))
 	return mux
 }
@@ -182,7 +193,7 @@ func captureRetainedSourceSnapshot(ctx context.Context, services Services, conve
 		if err != nil {
 			return nil, err
 		}
-		if added && services.Publisher != nil {
+		if added && services.Publisher != nil && !services.Generations.DurableTasks() {
 			if err := services.Publisher.Publish(ctx, domain.TaskMessage{
 				Type:      TypeMemoryRebuildConversation,
 				Queue:     QueueBulk,
@@ -360,22 +371,23 @@ func handleSummaryGenerate(logger *slog.Logger, services Services) func(context.
 			Importance:     generated.Importance,
 			DecayFactor:    generated.DecayFactor,
 			Metadata: map[string]any{
-				"summary_version":             payload.SummaryVersion,
-				"finalize_reason":             payload.FinalizeReason,
-				"topic_label":                 generated.TopicLabel,
-				"keywords":                    generated.Keywords,
-				"extraction_method":           "llm",
-				"_llm_summary_checkpoint":     newSummaryCheckpoint(conversation, generated),
-				"segment_count":               len(segments),
-				"segment_strategy":            "dialogue_window_v1",
-				"segment_overlap_messages":    conversationservice.DefaultSegmentOptions().Overlap,
-				"summary_chunk_count":         chunkCount,
-				"summary_chunk_max_bytes":     16000,
-				"summary_chunk_overlap_bytes": 0,
-				"modalities":                  modalitiesFromParts(parts),
-				"evidence_count":              len(summaryEvidences),
-				"source_part_count":           len(parts),
-				"has_source_blob":             hasSourceBlob(parts),
+				"summary_version":              payload.SummaryVersion,
+				"source_conversation_revision": conversation.Revision,
+				"finalize_reason":              payload.FinalizeReason,
+				"topic_label":                  generated.TopicLabel,
+				"keywords":                     generated.Keywords,
+				"extraction_method":            "llm",
+				"_llm_summary_checkpoint":      newSummaryCheckpoint(conversation, generated),
+				"segment_count":                len(segments),
+				"segment_strategy":             "dialogue_window_v1",
+				"segment_overlap_messages":     conversationservice.DefaultSegmentOptions().Overlap,
+				"summary_chunk_count":          chunkCount,
+				"summary_chunk_max_bytes":      16000,
+				"summary_chunk_overlap_bytes":  0,
+				"modalities":                   modalitiesFromParts(parts),
+				"evidence_count":               len(summaryEvidences),
+				"source_part_count":            len(parts),
+				"has_source_blob":              hasSourceBlob(parts),
 			},
 		}
 		doc = applyGenerationToDocument(payload.UserID, payload.GenerationID, doc)
@@ -560,7 +572,7 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 		}
 		generation, err := resolveProcessingGeneration(ctx, services, payload.UserID, payload.GenerationID)
 		if err != nil {
-			return err
+			return fmt.Errorf("resolve analysis generation: %w", err)
 		}
 		payload.GenerationID = generation.GenerationID
 		if payload.EmbeddingVersion <= 0 {
@@ -571,12 +583,12 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 		}
 		conversation, err := services.Conversations.GetConversation(ctx, payload.UserID, payload.ConversationID)
 		if err != nil {
-			return err
+			return fmt.Errorf("load analysis conversation: %w", err)
 		}
 		parts, artifacts, err := ensureConversationTimeline(ctx, services, conversation)
 		if err != nil {
 			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
-			return err
+			return fmt.Errorf("load analysis timeline: %w", err)
 		}
 		conversation.Parts = parts
 		conversation.Artifacts = artifacts
@@ -593,13 +605,13 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 		docs, err := services.Memories.ListDocumentsByConversationInGeneration(ctx, payload.UserID, payload.GenerationID, payload.ConversationID)
 		if err != nil {
 			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
-			return err
+			return fmt.Errorf("load analysis summaries: %w", err)
 		}
 		summaryDoc := selectSummaryDocument(docs, payload.SummaryIDs)
 		existingFacts, err := services.Memories.ListDocumentsInGeneration(ctx, payload.UserID, payload.GenerationID, []domain.MemoryType{domain.MemoryTypeFact}, 500)
 		if err != nil {
 			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
-			return err
+			return fmt.Errorf("load existing facts: %w", err)
 		}
 		analyzer := services.Analysis
 		if analyzer == nil {
@@ -615,7 +627,7 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 		})
 		if err != nil {
 			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
-			return err
+			return fmt.Errorf("analyze with checkpoint: %w", err)
 		}
 		factDocs := result.Facts
 		if len(factDocs) == 0 && result.Fact.ID != "" {
@@ -635,7 +647,7 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 			}
 			if err := services.Memories.StoreDocument(ctx, factDocs[idx]); err != nil {
 				markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
-				return err
+				return fmt.Errorf("store extracted fact: %w", err)
 			}
 			if len(summaryEvidences) > 0 {
 				factEvidences := groundedNodeEvidences(factDocs[idx], summaryEvidences)
@@ -657,7 +669,7 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 			}
 			if err := services.Memories.StoreDocument(ctx, result.Impression); err != nil {
 				markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
-				return err
+				return fmt.Errorf("store extracted impression: %w", err)
 			}
 			if len(summaryEvidences) > 0 {
 				impressionEvidences := groundedNodeEvidences(result.Impression, summaryEvidences)
@@ -677,7 +689,7 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 			}
 			if err := services.Memories.StoreDocument(ctx, genericDocs[idx]); err != nil {
 				markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
-				return err
+				return fmt.Errorf("store extracted item: %w", err)
 			}
 			if len(summaryEvidences) > 0 {
 				itemEvidences := groundedNodeEvidences(genericDocs[idx], summaryEvidences)
@@ -702,7 +714,7 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 			relation = enriched
 			if err := services.Memories.LinkDocuments(ctx, relation); err != nil {
 				markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, false)
-				return err
+				return fmt.Errorf("store extracted relation: %w", err)
 			}
 		}
 		logger.InfoContext(ctx, "analysis stored", "conversation_id", payload.ConversationID)
@@ -912,8 +924,16 @@ func handleKeyMemoryReconcile(logger *slog.Logger, services Services) func(conte
 		}
 		for _, candidate := range candidates {
 			km := domain.KeyMemory{
-				ID: keyMemoryID(userID, candidate.Key), UserID: userID, Key: candidate.Key, Value: candidate.Value, Category: candidate.Category, Source: "llm", ReviewStatus: "approved", Importance: candidate.Importance, DecayFactor: candidate.DecayFactor,
-				Metadata: map[string]any{"node_id": keyMemoryNodeID(userID, candidate.Key), "generation_id": generationID, "conversation_id": conversationID, "extraction_method": "llm", "source_document_ids": candidate.SourceDocumentIDs, "score_reason": "llm_extracted"},
+				ID: keyMemoryID(security.ScopedIdentity(ctx, userID), candidate.Key), UserID: userID, Key: candidate.Key, Value: candidate.Value, Category: candidate.Category, Source: "llm", ReviewStatus: "approved", Importance: candidate.Importance, DecayFactor: candidate.DecayFactor,
+				Metadata: map[string]any{"node_id": keyMemoryNodeID(ctx, userID, candidate.Key), "generation_id": generationID, "conversation_id": conversationID, "extraction_method": "llm", "source_document_ids": candidate.SourceDocumentIDs, "score_reason": "llm_extracted"},
+			}
+			for _, doc := range documents {
+				for _, id := range candidate.SourceDocumentIDs {
+					if doc.ID == id {
+						km.SourceRefs = append(km.SourceRefs, doc.SourceRefs...)
+						km.SubjectActorIDs = mergeUniqueStrings(km.SubjectActorIDs, doc.SubjectActorIDs)
+					}
+				}
 			}
 			km.Metadata["llm_checkpoint_id"] = checkpoint.ID
 			alreadyStored := false
@@ -1241,8 +1261,8 @@ func keyMemoryID(userID, key string) string {
 	return fmt.Sprintf("keymemory:%s:%s", userID, key)
 }
 
-func keyMemoryNodeID(userID, key string) string {
-	return fmt.Sprintf("node:keymemory:%s:%s", userID, key)
+func keyMemoryNodeID(ctx context.Context, userID, key string) string {
+	return fmt.Sprintf("node:keymemory:%s:%s", security.ScopedIdentity(ctx, userID), key)
 }
 
 func recordAudit(ctx context.Context, services Services, event domain.AuditEvent) {

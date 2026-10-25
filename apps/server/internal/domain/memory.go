@@ -3,6 +3,8 @@ package domain
 import "time"
 
 type SearchInput struct {
+	SubjectActorIDs     []string     `json:"subject_actor_ids,omitempty"`
+	QueryID             string       `json:"query_id,omitempty"`
 	WorkspaceID         string       `json:"workspace_id,omitempty"`
 	AsOf                *time.Time   `json:"as_of,omitempty"`
 	KnownAt             *time.Time   `json:"known_at,omitempty"`
@@ -41,26 +43,35 @@ type MemoryLineageMeta struct {
 }
 
 type MemoryDocument struct {
-	WorkspaceID    string             `json:"workspace_id,omitempty"`
-	ID             string             `json:"id"`
-	NodeID         string             `json:"node_id"`
-	GenerationID   string             `json:"generation_id,omitempty"`
-	UserID         string             `json:"user_id"`
-	ConversationID string             `json:"conversation_id,omitempty"`
-	Type           MemoryType         `json:"type"`
-	Content        string             `json:"content"`
-	Score          float64            `json:"score"`
-	EffectiveScore float64            `json:"effective_score"`
-	Importance     float64            `json:"importance"`
-	DecayFactor    float64            `json:"decay_factor"`
-	ActivityAt     time.Time          `json:"activity_at"`
-	TimeTier       TimeTier           `json:"time_tier,omitempty"`
-	Metadata       map[string]any     `json:"metadata,omitempty"`
-	Lineage        *MemoryLineageMeta `json:"lineage,omitempty"`
-	Related        []RelatedMemory    `json:"related,omitempty"`
-	Evidences      []MemoryEvidence   `json:"evidences,omitempty"`
-	CreatedAt      time.Time          `json:"created_at"`
-	UpdatedAt      time.Time          `json:"updated_at"`
+	Kind            string             `json:"kind,omitempty"`
+	Visibility      string             `json:"visibility,omitempty"`
+	ValidFrom       *time.Time         `json:"valid_from,omitempty"`
+	ValidTo         *time.Time         `json:"valid_to,omitempty"`
+	PartitionID     string             `json:"partition_id,omitempty"`
+	SubjectActorIDs []string           `json:"subject_actor_ids,omitempty"`
+	SourceRefs      []SourceRef        `json:"source_refs,omitempty"`
+	Revision        int64              `json:"revision"`
+	Status          string             `json:"status"`
+	WorkspaceID     string             `json:"workspace_id,omitempty"`
+	ID              string             `json:"id"`
+	NodeID          string             `json:"node_id"`
+	GenerationID    string             `json:"generation_id,omitempty"`
+	UserID          string             `json:"user_id"`
+	ConversationID  string             `json:"conversation_id,omitempty"`
+	Type            MemoryType         `json:"type"`
+	Content         string             `json:"content"`
+	Score           float64            `json:"score"`
+	EffectiveScore  float64            `json:"effective_score"`
+	Importance      float64            `json:"importance"`
+	DecayFactor     float64            `json:"decay_factor"`
+	ActivityAt      time.Time          `json:"activity_at"`
+	TimeTier        TimeTier           `json:"time_tier,omitempty"`
+	Metadata        map[string]any     `json:"metadata,omitempty"`
+	Lineage         *MemoryLineageMeta `json:"lineage,omitempty"`
+	Related         []RelatedMemory    `json:"related,omitempty"`
+	Evidences       []MemoryEvidence   `json:"evidences,omitempty"`
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       time.Time          `json:"updated_at"`
 }
 
 type FactLineageEntry struct {
@@ -88,6 +99,7 @@ type FactLineage struct {
 }
 
 type SearchResult struct {
+	Trace                *RecallTrace     `json:"trace,omitempty"`
 	Memories             []MemoryDocument `json:"memories"`
 	Total                int              `json:"total"`
 	QueryEmbeddingTokens int              `json:"query_embedding_tokens"`
@@ -101,9 +113,11 @@ type KeywordMatch struct {
 }
 
 type EmbeddingInput struct {
-	UserID string `json:"user_id"`
-	Text   string `json:"text"`
-	Model  string `json:"model"`
+	GenerationID     string `json:"generation_id"`
+	EmbeddingVersion int    `json:"embedding_version"`
+	UserID           string `json:"user_id"`
+	Text             string `json:"text"`
+	Model            string `json:"model"`
 }
 
 type EmbeddingResult struct {
@@ -114,6 +128,9 @@ type EmbeddingResult struct {
 }
 
 type KeyMemory struct {
+	SubjectActorIDs []string       `json:"subject_actor_ids,omitempty"`
+	SourceRefs      []SourceRef    `json:"source_refs,omitempty"`
+	PartitionID     string         `json:"partition_id,omitempty"`
 	WorkspaceID     string         `json:"workspace_id,omitempty"`
 	ID              string         `json:"id"`
 	UserID          string         `json:"user_id"`
@@ -201,6 +218,7 @@ type RerankResult struct {
 }
 
 type VectorUpsertRequest struct {
+	PartitionID       string    `json:"partition_id,omitempty"`
 	WorkspaceID       string    `json:"workspace_id,omitempty"`
 	UserID            string    `json:"user_id"`
 	GenerationID      string    `json:"generation_id,omitempty"`
@@ -258,6 +276,7 @@ const (
 )
 
 type MemorySourceSnapshot struct {
+	PartitionID     string                `json:"partition_id,omitempty"`
 	WorkspaceID     string                `json:"workspace_id,omitempty"`
 	SnapshotID      string                `json:"snapshot_id"`
 	UserID          string                `json:"user_id"`
@@ -306,4 +325,32 @@ type MemorySourceStats struct {
 	SnapshotCount        int        `json:"snapshot_count"`
 	LatestSnapshotAt     *time.Time `json:"latest_snapshot_at,omitempty"`
 	LatestSnapshotUserID string     `json:"latest_snapshot_user_id,omitempty"`
+}
+
+type RecallTrace struct {
+	Watermarks        []StreamWatermark    `json:"watermarks"`
+	WatermarksPartial bool                 `json:"watermarks_partial"`
+	ProviderCalls     []RecallProviderCall `json:"provider_calls"`
+	QueryID           string               `json:"query_id"`
+	ProviderRequestID string               `json:"provider_request_id,omitempty"`
+	LatencyMS         int64                `json:"latency_ms"`
+	ReturnedCount     int                  `json:"returned_count"`
+	EligibleCount     int                  `json:"eligible_count"`
+	ScoreDefinition   string               `json:"score_definition"`
+	FailureCode       string               `json:"failure_code,omitempty"`
+	Degraded          bool                 `json:"degraded"`
+}
+
+type RecallProviderCall struct {
+	CallID            string `json:"call_id"`
+	Role              string `json:"role"`
+	ProviderRequestID string `json:"provider_request_id,omitempty"`
+	Status            string `json:"status"`
+}
+type StreamWatermark struct {
+	StreamID     string `json:"stream_id"`
+	PartitionID  string `json:"partition_id"`
+	GenerationID string `json:"generation_id"`
+	Accepted     int64  `json:"accepted"`
+	Indexed      int64  `json:"indexed"`
 }

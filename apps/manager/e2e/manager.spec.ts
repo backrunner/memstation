@@ -1817,7 +1817,7 @@ test('workspace management paginates conversations and key memories across the f
 test('workspace management navigation resolves owners and keeps service and section scope', async ({ page }) => {
   await page.goto('/t/fixture-target/open/memory/keys');
   await expect(page).toHaveURL(/workspaces\?open=/);
-  await expect(page.getByText('Choose the Personal workspace to browse.', { exact: false })).toBeVisible();
+  await expect(page.getByText('Choose the workspace to browse.', { exact: false })).toBeVisible();
   await page.getByRole('link', { name: /Personal Owner: admin/ }).click();
   await expect(page).toHaveURL('/t/fixture-target/w/personal/keys');
   await expect(page.getByRole('heading', { name: 'Key memories', exact: true })).toBeVisible();
@@ -1932,4 +1932,41 @@ test('workspace management related Key Memory opens its scoped editor without a 
   await expect(page.getByRole('heading', { name: 'rollout_owner', exact: true })).toBeVisible();
   await expect(page.getByLabel('Value', { exact: true })).toHaveValue('ops-team');
   await expect(page.getByRole('button', { name: 'Save memory', exact: true })).toBeDisabled();
+});
+
+
+test('workspace management memory service reviews evidence, publishes and erases with tracked progress', async ({page},testInfo)=>{
+ await page.goto('/t/fixture-target/w/personal/lifecycle');
+ await expect(page.getByRole('heading',{name:'Memory service',exact:true})).toBeVisible();
+ await expect(page.locator('.error-state')).toHaveCount(0);
+ await page.getByRole('button',{name:'AI runtime and index generations',exact:true}).click();
+ await expect(page.getByText('AI: broker',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Rebuild workspace index',exact:true}).click();
+ await expect(page.getByText('0/2 processed',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Discard generation',exact:true}).click();
+ await expect(page.getByText('Inactive generation discarded.',{exact:true})).toBeVisible();
+ await expect(page.getByText('Accepted 7',{exact:true})).toBeVisible();
+ await expect(page.getByText('Indexed 4',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Replay task',exact:true}).click();
+ await expect(page.getByText('Original task queued for replay.',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Approve revision 1',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Open approved memory',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Open approved memory',exact:true}).click();
+ await page.getByLabel('Target workspace ID',{exact:true}).fill('personal-bob');
+ await page.getByRole('button',{name:'Preview publication',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Approve this target copy'})).toBeVisible();
+ await page.getByRole('button',{name:'Approve publication',exact:true}).click();
+ await expect(page.getByText('Publication copy approved.',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Retract copy',exact:true}).click();
+ await expect(page.getByText('revoked',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Deletion, export and retention',exact:true}).click();
+ await page.getByLabel('Record ID',{exact:true}).fill('source-1');
+ await page.getByLabel('Confirm workspace name',{exact:true}).fill('Personal');
+ await page.getByRole('button',{name:'Request deletion',exact:true}).click();
+ await expect(page.getByText('Reads blocked',{exact:true})).toBeVisible();
+ await expect(page.getByText('Deletion history persisted',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Export this partition',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Download export',exact:true})).toBeVisible();
+ await page.screenshot({path:testInfo.outputPath('memory-service.png'),fullPage:true});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
 });

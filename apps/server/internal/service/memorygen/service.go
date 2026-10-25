@@ -29,8 +29,19 @@ func NewService(db runtimeconfig.DBHandle, model string) *Service {
 
 func CurrentGenerationID(userID string) string { return memorygeneration.CurrentGenerationID(userID) }
 
+func (s *Service) CreateRebuildGeneration(ctx context.Context, in CreateRebuildInput) (domain.MemoryGeneration, []domain.MemoryGenerationSource, error) {
+	if in.Scope != "conversation" && security.AdminFromContext(ctx) {
+		var err error
+		ctx, err = s.FullWorkspaceContext(ctx, in.UserID)
+		if err != nil {
+			return domain.MemoryGeneration{}, nil, err
+		}
+	}
+	return s.Repository.CreateRebuildGeneration(ctx, in)
+}
+
 func (s *Service) CaptureSourceSnapshot(ctx context.Context, conversation domain.ConversationRecord) (domain.MemorySourceSnapshot, bool, error) {
-	workspace, err := security.PersonalScope(ctx, conversation.UserID, conversation.WorkspaceID)
+	workspace, err := security.DataScope(ctx, conversation.UserID, conversation.WorkspaceID)
 	if err != nil {
 		return domain.MemorySourceSnapshot{}, false, err
 	}
@@ -53,6 +64,8 @@ func snapshotFromConversation(conversation domain.ConversationRecord) domain.Mem
 		metadata = map[string]any{}
 	}
 	metadata["captured_from_conversation"] = conversation.ConversationID
+	metadata["trusted_context_mode"] = conversation.ContextMode
+	metadata["trusted_partition_id"] = conversation.PartitionID
 	metadata["captured_at"] = now.Format(time.RFC3339)
 	messages := conversationservice.PrepareMessagesForStorage(conversation.Messages)
 	parts := append([]domain.MessagePart(nil), conversation.Parts...)

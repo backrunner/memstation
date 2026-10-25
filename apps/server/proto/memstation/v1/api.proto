@@ -156,12 +156,43 @@ message SearchRequest {
  google.protobuf.Timestamp known_at = 12;
  string relation_mode = 13;
  string entity_scope = 14;
+ repeated string subject_actor_ids = 15;
 }
 
 message SearchResponse {
   repeated MemoryDocument memories = 1;
   int32 total = 2;
   int32 query_embedding_tokens = 3;
+ google.protobuf.Struct trace = 4;
+ google.protobuf.Struct rerank = 5;
+ RecallTrace recall_trace = 6;
+}
+
+message RecallTrace {
+ repeated StreamWatermark watermarks = 1;
+ bool watermarks_partial = 2;
+ repeated RecallProviderCall provider_calls = 3;
+ string query_id = 4;
+ string provider_request_id = 5;
+ int64 latency_ms = 6;
+ int32 returned_count = 7;
+ int32 eligible_count = 8;
+ string score_definition = 9;
+ string failure_code = 10;
+ bool degraded = 11;
+}
+message StreamWatermark {
+ string stream_id = 1;
+ string partition_id = 2;
+ string generation_id = 3;
+ int64 accepted = 4;
+ int64 indexed = 5;
+}
+message RecallProviderCall {
+ string call_id = 1;
+ string role = 2;
+ string provider_request_id = 3;
+ string status = 4;
 }
 
 message InjectionResult {
@@ -188,6 +219,23 @@ message MemoryDocument {
   google.protobuf.Timestamp created_at = 16;
   google.protobuf.Timestamp updated_at = 17;
   FactLineage lineage = 18;
+ string workspace_id = 19;
+ string partition_id = 20;
+ repeated string subject_actor_ids = 21;
+ repeated SourceRef source_refs = 22;
+ int64 revision = 23;
+ string status = 24;
+ string kind=25;
+ string visibility=26;
+ google.protobuf.Timestamp valid_from=27;
+ google.protobuf.Timestamp valid_to=28;
+ repeated MemoryEvidence evidences=29;
+}
+
+message MemoryEvidence {
+ string id=1;string generation_id=2;string user_id=3;string node_id=4;string conversation_id=5;
+ int32 sequence_num=6;string part_id=7;string artifact_id=8;int32 page_index=9;int64 start_ms=10;int64 end_ms=11;
+ string evidence_kind=12;string excerpt_text=13;double weight=14;google.protobuf.Struct metadata=15;google.protobuf.Timestamp created_at=16;
 }
 
 message FactLineage {
@@ -344,3 +392,147 @@ message ConversationMemoryResponse {
   repeated MemoryDocument documents = 3;
   repeated KeyMemory key_memories = 4;
 }
+
+// Independent memory contract. Workspace and audience are selected via authenticated
+// metadata; request fields can only narrow that server-bound authorization.
+service MemoryDataService {
+ rpc Probe(google.protobuf.Empty) returns (MemoryCapabilities);
+ rpc Observe(ObserveRequest) returns (IngestionReceipt);
+ rpc Progress(RecordRequest) returns (IngestionReceipt);
+ rpc OpenWindow(OpenWindowRequest) returns (ConversationWindow);
+ rpc GetWindow(RecordRequest) returns (ConversationWindow);
+ rpc Finalize(FinalizeWindowRequest) returns (ConversationWindow);
+ rpc Inspect(RecordRequest) returns (MemoryDocument);
+ rpc Source(RecordRequest) returns (SourceRecord);
+ rpc Propose(CandidateInput) returns (MemoryCandidate);
+ rpc Candidates(RecordRequest) returns (CandidateList);
+ rpc Retract(ForgetRequest) returns (MemoryOperation);
+ rpc Forget(ForgetRequest) returns (MemoryOperation);
+ rpc Export(ExportRequest) returns (MemoryOperation);
+ rpc Operation(RecordRequest) returns (MemoryOperation);
+ rpc ReconcileUsage(RecordRequest) returns(AICall);
+ rpc Usage(AIUsageRequest) returns (AIUsageResponse);
+}
+service WorkspaceAdminService {
+ rpc Generations(AdminWorkspaceScope) returns(GenerationList);
+ rpc Rebuild(GenerationRebuildRequest) returns(MemoryGeneration);
+ rpc ActivateGeneration(AdminRecordRequest) returns(MemoryGeneration);
+ rpc DiscardGeneration(AdminRecordRequest) returns(MemoryGeneration);
+ rpc Capabilities(AdminWorkspaceScope) returns(MemoryCapabilities);
+
+ rpc CreateAgent(WorkspaceAgentCreate) returns(WorkspaceAgent);
+ rpc Agent(WorkspaceGrantRequest) returns(WorkspaceAgentDetail);
+ rpc Workspaces(WorkspaceListRequest) returns(WorkspaceListResponse);
+ rpc CreateWorkspace(WorkspaceConfig) returns(WorkspaceConfig);
+ rpc UpdateWorkspace(WorkspaceConfig) returns(WorkspaceConfig);
+ rpc Integrations(AdminWorkspaceScope) returns(IntegrationList);
+ rpc PutIntegration(IntegrationConfig) returns(IntegrationConfig);
+ rpc Partitions(AdminWorkspaceScope) returns(PartitionList);
+ rpc PutPartition(PartitionConfig) returns(PartitionConfig);
+ rpc Grant(WorkspaceGrantRequest) returns(WorkspaceGrant);
+ rpc SetGrant(WorkspaceGrant) returns(WorkspaceGrant);
+ rpc Control(MemoryControlRequest) returns(MemoryControlOverview);
+ rpc ReplayJob(AdminRecordRequest) returns(google.protobuf.Empty);
+ rpc Inspect(AdminRecordRequest) returns(MemoryDocument);
+ rpc Source(AdminRecordRequest) returns(SourceRecord);
+ rpc Progress(AdminRecordRequest) returns(IngestionReceipt);
+ rpc Candidates(AdminRecordRequest) returns(CandidateList);
+ rpc Propose(AdminCandidateRequest) returns(MemoryCandidate);
+ rpc Forget(AdminForgetRequest) returns(MemoryOperation);
+ rpc Retract(AdminForgetRequest) returns(MemoryOperation);
+ rpc Export(AdminExportRequest) returns(MemoryOperation);
+ rpc Operation(AdminRecordRequest) returns(MemoryOperation);
+ rpc ReconcileUsage(AdminRecordRequest) returns(AICall);
+ rpc Usage(AdminUsageRequest) returns(AIUsageResponse);
+ rpc ReviewCandidate(ReviewCandidateRequest) returns (MemoryCandidate);
+ rpc Publish(PublishRequest) returns (MemoryPublication);
+ rpc Publications(AdminWorkspaceScope) returns (PublicationList);
+ rpc RetractPublication(RetractPublicationRequest) returns (MemoryPublication);
+}
+message RecordRequest {string id = 1;string after=2;}
+message TextSpan {int32 start = 1;int32 end = 2;}
+message SourceRef {string workspace_id = 1;string message_id = 2;int64 revision = 3;int32 part_index = 4;TextSpan span = 5;}
+message SourceSpeaker {string external_id = 1;string actor_id = 2;string display_name = 3;string kind = 4;}
+message SourcePart {string type = 1;string text = 2;string actor_id = 3;SourceRef source = 4;SourceSpeaker author = 5;}
+message SourceEvent {
+ string event_id = 1;string type = 2;string source_message_id = 3;int64 source_revision = 4;
+ SourceSpeaker speaker = 5;repeated SourcePart parts = 6;SourceRef reply_to = 7;
+ // RFC3339 with timezone, identical to the HTTP contract.
+ string occurred_at = 8;string delivery_status = 9;string delivery_receipt = 10;
+}
+message IngestBatch {string workspace_id = 1;string integration_id = 2;string external_space_id = 3;string thread_id = 4;string partition_id = 5;repeated SourceEvent events = 6;}
+message ObserveRequest {IngestBatch batch = 1;string idempotency_key = 2;}
+message EventAcceptance {string conversation_id = 1;string event_id = 2;string message_id = 3;string status = 4;int64 sequence = 5;}
+message IngestionReceipt {
+ string id = 1;string workspace_id = 2;string stream_id = 3;string partition_id = 4;string generation_id = 5;
+ int64 accepted_sequence = 6;int64 indexed_sequence = 7;string status = 8;string stage = 9;string failure_code = 10;
+ int32 retry_count = 11;string next_retry_at = 12;bool dead_letter = 13;repeated EventAcceptance events = 14;
+}
+message WindowInput {string workspace_id = 1;string integration_id = 2;string external_space_id = 3;string thread_id = 4;string partition_id = 5;}
+message OpenWindowRequest {WindowInput window = 1;string idempotency_key = 2;}
+message FinalizeWindowRequest {string id = 1;int64 expected_revision = 2;}
+message ConversationWindow {string id = 1;string workspace_id = 2;string partition_id = 3;string stream_id = 4;int64 revision = 5;string status = 6;}
+message SourceRecord {string id = 1;string workspace_id = 2;string partition_id = 3;string integration_id = 4;int64 revision = 5;string speaker_actor_id = 6;repeated SourcePart parts = 7;SourceRef reply_to = 8;string occurred_at = 9;}
+message CandidateInput {string kind = 1;string content = 2;string partition_id = 3;repeated string subject_actor_ids = 4;repeated SourceRef source_refs = 5;string target_node_id = 6;int64 target_revision = 7;}
+message MemoryCandidate {
+ string id = 1;string workspace_id = 2;string partition_id = 3;string agent_id = 4;string kind = 5;string content = 6;
+ repeated string subject_actor_ids = 7;repeated SourceRef source_refs = 8;string origin = 9;string status = 10;int64 revision = 11;
+ string target_node_id = 12;int64 target_revision = 13;string result_node_id = 14;string created_at = 15;string updated_at = 16;
+}
+message CandidateList {repeated MemoryCandidate items = 1;}
+message ForgetSelector {string partition_id = 1;repeated SourceRef source_refs = 2;repeated string node_ids = 3;string actor_id = 4;bool workspace = 5;}
+message ForgetRequest {ForgetSelector selector = 1;string idempotency_key = 2;}
+message ExportRequest {string idempotency_key = 1;}
+message MemoryOperation {
+ string id = 1;string workspace_id = 2;string partition_id = 3;string kind = 4;string status = 5;int64 revision = 6;
+ bool read_blocked = 7;bool online_cleaned = 8;bool journal_persisted = 9;string backup_status = 10;string failure_code = 11;
+ google.protobuf.Struct result = 12;string expires_at = 13;string created_at = 14;string updated_at = 15;
+}
+message MemoryCapabilities {string contract_version = 1;string server_version = 2;string status = 3;google.protobuf.Struct access = 4;map<string,bool> capabilities = 5;repeated string limitations = 6;MemoryRuntime runtime=7;}
+message AdminWorkspaceScope {string user_id = 1;string workspace_id = 2;string partition_id = 3;string after=4;}
+message ReviewCandidateRequest {AdminWorkspaceScope scope = 1;string id = 2;int64 expected_revision = 3;string decision = 4;string confirmed_kind = 5;}
+message PublicationInput {string source_node_id = 1;int64 source_revision = 2;string target_workspace_id = 3;string target_partition_id = 4;map<string,string> actor_mapping = 5;string replaces_publication_id = 6;int64 expected_publication_revision = 7;}
+message PublishRequest {AdminWorkspaceScope scope = 1;PublicationInput publication = 2;}
+message MemoryPublication {string id = 1;string source_workspace_id = 2;string source_node_id = 3;int64 source_revision = 4;string target_workspace_id = 5;string target_partition_id = 6;string target_node_id = 7;string status = 8;int64 revision = 9;string operation_id = 10;}
+message PublicationList {repeated MemoryPublication items = 1;}
+message RetractPublicationRequest {AdminWorkspaceScope scope = 1;string id = 2;int64 expected_revision = 3;}
+
+message AIUsageRequest {string after = 1;int32 limit = 2;}
+message AICall {
+ string id = 1;string workspace_id = 2;string partition_id = 3;repeated string partition_ids = 4;string role = 5;
+ string model_alias = 6;string model_version = 7;string trace_id = 8;string job_id = 9;int32 attempt = 10;
+ string provider_request_id = 11;string broker_usage_id = 12;string status = 13;int32 input_tokens = 14;int32 output_tokens = 15;
+ string reported_cost = 16;string currency = 17;string usage_authority = 18;string failure_code = 19;string created_at = 20;string updated_at = 21;
+}
+message AIUsageResponse {repeated AICall items = 1;string usage_authority = 2;bool additional_charge = 3;}
+
+message WorkspaceConfig {string id=1;string user_id=2;string name=3;string kind=4;string status=5;int64 policy_version=6;repeated string capabilities=7;string created_at=8;string updated_at=9;}
+message WorkspaceListRequest {string user_id=1;string after=2;string query=3;int32 limit=4;}
+message WorkspaceListResponse {repeated WorkspaceConfig items=1;string next_cursor=2;string workspace_mode=3;}
+message IntegrationConfig {string id=1;string user_id=2;string workspace_id=3;string name=4;string kind=5;string external_space_id=6;string agent_id=7;repeated string allowed_event_types=8;int64 revision=9;}
+message IntegrationList {repeated IntegrationConfig items=1;}
+message PartitionConfig {string id=1;string user_id=2;string workspace_id=3;string agent_id=4;repeated string audience_actor_ids=5;int64 revision=6;}
+message PartitionList {repeated PartitionConfig items=1;}
+message WorkspaceGrant {string user_id=1;string workspace_id=2;string agent_id=3;repeated string capabilities=4;int64 revision=5;}
+message WorkspaceGrantRequest {AdminWorkspaceScope scope=1;string agent_id=2;}
+message AdminRecordRequest {AdminWorkspaceScope scope=1;string id=2;string after=3;}
+message AdminCandidateRequest {AdminWorkspaceScope scope=1;CandidateInput candidate=2;}
+message AdminForgetRequest {AdminWorkspaceScope scope=1;ForgetRequest request=2;}
+message AdminExportRequest {AdminWorkspaceScope scope=1;string idempotency_key=2;}
+message AdminUsageRequest {AdminWorkspaceScope scope=1;AIUsageRequest request=2;}
+message MemoryControlRequest {AdminWorkspaceScope scope=1;string after=2;int32 limit=3;}
+message WorkspaceActor {string actor_id=1;string display_name=2;string kind=3;int64 revision=4;}
+message SourceSummary {string id=1;int64 revision=2;string speaker_actor_id=3;string status=4;}
+message MemoryJob {string id=1;string queue=2;string operation_id=3;string user_id=4;string workspace_id=5;string partition_id=6;string conversation_id=7;string task_type=8;string status=9;int32 attempt=10;string failure_code=11;string next_retry_at=12;string generation_id=13;}
+message MemoryControlOverview {repeated WorkspaceActor actors=1;repeated SourceSummary sources=2;repeated IngestionReceipt receipts=3;repeated MemoryJob jobs=4;repeated MemoryOperation operations=5;int32 limit=6;string next_cursor=7;}
+
+message WorkspaceAgentCreate {AdminWorkspaceScope scope=1;string name=2;repeated string capabilities=3;}
+message WorkspaceAgent {string id=1;string user_id=2;string actor_id=3;string name=4;string status=5;string default_workspace_id=6;int64 revision=7;bool legacy=8;string created_at=9;string updated_at=10;}
+message WorkspaceAgentDetail {WorkspaceAgent agent=1;WorkspaceGrant grant=2;WorkspaceConfig workspace=3;repeated string effective_capabilities=4;}
+
+message MemoryRuntime {string ai_backend=1;map<string,string> role_aliases=2;EmbeddingIdentity embedding=3;string usage_authority=4;}
+message EmbeddingIdentity {string model_version=1;int32 dimensions=2;string fingerprint=3;}
+
+message MemoryGeneration {string generation_id=1;string user_id=2;string workspace_id=3;string status=4;string scope=5;string conversation_id=6;bool is_active=7;int32 structure_version=8;int32 embedding_version=9;string embedding_model=10;bool activate_on_success=11;int32 source_count=12;int32 processed_count=13;int32 embedding_count=14;int32 failure_count=15;string last_error=16;google.protobuf.Struct metadata=17;string created_at=18;string updated_at=19;string activated_at=20;}
+message GenerationList {repeated MemoryGeneration items=1;}
+message GenerationRebuildRequest {AdminWorkspaceScope scope=1;string embedding_model_override=2;bool activate_on_success=3;}

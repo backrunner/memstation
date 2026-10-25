@@ -753,7 +753,7 @@ func TestKeyMemoryReconcileHandlerEnforcesWhitelistAndAudits(t *testing.T) {
 	if len(invalidated) != 1 || invalidated[0] != "user-1" {
 		t.Fatalf("expected cache invalidation callback for user-1, got %+v", invalidated)
 	}
-	relations, err := memories.ListRelations(ctx, "user-1", "", []string{keyMemoryNodeID("user-1", "recent_conversation")}, 1)
+	relations, err := memories.ListRelations(ctx, "user-1", "", []string{keyMemoryNodeID(context.Background(), "user-1", "recent_conversation")}, 1)
 	if err != nil {
 		t.Fatalf("list key memory relations: %v", err)
 	}
@@ -770,7 +770,7 @@ func TestKeyMemoryReconcileHandlerEnforcesWhitelistAndAudits(t *testing.T) {
 		if relation.RelationType != "promoted_to_key_memory" {
 			t.Fatalf("unexpected relation type: %+v", relation)
 		}
-		if relation.DstNodeID != keyMemoryNodeID("user-1", "recent_conversation") {
+		if relation.DstNodeID != keyMemoryNodeID(context.Background(), "user-1", "recent_conversation") {
 			t.Fatalf("expected key memory node as relation target, got %+v", relation)
 		}
 	}
@@ -825,7 +825,7 @@ func TestKeyMemoryReconcileHandlerScopesRelationsToRequestedGeneration(t *testin
 		t.Fatalf("handle generation-scoped key memory reconcile: %v", err)
 	}
 
-	keyNodeID := keyMemoryNodeID("user-1", "recent_conversation")
+	keyNodeID := keyMemoryNodeID(context.Background(), "user-1", "recent_conversation")
 	relations, err := memories.ListRelations(ctx, "user-1", candidateGenerationID, []string{keyNodeID}, 1)
 	if err != nil {
 		t.Fatalf("list candidate generation relations: %v", err)

@@ -9,6 +9,7 @@ import (
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/security"
+	storeaccess "memstation/apps/server/internal/store/access"
 )
 
 func (r *HybridMediaRepository) MarkBlobForCleanup(ctx context.Context, user, conversation, blob string) (bool, error) {
@@ -19,7 +20,7 @@ func (r *HybridMediaRepository) MarkBlobForCleanup(ctx context.Context, user, co
 }
 
 func (r *PostgresMediaRepository) MarkBlobForCleanup(ctx context.Context, user, conversation, blob string) (bool, error) {
-	workspace, err := security.PersonalScope(ctx, user, "")
+	workspace, err := security.DataScope(ctx, user, "")
 	if err != nil {
 		return false, err
 	}
@@ -29,7 +30,7 @@ func (r *PostgresMediaRepository) MarkBlobForCleanup(ctx context.Context, user, 
 	}
 	defer rollback(tx)
 	var id string
-	err = tx.QueryRowContext(ctx, `SELECT blob_id FROM blob_objects WHERE user_id=$1 AND workspace_id=$2 AND blob_id=$3 FOR UPDATE`, user, workspace, blob).Scan(&id)
+	err = tx.QueryRowContext(ctx, `SELECT blob_id FROM blob_objects WHERE user_id=$1 AND workspace_id=$2 AND blob_id=$3 AND `+storeaccess.PartitionSQL(ctx, "partition_id")+` FOR UPDATE`, user, workspace, blob).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
@@ -48,14 +49,14 @@ func (r *PostgresMediaRepository) MarkBlobForCleanup(ctx context.Context, user, 
 }
 
 func (r *InMemoryMediaRepository) MarkBlobForCleanup(ctx context.Context, user, conversation, blob string) (bool, error) {
-	workspace, err := security.PersonalScope(ctx, user, "")
+	workspace, err := security.DataScope(ctx, user, "")
 	if err != nil {
 		return false, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	b, ok := r.blobs[key(user, blob)]
-	if !ok || b.WorkspaceID != workspace {
+	if !ok || b.WorkspaceID != workspace || !security.CanReadPartition(ctx, b.PartitionID) {
 		return false, nil
 	}
 	for _, parts := range r.parts {
@@ -86,7 +87,7 @@ func validatePartBlobsTx(ctx context.Context, tx *sql.Tx, user, workspace string
 	sort.Strings(ordered)
 	for _, id := range ordered {
 		var found string
-		if err := tx.QueryRowContext(ctx, `SELECT blob_id FROM blob_objects WHERE user_id=$1 AND workspace_id=$2 AND blob_id=$3 AND deleted_at IS NULL FOR SHARE`, user, workspace, id).Scan(&found); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT blob_id FROM blob_objects WHERE user_id=$1 AND workspace_id=$2 AND blob_id=$3 AND `+storeaccess.PartitionSQL(ctx, "partition_id")+` AND deleted_at IS NULL FOR SHARE`, user, workspace, id).Scan(&found); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return domain.ErrAccessDenied
 			}

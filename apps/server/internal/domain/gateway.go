@@ -196,6 +196,7 @@ type UsageRecord struct {
 }
 
 type UnifiedMessage struct {
+	Source      *MessageSource `json:"source,omitempty"`
 	Role        MessageRole    `json:"role"`
 	Text        string         `json:"text,omitempty"`
 	Blocks      []ContentBlock `json:"blocks,omitempty"`
@@ -245,14 +246,15 @@ func (r UnifiedRequest) SourceRetainEnabled(defaultValue bool) bool {
 }
 
 type UnifiedResponse struct {
-	ResponseID string         `json:"response_id"`
-	Protocol   Protocol       `json:"protocol"`
-	Provider   Provider       `json:"provider"`
-	Model      string         `json:"model,omitempty"`
-	Message    UnifiedMessage `json:"message"`
-	Usage      UsageRecord    `json:"usage"`
-	CreatedAt  time.Time      `json:"created_at"`
-	Raw        map[string]any `json:"raw,omitempty"`
+	FinishReason string         `json:"finish_reason,omitempty"`
+	ResponseID   string         `json:"response_id"`
+	Protocol     Protocol       `json:"protocol"`
+	Provider     Provider       `json:"provider"`
+	Model        string         `json:"model,omitempty"`
+	Message      UnifiedMessage `json:"message"`
+	Usage        UsageRecord    `json:"usage"`
+	CreatedAt    time.Time      `json:"created_at"`
+	Raw          map[string]any `json:"raw,omitempty"`
 }
 
 type StreamEvent struct {

@@ -33,7 +33,7 @@ func (r *HybridMemoryRepository) StoreSummaryCheckpoint(ctx context.Context, use
 }
 
 func (r *PostgresMemoryRepository) StoreSummaryCheckpoint(ctx context.Context, user, generation, id, content, key string, value any) error {
-	scope, err := security.PersonalScope(ctx, user, "")
+	scope, err := security.DataScope(ctx, user, "")
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func (r *PostgresMemoryRepository) StoreSummaryCheckpoint(ctx context.Context, u
 }
 
 func (r *InMemoryMemoryRepository) StoreSummaryCheckpoint(ctx context.Context, user, generation, id, content, key string, value any) error {
-	scope, err := security.PersonalScope(ctx, user, "")
+	scope, err := security.DataScope(ctx, user, "")
 	if err != nil {
 		return err
 	}

@@ -39,11 +39,14 @@ func NewStore(cfg bootstrap.MultimodalConfig) (ports.BlobStore, error) {
 }
 
 func (s *LocalStore) Put(ctx context.Context, blob domain.BlobObject, body io.Reader) (domain.BlobObject, error) {
-	workspace, err := security.PersonalScope(ctx, blob.UserID, blob.WorkspaceID)
+	workspace, err := security.DataScope(ctx, blob.UserID, blob.WorkspaceID)
 	if err != nil {
 		return domain.BlobObject{}, err
 	}
 	blob.WorkspaceID = workspace
+	if !security.CanReadPartition(ctx, blob.PartitionID) {
+		return domain.BlobObject{}, domain.ErrAccessDenied
+	}
 	if blob.BlobID == "" || blob.DeletedAt != nil {
 		return domain.BlobObject{}, domain.ErrAccessDenied
 	}
@@ -110,11 +113,17 @@ func (s *LocalStore) Delete(ctx context.Context, blob domain.BlobObject) error {
 }
 
 func scopedKey(blob domain.BlobObject) string {
-	return filepath.Join("v2", domain.PersonalWorkspaceID(blob.UserID), domain.AccessID("blob", blob.BlobID), "content")
+	if blob.PartitionID != "" {
+		return filepath.Join("v3", blob.WorkspaceID, domain.AccessID("partition", blob.PartitionID), domain.AccessID("blob", blob.BlobID), "content")
+	}
+	return filepath.Join("v2", blob.WorkspaceID, domain.AccessID("blob", blob.BlobID), "content")
 }
 
 func validateBlobKey(ctx context.Context, blob domain.BlobObject) error {
-	if _, err := security.PersonalScope(ctx, blob.UserID, blob.WorkspaceID); err != nil {
+	if !security.CanReadPartition(ctx, blob.PartitionID) {
+		return domain.ErrAccessDenied
+	}
+	if _, err := security.DataScope(ctx, blob.UserID, blob.WorkspaceID); err != nil {
 		return err
 	}
 	if blob.BlobID == "" || blob.StorageKey == "" || !filepath.IsLocal(blob.StorageKey) || filepath.Clean(blob.StorageKey) != blob.StorageKey {
@@ -122,6 +131,9 @@ func validateBlobKey(ctx context.Context, blob domain.BlobObject) error {
 	}
 	if blob.StorageKey == scopedKey(blob) {
 		return nil
+	}
+	if blob.PartitionID != "" {
+		return domain.ErrAccessDenied
 	}
 	// Existing on-disk uploads retain their original layout. Only an exact
 	// owner/blob directory is accepted, never an arbitrary metadata path.

@@ -19,10 +19,22 @@ const (
 	FieldUpdatedAt = "updated_at"
 	// FieldGenerationID holds the string denoting the generation_id field in the database.
 	FieldGenerationID = "generation_id"
+	// FieldSourceConversationID holds the string denoting the source_conversation_id field in the database.
+	FieldSourceConversationID = "source_conversation_id"
 	// FieldUserID holds the string denoting the user_id field in the database.
 	FieldUserID = "user_id"
 	// FieldWorkspaceID holds the string denoting the workspace_id field in the database.
 	FieldWorkspaceID = "workspace_id"
+	// FieldPartitionID holds the string denoting the partition_id field in the database.
+	FieldPartitionID = "partition_id"
+	// FieldAccessStatus holds the string denoting the access_status field in the database.
+	FieldAccessStatus = "access_status"
+	// FieldSubjectActorIds holds the string denoting the subject_actor_ids field in the database.
+	FieldSubjectActorIds = "subject_actor_ids"
+	// FieldSourceRefs holds the string denoting the source_refs field in the database.
+	FieldSourceRefs = "source_refs"
+	// FieldRevision holds the string denoting the revision field in the database.
+	FieldRevision = "revision"
 	// FieldNodeType holds the string denoting the node_type field in the database.
 	FieldNodeType = "node_type"
 	// FieldEntityID holds the string denoting the entity_id field in the database.
@@ -49,8 +61,14 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldUpdatedAt,
 	FieldGenerationID,
+	FieldSourceConversationID,
 	FieldUserID,
 	FieldWorkspaceID,
+	FieldPartitionID,
+	FieldAccessStatus,
+	FieldSubjectActorIds,
+	FieldSourceRefs,
+	FieldRevision,
 	FieldNodeType,
 	FieldEntityID,
 	FieldImportance,
@@ -80,6 +98,18 @@ var (
 	UpdateDefaultUpdatedAt func() time.Time
 	// DefaultGenerationID holds the default value on creation for the "generation_id" field.
 	DefaultGenerationID string
+	// DefaultSourceConversationID holds the default value on creation for the "source_conversation_id" field.
+	DefaultSourceConversationID string
+	// DefaultPartitionID holds the default value on creation for the "partition_id" field.
+	DefaultPartitionID string
+	// DefaultAccessStatus holds the default value on creation for the "access_status" field.
+	DefaultAccessStatus string
+	// DefaultSubjectActorIds holds the default value on creation for the "subject_actor_ids" field.
+	DefaultSubjectActorIds []string
+	// DefaultSourceRefs holds the default value on creation for the "source_refs" field.
+	DefaultSourceRefs []map[string]interface{}
+	// DefaultRevision holds the default value on creation for the "revision" field.
+	DefaultRevision int64
 	// DefaultImportance holds the default value on creation for the "importance" field.
 	DefaultImportance float64
 	// DefaultDecayFactor holds the default value on creation for the "decay_factor" field.
@@ -117,6 +147,11 @@ func ByGenerationID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldGenerationID, opts...).ToFunc()
 }
 
+// BySourceConversationID orders the results by the source_conversation_id field.
+func BySourceConversationID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSourceConversationID, opts...).ToFunc()
+}
+
 // ByUserID orders the results by the user_id field.
 func ByUserID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUserID, opts...).ToFunc()
@@ -125,6 +160,21 @@ func ByUserID(opts ...sql.OrderTermOption) OrderOption {
 // ByWorkspaceID orders the results by the workspace_id field.
 func ByWorkspaceID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldWorkspaceID, opts...).ToFunc()
+}
+
+// ByPartitionID orders the results by the partition_id field.
+func ByPartitionID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPartitionID, opts...).ToFunc()
+}
+
+// ByAccessStatus orders the results by the access_status field.
+func ByAccessStatus(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAccessStatus, opts...).ToFunc()
+}
+
+// ByRevision orders the results by the revision field.
+func ByRevision(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRevision, opts...).ToFunc()
 }
 
 // ByNodeType orders the results by the node_type field.

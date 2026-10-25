@@ -62,3 +62,7 @@ func (s *Scorer) Score(ctx context.Context, input ScoreInput) (MemoryScore, erro
 	}
 	return score, nil
 }
+
+func NewScorerWithGenerator(generator memoryllm.Generator) *Scorer {
+	return &Scorer{generator: generator}
+}

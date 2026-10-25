@@ -42,7 +42,7 @@ func TestKeyMemoryCacheValidatesScopeBeforeHit(t *testing.T) {
 		{UserID: "owner", WorkspaceID: "group", Value: "foreign workspace"},
 		{UserID: "owner", Value: "legacy cache missing scope"},
 	} {
-		if err := store.Set(ctx, keyMemoryCacheKey("owner", 10), []domain.KeyMemory{invalid}); err != nil {
+		if err := store.Set(ctx, keyMemoryCacheKey(ctx, "owner", 10), []domain.KeyMemory{invalid}); err != nil {
 			t.Fatal(err)
 		}
 		got, err := service.ListKeyMemories(ctx, "owner", 10)
@@ -50,7 +50,7 @@ func TestKeyMemoryCacheValidatesScopeBeforeHit(t *testing.T) {
 			t.Fatalf("cache scope validation: %+v %v", got, err)
 		}
 	}
-	neighbor := keyMemoryCacheKey("owner:limit:10", 10)
+	neighbor := keyMemoryCacheKey(ctx, "owner:limit:10", 10)
 	if err := store.Set(ctx, neighbor, []string{"preserve"}); err != nil {
 		t.Fatal(err)
 	}

@@ -30,7 +30,7 @@ func scanWorkspace(row interface{ Scan(...any) error }) (domain.Workspace, error
 func (r *IdentityRepository) SearchWorkspaces(ctx context.Context, q domain.WorkspaceQuery) ([]domain.Workspace, error) {
 	items := []domain.Workspace{}
 	if db := currentDB(r.db); db != nil {
-		rows, err := db.QueryContext(ctx, `SELECT `+workspaceColumns+` FROM workspaces WHERE ($1='' OR user_id=$1) AND id>$2 AND (strpos(lower(name),lower($3))>0 OR strpos(lower(user_id),lower($3))>0 OR strpos(lower(id),lower($3))>0) AND kind='personal' AND id='personal-'||encode(sha256(convert_to(user_id,'UTF8')),'hex') ORDER BY id LIMIT $4`, q.UserID, q.After, q.Query, q.Limit)
+		rows, err := db.QueryContext(ctx, `SELECT `+workspaceColumns+` FROM workspaces WHERE ($1='' OR user_id=$1) AND id>$2 AND (strpos(lower(name),lower($3))>0 OR strpos(lower(user_id),lower($3))>0 OR strpos(lower(id),lower($3))>0) AND kind IN('personal','group','project') ORDER BY id LIMIT $4`, q.UserID, q.After, q.Query, q.Limit)
 		if err != nil {
 			return nil, err
 		}
@@ -47,7 +47,7 @@ func (r *IdentityRepository) SearchWorkspaces(ctx context.Context, q domain.Work
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, w := range r.workspaces {
-		if (q.UserID == "" || w.UserID == q.UserID) && w.ID > q.After && w.Kind == "personal" && w.ID == domain.PersonalWorkspaceID(w.UserID) && (strings.Contains(strings.ToLower(w.Name), strings.ToLower(q.Query)) || strings.Contains(strings.ToLower(w.UserID), strings.ToLower(q.Query)) || strings.Contains(strings.ToLower(w.ID), strings.ToLower(q.Query))) {
+		if (q.UserID == "" || w.UserID == q.UserID) && w.ID > q.After && (w.Kind == "personal" || w.Kind == "group" || w.Kind == "project") && (strings.Contains(strings.ToLower(w.Name), strings.ToLower(q.Query)) || strings.Contains(strings.ToLower(w.UserID), strings.ToLower(q.Query)) || strings.Contains(strings.ToLower(w.ID), strings.ToLower(q.Query))) {
 			w.Capabilities = append([]string{}, w.Capabilities...)
 			items = append(items, w)
 		}
@@ -76,7 +76,7 @@ func (r *IdentityRepository) GetWorkspace(ctx context.Context, user, id string) 
 func (r *IdentityRepository) UpdateWorkspace(ctx context.Context, input domain.Workspace) (domain.Workspace, error) {
 	var result domain.Workspace
 	apply := func(old domain.Workspace) error {
-		if old.ID != domain.PersonalWorkspaceID(input.UserID) || old.UserID != input.UserID || old.Kind != "personal" {
+		if old.UserID != input.UserID || old.ID != input.ID {
 			return domain.ErrAccessNotFound
 		}
 		if old.Status != "active" {

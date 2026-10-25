@@ -1,3 +1,17 @@
+x-memory-service: &memory-service
+  MEMSTATION_DELETION_JOURNAL_KEY: ${MEMSTATION_DELETION_JOURNAL_KEY:-}
+  MEMSTATION_MEMORY_AI_BACKEND: ${MEMSTATION_MEMORY_AI_BACKEND:-direct}
+  MEMSTATION_MEMORY_BROKER_BASE_URL: ${MEMSTATION_MEMORY_BROKER_BASE_URL:-}
+  MEMSTATION_MEMORY_BROKER_CREDENTIAL: ${MEMSTATION_MEMORY_BROKER_CREDENTIAL:-}
+  MEMSTATION_MEMORY_BROKER_SUMMARY_ALIAS: ${MEMSTATION_MEMORY_BROKER_SUMMARY_ALIAS:-memory.summary}
+  MEMSTATION_MEMORY_BROKER_ANALYSIS_ALIAS: ${MEMSTATION_MEMORY_BROKER_ANALYSIS_ALIAS:-memory.analysis}
+  MEMSTATION_MEMORY_BROKER_EMBEDDING_ALIAS: ${MEMSTATION_MEMORY_BROKER_EMBEDDING_ALIAS:-memory.embedding}
+  MEMSTATION_MEMORY_BROKER_RERANK_ALIAS: ${MEMSTATION_MEMORY_BROKER_RERANK_ALIAS:-memory.rerank}
+  MEMSTATION_MEMORY_BROKER_EMBEDDING_MODEL: ${MEMSTATION_MEMORY_BROKER_EMBEDDING_MODEL:-}
+  MEMSTATION_MEMORY_BROKER_EMBEDDING_DIMENSIONS: ${MEMSTATION_MEMORY_BROKER_EMBEDDING_DIMENSIONS:-0}
+  MEMSTATION_MEMORY_BROKER_EMBEDDING_FINGERPRINT: ${MEMSTATION_MEMORY_BROKER_EMBEDDING_FINGERPRINT:-}
+  MEMSTATION_INGESTION_WINDOW_BUDGET: ${MEMSTATION_INGESTION_WINDOW_BUDGET:-8192}
+
 services:
   workspace:
     build:
@@ -6,11 +20,13 @@ services:
     command: sleep infinity
     working_dir: /workspace/memstation
     environment:
+      <<: *memory-service
       MEMSTATION_PORT: 8080
       MEMSTATION_GRPC_PORT: 9090
       DATABASE_URL: postgres://memstation:memstation_dev@postgres:5432/memstation?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       VECTOR_STORE_BACKEND: pgvector
+      MEMSTATION_DELETION_JOURNAL_PATH: /var/lib/memstation-deletions/history.jsonl
       MEMSTATION_ADMIN_TOKEN: ${MEMSTATION_ADMIN_TOKEN:-memstation-local-admin-token}
       MEMSTATION_MASTER_KEY: ${MEMSTATION_MASTER_KEY:-memstation-local-master-key}
       MEMSTATION_DEV_API_KEY: ${MEMSTATION_DEV_API_KEY:-ms-local-dev}
@@ -23,6 +39,7 @@ services:
       - "127.0.0.1:5173:5173"
     volumes:
       - ../..:/workspace/memstation
+      - deletion-journal:/var/lib/memstation-deletions
     depends_on:
       postgres:
         condition: service_healthy
@@ -34,11 +51,13 @@ services:
       context: ../..
       dockerfile: apps/server/Dockerfile
     environment:
+      <<: *memory-service
       MEMSTATION_PORT: 8080
       MEMSTATION_GRPC_PORT: 9090
       DATABASE_URL: postgres://memstation:memstation_dev@postgres:5432/memstation?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       VECTOR_STORE_BACKEND: pgvector
+      MEMSTATION_DELETION_JOURNAL_PATH: /var/lib/memstation-deletions/history.jsonl
       MEMSTATION_PUBLIC_BASE_URL: ${MEMSTATION_PUBLIC_BASE_URL:-http://127.0.0.1:8080}
       CHAT_MODEL: ${CHAT_MODEL:-}
       SUMMARY_MODEL: ${SUMMARY_MODEL:-}
@@ -58,6 +77,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - deletion-journal:/var/lib/memstation-deletions
     command: ["serve"]
 
   worker:
@@ -65,9 +86,11 @@ services:
       context: ../..
       dockerfile: apps/server/Dockerfile
     environment:
+      <<: *memory-service
       DATABASE_URL: postgres://memstation:memstation_dev@postgres:5432/memstation?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       VECTOR_STORE_BACKEND: pgvector
+      MEMSTATION_DELETION_JOURNAL_PATH: /var/lib/memstation-deletions/history.jsonl
       MEMSTATION_ADMIN_TOKEN: ${MEMSTATION_ADMIN_TOKEN:-memstation-local-admin-token}
       MEMSTATION_MASTER_KEY: ${MEMSTATION_MASTER_KEY:-memstation-local-master-key}
       MEMSTATION_DEV_API_KEY: ${MEMSTATION_DEV_API_KEY:-ms-local-dev}
@@ -76,6 +99,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - deletion-journal:/var/lib/memstation-deletions
     command: ["worker"]
 
   scheduler:
@@ -83,9 +108,11 @@ services:
       context: ../..
       dockerfile: apps/server/Dockerfile
     environment:
+      <<: *memory-service
       DATABASE_URL: postgres://memstation:memstation_dev@postgres:5432/memstation?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       VECTOR_STORE_BACKEND: pgvector
+      MEMSTATION_DELETION_JOURNAL_PATH: /var/lib/memstation-deletions/history.jsonl
       MEMSTATION_ADMIN_TOKEN: ${MEMSTATION_ADMIN_TOKEN:-memstation-local-admin-token}
       MEMSTATION_MASTER_KEY: ${MEMSTATION_MASTER_KEY:-memstation-local-master-key}
       MEMSTATION_DEV_API_KEY: ${MEMSTATION_DEV_API_KEY:-ms-local-dev}
@@ -94,6 +121,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - deletion-journal:/var/lib/memstation-deletions
     command: ["scheduler"]
 
   manager:
@@ -152,5 +181,6 @@ services:
       - "127.0.0.1:4318:4318"
 
 volumes:
+  deletion-journal:
   postgres-data:
   redis-data:

@@ -69,6 +69,11 @@ func GenerationID(v string) predicate.MemoryNode {
 	return predicate.MemoryNode(sql.FieldEQ(FieldGenerationID, v))
 }
 
+// SourceConversationID applies equality check predicate on the "source_conversation_id" field. It's identical to SourceConversationIDEQ.
+func SourceConversationID(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEQ(FieldSourceConversationID, v))
+}
+
 // UserID applies equality check predicate on the "user_id" field. It's identical to UserIDEQ.
 func UserID(v string) predicate.MemoryNode {
 	return predicate.MemoryNode(sql.FieldEQ(FieldUserID, v))
@@ -77,6 +82,21 @@ func UserID(v string) predicate.MemoryNode {
 // WorkspaceID applies equality check predicate on the "workspace_id" field. It's identical to WorkspaceIDEQ.
 func WorkspaceID(v string) predicate.MemoryNode {
 	return predicate.MemoryNode(sql.FieldEQ(FieldWorkspaceID, v))
+}
+
+// PartitionID applies equality check predicate on the "partition_id" field. It's identical to PartitionIDEQ.
+func PartitionID(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEQ(FieldPartitionID, v))
+}
+
+// AccessStatus applies equality check predicate on the "access_status" field. It's identical to AccessStatusEQ.
+func AccessStatus(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEQ(FieldAccessStatus, v))
+}
+
+// Revision applies equality check predicate on the "revision" field. It's identical to RevisionEQ.
+func Revision(v int64) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEQ(FieldRevision, v))
 }
 
 // NodeType applies equality check predicate on the "node_type" field. It's identical to NodeTypeEQ.
@@ -264,6 +284,71 @@ func GenerationIDContainsFold(v string) predicate.MemoryNode {
 	return predicate.MemoryNode(sql.FieldContainsFold(FieldGenerationID, v))
 }
 
+// SourceConversationIDEQ applies the EQ predicate on the "source_conversation_id" field.
+func SourceConversationIDEQ(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEQ(FieldSourceConversationID, v))
+}
+
+// SourceConversationIDNEQ applies the NEQ predicate on the "source_conversation_id" field.
+func SourceConversationIDNEQ(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldNEQ(FieldSourceConversationID, v))
+}
+
+// SourceConversationIDIn applies the In predicate on the "source_conversation_id" field.
+func SourceConversationIDIn(vs ...string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldIn(FieldSourceConversationID, vs...))
+}
+
+// SourceConversationIDNotIn applies the NotIn predicate on the "source_conversation_id" field.
+func SourceConversationIDNotIn(vs ...string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldNotIn(FieldSourceConversationID, vs...))
+}
+
+// SourceConversationIDGT applies the GT predicate on the "source_conversation_id" field.
+func SourceConversationIDGT(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldGT(FieldSourceConversationID, v))
+}
+
+// SourceConversationIDGTE applies the GTE predicate on the "source_conversation_id" field.
+func SourceConversationIDGTE(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldGTE(FieldSourceConversationID, v))
+}
+
+// SourceConversationIDLT applies the LT predicate on the "source_conversation_id" field.
+func SourceConversationIDLT(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldLT(FieldSourceConversationID, v))
+}
+
+// SourceConversationIDLTE applies the LTE predicate on the "source_conversation_id" field.
+func SourceConversationIDLTE(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldLTE(FieldSourceConversationID, v))
+}
+
+// SourceConversationIDContains applies the Contains predicate on the "source_conversation_id" field.
+func SourceConversationIDContains(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldContains(FieldSourceConversationID, v))
+}
+
+// SourceConversationIDHasPrefix applies the HasPrefix predicate on the "source_conversation_id" field.
+func SourceConversationIDHasPrefix(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldHasPrefix(FieldSourceConversationID, v))
+}
+
+// SourceConversationIDHasSuffix applies the HasSuffix predicate on the "source_conversation_id" field.
+func SourceConversationIDHasSuffix(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldHasSuffix(FieldSourceConversationID, v))
+}
+
+// SourceConversationIDEqualFold applies the EqualFold predicate on the "source_conversation_id" field.
+func SourceConversationIDEqualFold(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEqualFold(FieldSourceConversationID, v))
+}
+
+// SourceConversationIDContainsFold applies the ContainsFold predicate on the "source_conversation_id" field.
+func SourceConversationIDContainsFold(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldContainsFold(FieldSourceConversationID, v))
+}
+
 // UserIDEQ applies the EQ predicate on the "user_id" field.
 func UserIDEQ(v string) predicate.MemoryNode {
 	return predicate.MemoryNode(sql.FieldEQ(FieldUserID, v))
@@ -392,6 +477,176 @@ func WorkspaceIDEqualFold(v string) predicate.MemoryNode {
 // WorkspaceIDContainsFold applies the ContainsFold predicate on the "workspace_id" field.
 func WorkspaceIDContainsFold(v string) predicate.MemoryNode {
 	return predicate.MemoryNode(sql.FieldContainsFold(FieldWorkspaceID, v))
+}
+
+// PartitionIDEQ applies the EQ predicate on the "partition_id" field.
+func PartitionIDEQ(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEQ(FieldPartitionID, v))
+}
+
+// PartitionIDNEQ applies the NEQ predicate on the "partition_id" field.
+func PartitionIDNEQ(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldNEQ(FieldPartitionID, v))
+}
+
+// PartitionIDIn applies the In predicate on the "partition_id" field.
+func PartitionIDIn(vs ...string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldIn(FieldPartitionID, vs...))
+}
+
+// PartitionIDNotIn applies the NotIn predicate on the "partition_id" field.
+func PartitionIDNotIn(vs ...string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldNotIn(FieldPartitionID, vs...))
+}
+
+// PartitionIDGT applies the GT predicate on the "partition_id" field.
+func PartitionIDGT(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldGT(FieldPartitionID, v))
+}
+
+// PartitionIDGTE applies the GTE predicate on the "partition_id" field.
+func PartitionIDGTE(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldGTE(FieldPartitionID, v))
+}
+
+// PartitionIDLT applies the LT predicate on the "partition_id" field.
+func PartitionIDLT(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldLT(FieldPartitionID, v))
+}
+
+// PartitionIDLTE applies the LTE predicate on the "partition_id" field.
+func PartitionIDLTE(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldLTE(FieldPartitionID, v))
+}
+
+// PartitionIDContains applies the Contains predicate on the "partition_id" field.
+func PartitionIDContains(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldContains(FieldPartitionID, v))
+}
+
+// PartitionIDHasPrefix applies the HasPrefix predicate on the "partition_id" field.
+func PartitionIDHasPrefix(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldHasPrefix(FieldPartitionID, v))
+}
+
+// PartitionIDHasSuffix applies the HasSuffix predicate on the "partition_id" field.
+func PartitionIDHasSuffix(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldHasSuffix(FieldPartitionID, v))
+}
+
+// PartitionIDEqualFold applies the EqualFold predicate on the "partition_id" field.
+func PartitionIDEqualFold(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEqualFold(FieldPartitionID, v))
+}
+
+// PartitionIDContainsFold applies the ContainsFold predicate on the "partition_id" field.
+func PartitionIDContainsFold(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldContainsFold(FieldPartitionID, v))
+}
+
+// AccessStatusEQ applies the EQ predicate on the "access_status" field.
+func AccessStatusEQ(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEQ(FieldAccessStatus, v))
+}
+
+// AccessStatusNEQ applies the NEQ predicate on the "access_status" field.
+func AccessStatusNEQ(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldNEQ(FieldAccessStatus, v))
+}
+
+// AccessStatusIn applies the In predicate on the "access_status" field.
+func AccessStatusIn(vs ...string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldIn(FieldAccessStatus, vs...))
+}
+
+// AccessStatusNotIn applies the NotIn predicate on the "access_status" field.
+func AccessStatusNotIn(vs ...string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldNotIn(FieldAccessStatus, vs...))
+}
+
+// AccessStatusGT applies the GT predicate on the "access_status" field.
+func AccessStatusGT(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldGT(FieldAccessStatus, v))
+}
+
+// AccessStatusGTE applies the GTE predicate on the "access_status" field.
+func AccessStatusGTE(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldGTE(FieldAccessStatus, v))
+}
+
+// AccessStatusLT applies the LT predicate on the "access_status" field.
+func AccessStatusLT(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldLT(FieldAccessStatus, v))
+}
+
+// AccessStatusLTE applies the LTE predicate on the "access_status" field.
+func AccessStatusLTE(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldLTE(FieldAccessStatus, v))
+}
+
+// AccessStatusContains applies the Contains predicate on the "access_status" field.
+func AccessStatusContains(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldContains(FieldAccessStatus, v))
+}
+
+// AccessStatusHasPrefix applies the HasPrefix predicate on the "access_status" field.
+func AccessStatusHasPrefix(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldHasPrefix(FieldAccessStatus, v))
+}
+
+// AccessStatusHasSuffix applies the HasSuffix predicate on the "access_status" field.
+func AccessStatusHasSuffix(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldHasSuffix(FieldAccessStatus, v))
+}
+
+// AccessStatusEqualFold applies the EqualFold predicate on the "access_status" field.
+func AccessStatusEqualFold(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEqualFold(FieldAccessStatus, v))
+}
+
+// AccessStatusContainsFold applies the ContainsFold predicate on the "access_status" field.
+func AccessStatusContainsFold(v string) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldContainsFold(FieldAccessStatus, v))
+}
+
+// RevisionEQ applies the EQ predicate on the "revision" field.
+func RevisionEQ(v int64) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldEQ(FieldRevision, v))
+}
+
+// RevisionNEQ applies the NEQ predicate on the "revision" field.
+func RevisionNEQ(v int64) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldNEQ(FieldRevision, v))
+}
+
+// RevisionIn applies the In predicate on the "revision" field.
+func RevisionIn(vs ...int64) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldIn(FieldRevision, vs...))
+}
+
+// RevisionNotIn applies the NotIn predicate on the "revision" field.
+func RevisionNotIn(vs ...int64) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldNotIn(FieldRevision, vs...))
+}
+
+// RevisionGT applies the GT predicate on the "revision" field.
+func RevisionGT(v int64) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldGT(FieldRevision, v))
+}
+
+// RevisionGTE applies the GTE predicate on the "revision" field.
+func RevisionGTE(v int64) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldGTE(FieldRevision, v))
+}
+
+// RevisionLT applies the LT predicate on the "revision" field.
+func RevisionLT(v int64) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldLT(FieldRevision, v))
+}
+
+// RevisionLTE applies the LTE predicate on the "revision" field.
+func RevisionLTE(v int64) predicate.MemoryNode {
+	return predicate.MemoryNode(sql.FieldLTE(FieldRevision, v))
 }
 
 // NodeTypeEQ applies the EQ predicate on the "node_type" field.

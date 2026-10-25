@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 
+	storeaccess "memstation/apps/server/internal/store/access"
+
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/security"
 )
@@ -86,10 +88,10 @@ func relationIdentity(r domain.MemoryRelation) string {
 }
 
 func (r *PostgresMemoryRepository) RecallRelations(ctx context.Context, q domain.RelationQuery) ([]domain.MemoryRelation, error) {
-	if _, err := security.PersonalScope(ctx, q.UserID, q.WorkspaceID); err != nil {
+	if _, err := security.DataScope(ctx, q.UserID, q.WorkspaceID); err != nil {
 		return nil, err
 	}
-	q.WorkspaceID = domain.PersonalWorkspaceID(q.UserID)
+	q.WorkspaceID = security.WorkspaceID(ctx, q.UserID)
 	q = q.Normalized()
 	if err := domain.ValidateRelationMode(q.Mode); err != nil {
 		return nil, err
@@ -124,8 +126,8 @@ func (r *PostgresMemoryRepository) RecallRelations(ctx context.Context, q domain
 			}
 			branches = append(branches, fmt.Sprintf(`(SELECT e.* FROM memory_relations e
           WHERE e.user_id=$1 AND e.generation_id=$2 AND e.%s=seed.id AND e.weight >= $3 AND e.relation_type IN (%s)%s
-          AND EXISTS (SELECT 1 FROM memory_nodes n WHERE n.workspace_id = 'personal-' || encode(sha256(convert_to(n.user_id,'UTF8')),'hex') AND n.user_id =e.user_id AND n.id=e.src_node_id AND (n.generation_id=$2 OR (n.generation_id='' AND n.node_type='key_memory')))
-          AND EXISTS (SELECT 1 FROM memory_nodes n WHERE n.workspace_id = 'personal-' || encode(sha256(convert_to(n.user_id,'UTF8')),'hex') AND n.user_id =e.user_id AND n.id=e.dst_node_id AND (n.generation_id=$2 OR (n.generation_id='' AND n.node_type='key_memory')))
+          AND EXISTS (SELECT 1 FROM memory_nodes n WHERE `+storeaccess.NodeSQL(ctx, "n")+` AND n.user_id =e.user_id AND n.id=e.src_node_id AND (n.generation_id=$2 OR (n.generation_id='' AND n.node_type='key_memory')))
+          AND EXISTS (SELECT 1 FROM memory_nodes n WHERE `+storeaccess.NodeSQL(ctx, "n")+` AND n.user_id =e.user_id AND n.id=e.dst_node_id AND (n.generation_id=$2 OR (n.generation_id='' AND n.node_type='key_memory')))
           ORDER BY e.weight DESC,e.id LIMIT $4)`, direction, strings.Join(types, ","), extra))
 		}
 		statement := fmt.Sprintf(`SELECT rel.id,rel.generation_id,rel.user_id,rel.src_node_id,rel.dst_node_id,rel.relation_type,rel.weight,rel.source,rel.metadata,rel.created_at
@@ -158,10 +160,10 @@ func (r *PostgresMemoryRepository) RecallRelations(ctx context.Context, q domain
 }
 
 func (r *InMemoryMemoryRepository) RecallRelations(ctx context.Context, q domain.RelationQuery) ([]domain.MemoryRelation, error) {
-	if _, err := security.PersonalScope(ctx, q.UserID, q.WorkspaceID); err != nil {
+	if _, err := security.DataScope(ctx, q.UserID, q.WorkspaceID); err != nil {
 		return nil, err
 	}
-	q.WorkspaceID = domain.PersonalWorkspaceID(q.UserID)
+	q.WorkspaceID = security.WorkspaceID(ctx, q.UserID)
 	q = q.Normalized()
 	if err := domain.ValidateRelationMode(q.Mode); err != nil {
 		return nil, err
@@ -189,7 +191,7 @@ func (r *InMemoryMemoryRepository) RecallRelations(ctx context.Context, q domain
 			}
 			src, srcOK := nodes[e.SrcNodeID]
 			dst, dstOK := nodes[e.DstNodeID]
-			if !srcOK || !dstOK || !matchesDocumentGeneration(q.UserID, q.GenerationID, src) || !matchesDocumentGeneration(q.UserID, q.GenerationID, dst) {
+			if !srcOK || !dstOK || !matchesDocumentGeneration(ctx, q.UserID, q.GenerationID, src) || !matchesDocumentGeneration(ctx, q.UserID, q.GenerationID, dst) {
 				continue
 			}
 			for _, id := range frontier {

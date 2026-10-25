@@ -59,7 +59,7 @@ func (s *Service) Snapshot() bootstrap.MultimodalConfig {
 }
 
 func (s *Service) SaveUpload(ctx context.Context, userID, filename, mimeType string, body io.Reader, metadata map[string]any) (domain.BlobObject, error) {
-	workspace, scopeErr := security.PersonalScope(ctx, userID, "")
+	workspace, scopeErr := security.DataScope(ctx, userID, "")
 	if scopeErr != nil {
 		return domain.BlobObject{}, scopeErr
 	}
@@ -116,7 +116,7 @@ func (s *Service) SaveUpload(ctx context.Context, userID, filename, mimeType str
 }
 
 func (s *Service) GetBlob(ctx context.Context, userID, blobID string) (domain.BlobObject, error) {
-	_, scopeErr := security.PersonalScope(ctx, userID, "")
+	_, scopeErr := security.DataScope(ctx, userID, "")
 	if scopeErr != nil {
 		return domain.BlobObject{}, scopeErr
 	}
@@ -127,7 +127,7 @@ func (s *Service) GetBlob(ctx context.Context, userID, blobID string) (domain.Bl
 }
 
 func (s *Service) OpenBlob(ctx context.Context, userID, blobID string) (domain.BlobObject, io.ReadCloser, error) {
-	_, scopeErr := security.PersonalScope(ctx, userID, "")
+	_, scopeErr := security.DataScope(ctx, userID, "")
 	if scopeErr != nil {
 		return domain.BlobObject{}, nil, scopeErr
 	}
@@ -150,7 +150,7 @@ func (s *Service) OpenBlob(ctx context.Context, userID, blobID string) (domain.B
 }
 
 func (s *Service) DeleteBlob(ctx context.Context, userID, blobID string) error {
-	_, scopeErr := security.PersonalScope(ctx, userID, "")
+	_, scopeErr := security.DataScope(ctx, userID, "")
 	if scopeErr != nil {
 		return scopeErr
 	}
@@ -174,7 +174,7 @@ func (s *Service) DeleteBlob(ctx context.Context, userID, blobID string) error {
 }
 
 func (s *Service) CleanupConversationBlobs(ctx context.Context, userID, conversationID string) error {
-	_, scopeErr := security.PersonalScope(ctx, userID, "")
+	_, scopeErr := security.DataScope(ctx, userID, "")
 	if scopeErr != nil {
 		return scopeErr
 	}
@@ -217,7 +217,7 @@ func (s *Service) CleanupConversationBlobs(ctx context.Context, userID, conversa
 }
 
 func (s *Service) MaterializeConversation(ctx context.Context, conversation domain.ConversationRecord) ([]domain.MessagePart, error) {
-	workspace, scopeErr := security.PersonalScope(ctx, conversation.UserID, conversation.WorkspaceID)
+	workspace, scopeErr := security.DataScope(ctx, conversation.UserID, conversation.WorkspaceID)
 	if scopeErr != nil {
 		return nil, scopeErr
 	}
@@ -233,7 +233,7 @@ func (s *Service) MaterializeConversation(ctx context.Context, conversation doma
 }
 
 func (s *Service) ExtractConversation(ctx context.Context, conversation domain.ConversationRecord, parts []domain.MessagePart) ([]domain.MessagePartArtifact, error) {
-	workspace, scopeErr := security.PersonalScope(ctx, conversation.UserID, conversation.WorkspaceID)
+	workspace, scopeErr := security.DataScope(ctx, conversation.UserID, conversation.WorkspaceID)
 	if scopeErr != nil {
 		return nil, scopeErr
 	}
@@ -269,7 +269,7 @@ func (s *Service) ExtractConversation(ctx context.Context, conversation domain.C
 }
 
 func (s *Service) ListMessageParts(ctx context.Context, userID, conversationID string) ([]domain.MessagePart, error) {
-	_, scopeErr := security.PersonalScope(ctx, userID, "")
+	_, scopeErr := security.DataScope(ctx, userID, "")
 	if scopeErr != nil {
 		return nil, scopeErr
 	}
@@ -280,7 +280,7 @@ func (s *Service) ListMessageParts(ctx context.Context, userID, conversationID s
 }
 
 func (s *Service) ListPartArtifacts(ctx context.Context, userID, conversationID string) ([]domain.MessagePartArtifact, error) {
-	_, scopeErr := security.PersonalScope(ctx, userID, "")
+	_, scopeErr := security.DataScope(ctx, userID, "")
 	if scopeErr != nil {
 		return nil, scopeErr
 	}

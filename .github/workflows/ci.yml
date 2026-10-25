@@ -16,6 +16,16 @@ jobs:
   test:
     runs-on: ubuntu-latest
     services:
+      redis:
+        # Reuse the deployment's Redis 7 baseline for durable queue contracts.
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
       postgres:
         image: pgvector/pgvector:pg16
         env:
@@ -32,6 +42,7 @@ jobs:
     env:
       DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable
       MEMSTATION_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable
+      MEMSTATION_TEST_REDIS_URL: redis://127.0.0.1:6379/13
       MEMSTATION_SERVER_COVERAGE_THRESHOLD: "55"
     steps:
       - uses: actions/checkout@v4
@@ -70,6 +81,8 @@ jobs:
         run: bash ./scripts/ops/run-worker-recovery-smoke.sh "$RUNNER_TEMP/memstation-recovery"
       - name: Backup/restore drill dry-run
         run: bash ./scripts/ops/run-backup-restore-drill.sh --dry-run --out-dir "$RUNNER_TEMP/memstation-backup-drill"
+      - name: Independent deletion recovery drill dry-run
+        run: MEMSTATION_RECOVERY_ARTIFACT_DIR="$RUNNER_TEMP/memstation-memory-recovery" bash ./scripts/ops/check-memory-recovery.sh --dry-run
       - name: pnpm lint
         run: pnpm lint
       - name: pnpm test

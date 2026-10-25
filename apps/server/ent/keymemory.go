@@ -23,6 +23,10 @@ type KeyMemory struct {
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID string `json:"user_id,omitempty"`
+	// WorkspaceID holds the value of the "workspace_id" field.
+	WorkspaceID string `json:"workspace_id,omitempty"`
+	// PartitionID holds the value of the "partition_id" field.
+	PartitionID string `json:"partition_id,omitempty"`
 	// NodeID holds the value of the "node_id" field.
 	NodeID string `json:"node_id,omitempty"`
 	// Key holds the value of the "key" field.
@@ -49,7 +53,7 @@ func (*KeyMemory) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case keymemory.FieldID:
 			values[i] = new(sql.NullInt64)
-		case keymemory.FieldUserID, keymemory.FieldNodeID, keymemory.FieldKey, keymemory.FieldValue, keymemory.FieldCategory, keymemory.FieldSource, keymemory.FieldReviewStatus:
+		case keymemory.FieldUserID, keymemory.FieldWorkspaceID, keymemory.FieldPartitionID, keymemory.FieldNodeID, keymemory.FieldKey, keymemory.FieldValue, keymemory.FieldCategory, keymemory.FieldSource, keymemory.FieldReviewStatus:
 			values[i] = new(sql.NullString)
 		case keymemory.FieldCreatedAt, keymemory.FieldUpdatedAt, keymemory.FieldLastConfirmedAt, keymemory.FieldDeletedAt:
 			values[i] = new(sql.NullTime)
@@ -91,6 +95,18 @@ func (_m *KeyMemory) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field user_id", values[i])
 			} else if value.Valid {
 				_m.UserID = value.String
+			}
+		case keymemory.FieldWorkspaceID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field workspace_id", values[i])
+			} else if value.Valid {
+				_m.WorkspaceID = value.String
+			}
+		case keymemory.FieldPartitionID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field partition_id", values[i])
+			} else if value.Valid {
+				_m.PartitionID = value.String
 			}
 		case keymemory.FieldNodeID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -186,6 +202,12 @@ func (_m *KeyMemory) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("user_id=")
 	builder.WriteString(_m.UserID)
+	builder.WriteString(", ")
+	builder.WriteString("workspace_id=")
+	builder.WriteString(_m.WorkspaceID)
+	builder.WriteString(", ")
+	builder.WriteString("partition_id=")
+	builder.WriteString(_m.PartitionID)
 	builder.WriteString(", ")
 	builder.WriteString("node_id=")
 	builder.WriteString(_m.NodeID)

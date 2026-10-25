@@ -25,3 +25,13 @@ type IdentityRepository interface {
 	ListCredentials(context.Context) ([]domain.Credential, error)
 	Authenticate(context.Context, string, string) (domain.AccessContext, error)
 }
+
+// Administration is separate from runtime authentication; Actors never confer a grant.
+type WorkspaceAdministration interface {
+	CreateWorkspace(context.Context, domain.Workspace) (domain.Workspace, error)
+	PutIntegration(context.Context, domain.IntegrationConfig) (domain.IntegrationConfig, error)
+	ListIntegrations(context.Context, string, string) ([]domain.IntegrationConfig, error)
+	PutPartition(context.Context, domain.MemoryPartition) (domain.MemoryPartition, error)
+	ListPartitions(context.Context, string, string) ([]domain.MemoryPartition, error)
+	ResolveAccess(context.Context, domain.AccessContext, string, domain.Audience) (domain.AccessContext, error)
+}

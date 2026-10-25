@@ -16,7 +16,7 @@
     {#if page.params.agent}
       <AgentAccess target={data.routeTarget} userId={workspace.user_id} workspaceId={workspace.id} agentId={page.params.agent} directoryPath={base} />
     {:else}
-      <AgentDirectory target={data.routeTarget} userId={workspace.user_id} workspaceName={workspace.name} basePath={base} />
+      <AgentDirectory target={data.routeTarget} userId={workspace.user_id} workspaceName={workspace.name} workspaceId={workspace.id} allowedCapabilities={workspace.capabilities} basePath={base} />
     {/if}
   {/key}
 {:else}

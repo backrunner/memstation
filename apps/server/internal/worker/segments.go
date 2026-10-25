@@ -151,7 +151,7 @@ func applyGenerationToSegments(userID, generationID string, segments []domain.Co
 func scopeStableID(userID, generationID, baseID string) string {
 	baseID = strings.TrimSpace(baseID)
 	generationID = strings.TrimSpace(generationID)
-	if baseID == "" || generationID == "" || generationID == currentGenerationID(userID) {
+	if baseID == "" || generationID == "" || generationID == currentGenerationID(userID) || strings.HasPrefix(baseID, generationID+":") {
 		return baseID
 	}
 	return generationID + ":" + baseID

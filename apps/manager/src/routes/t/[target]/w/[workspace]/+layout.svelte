@@ -15,6 +15,7 @@
   let access = $derived(settings.replace(/settings$/, 'access'));
   let memory = $derived(settings.replace(/settings$/, 'memory'));
   let keys = $derived(settings.replace(/settings$/, 'keys'));
+  let lifecycle = $derived(settings.replace(/settings$/, 'lifecycle'));
   let conversations = $derived(settings.replace(/settings$/, 'conversations'));
 </script>
 
@@ -30,6 +31,7 @@
       <a href={conversations} aria-current={page.url.pathname.startsWith(conversations) ? 'page' : undefined}>Conversations</a>
       <a href={settings} aria-current={page.url.pathname === settings ? 'page' : undefined}>Workspace settings</a>
       <a href={access} aria-current={page.url.pathname.startsWith(access) ? 'page' : undefined}>Agents with access</a>
+      <a href={lifecycle} aria-current={page.url.pathname.startsWith(lifecycle) ? 'page' : undefined}>Memory service</a>
     </nav>
   {/if}
   {@render children()}

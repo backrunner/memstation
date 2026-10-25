@@ -574,7 +574,7 @@ export async function createUserAPIKey(
   target: MemStationTarget,
   userId: string,
   name: string,
-  options?: { agent_id?: string; capabilities?: string[]; expires_at?: string }
+  options?: { agent_id?: string; workspace_id?: string; capabilities?: string[]; expires_at?: string }
 ): Promise<{ record: APIKeyRecord; api_key: string }> {
   return adminRequest(target, `/api/admin/users/${encodeURIComponent(userId)}/api-keys`, {
     method: 'POST',
@@ -2099,17 +2099,17 @@ export function fetchAgents(target: MemStationTarget, userId: string, options: {
   const query = new URLSearchParams({ limit: '50', ...options });
   return adminRequest(target, `${agentPath(userId)}?${query}`, { signal, cache: 'no-store' });
 }
-export function fetchAgentDetail(target: MemStationTarget, userId: string, agentId: string, signal?: AbortSignal): Promise<AgentDetail> {
-  return adminRequest(target, agentPath(userId, agentId), { signal, cache: 'no-store' });
+export function fetchAgentDetail(target: MemStationTarget, userId: string, agentId: string, signal?: AbortSignal, workspaceId?:string): Promise<AgentDetail> {
+  return adminRequest(target, workspaceId?`/api/admin/workspaces/${encodeURIComponent(workspaceId)}/agents/${encodeURIComponent(agentId)}/detail?${new URLSearchParams({user_id:userId})}`:agentPath(userId, agentId), { signal, cache: 'no-store' });
 }
-export function createAgent(target: MemStationTarget, userId: string, name: string, capabilities: string[]): Promise<AgentRecord> {
-  return adminRequest(target, agentPath(userId), { method: 'POST', body: JSON.stringify({ name, capabilities }) });
+export function createAgent(target: MemStationTarget, userId: string, name: string, capabilities: string[], workspaceId?:string): Promise<AgentRecord> {
+  return adminRequest(target, workspaceId?`/api/admin/workspaces/${encodeURIComponent(workspaceId)}/agents`:agentPath(userId), { method: 'POST', body: JSON.stringify({ name, capabilities, ...(workspaceId?{user_id:userId}:{}) }) });
 }
 export function updateAgent(target: MemStationTarget, userId: string, agent: AgentRecord, name: string, status: AgentRecord['status']): Promise<AgentRecord> {
   return adminRequest(target, agentPath(userId, agent.id), { method: 'PUT', body: JSON.stringify({ name, status, expected_revision: agent.revision }) });
 }
 export function updateAgentGrant(target: MemStationTarget, userId: string, grant: AgentGrant, capabilities: string[]): Promise<AgentGrant> {
-  return adminRequest(target, `${agentPath(userId, grant.agent_id)}/grant`, { method: 'PUT', body: JSON.stringify({ capabilities, expected_revision: grant.revision }) });
+  return adminRequest(target, `/api/admin/workspaces/${encodeURIComponent(grant.workspace_id)}/agents/${encodeURIComponent(grant.agent_id)}/grant`, { method: 'PUT', body: JSON.stringify({ user_id:userId, capabilities, expected_revision: grant.revision }) });
 }
 export function fetchAgentCredentials(target: MemStationTarget, userId: string, agentId: string, after = '', signal?: AbortSignal): Promise<CursorPage<AgentCredential>> {
   return adminRequest(target, `${agentPath(userId, agentId)}/api-keys?${new URLSearchParams({ limit: '50', after })}`, { signal, cache: 'no-store' });
@@ -2127,4 +2127,8 @@ export function writeWorkspaceMemory<T>(target: MemStationTarget, workspace: Wor
 
 export function browseWorkspaces(target: MemStationTarget, query: string, after = ''): Promise<import('#lib/types.ts').WorkspacePage> {
   return adminRequest(target, `/api/admin/workspaces?${new URLSearchParams({ q: query, after, limit: '30' })}`);
+}
+
+export function createWorkspace(target: MemStationTarget, userId: string, name: string, kind: string): Promise<WorkspaceRecord> {
+ return adminRequest(target,'/api/admin/workspaces',{method:'POST',body:JSON.stringify({user_id:userId,name,kind})});
 }

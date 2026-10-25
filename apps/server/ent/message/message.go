@@ -21,6 +21,8 @@ const (
 	FieldUserID = "user_id"
 	// FieldWorkspaceID holds the string denoting the workspace_id field in the database.
 	FieldWorkspaceID = "workspace_id"
+	// FieldPartitionID holds the string denoting the partition_id field in the database.
+	FieldPartitionID = "partition_id"
 	// FieldConversationID holds the string denoting the conversation_id field in the database.
 	FieldConversationID = "conversation_id"
 	// FieldRole holds the string denoting the role field in the database.
@@ -48,6 +50,7 @@ var Columns = []string{
 	FieldUpdatedAt,
 	FieldUserID,
 	FieldWorkspaceID,
+	FieldPartitionID,
 	FieldConversationID,
 	FieldRole,
 	FieldContentBlocks,
@@ -75,6 +78,8 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultPartitionID holds the default value on creation for the "partition_id" field.
+	DefaultPartitionID string
 	// DefaultSequenceNum holds the default value on creation for the "sequence_num" field.
 	DefaultSequenceNum int
 )
@@ -105,6 +110,11 @@ func ByUserID(opts ...sql.OrderTermOption) OrderOption {
 // ByWorkspaceID orders the results by the workspace_id field.
 func ByWorkspaceID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldWorkspaceID, opts...).ToFunc()
+}
+
+// ByPartitionID orders the results by the partition_id field.
+func ByPartitionID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPartitionID, opts...).ToFunc()
 }
 
 // ByConversationID orders the results by the conversation_id field.

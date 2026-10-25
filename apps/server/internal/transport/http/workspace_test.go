@@ -62,7 +62,7 @@ func TestWorkspaceAdminContractAndProxyDiscovery(t *testing.T) {
 		{"GET", "/api/admin/workspaces?limit=oops", "", 400},
 		{"GET", "/api/admin/workspaces?limit=101", "", 400},
 		{"GET", path + "?user_id=other", "", 404},
-		{"PUT", path, strings.Replace(body, `"owner"`, `"other"`, 1), 400},
+		{"PUT", path, strings.Replace(body, `"owner"`, `"other"`, 1), 404},
 		{"PUT", path, strings.Replace(body, `"capabilities":[]`, `"capabilities":null`, 1), 400},
 		{"PUT", path, strings.Replace(body, `"capabilities":[]`, `"capabilities":[],"status":"archived"`, 1), 400},
 		{"PUT", path, body, 200},

@@ -60,6 +60,20 @@ func (_c *MessageCreate) SetWorkspaceID(v string) *MessageCreate {
 	return _c
 }
 
+// SetPartitionID sets the "partition_id" field.
+func (_c *MessageCreate) SetPartitionID(v string) *MessageCreate {
+	_c.mutation.SetPartitionID(v)
+	return _c
+}
+
+// SetNillablePartitionID sets the "partition_id" field if the given value is not nil.
+func (_c *MessageCreate) SetNillablePartitionID(v *string) *MessageCreate {
+	if v != nil {
+		_c.SetPartitionID(*v)
+	}
+	return _c
+}
+
 // SetConversationID sets the "conversation_id" field.
 func (_c *MessageCreate) SetConversationID(v string) *MessageCreate {
 	_c.mutation.SetConversationID(v)
@@ -167,6 +181,10 @@ func (_c *MessageCreate) defaults() {
 		v := message.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.PartitionID(); !ok {
+		v := message.DefaultPartitionID
+		_c.mutation.SetPartitionID(v)
+	}
 	if _, ok := _c.mutation.SequenceNum(); !ok {
 		v := message.DefaultSequenceNum
 		_c.mutation.SetSequenceNum(v)
@@ -186,6 +204,9 @@ func (_c *MessageCreate) check() error {
 	}
 	if _, ok := _c.mutation.WorkspaceID(); !ok {
 		return &ValidationError{Name: "workspace_id", err: errors.New(`ent: missing required field "Message.workspace_id"`)}
+	}
+	if _, ok := _c.mutation.PartitionID(); !ok {
+		return &ValidationError{Name: "partition_id", err: errors.New(`ent: missing required field "Message.partition_id"`)}
 	}
 	if _, ok := _c.mutation.ConversationID(); !ok {
 		return &ValidationError{Name: "conversation_id", err: errors.New(`ent: missing required field "Message.conversation_id"`)}
@@ -237,6 +258,10 @@ func (_c *MessageCreate) createSpec() (*Message, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.WorkspaceID(); ok {
 		_spec.SetField(message.FieldWorkspaceID, field.TypeString, value)
 		_node.WorkspaceID = value
+	}
+	if value, ok := _c.mutation.PartitionID(); ok {
+		_spec.SetField(message.FieldPartitionID, field.TypeString, value)
+		_node.PartitionID = value
 	}
 	if value, ok := _c.mutation.ConversationID(); ok {
 		_spec.SetField(message.FieldConversationID, field.TypeString, value)

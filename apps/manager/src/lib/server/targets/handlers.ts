@@ -84,7 +84,7 @@ export async function proxy(event: RequestEvent): Promise<Response> {
   const session = await store.connection(id, binding);
   if (!session && kind !== 'health') error(401, 'Reconnect this target.');
   const headers: Record<string, string> = {};
-  for (const key of ['accept', 'content-type', 'range']) {
+  for (const key of ['accept', 'content-type', 'range', 'idempotency-key']) {
     const value = event.request.headers.get(key); if (value) headers[key] = value;
   }
   if (kind === 'admin') headers.cookie = session!.cookie;

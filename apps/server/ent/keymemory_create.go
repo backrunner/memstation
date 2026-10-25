@@ -54,6 +54,26 @@ func (_c *KeyMemoryCreate) SetUserID(v string) *KeyMemoryCreate {
 	return _c
 }
 
+// SetWorkspaceID sets the "workspace_id" field.
+func (_c *KeyMemoryCreate) SetWorkspaceID(v string) *KeyMemoryCreate {
+	_c.mutation.SetWorkspaceID(v)
+	return _c
+}
+
+// SetPartitionID sets the "partition_id" field.
+func (_c *KeyMemoryCreate) SetPartitionID(v string) *KeyMemoryCreate {
+	_c.mutation.SetPartitionID(v)
+	return _c
+}
+
+// SetNillablePartitionID sets the "partition_id" field if the given value is not nil.
+func (_c *KeyMemoryCreate) SetNillablePartitionID(v *string) *KeyMemoryCreate {
+	if v != nil {
+		_c.SetPartitionID(*v)
+	}
+	return _c
+}
+
 // SetNodeID sets the "node_id" field.
 func (_c *KeyMemoryCreate) SetNodeID(v string) *KeyMemoryCreate {
 	_c.mutation.SetNodeID(v)
@@ -185,6 +205,10 @@ func (_c *KeyMemoryCreate) defaults() {
 		v := keymemory.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.PartitionID(); !ok {
+		v := keymemory.DefaultPartitionID
+		_c.mutation.SetPartitionID(v)
+	}
 	if _, ok := _c.mutation.ReviewStatus(); !ok {
 		v := keymemory.DefaultReviewStatus
 		_c.mutation.SetReviewStatus(v)
@@ -201,6 +225,12 @@ func (_c *KeyMemoryCreate) check() error {
 	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "KeyMemory.user_id"`)}
+	}
+	if _, ok := _c.mutation.WorkspaceID(); !ok {
+		return &ValidationError{Name: "workspace_id", err: errors.New(`ent: missing required field "KeyMemory.workspace_id"`)}
+	}
+	if _, ok := _c.mutation.PartitionID(); !ok {
+		return &ValidationError{Name: "partition_id", err: errors.New(`ent: missing required field "KeyMemory.partition_id"`)}
 	}
 	if _, ok := _c.mutation.NodeID(); !ok {
 		return &ValidationError{Name: "node_id", err: errors.New(`ent: missing required field "KeyMemory.node_id"`)}
@@ -251,6 +281,14 @@ func (_c *KeyMemoryCreate) createSpec() (*KeyMemory, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.UserID(); ok {
 		_spec.SetField(keymemory.FieldUserID, field.TypeString, value)
 		_node.UserID = value
+	}
+	if value, ok := _c.mutation.WorkspaceID(); ok {
+		_spec.SetField(keymemory.FieldWorkspaceID, field.TypeString, value)
+		_node.WorkspaceID = value
+	}
+	if value, ok := _c.mutation.PartitionID(); ok {
+		_spec.SetField(keymemory.FieldPartitionID, field.TypeString, value)
+		_node.PartitionID = value
 	}
 	if value, ok := _c.mutation.NodeID(); ok {
 		_spec.SetField(keymemory.FieldNodeID, field.TypeString, value)

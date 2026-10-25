@@ -345,12 +345,16 @@ func (e *Engine) SearchWithVariant(ctx context.Context, input domain.SearchInput
 }
 
 func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant SearchVariant) (DebugSearchResult, error) {
-	bound, err := security.WithPersonalDataScope(ctx, input.UserID, input.WorkspaceID)
+	workspace, err := security.DataScope(ctx, input.UserID, input.WorkspaceID)
+	if err != nil {
+		return DebugSearchResult{}, err
+	}
+	bound, err := security.WithDataScope(ctx, input.UserID, workspace, security.Partitions(ctx)...)
 	if err != nil {
 		return DebugSearchResult{}, err
 	}
 	ctx = bound
-	input.WorkspaceID = domain.PersonalWorkspaceID(input.UserID)
+	input.WorkspaceID = security.WorkspaceID(ctx, input.UserID)
 	ctx, span := observability.TraceSpan(ctx, "memory.search",
 		attribute.String("memory.user_id", input.UserID),
 		attribute.Int("memory.query_length", len(strings.TrimSpace(input.Query))),
@@ -522,7 +526,7 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 
 	candidates := make([]searchCandidate, 0, len(docs))
 	for _, doc := range docs {
-		if !matchesTemporalSearchInput(doc, input) || !matchesSearchDocument(doc, input) {
+		if !matchesTemporalSearchInput(doc, input) || !matchesSearchDocument(ctx, doc, input) {
 			continue
 		}
 		semanticScore := scoreMap[doc.NodeID]
@@ -677,7 +681,7 @@ func (e *Engine) searchWithoutVectors(ctx context.Context, input domain.SearchIn
 	candidates := make([]searchCandidate, 0, len(result.Memories))
 	componentBaseScores := make(map[string]float64, len(result.Memories))
 	for _, doc := range result.Memories {
-		if doc.ID == "" || !matchesTemporalSearchInput(doc, input) || !matchesSearchDocument(doc, input) {
+		if doc.ID == "" || !matchesTemporalSearchInput(doc, input) || !matchesSearchDocument(ctx, doc, input) {
 			continue
 		}
 		components := scoreDocumentAt(doc, baseScores[doc.NodeID], 0, 0, supersessionBoosts[doc.NodeID], conversationBoosts[doc.NodeID], 0, 0, now, cfg)
@@ -852,11 +856,11 @@ func matchesRequestedTypes(value domain.MemoryType, filters []domain.MemoryType)
 	return false
 }
 
-func matchesSearchDocument(doc domain.MemoryDocument, input domain.SearchInput) bool {
+func matchesSearchDocument(ctx context.Context, doc domain.MemoryDocument, input domain.SearchInput) bool {
 	if input.UserID != "" && doc.UserID != input.UserID {
 		return false
 	}
-	if doc.WorkspaceID != "" && doc.WorkspaceID != domain.PersonalWorkspaceID(input.UserID) {
+	if doc.WorkspaceID != "" && doc.WorkspaceID != security.WorkspaceID(ctx, input.UserID) {
 		return false
 	}
 	if !matchesRequestedTypes(doc.Type, input.MemoryTypes) {

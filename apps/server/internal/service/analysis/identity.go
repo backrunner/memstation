@@ -3,7 +3,9 @@ package analysis
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"memstation/apps/server/internal/domain"
@@ -38,6 +40,14 @@ func applyFactLineageMetadata(doc domain.MemoryDocument, userID, conversationID 
 	doc.Metadata["fact_key"] = factKey
 	doc.Metadata["lineage_group_id"] = factLineageGroupID(userID, factKey)
 	doc.Metadata["lineage_revision_key"] = factLineageRevisionKey(userID, conversationID, factKey, doc.Content, doc.Metadata)
+	if len(doc.SubjectActorIDs) > 0 {
+		actors := append([]string{}, doc.SubjectActorIDs...)
+		slices.Sort(actors)
+		identity, _ := json.Marshal([]any{doc.Metadata["lineage_revision_key"], actors})
+		hash := sha256.Sum256(identity)
+		doc.Metadata["lineage_revision_key"] = hex.EncodeToString(hash[:])
+	}
+
 	return doc
 }
 

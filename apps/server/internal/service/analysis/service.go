@@ -8,12 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/provider"
+	"memstation/apps/server/internal/security"
 	"memstation/apps/server/internal/service/memoryllm"
 	"memstation/apps/server/internal/textutil"
 )
@@ -52,12 +54,14 @@ type Quote struct {
 	Text     string `json:"text"`
 }
 type Item struct {
-	Content     string  `json:"content"`
-	Importance  float64 `json:"importance"`
-	DecayFactor float64 `json:"decay_factor"`
-	Confidence  float64 `json:"confidence"`
-	Subject     string  `json:"subject"`
-	Quotes      []Quote `json:"quotes"`
+	SubjectActorIDs []string `json:"subject_actor_ids,omitempty"`
+	SubjectScope    string   `json:"subject_scope,omitempty"`
+	Content         string   `json:"content"`
+	Importance      float64  `json:"importance"`
+	DecayFactor     float64  `json:"decay_factor"`
+	Confidence      float64  `json:"confidence"`
+	Subject         string   `json:"subject"`
+	Quotes          []Quote  `json:"quotes"`
 }
 type Fact struct {
 	Item
@@ -99,17 +103,50 @@ type Summary struct {
 	ChunkCount  int      `json:"-"`
 }
 type Source struct {
-	Kind        string             `json:"kind,omitempty"`
-	ID          string             `json:"id"`
-	Role        domain.MessageRole `json:"role"`
-	Text        string             `json:"text"`
-	SequenceNum int                `json:"sequence_num"`
-	PartID      string             `json:"part_id,omitempty"`
+	Ref             *domain.SourceRef  `json:"source_ref,omitempty"`
+	SpeakerActorID  string             `json:"speaker_actor_id,omitempty"`
+	AuthorActorID   string             `json:"author_actor_id,omitempty"`
+	MentionActorIDs []string           `json:"mention_actor_ids,omitempty"`
+	Kind            string             `json:"kind,omitempty"`
+	ID              string             `json:"id"`
+	Role            domain.MessageRole `json:"role"`
+	Text            string             `json:"text"`
+	SequenceNum     int                `json:"sequence_num"`
+	PartID          string             `json:"part_id,omitempty"`
 }
 
 // Sources serializes original material. Splitting is transport budgeting, not memory generation.
 func Sources(conversation domain.ConversationRecord) []Source {
 	out := []Source{}
+	if conversation.ContextMode == "events" {
+		for seq, message := range conversation.Messages {
+			if message.Source == nil {
+				continue
+			}
+			source := message.Source
+			for i, part := range source.Parts {
+				if strings.TrimSpace(part.Text) == "" {
+					continue
+				}
+				ref := domain.SourceRef{WorkspaceID: source.WorkspaceID, MessageID: source.MessageID, Revision: source.Revision, PartIndex: i}
+				author := source.Speaker.ActorID
+				if part.Type == "quote" {
+					author = ""
+					if part.Author != nil {
+						author = part.Author.ActorID
+					}
+				}
+				mentions := []string{}
+				for _, p := range source.Parts {
+					if p.Type == "mention" && p.ActorID != "" {
+						mentions = append(mentions, p.ActorID)
+					}
+				}
+				out = append(out, Source{Kind: part.Type, ID: fmt.Sprintf("%s:%d:%d", source.MessageID, source.Revision, i), Role: message.Role, Text: part.Text, SequenceNum: seq + 1, Ref: &ref, SpeakerActorID: source.Speaker.ActorID, AuthorActorID: author, MentionActorIDs: mentions})
+			}
+		}
+		return out
+	}
 	if len(conversation.Parts) > 0 {
 		for _, part := range conversation.Parts {
 			text := part.TextContent
@@ -154,9 +191,19 @@ func sourceBatches(sources []Source) ([][]Source, error) {
 	size := 0
 	for _, source := range sources {
 		remaining := source.Text
+		offset := 0
+		if source.Ref != nil && source.Ref.Span != nil {
+			offset = source.Ref.Span.Start
+		}
 		for remaining != "" {
 			piece := source
 			piece.Text = textutil.PrefixBytes(remaining, 12000)
+			if source.Ref != nil {
+				ref := *source.Ref
+				ref.Span = &domain.TextSpan{Start: offset, End: offset + utf8.RuneCountInString(piece.Text)}
+				piece.Ref = &ref
+			}
+			offset += utf8.RuneCountInString(piece.Text)
 			remaining = remaining[len(piece.Text):]
 			if size+len(piece.Text) > 16000 && len(batch) > 0 {
 				batches = append(batches, batch)
@@ -250,7 +297,8 @@ func validateSummary(s Summary) error {
 const extractionInstruction = `Extract only durable, supported memories from the original sources. The summary and existing facts are context, never new evidence. Interpret negation, corrections, hypothetical examples, speaker attribution and temporal changes. Do not treat assistant suggestions as user commitments. Return {"facts":[],"impression":null,"items":[]}. Empty arrays and null impression are correct when there is nothing to remember.
 Each fact is {"key":string,"category":string,"subject":string,"content":string,"confidence":number,"importance":number,"decay_factor":number,"quotes":[{"source_id":string,"text":string}],"supersedes":[existing_fact_id],"valid_from":optional_RFC3339,"valid_to":optional_RFC3339}. Use stable semantic snake_case keys specific to subject and project; reuse an existing key only for the same attribute. Supersede only facts explicitly corrected or replaced, never merely similar facts. Every supersedes entry must be an exact id from existing_facts, and that existing fact's key and subject must exactly equal the emitted fact's key and subject. For a correction of the same attribute, preserve the existing key and subject verbatim; never generate a new key or subject while referencing its old id. If there is no supported matching replacement, use an empty supersedes array. Quotes must be exact spans from user or tool sources.
 Optional impression has content, subject, confidence, importance, decay_factor, quotes and describes only supported observations, not fixed personality labels.
-Each item is {"key":string,"type":string,"title":string,"status":string,"subject":string,"content":string,"confidence":number,"importance":number,"decay_factor":number,"quotes":[{"source_id":string,"text":string}]}. All these item fields are required, including subject and scores for completed or cancelled tasks. Subject identifies the person or project the assertion concerns; do not return an empty subject or content. If the subject cannot be supported, omit that item. Type is task,event,procedure,entity,agent_action,artifact. A future plan is a task, never a completed event. Entities additionally have entity_kind and canonical_name. Do not invent tool calls or artifact IDs. An artifact may include artifact_id only when supplied in an artifact source. Optionally return relations:[{source_key,target_key,type,weight}] between your emitted fact/item keys; allowed types are used_tool,produced_artifact,mentions_entity,depends_on,resulted_in,supports. Weight 0..1. Never copy credentials, tokens, passwords or raw debug payloads into memories or quotes. Confidence 0..1, importance 0.5..2, decay_factor 0.5..3; these ranges apply to every fact, impression and item, with no exceptions for task status. At most 16 facts and 12 items per response.`
+Each item is {"key":string,"type":string,"title":string,"status":string,"subject":string,"content":string,"confidence":number,"importance":number,"decay_factor":number,"quotes":[{"source_id":string,"text":string}]}. All these item fields are required, including subject and scores for completed or cancelled tasks. Subject identifies the person or project the assertion concerns; do not return an empty subject or content. If the subject cannot be supported, omit that item. Type is task,event,procedure,entity,agent_action,artifact. A future plan is a task, never a completed event. Entities additionally have entity_kind and canonical_name. Do not invent tool calls or artifact IDs. An artifact may include artifact_id only when supplied in an artifact source. Optionally return relations:[{source_key,target_key,type,weight}] between your emitted fact/item keys; allowed types are used_tool,produced_artifact,mentions_entity,depends_on,resulted_in,supports. Weight 0..1. Never copy credentials, tokens, passwords or raw debug payloads into memories or quotes. Confidence 0..1, importance 0.5..2, decay_factor 0.5..3; these ranges apply to every fact, impression and item, with no exceptions for task status. At most 16 facts and 12 items per response.
+When sources contain source_ref and actor identifiers, every item/fact/impression must include subject_scope (actor or workspace) and subject_actor_ids. Use exact supplied author_actor_id or mention_actor_ids for actor subjects. A quoted statement belongs to its author, not the quoting speaker. Unknown authors stay unknown: omit unsupported actor claims. Workspace habits use subject_scope=workspace and an empty subject_actor_ids array. Never use the owner as an implicit subject or infer an actor identity from a display name.`
 
 func (s *Service) AnalyzeConversation(ctx context.Context, input Input) (Result, error) {
 	user := firstNonEmpty(input.UserID, input.Conversation.UserID)
@@ -396,6 +444,13 @@ func (s *Service) AnalyzeConversation(ctx context.Context, input Input) (Result,
 				doc.Metadata["title"] = item.CanonicalName
 				doc.Metadata["entity_kind"] = item.EntityKind
 				doc.Metadata["entity_scope"] = metadataString(input.Conversation.Metadata, "entity_scope")
+				if len(doc.SourceRefs) > 0 || security.WritePartition(ctx) != "" {
+					actors := append([]string{}, doc.SubjectActorIDs...)
+					slices.Sort(actors)
+					scopeData, _ := json.Marshal([]any{security.WorkspaceID(ctx, user), security.WritePartition(ctx), actors})
+					doc.Metadata["entity_scope"] = domain.AccessID("subject-scope", string(scopeData))
+				}
+
 				key := canonicalEntityKey(doc.Content, doc.Metadata)
 				doc.Metadata["canonical_key"] = key
 				doc.Metadata["aliases"] = []string{item.Title}
@@ -448,6 +503,9 @@ func (s *Service) AnalyzeConversation(ctx context.Context, input Input) (Result,
 	if result.Impression.ID != "" {
 		all = append(all, result.Impression)
 	}
+	for _, doc := range all {
+		doc.Metadata["source_conversation_revision"] = input.Conversation.Revision
+	}
 	if input.Summary.NodeID != "" {
 		for _, doc := range all {
 			result.Relations = append(result.Relations, domain.MemoryRelation{UserID: user, SrcNodeID: input.Summary.NodeID, DstNodeID: doc.NodeID, RelationType: domain.MemoryRelationDerivedFrom, Weight: 1, Source: "llm", Metadata: map[string]any{"conversation_id": conversation}})
@@ -476,9 +534,11 @@ func documentFromItem(item Item, kind domain.MemoryType, user, conversation stri
 	if len(item.Quotes) > 16 {
 		return domain.MemoryDocument{}, errors.New("invalid LLM memory quotes: at most 16")
 	}
-	doc := domain.MemoryDocument{UserID: user, ConversationID: conversation, Type: kind, Content: strings.TrimSpace(item.Content), Importance: item.Importance, DecayFactor: item.DecayFactor, Metadata: map[string]any{"subject": item.Subject, "confidence": item.Confidence, "extraction_method": "llm", "score_reason": "llm_extracted", "support_kind": "model_inference", "source": "llm"}}
+	doc := domain.MemoryDocument{SubjectActorIDs: append([]string{}, item.SubjectActorIDs...), UserID: user, ConversationID: conversation, Type: kind, Content: strings.TrimSpace(item.Content), Importance: item.Importance, DecayFactor: item.DecayFactor, Metadata: map[string]any{"subject": item.Subject, "confidence": item.Confidence, "extraction_method": "llm", "score_reason": "llm_extracted", "support_kind": "model_inference", "source": "llm"}}
 	quotes := []any{}
 	parts := []string{}
+	eventSources := false
+	supportedActors := map[string]bool{}
 	for _, quote := range item.Quotes {
 		found := false
 		for _, source := range sources {
@@ -491,6 +551,23 @@ func documentFromItem(item Item, kind domain.MemoryType, user, conversation stri
 			start := strings.Index(source.Text, quote.Text)
 			if !validText(quote.Text, 8000) || start < 0 {
 				return domain.MemoryDocument{}, errors.New("LLM quote is not an exact source span")
+			}
+			if source.Ref != nil {
+				eventSources = true
+				ref := *source.Ref
+				offset := 0
+				if ref.Span != nil {
+					offset = ref.Span.Start
+				}
+				ref.Span = &domain.TextSpan{Start: offset + utf8.RuneCountInString(source.Text[:start]), End: offset + utf8.RuneCountInString(source.Text[:start+len(quote.Text)])}
+				doc.SourceRefs = append(doc.SourceRefs, ref)
+				doc.WorkspaceID = ref.WorkspaceID
+				if source.AuthorActorID != "" {
+					supportedActors[source.AuthorActorID] = true
+				}
+				for _, actor := range source.MentionActorIDs {
+					supportedActors[actor] = true
+				}
 			}
 			raw := fmt.Sprintf("%s|%s|%s|%d|%s|%d|%d", user, conversation, source.ID, source.SequenceNum, source.PartID, start, start+len(quote.Text))
 			sum := sha256.Sum256([]byte(raw))
@@ -519,6 +596,24 @@ func documentFromItem(item Item, kind domain.MemoryType, user, conversation stri
 	}
 	if len(quotes) == 0 {
 		return domain.MemoryDocument{}, errors.New("LLM memory requires original source evidence")
+	}
+	if eventSources {
+		if item.SubjectScope == "workspace" {
+			if len(item.SubjectActorIDs) != 0 {
+				return domain.MemoryDocument{}, errors.New("workspace subject cannot include actor IDs")
+			}
+		} else if item.SubjectScope == "actor" && len(item.SubjectActorIDs) > 0 {
+			seenActors := []string{}
+			for _, actor := range item.SubjectActorIDs {
+				if !supportedActors[actor] || slices.Contains(seenActors, actor) {
+					return domain.MemoryDocument{}, errors.New("unsupported LLM subject actor")
+				}
+				seenActors = append(seenActors, actor)
+			}
+		} else {
+			return domain.MemoryDocument{}, errors.New("event memory requires explicit supported subject scope")
+		}
+		doc.Metadata["subject_scope"] = item.SubjectScope
 	}
 	doc.Metadata["source_quotes"] = quotes
 	doc.Metadata["source_part_ids"] = parts

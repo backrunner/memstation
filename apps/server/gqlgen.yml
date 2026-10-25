@@ -10,3 +10,86 @@ resolver:
   layout: follow-schema
   dir: graph/resolver
   package: resolver
+
+struct_tag: json
+models:
+  Long:
+    model: github.com/99designs/gqlgen/graphql.Int64
+  Time:
+    model: github.com/99designs/gqlgen/graphql.Time
+  JSON:
+    model: github.com/99designs/gqlgen/graphql.Any
+  WorkspaceInfo:
+    model: memstation/apps/server/internal/domain.Workspace
+  WorkspaceDirectory:
+    model: memstation/apps/server/internal/domain.WorkspacePage
+  IntegrationInfo:
+    model: memstation/apps/server/internal/domain.IntegrationConfig
+  PartitionInfo:
+    model: memstation/apps/server/internal/domain.MemoryPartition
+  GrantInfo:
+    model: memstation/apps/server/internal/domain.WorkspaceGrant
+  SourceSpan:
+    model: memstation/apps/server/internal/domain.TextSpan
+  SourceReference:
+    model: memstation/apps/server/internal/domain.SourceRef
+  SourceIdentity:
+    model: memstation/apps/server/internal/domain.SourceSpeaker
+  SourceContent:
+    model: memstation/apps/server/internal/domain.SourcePart
+  SourceDetail:
+    model: memstation/apps/server/internal/domain.SourceRecord
+  CandidateRecord:
+    model: memstation/apps/server/internal/domain.MemoryCandidate
+  LifecycleOperation:
+    model: memstation/apps/server/internal/domain.MemoryOperation
+  PublicationRecord:
+    model: memstation/apps/server/internal/domain.MemoryPublication
+  AcceptanceRecord:
+    model: memstation/apps/server/internal/domain.EventAcceptance
+  IngestionProgress:
+    model: memstation/apps/server/internal/domain.IngestionReceipt
+  ActorInfo:
+    model: memstation/apps/server/internal/domain.WorkspaceActor
+  SourceInfo:
+    model: memstation/apps/server/internal/domain.SourceSummary
+  MemoryJobInfo:
+    model: memstation/apps/server/internal/domain.MemoryJob
+  MemoryControlInfo:
+    model: memstation/apps/server/internal/domain.MemoryControlOverview
+  MemoryRecord:
+    model: memstation/apps/server/internal/domain.MemoryDocument
+  BackgroundCall:
+    model: memstation/apps/server/internal/domain.AICall
+  WorkspaceCreate:
+    model: memstation/apps/server/internal/domain.Workspace
+  WorkspacePolicy:
+    model: memstation/apps/server/internal/domain.Workspace
+  IntegrationInput:
+    model: memstation/apps/server/internal/domain.IntegrationConfig
+  PartitionInput:
+    model: memstation/apps/server/internal/domain.MemoryPartition
+  GrantInput:
+    model: memstation/apps/server/internal/domain.WorkspaceGrant
+  SourceSpanInput:
+    model: memstation/apps/server/internal/domain.TextSpan
+  SourceReferenceInput:
+    model: memstation/apps/server/internal/domain.SourceRef
+  CandidateProposal:
+    model: memstation/apps/server/internal/domain.MemoryCandidate
+  EraseSelector:
+    model: memstation/apps/server/internal/domain.ForgetSelector
+  PublicationProposal:
+    model: memstation/apps/server/internal/domain.PublicationInput
+  WorkspaceAgent:
+    model: memstation/apps/server/internal/domain.Agent
+  WorkspaceAgentDetail:
+    model: memstation/apps/server/internal/domain.AgentDetail
+  MemoryGenerationInfo:
+    model: memstation/apps/server/internal/domain.MemoryGeneration
+  MemoryCapabilitiesInfo:
+    model: memstation/apps/server/internal/domain.MemoryCapabilities
+  MemoryRuntimeInfo:
+    model: memstation/apps/server/internal/domain.MemoryRuntime
+  EmbeddingIdentityInfo:
+    model: memstation/apps/server/internal/domain.EmbeddingIdentity

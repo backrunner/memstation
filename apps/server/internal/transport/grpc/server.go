@@ -7,11 +7,12 @@ import (
 	"strings"
 	"time"
 
+	memorycontrolservice "memstation/apps/server/internal/service/memorycontrol"
+
 	"memstation/apps/server/internal/domain"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	grpcHealth "google.golang.org/grpc/health"
 	grpcHealthV1 "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/reflection"
@@ -22,25 +23,35 @@ import (
 	"memstation/apps/server/internal/observability"
 	"memstation/apps/server/internal/security"
 	adminservice "memstation/apps/server/internal/service/admin"
+	"memstation/apps/server/internal/service/aibroker"
 	auditsvc "memstation/apps/server/internal/service/audit"
 	gatewayservice "memstation/apps/server/internal/service/gateway"
+	identityservice "memstation/apps/server/internal/service/identity"
+	ingestionservice "memstation/apps/server/internal/service/ingestion"
+	lifecycleservice "memstation/apps/server/internal/service/lifecycle"
 	memoryservice "memstation/apps/server/internal/service/memory"
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
 	pb "memstation/apps/server/proto/memstation/v1"
 )
 
 type Dependencies struct {
-	Config      bootstrap.Config
-	Logger      *slog.Logger
-	Health      *observability.Registry
-	Auth        security.Authenticator
-	RateLimiter *security.RateLimiter
-	Models      *modelcap.Registry
-	Gateway     *gatewayservice.Service
-	Memory      *memoryservice.Service
-	Generations *memorygenservice.Service
-	Admin       *adminservice.Service
-	Audit       *auditsvc.Service
+	MemoryControl *memorycontrolservice.Service
+	AIUsage       *aibroker.UsageService
+	DataReady     func(context.Context) error
+	Ingestion     *ingestionservice.Service
+	Lifecycle     *lifecycleservice.Service
+	Identity      *identityservice.Service
+	Config        bootstrap.Config
+	Logger        *slog.Logger
+	Health        *observability.Registry
+	Auth          security.Authenticator
+	RateLimiter   *security.RateLimiter
+	Models        *modelcap.Registry
+	Gateway       *gatewayservice.Service
+	Memory        *memoryservice.Service
+	Generations   *memorygenservice.Service
+	Admin         *adminservice.Service
+	Audit         *auditsvc.Service
 }
 
 var proxyMethodSet = map[string]struct{}{
@@ -70,6 +81,7 @@ func NewServer(deps Dependencies) *grpc.Server {
 			recoveryUnaryInterceptor(logger),
 			logUnaryInterceptor(logger),
 			authUnaryInterceptor(deps.Auth, deps.RateLimiter),
+			memoryRecoveryInterceptor(deps.DataReady),
 		),
 	)
 
@@ -81,6 +93,8 @@ func NewServer(deps Dependencies) *grpc.Server {
 		models:  deps.Models,
 		gateway: deps.Gateway,
 	})
+	pb.RegisterMemoryDataServiceServer(server, &memoryDataServiceServer{deps: deps})
+	pb.RegisterWorkspaceAdminServiceServer(server, &workspaceAdminServiceServer{deps: deps})
 	pb.RegisterMemoryServiceServer(server, &memoryServiceServer{
 		memory: deps.Memory,
 		audit:  deps.Audit,
@@ -91,8 +105,7 @@ func NewServer(deps Dependencies) *grpc.Server {
 		generations: deps.Generations,
 	})
 
-	healthServer := grpcHealth.NewServer()
-	healthServer.SetServingStatus("", grpcHealthV1.HealthCheckResponse_SERVING)
+	healthServer := &readinessHealthService{health: deps.Health}
 	grpcHealthV1.RegisterHealthServer(server, healthServer)
 	reflection.Register(server)
 
@@ -134,7 +147,11 @@ func authUnaryInterceptor(auth security.Authenticator, limiter *security.RateLim
 				token = strings.TrimSpace(token[7:])
 			}
 			var err error
-			ctx, err = auth.AuthenticateContext(ctx, token, firstCredential(md, "x-memstation-workspace"))
+			audience, parseErr := security.ParseAudience(firstCredential(md, "x-memstation-audience"))
+			if parseErr != nil || len(md.Get("x-memstation-audience")) > 1 {
+				return nil, status.Error(codes.PermissionDenied, "audience access denied")
+			}
+			ctx, err = auth.AuthenticateAudienceContext(ctx, token, firstCredential(md, "x-memstation-workspace"), audience)
 			if len(md.Get("x-memstation-workspace")) > 1 {
 				err = domain.ErrAccessDenied
 			}
@@ -145,8 +162,10 @@ func authUnaryInterceptor(auth security.Authenticator, limiter *security.RateLim
 				return nil, status.Error(codes.Unauthenticated, "invalid api key")
 			}
 			userID := security.UserIDFromContext(ctx)
-			if err := security.RequireCapability(ctx, grpcProxyCapability(info.FullMethod)); err != nil {
-				return nil, status.Error(codes.PermissionDenied, "capability required")
+			if capability := grpcProxyCapability(info.FullMethod); capability != "" {
+				if err := security.RequireCapability(ctx, capability); err != nil {
+					return nil, status.Error(codes.PermissionDenied, "capability required")
+				}
 			}
 			if limiter != nil && !limiter.Allow(security.RateLimitKeyFromToken(userID, token, info.FullMethod)) {
 				return nil, status.Error(codes.ResourceExhausted, "proxy rate limit exceeded")
@@ -163,11 +182,17 @@ func authUnaryInterceptor(auth security.Authenticator, limiter *security.RateLim
 }
 
 func isProxyMethod(method string) bool {
+	if strings.HasPrefix(method, "/memstation.v1.MemoryDataService/") {
+		return true
+	}
 	_, ok := proxyMethodSet[method]
 	return ok
 }
 
 func isAdminMethod(method string) bool {
+	if strings.HasPrefix(method, "/memstation.v1.WorkspaceAdminService/") {
+		return true
+	}
 	_, ok := adminMethodSet[method]
 	return ok
 }
@@ -195,6 +220,29 @@ func firstCredential(md metadata.MD, keys ...string) string {
 }
 
 func grpcProxyCapability(method string) string {
+	if strings.HasPrefix(method, "/memstation.v1.MemoryDataService/") {
+		switch strings.TrimPrefix(method, "/memstation.v1.MemoryDataService/") {
+		case "Probe", "Operation":
+			return ""
+		case "Observe", "Progress", "OpenWindow", "GetWindow", "Finalize":
+			return domain.CapabilityEventsWrite
+		case "Usage", "ReconcileUsage":
+			return domain.CapabilityUsageRead
+		case "Source":
+			return domain.CapabilitySourcesRead
+		case "Propose", "Candidates":
+			return domain.CapabilityCandidatesWrite
+		case "Retract":
+			return domain.CapabilitySourcesRetract
+		case "Forget":
+			return domain.CapabilityMemoryForget
+		case "Export":
+			return domain.CapabilityMemoryExport
+		default:
+			return domain.CapabilityMemoryRead
+		}
+	}
+
 	switch method {
 	case pb.GatewayService_Complete_FullMethodName, pb.GatewayService_ListModels_FullMethodName:
 		return domain.CapabilityGateway
@@ -202,5 +250,16 @@ func grpcProxyCapability(method string) string {
 		return domain.CapabilityMemoryEdit
 	default:
 		return domain.CapabilityMemoryRead
+	}
+}
+
+func memoryRecoveryInterceptor(check func(context.Context) error) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, next grpc.UnaryHandler) (any, error) {
+		if check != nil && (isProxyMethod(info.FullMethod) || isAdminMethod(info.FullMethod)) && info.FullMethod != pb.GatewayService_ListModels_FullMethodName && info.FullMethod != pb.MemoryDataService_Probe_FullMethodName && info.FullMethod != pb.WorkspaceAdminService_Capabilities_FullMethodName {
+			if err := check(ctx); err != nil {
+				return nil, status.Error(codes.Unavailable, "memory_recovery_pending")
+			}
+		}
+		return next(ctx, req)
 	}
 }
