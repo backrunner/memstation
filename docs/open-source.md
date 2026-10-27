@@ -1,60 +1,19 @@
-# Open-source publication scope
+# Open-source scope and publication policy
 
-Reviewed on **2026-10-25**, starting at commit `23f8623`. This records the evidence
-for opening the repository, not a certification that every future commit or binary
-distribution is free of security or licensing issues.
+The public repository contains source code, reusable documentation, synthetic fixtures,
+and selected product/brand assets. Local plans, review notes, validation reports,
+benchmark JSON, prototype captures and model-generation records belong in ignored
+`.agents/` storage. Raw datasets, model replies, credentials, logs and runtime data
+remain in ignored `.artifacts/` or deployment-specific storage.
 
-## Source and history
+Public documentation must not depend on these local archives. Retain licenses,
+source assets required by build/export scripts, and intentional README screenshots.
+Do not publish generated records solely because they pass a credential scanner.
 
-- The initial checkout contained 740 tracked files and 83 reachable commits on
-  `main` / `origin/main`. Gitleaks **8.30.1** scanned all reachable history with
-  redacted output and inline allow comments disabled: **zero findings**. It examined
-  82 patches, approximately 25.59 MB.
-- A separate Git object pass inspected 1,875 reachable blobs, including 12 binary
-  assets, and checked text for local machine paths, private key headers and contact
-  information. No personal machine paths or private keys were found. Text contacts
-  were synthetic fixture addresses. Git commit author identity remains part of the
-  normal contributor attribution history.
-- The tracked files and history contain configuration examples and synthetic test
-  credentials, not the local Ollama environment, actual client credentials, service
-  logs, database backups or downloaded model weights. Known development defaults
-  are labeled as local-only and must be replaced for exposed deployments.
-- Native golden data and the small LOCOMO/LongMemEval-shaped fixtures are synthetic.
-  Downloaded upstream datasets and evaluation artifacts are not distributed.
-- Current screenshots are captured from the repository fixture server. Planning
-  screenshots under `docs/plans/` remain explicitly separate from actual product UI.
-
-Local environment files, `.agents/`, `.artifacts/`, dependencies and build output
-remain outside Git. Ignore rules also cover private key containers, common database
-and backup formats, logs, local model weights and root-level data directories.
-Docker context exclusions cover the same sensitive material. Neither mechanism
-removes a file that is already tracked, so staged changes still require review.
-
-The complete staged export was scanned again before publication: approximately
-7.11 MB, **zero findings**. Both READMEs rendered through GitHub's Markdown API;
-local document links, Issue form YAML, shell snippet syntax and Compose config
-parsing passed. The screenshot script ran against isolated fixtures and checked
-390px overflow. This documentation change did not repeat the prior full application
-regression or rebuild the full Compose stack.
-
-## GitHub material
-
-The publication review also covers the repository description, issue/PR surfaces,
-release assets and retained Actions logs and diagnostic artifacts. The repository
-had no issues, pull requests or releases at review time. All **58 runs within the
-90-day retention window** and all **6 retained artifacts** were downloaded. Logs
-and artifact content, including nested Playwright trace archives, were scanned with
-redacted output. The nested-archive scan reported one generic API-key finding. It
-was traced to the fixture server's `nextAPIKey` function and the loopback-only
-credential-issuance test response: a random synthetic credential, not a key for a
-live deployment or upstream provider. No real credential finding remained after
-that review. Expired Actions logs are not accessible through the API and are
-outside the available evidence.
-
-Raw audit reports and downloaded archives stay in ignored `.artifacts/` storage;
-they are not added to the public repository. Future logs and uploads should use
-synthetic data and short retention. Do not upload local runtime artifacts just
-because a file passes a credential scanner.
+`.gitignore` and `.dockerignore` exclude local agent archives and runtime material.
+Ignore rules do not remove files already tracked by Git; review tracked deletions
+and staged filenames whenever moving material into local storage. Moving a tracked
+file does not erase it from previously published Git history.
 
 ## License choice
 

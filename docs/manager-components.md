@@ -1,6 +1,6 @@
 # Manager 共享 UI 组件
 
-Manager 的筛选、记录元数据、身份详情、任务表单、聊天工具和调试信息统一使用 `apps/manager/src/lib/components/CollapsibleSection.svelte`。不要在页面重新写原生 `details/summary` 或局部展开按钮样式。
+Manager 的筛选、记录元数据、身份详情、任务表单、聊天工具和调试信息统一使用 `apps/manager/src/lib/components/ui/CollapsibleSection.svelte`。不要在页面重新写原生 `details/summary` 或局部展开按钮样式。
 
 ## 用法
 
@@ -36,19 +36,11 @@ Manager 的筛选、记录元数据、身份详情、任务表单、聊天工具
 - 内容保留在 DOM，收起不重置表单或编辑器状态；原生 GET 表单仍提交隐藏区域的控件值。约束校验发现隐藏的无效控件时展开区域、聚焦控件并显示校验结果。
 - 展开／收起动画受区域裁切，避免过渡期间压到后续内容；遵循 `prefers-reduced-motion`。移动触控至少 44px。
 
-## 覆盖与验证
+## 回归检查
 
-统一覆盖 13 个文件中的 22 处 CollapsibleSection 调用（包含 FilterToolbar），以及使用 FilterToolbar 的 6 个页面；将工作区历史筛选、Workspace details、Agent Identity details 的三处原生折叠替换为共享组件。聊天工具调用／结果、原始事件计数改用 `count`。Manager 源码中原生 `details/summary` 已清零。
-
-浏览器回归覆盖收起表单提交、SSR 后刷新恢复、键盘与焦点、无效字段自动展开、减少动态效果、工作区／Agent／任务区域、桌面和 320／390px 布局。截图使用真实运行的 Manager 和本地 fixture，不能当作真实后端或物理手机验证。该调整不改变服务端接口或数据库。
-
-2026-10-24 验证记录：
-
-- Manager lint／Svelte 类型检查通过，0 errors、0 warnings；production build 通过。构建仍提示部分既有 chunk 大于 500 kB。
-- Vitest：26 项通过，1 项需要独立 Redis 环境的集成测试跳过；本次未修改该链路。
-- Playwright 全量 90 项（Chromium 57、mobile WebKit 33）：89 项通过，1 项旧测试的 `getByLabel('Filter')` 同时匹配输入框和 `Filters` 按钮。改为精确的 textbox role 后，该用例及新增折叠专项复测 5／5 通过；无剩余失败。
-- 已检查桌面、320px／390px 截图，包含收起／展开筛选、工作区和 Agent 详情、任务面板；18 张截图和机器可读验证记录保存在本地 `.artifacts/manager-collapsible-20261024/`。
-
+浏览器回归应覆盖收起表单提交、SSR 恢复、键盘与焦点、无效字段自动展开、
+减少动态效果以及桌面和窄屏布局。fixture 验证不等同于真实后端或物理手机验收。
+截图、检查计数和每轮结果保存到本地忽略目录。
 
 ## 工作区选择与动线
 
@@ -69,6 +61,6 @@ Manager 的筛选、记录元数据、身份详情、任务表单、聊天工具
 
 说明文字使用自然语句；不要把全部圆点替换成另一种装饰符。搜索框和提交按钮底部对齐；Key Memory 窄屏搜索框占满一行，Apply 与 New key memory 在下一行对齐。沿用共享表单、按钮、Select、Dialog 和折叠组件的焦点、尺寸与触屏规则。
 
-本次范围和实际验证结果见 [2026-10-24 UI 整理记录](plans/workspace-agents/manager-ui-refinement-2026-10-24.md)。
+## 组件目录
 
-2026-10-24 工作区选择与元数据整理：98 项完整浏览器回归及审计加载态修正后 3 项复测通过，Manager lint／类型检查和 production build 通过；29 项单测通过，1 项独立 Redis 集成测试跳过。桌面／移动截图与实际边界见上述 UI 整理记录。
+`ui/` 放表单控件、折叠和确认等基础交互；`layout/` 放页头、筛选栏和栏目导航；`content/` 放 Markdown、代码和 JSON；`charts/` 放图表。记忆、Agent、工作区、配置、Target 与聊天组件分别放入对应业务目录。统一使用 `#lib/components/<分类>/<组件>.svelte`，基础组件不得导入业务组件。

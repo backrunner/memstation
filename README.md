@@ -22,7 +22,7 @@ correct it when needed, and control how it is recalled.
 
 **Current scope:** single-instance self-hosting with Personal, group and project
 workspaces. Independent event ingestion, scoped Agent credentials, private audiences
-and source deletion are available through the [memory service contract](docs/plans/workspace-agents/contracts.md).
+and source deletion are available through the [memory service contract](docs/memory-service-contract.md).
 Actual Mimic integration, organizations, billing and production-scale performance
 validation remain separate delivery gates.
 
@@ -144,20 +144,21 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 | Develop and contribute | [Local workflows](docs/local-debugging.md), [contribution guide](CONTRIBUTING.md), [engineering specification](AGENTS.md) |
 | Configure Manager | [Service connections, sessions and network policy](docs/manager-connections.md) |
 | Understand memory | [Architecture](docs/architecture.md), [LLM generation](docs/llm-memory.md), [graph and fact history](docs/graph-memory.md) |
-| Workspaces and Agents | [Independent memory implementation and acceptance](docs/plans/workspace-agents/implementation-status.md), [deployment and integration](docs/independent-memory-integration.md) |
-| Verify behavior | [CI and testing](docs/ci.md), [retrieval evaluation](apps/server/tests/eval/README.md) |
+| Workspaces and Agents | [Memory service contract](docs/memory-service-contract.md), [deployment and integration](docs/independent-memory-integration.md) |
+| Verify behavior | [CI and testing](docs/ci.md), [retrieval evaluation](apps/server/tests/eval/README.md), [real-worker failure-cohort protocol](apps/server/tests/eval/REGRESSION.md) |
 | Deploy and operate | [Compose](deploy/compose/DEVELOPMENT.md), [Kubernetes baseline](deploy/k8s), [Nginx](deploy/nginx), [telemetry](deploy/otel), [backup and restore](deploy/compose/BACKUP_RESTORE.md) |
-| Open-source scope | [Publication audit and licensing boundaries](docs/open-source.md), [third-party notices](THIRD_PARTY_NOTICES.md) |
+| Open-source scope | [Publication policy and licensing boundaries](docs/open-source.md), [third-party notices](THIRD_PARTY_NOTICES.md) |
 
 Retrieval benchmarks are manual diagnostic runs, outside default CI/nightly gates.
 Native golden data ships in the repository; external LOCOMO and LongMemEval datasets
 are downloaded separately. Deterministic test vectors demonstrate the evaluation
 pipeline, not real-model retrieval quality.
 
-Measured real-model recall, source replay, and load results:
-[2026-10-25 evaluation](docs/memory-quality-2026-10-25.md). The report also records
-the targets that remain unmet.
-
+Real-model quality and production-scale latency remain under evaluation. Report
+retrieval, answer quality, judge protocol and failures separately; a small development
+sample or deterministic fixture is not a competitive benchmark result. Use the
+[evaluation guide](apps/server/tests/eval/README.md) to run reproducible checks.
+Per-run reports, generated JSON and development archives stay in ignored local storage.
 
 ## Contribute
 
@@ -176,3 +177,5 @@ See the [official license text](https://www.apache.org/licenses/LICENSE-2.0).
 Bundled fonts retain SIL OFL 1.1. Dependencies retain their own licenses. Model weights
 and hosted model access are not included. External LOCOMO data is CC BY-NC 4.0 and
 is neither bundled nor relicensed under Apache-2.0.
+
+Repository organization: SQL repositories are grouped by business responsibility under `apps/server/internal/store/sql/`; Manager components use shared UI/layout/content directories and business-specific directories. Development rules are in [AGENTS.md](AGENTS.md#127-目录组织与职责边界).

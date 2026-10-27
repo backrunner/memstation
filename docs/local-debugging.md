@@ -63,11 +63,7 @@ pnpm dev:reset
 memstation-local-admin-token
 ```
 
-开发默认 API Key 是：
-
-```text
-ms-local-dev
-```
+执行 `memstation seed` 创建 Bootstrap agent 和凭据，明文 Key 仅显示一次。也可以在 Manager 中先创建 Agent，再为它选择工作区并签发 Key。代理请求只接受已注册的凭据。
 
 然后在 Manager 的 Provider 和 Model 设置中配置可用的 Chat、Summary、Analysis 模型及部署级 Embedding 模型。语义记忆仅使用 LLM，Summary／Analysis 未配置或调用失败会使对应任务失败重试，不会生成规则兜底记忆。配置与本机 Ollama 测试边界见 [LLM 记忆生成](llm-memory.md)。不要把真实密钥提交到仓库。
 

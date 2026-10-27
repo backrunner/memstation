@@ -1,12 +1,12 @@
 # 独立记忆服务部署与 Mimic 接入
 
-MemStation 支持独立事件摄取、异步巩固、授权检索和来源生命周期。Mimic 继续使用自己的聊天 Runtime；不要把同一聊天再发送到 MemStation Gateway。接口字段和权限见 [契约 1.0](plans/workspace-agents/contracts.md)，实际验证范围见 [MS 验收表](plans/workspace-agents/implementation-status.md)。
+MemStation 支持独立事件摄取、异步巩固、授权检索和来源生命周期。Mimic 继续使用自己的聊天 Runtime；不要把同一聊天再发送到 MemStation Gateway。接口字段和权限见 [契约 1.0](memory-service-contract.md)。
 
 ## 升级与初始化
 
 1. 保留数据库、配置和当前独立删除清单的备份。暂停写入并依次运行版本化迁移；本次新增 `202610250002` 至 `202610250014`，不使用运行时自动建表。旧记录只保留在原 Personal Workspace，不推断群、昵称或人物归属。
 2. 为 serve、worker、scheduler 配置同一数据库、Redis 和独立删除清单路径。Compose 已为这些角色共享 `deletion-journal` volume；它必须独立于数据库备份的恢复时间点。
-3. 首次把没有删除清单的旧部署升级到此版本时，显式执行 `memstation seed --initialize-deletion-journal`。这是一次性接纳当前数据库为起点；**恢复旧备份时不能使用这个选项**。已有清单的部署直接运行 `memstation seed --verify-recovery`。
+3. 当前阶段只支持当前数据契约，不提供旧部署的自动迁移或兼容读取。新部署使用空数据库执行版本化迁移和 `memstation seed`；备份恢复必须保留原独立删除日志，并运行 `memstation seed --verify-recovery`。删除日志缺失时拒绝恢复就绪，不通过初始化开关绕过。
 4. 启动 serve、worker、scheduler。恢复屏障未通过时数据面和 worker 保持不可用；capabilities 返回 `memory-disabled`，不会用临时内存仓库冒充可持久化服务。
 5. 在 Manager 创建 group/project Workspace、Agent、权限和业务凭据，再配置 Integration 的平台命名空间、来源空间、观察 Agent 与允许事件。成员 Actor 不等于 API 授权。现有绑定身份字段不可直接改为另一个来源；先撤销旧观察权限，再明确配置新绑定。
 
@@ -89,4 +89,4 @@ go run ./tests/contract/cmd/mockbroker -listen 127.0.0.1:18490
 
 `backup_status` 表示旧备份须按部署保留政策过期且恢复受清单约束，**不声称远端备份正文已经物理擦除**。部署方负责独立清单的可靠存储、备份保留时间和最终销毁。导出正文保留 24 小时，到期后台清除；读取导出时再次检查来源与 revision，失效即撤销结果。
 
-当前验证包含本地 PostgreSQL/Redis + 模拟 broker 契约测试、实际独立启动 serve/worker/scheduler 后运行双群样例、恢复 CLI，以及 Manager 桌面/移动端 E2E。真正接通 Mimic 还需用实际适配器、受限 broker 凭据和真实部署完成上述双群、撤回、对账与恢复验收；远端 CI、实际模型质量和容量不是本地契约测试的推论。
+验收应包含 PostgreSQL/Redis + broker 契约、独立启动 serve/worker/scheduler 后的双群样例、恢复 CLI，以及 Manager 桌面/移动端流程。真正接通 Mimic 时，使用实际适配器、受限 broker 凭据和真实部署完成双群、撤回、对账与恢复验收；模拟测试不能代替实际模型质量、容量或跨项目联调。

@@ -1,8 +1,8 @@
 # 独立记忆服务接入契约 1.0
 
-本文描述当前实现的 MemStation 数据面和管理面。完整 Run 调度、context handle 和网关自动补群历史仍属于 [Workspace 架构方案](architecture.md) 的后续范围，不是本契约的可调用接口。Mimic 保留自己的 AI Runtime、短期窗口、参与判断、发送状态和上下文预算，独立摄取与检索不会再次代理经过 MemStation Gateway。
+本文描述当前实现的 MemStation 数据面和管理面。完整 Run 调度、context handle 和网关自动补群历史仍属于后续架构扩展，不是本契约的可调用接口。Mimic 保留自己的 AI Runtime、短期窗口、参与判断、发送状态和上下文预算，独立摄取与检索不会再次代理经过 MemStation Gateway。
 
-实现与验证记录见 [MS 验收表](implementation-status.md)，部署、broker 和恢复步骤见 [接入说明](../../independent-memory-integration.md)。
+部署、broker、自动化检查入口和恢复步骤见 [接入说明](independent-memory-integration.md)。
 
 ## 认证与范围
 
@@ -44,7 +44,7 @@ HTTP Header 同名多值和非法受众 JSON 均拒绝。gRPC 使用小写同名
 
 `workspace:true` 的 forget 指整个选定 partition，不隐式擦除不可见私有分区。删除所有分区需要逐分区显式管理操作。导出权限不自动包含原文读取：缺少 `sources.read` 时剔除原文 segment、证据正文和源 metadata，保留派生内容与 sourceRefs。普通 recall/inspect 同样遵守这个边界。
 
-能力键包括 `server_isolation`、`multi_workspace`、`private_audience`、`independent_ingestion`、`actor_attribution`、`batch_idempotency`、`source_retraction`、`forget`、`source_read`、`processing_watermarks`、`candidates`、`candidate_review`、`memory_inspect`、`recall_explanation`、`usage`、`broker`、`export`、`publishing`。隔离粒度为服务端 owner + Workspace + partition；发布和批准只对有管理权限的入口声明。存储或删除恢复不可用时全部关闭。直连模式不虚报 broker 用量能力。
+能力键包括 `server_isolation`、`multi_workspace`、`private_audience`、`independent_ingestion`、`actor_attribution`、`external_actor_mentions`、`batch_idempotency`、`source_retraction`、`forget`、`source_read`、`processing_watermarks`、`candidates`、`candidate_review`、`memory_inspect`、`recall_explanation`、`usage`、`broker`、`export`、`publishing`。隔离粒度为服务端 owner + Workspace + partition；发布和批准只对有管理权限的入口声明。存储或删除恢复不可用时全部关闭。直连模式不虚报 broker 用量能力。
 
 ## 事件、来源与窗口
 
@@ -68,7 +68,9 @@ HTTP Header 同名多值和非法受众 JSON 均拒绝。gRPC 使用小写同名
 }
 ```
 
-`parts.type` 当前为 text/quote/mention。quote 可以带 `author`（同 speaker 结构）或 `source`；mention 使用已验证 `actor_id`；`reply_to` 使用 SourceRef。未知作者保持 `kind:unknown`，不能提供伪 Actor。已知 quote source 必须在同空间和可读分区内，引用文本和原作者从可信来源校验，不能用 A 的昵称把 B 的事实归给 A。尚未摄取的引用须等待来源就绪，不能猜测跨空间 ID。
+`parts.type` 当前为 text/quote/mention。quote 可以带 `author`（同 speaker 结构）或 `source`；mention 使用已验证 `actor_id`，或在声明 `external_actor_mentions` 的服务中通过 `author:{kind:"human"|"bot",external_id,display_name?}` 按当前 Integration 命名空间解析首次出现的成员。两种身份同时提供时必须一致；不允许客户端自行计算内部 ID。`reply_to` 使用 SourceRef。未知作者保持 `kind:unknown`，不能提供伪 Actor。已知 quote source 必须在同空间和可读分区内，引用文本和原作者从可信来源校验，不能用 A 的昵称把 B 的事实归给 A。尚未摄取的引用须等待来源就绪，不能猜测跨空间 ID。
+
+`/memory/records/{id}` 的 Node ID 是不透明字符串，客户端按单个路径段 URL 编码；服务端恰好解码一次，不以冒号、百分号或其他字符推断 ID 结构。访问仍按 Workspace/partition 授权。
 
 SourceRef 是 `workspace_id/message_id/revision/part_index/span`。span 为单个内容块内 Unicode code point 的 `[start,end)`，不是 UTF-8 字节或 JavaScript UTF-16 索引。模型抽取使用有效原文片段，并验证 subject_actor_ids；原话、引用和 model_inference/human_attestation 通过 support_kind 区分。
 

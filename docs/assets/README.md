@@ -13,12 +13,10 @@ Forest green and a sage accent connect it to Manager's light theme.
 - [Apple touch icon](../../apps/manager/static/apple-touch-icon.png): opaque 180px export on a pale background.
 
 The artwork was generated through Replicate CLI using
-[`openai/gpt-image-2.5-flare`](https://replicate.com/openai/gpt-image-2.5-flare):
-three `low` quality concepts followed by a `medium` quality refinement of the
-memory terminal. [Generation record](logo-generation.json) preserves the exact
-prompts, settings and prediction IDs; the selected [reference concept](memstation-concept.png)
-is retained locally so the refinement does not depend on an expiring delivery URL. The API reports the model version as
-`hidden`; the record does not imply a pinned, reproducible model revision.
+[`openai/gpt-image-2.5-flare`](https://replicate.com/openai/gpt-image-2.5-flare).
+The selected source bitmap is retained so exports do not depend on an expiring
+model delivery URL. Prompts, prediction IDs and intermediate concepts are local
+agent archives, excluded from Git and the public asset documentation.
 
 The source is a bitmap, not an SVG. Exports preserve its alpha and artwork,
 trim excess canvas space, and apply consistent optical padding. To regenerate
@@ -33,8 +31,8 @@ Original brand assets are covered by the project's [Apache-2.0 license](../../LI
 `manager-preview.png`, `manager-memory.png` and `manager-mobile.png` show the current
 Manager dashboard and Personal workspace browser, captured on 2026-10-25 with the
 repository's synthetic Playwright fixtures. They contain no production conversations
-or credentials. The workspace prototype under `docs/plans/` illustrates planned
-behavior and is not used as a product screenshot.
+or credentials. Design prototypes and validation captures stay in local agent archives and are not
+used as product screenshots.
 
 To capture the running UI again, install the locked dependencies and Chromium, then:
 

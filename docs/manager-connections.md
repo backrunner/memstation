@@ -62,4 +62,7 @@ Manager cookie 为 `httpOnly + SameSite=Strict`，生产环境始终使用 `Secu
 
 连接弹窗保存失败会保留非敏感输入并展示错误，token 每次尝试后清空；等待期间禁止重复保存或更换编辑对象。多个服务可以分别连接和断开。全部断开时若 Manager 无法清除某个绑定，会保留连接列表并显示重试提示，不把失败当作退出成功。
 
-此改造完成了 Workspace 计划中 P4 的服务连接前置部分。后续已实现 [Personal 目录、策略管理和 settings/access 作用域 URL](plans/workspace-agents/workspace-management-2026-10-24.md)。[工作区记忆／对话浏览及来源跳转](plans/workspace-agents/workspace-browsing-2026-10-24.md)也已接入 server load。Personal 工作区切换、记忆编辑、范围内检索与分页、主导航和旧记录入口解析也已实现；高级审计／重建保留兼容视图，其他工作区、私有记忆和群聊摄取仍按 [完整计划](plans/workspace-agents/README.md) 后续实施。
+工作区目录、策略管理、访问授权、记忆与会话页面使用明确的 Target/Workspace URL，
+通过 Manager 服务端获取数据。范围、受众和事件摄取能力见
+[独立记忆服务契约](memory-service-contract.md)，部署和自动化接入检查见
+[接入说明](independent-memory-integration.md)。

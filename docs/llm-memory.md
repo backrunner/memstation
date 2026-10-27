@@ -1,6 +1,6 @@
 # LLM 记忆生成
 
-2026-10-24 起，语义记忆仅通过配置的 LLM 生成。已删除关键词匹配、固定画像、文本拼接摘要、模板事实和启发式重要性评分的生产入口。在线 Worker、generation rebuild 和 Playground 预览复用同一处理服务。
+语义记忆仅通过配置的 LLM 生成。已删除关键词匹配、固定画像、文本拼接摘要、模板事实和启发式重要性评分的生产入口。在线 Worker、generation rebuild 和 Playground 预览复用同一处理服务。
 
 ## 模型职责与配置
 
@@ -43,21 +43,42 @@
 
 升级前执行版本化迁移 `202610240005_llm_summary_metadata.sql` 、`202610240006_llm_impression_metadata.sql` 、`202610240007_llm_fact_metadata.sql` 和 `202610250001_llm_fact_history_metadata.sql`，为 Summary、Impression 和 Fact 增加 JSONB 元数据，持久化检查点、LLM 来源和原文引用。历史快照触发器同时展开来源元数据，并修正已有嵌套快照，不改变历史内容或时间。检查点通过专用 store 方法合并写入，不重置向量 ready 状态或人工编辑版本。既有规则生成的历史记忆保留；升级不会自动删数据、批量调用模型或替换当前 generation。需要更新旧记忆时，使用现有 generation rebuild，在隔离代次检查后显式激活。新的在线提取和重建均使用 LLM。
 
-仍只开放 Personal Workspace。本次变更没有开放群聊工作区、跨人画像或其他 Workspace 类型。
+Workspace、Actor、Agent 与受众权限遵循 [独立记忆服务契约](memory-service-contract.md)；抽取结果不能扩大发言者或调用者的授权范围。
 
-## 本机真实验证
+## 实验性语义事件与推理设置
 
-本机 Ollama 转发用户指定的 `deepseek-v4.1-flash:1017-cloud` 进行文本生成；Embedding 使用本地 `qwen3-embedding:4b-q8_0`，维度为 2,560。这里记录的是本次测试配置，并非核心默认模型。
+应用迁移 `202610250015_semantic_episodes.sql` 后，可通过
+`MEMSTATION_SEMANTIC_EPISODES_ENABLED=true` 启用后续 episode 抽取，默认关闭。
+server 和所有 worker 应保持一致配置。关闭开关不删除已保存的 episode，
+历史记忆不会自动重新抽取；检索仍可读取已经持久化的类型。
 
-真实中文样例包含“不喝咖啡，只喝茶”“不是项目经理”“助手建议下周五上线，但用户明确说尚未决定”以及“最终 SQLite，不用 PostgreSQL”。已验证预览、结束会话后的异步生成、Key Memory 合并、本地向量存储和跨会话注入，回答保留了上述否定和不确定性。
+事件叙述与 Fact、summary、task 共存。状态、人物、时间原话和逐字引用由
+LLM 提供并受来源校验；来源会话日期单独保存，不用处理时间代替事件时间。
+Manager 的记忆类型筛选和详情支持 Semantic episodes。
 
-最初真实调用暴露了非 JSON 输出和推理模型评分 Token 不足：分别通过支持接口的原生 JSON 模式和增加评分预算修复；失败期间未生成规则兜底记忆。此样例证明链路可用，不等同于复杂语义准确率或长会话效果评测。
+`MEMSTATION_MEMORY_REASONING_EFFORT` 可显式设置内部摘要、分析和评分的推理强度，
+默认空值沿用 provider 默认。当前仅适用于支持该参数的 OpenAI-compatible
+Chat / Responses；不改变被代理的用户请求。先核对模型支持值，再在专用环境测试。
 
-凭据、私有运行配置、测试报告和日志位于被忽略的 `.env.memstation-ollama` 与 `.artifacts/ollama-local/`。旧 `smoke-report.json` 是切换前的规则基线；本次语义证据使用 `llm-preview.json`、`llm-final-pipeline-report.json` 及后续验证日志，不能混称。
+启用 episode 时，分析每批最多 12 段来源、6,000 字节，最多 32 批；
+完整验证的批次按输入、策略和推理设置持久化，后批失败重试可复用先前结果。
+批次 checkpoint 总预算为 256 KiB，不对外返回内部元数据。
 
-自动化回归包括模型失败不兜底、合法空结果、精确引用与助手来源拒绝、显式事实替代、跨时区有效区间、长摘要分层预算、检查点重试、Key Memory 并发编辑保护，以及四种出站协议的 Token/JSON 参数契约。离线恢复演练显式安装测试模型模拟器，仅验证任务可靠性，不代表真实模型性能。
+原始文本索引使用有界 UTF-8 切片并保留来源字节区间。旧来源索引不会因为
+升级或普通保留型重建而自动重新切分，需要另行规划历史迁移。
 
-扩展的真实来源回放、外部召回和 HTTP 并发测试见 [2026-10-25 效果报告](memory-quality-2026-10-25.md)。小样例链路通过不能代替完整覆盖率；真实模型的格式或替代引用错误仍会造成任务失败，应结合失败样例判断。
+## 评测
 
+使用 [手动评测入口](../apps/server/tests/eval/README.md) 检查真实模型的来源覆盖、
+回答、失败率和耗时。确定性 fixture 用于契约与可靠性验证，不代表真实模型质量。
+每轮报告、失败回复和程序化输出保存在本地忽略目录，不放入产品文档。
 
-本次最终验证：完整 Go 测试在独立 PostgreSQL 测试库通过；相关包 race、format、lint、出站协议契约、生成代码一致性通过。三项新迁移 Atlas lint 和 dry-run 通过，离线 Worker 恢复 smoke 通过；真实 Manager 登录、桌面与 390px 布局、服务重启和检查点重放通过。新用户样例得到 7 条 Fact、1 条 Task、3 条 Key Memory，13 条 2,560 维向量，相关节点全部 ready。2026-10-25 提交前复核记录见 [复核记录](llm-memory-review-2026-10-25.md)。
+## Output budgets and worker deadlines
+
+Memory processing defaults to an initial output budget of 16,384 tokens and a deployment ceiling of 65,536. Configure `MEMSTATION_MEMORY_MIN_OUTPUT_TOKENS`, `MEMSTATION_MEMORY_MAX_OUTPUT_TOKENS` and `MEMSTATION_MEMORY_LLM_TIMEOUT_SECONDS` (default 300 seconds). The initial request uses the larger of the task's explicit budget and the configured minimum. A request above the configured maximum is rejected before inference; it is never silently reduced. Limits must satisfy `1 <= minimum <= maximum <= 262144`. Configure a ceiling supported by the actual upstream model.
+
+Only an explicit length/max-tokens finish reason permits one retry of the same input at the configured ceiling. Both attempts share the deadline and their token usage is added. Partial output is never accepted as a complete memory. Schema/source-grounding correction remains separately bounded and never receives rejected output as evidence. Reasoning effort and output limits are part of the analysis checkpoint identity. Internal model adapters use at least the memory deadline, so the gateway's shorter provider timeout does not silently cap a worker call. Broker-backed summary/analysis calls use this generation deadline too; broker embedding and rerank calls retain the shorter provider timeout.
+
+Manual failure-cohort evaluation is documented in [the evaluation guide](../apps/server/tests/eval/REGRESSION.md). Dataset files, selections, model outputs and reports remain under ignored `.agents/archive/`; the failure-enriched cohort is a development diagnostic and is not a representative benchmark score.
+
+Native images, audio and other attachments follow the selected model and transport capability policy. Supported media is attached to Summary/Fact requests; unsupported media becomes a text marker and cannot support a fact. See [Native media input](multimodal-input.md).

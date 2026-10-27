@@ -46,7 +46,12 @@ gitleaks git --log-opts="--all --full-history" --redact --ignore-gitleaks-allow
 Store any local reports under the ignored `.artifacts/` directory. Do not suppress
 an alert without reviewing its origin. A clean scan complements manual review of
 fixtures, screenshots and third-party rights; it does not establish their provenance.
-See the [publication audit](docs/open-source.md).
+See the [publication policy](docs/open-source.md).
+
+Keep reusable guides and API contracts in `docs/`. Local plans, validation reports,
+generated benchmark JSON and prototype captures belong in ignored `.agents/archive/`;
+do not force-add them. Required generated source code and selected README/brand assets
+remain part of the repository.
 
 Keep commits focused and use `type: message`, for example `fix: preserve memory filters`
 or `feat: add provider diagnostics`. Dependency upgrades must include compatibility
@@ -57,3 +62,23 @@ notes and regression results. Do not lower correctness or coverage gates to get 
 By submitting a contribution for inclusion in this project, you agree to license it
 under [Apache License 2.0](LICENSE). Preserve third-party notices and identify any
 new third-party material in your contribution.
+
+## Current contracts
+
+This project does not retain legacy implementations or backward compatibility at
+this stage. Update the server, Manager, protocol schemas, scripts, fixtures and
+maintained documentation together when changing a contract. Remove retired paths,
+aliases and format readers; reject unsupported inputs instead of silently
+reconstructing an identity or switching to retired behavior. Historical facts,
+audit provenance, supersession and temporal queries remain product features.
+
+The unreleased database migration baseline initializes an empty database. It does
+not convert a prior deployment's data. Keep existing databases and evaluation
+archives intact; use a separate database to validate the current schema. Backup
+recovery uses a current-schema backup together with its independent deletion log.
+
+## Directory organization
+
+Group implementations by responsibility rather than accumulating unrelated files in a shared directory. SQL repositories live in `internal/store/sql/{conversation,identity,memory,media,ingestion,lifecycle,aicall,memorygeneration}`; SQL-only shared code and fixtures live under `sql/internal`. Keep transaction ownership and authorization intact when extracting packages. Tests stay with their owning package; cross-repository contracts belong in integration tests.
+
+Manager components are grouped into `ui`, `layout`, `content`, `charts` and business domains. Use `#lib/` imports and keep primitives independent of business components. Update imports, tests, scripts and maintained documentation together; remove old paths rather than adding compatibility re-exports. See AGENTS.md section 12.7 for the complete rules.

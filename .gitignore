@@ -1,6 +1,7 @@
 node_modules/
 .pnpm-store/
 .turbo/
+# Local agent plans, validation archives and generated reports.
 .agents/
 .DS_Store
 .env
@@ -10,6 +11,8 @@ coverage/
 dist/
 build/
 .artifacts/
+__pycache__/
+*.py[cod]
 apps/manager/.svelte-kit/
 apps/manager/build/
 apps/manager/node_modules/

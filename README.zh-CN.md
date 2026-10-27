@@ -18,7 +18,7 @@
 
 MemStation 连接 AI 客户端与模型服务，让有用的上下文跨对话保留。你可以查看一段对话如何变成记忆、修正提取结果，并控制后续请求如何检索和使用这些信息。
 
-**当前范围：单实例自托管，支持 Personal、group 和 project 工作区。** [独立记忆服务](docs/plans/workspace-agents/contracts.md) 提供事件摄取、Agent 权限、私有受众和来源删除。实际 Mimic 联调、组织、计费和生产量级性能仍需分别验收。
+**当前范围：单实例自托管，支持 Personal、group 和 project 工作区。** [独立记忆服务](docs/memory-service-contract.md) 提供事件摄取、Agent 权限、私有受众和来源删除。实际 Mimic 联调、组织、计费和生产量级性能仍需分别验收。
 
 <a href="docs/assets/manager-preview.png"><img src="docs/assets/manager-preview.png" alt="Manager 总览：对话活动、记忆数量、任务队列和审计记录" width="1440" /></a>
 <p align="center"><sub>当前 Manager 界面，使用仓库内的模拟测试数据。</sub></p>
@@ -120,15 +120,14 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 | 开发与贡献 | [本地工作流](docs/local-debugging.md)、[贡献指南](CONTRIBUTING.md)、[工程规范](AGENTS.md) |
 | 配置 Manager | [服务连接、会话与网络策略](docs/manager-connections.md) |
 | 理解记忆机制 | [架构](docs/architecture.md)、[LLM 生成](docs/llm-memory.md)、[图关系与事实历史](docs/graph-memory.md) |
-| 工作区与多 Agent | [独立记忆实施与验收](docs/plans/workspace-agents/implementation-status.md)、[部署与接入说明](docs/independent-memory-integration.md) |
-| 验证功能 | [CI 与测试](docs/ci.md)、[检索评测](apps/server/tests/eval/README.md) |
+| 工作区与多 Agent | [独立记忆服务契约](docs/memory-service-contract.md)、[部署与接入说明](docs/independent-memory-integration.md) |
+| 验证功能 | [CI 与测试](docs/ci.md)、[检索评测](apps/server/tests/eval/README.md)、[真实 Worker 失败小集协议](apps/server/tests/eval/REGRESSION.md) |
 | 部署与运维 | [Compose](deploy/compose/DEVELOPMENT.md)、[Kubernetes 基线](deploy/k8s)、[Nginx](deploy/nginx)、[Telemetry](deploy/otel)、[备份恢复](deploy/compose/BACKUP_RESTORE.md) |
-| 开源范围 | [公开前检查与许可边界](docs/open-source.md)、[第三方声明](THIRD_PARTY_NOTICES.md) |
+| 开源范围 | [发布政策与许可边界](docs/open-source.md)、[第三方声明](THIRD_PARTY_NOTICES.md) |
 
 检索 Benchmark 作为本地、手动诊断，不进入默认 CI / nightly 红线。仓库分发原生 golden dataset，LOCOMO 和 LongMemEval 等外部数据单独下载。确定性测试向量只验证评测链路，不代表真实模型召回质量。
 
-真实模型的召回、来源回放和负载结果见 [2026-10-25 效果评测](docs/memory-quality-2026-10-25.md)，其中明确记录尚未达标的部分。
-
+真实模型质量和生产量级延迟仍需持续验证。评测应分别记录召回、回答质量、评分协议和失败，不能用小样本或确定性 fixture 代替整体效果。复现入口见 [评测指南](apps/server/tests/eval/README.md)；每轮验证报告、生成 JSON 和开发归档保存在本地忽略目录。
 
 ## 参与贡献
 
@@ -139,3 +138,5 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 采用 [Apache License 2.0](LICENSE)，版权及第三方说明见 [NOTICE](NOTICE) 与 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。允许按许可条款商业使用、修改与再分发，包含明确的专利授权，参见[官方许可原文](https://www.apache.org/licenses/LICENSE-2.0)。
 
 内置字体保留 SIL OFL 1.1，依赖保留各自许可证。模型权重和云端模型服务不随项目提供。LOCOMO 外部数据采用 CC BY-NC 4.0，不随仓库分发，也不转为 Apache-2.0。
+
+代码组织：SQL 仓库按业务职责放在 `apps/server/internal/store/sql/` 的子包中；Manager 组件区分基础控件、布局、内容与业务模块。目录迁移和依赖边界见 [开发规范](AGENTS.md#127-目录组织与职责边界)。

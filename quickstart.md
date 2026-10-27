@@ -46,7 +46,7 @@ pnpm dev
 默认开发登录信息：
 
 - `MEMSTATION_ADMIN_TOKEN=memstation-local-admin-token`
-- `MEMSTATION_DEV_API_KEY=ms-local-dev`
+- 代理 Key：使用 `memstation seed` 一次性输出的 Bootstrap agent 凭据，或在 Manager 中显式创建 Agent 后签发。
 - `MEMSTATION_MASTER_KEY=memstation-local-master-key`
 
 说明：
@@ -147,7 +147,7 @@ pnpm dev
 - `VECTOR_STORE_BACKEND=pgvector`
 - `MEMSTATION_ADMIN_TOKEN=memstation-local-admin-token`
 - `MEMSTATION_MASTER_KEY=memstation-local-master-key`
-- `MEMSTATION_DEV_API_KEY=ms-local-dev`
+- 代理 Key：使用 `memstation seed` 一次性输出的 Bootstrap agent 凭据，或在 Manager 中显式创建 Agent 后签发。
 - `MEMSTATION_CORS_ALLOWED_ORIGINS=http://127.0.0.1:5173,http://localhost:5173`
 - `MEMSTATION_SESSION_COOKIE_SECURE=false`
 - `MEMSTATION_SESSION_COOKIE_CROSS_SITE=false`
