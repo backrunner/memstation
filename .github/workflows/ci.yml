@@ -92,7 +92,20 @@ jobs:
       - name: Coverage thresholds
         run: bash ./scripts/test/check-coverage.sh
       - name: Install Playwright browser
-        run: cd apps/manager && pnpm exec playwright install --with-deps chromium webkit
+        timeout-minutes: 15
+        run: |
+          # The hosted runner's Azure mirror can stall large dependency downloads.
+          # Keep Ubuntu signatures and the complete browser dependency gate.
+          sudo tee /etc/apt/apt.conf.d/80memstation-ci-network >/dev/null <<'APT'
+          Acquire::Retries "2";
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          APT
+          if [[ -f /etc/apt/apt-mirrors.txt ]]; then
+            printf '%s\n' 'https://archive.ubuntu.com/ubuntu' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          fi
+          cd apps/manager
+          pnpm exec playwright install --with-deps chromium webkit
       - name: Manager Playwright E2E
         run: pnpm test:e2e:manager
       - name: Upload ops artifacts

@@ -68,3 +68,11 @@ bash scripts/ops/run-backup-restore-drill.sh
 The backup drill requires Docker Compose, creates isolated source/restore projects,
 and removes its temporary stacks afterward. It verifies database table counts and
 Redis markers. See the [backup guide](../deploy/compose/BACKUP_RESTORE.md).
+
+## Browser dependency downloads
+
+The browser-install step uses Ubuntu's official archive in the hosted runner's
+main mirror list, with a 30-second HTTP/HTTPS idle timeout, two APT retries and a
+15-minute step limit. This avoids indefinite downloads from an unhealthy regional
+mirror while retaining Ubuntu package signature verification. Chromium and WebKit
+and all Manager E2E cases remain required; download failure fails the job.
