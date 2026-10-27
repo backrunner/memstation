@@ -66,7 +66,7 @@ func runIdentitySuite(t *testing.T, db *sql.DB) {
 		t.Fatal("agents do not have independent identities in one workspace")
 	}
 	caps := []string{domain.CapabilityMemoryRead}
-	key, raw, err := keys.CreateWithOptions(ctx, user, apikey.CreateOptions{Name: "read only", AgentID: a.ID, Capabilities: caps})
+	key, raw, err := keys.CreateWithOptions(ctx, user, apikey.CreateOptions{WorkspaceID: domain.PersonalWorkspaceID(user), Name: "read only", AgentID: a.ID, Capabilities: caps})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,14 +87,14 @@ func runIdentitySuite(t *testing.T, db *sql.DB) {
 	if _, err = auth.AuthenticateContext(ctx, raw, "another-workspace"); !errors.Is(err, domain.ErrAccessDenied) {
 		t.Fatalf("workspace override accepted: %v", err)
 	}
-	if _, _, err = keys.CreateWithOptions(ctx, "other-owner", apikey.CreateOptions{Name: "spoof", AgentID: a.ID}); !errors.Is(err, domain.ErrAccessNotFound) {
+	if _, _, err = keys.CreateWithOptions(ctx, "other-owner", apikey.CreateOptions{WorkspaceID: domain.PersonalWorkspaceID(user), Name: "spoof", AgentID: a.ID}); !errors.Is(err, domain.ErrAccessNotFound) {
 		t.Fatalf("cross-owner issuance: %v", err)
 	}
 	if err = keys.RevokeForUser(ctx, "other-owner", key.ID); !errors.Is(err, domain.ErrAccessNotFound) {
 		t.Fatalf("cross-owner revoke: %v", err)
 	}
 	past := time.Now().Add(-time.Minute)
-	if _, _, err = keys.CreateWithOptions(ctx, user, apikey.CreateOptions{Name: "expired", AgentID: a.ID, ExpiresAt: &past}); err == nil {
+	if _, _, err = keys.CreateWithOptions(ctx, user, apikey.CreateOptions{WorkspaceID: domain.PersonalWorkspaceID(user), Name: "expired", AgentID: a.ID, ExpiresAt: &past}); err == nil {
 		t.Fatal("past expiration accepted")
 	}
 	bound, err := auth.AuthenticateContext(ctx, raw, principal.WorkspaceID)
@@ -157,7 +157,7 @@ func runIdentitySuite(t *testing.T, db *sql.DB) {
 	if _, err = auth.AuthenticatePrincipal(ctx, raw); err == nil {
 		t.Fatal("disabled agent authenticated")
 	}
-	if _, _, err = keys.CreateWithOptions(ctx, user, apikey.CreateOptions{Name: "disabled", AgentID: a.ID}); !errors.Is(err, domain.ErrAccessDenied) {
+	if _, _, err = keys.CreateWithOptions(ctx, user, apikey.CreateOptions{WorkspaceID: domain.PersonalWorkspaceID(user), Name: "disabled", AgentID: a.ID}); !errors.Is(err, domain.ErrAccessDenied) {
 		t.Fatalf("issued disabled credential: %v", err)
 	}
 	disabled.Status = "active"
@@ -168,7 +168,7 @@ func runIdentitySuite(t *testing.T, db *sql.DB) {
 		t.Fatal("reactivation resurrected revoked credential")
 	}
 	// New credentials for another Agent are unaffected.
-	active, activeRaw, err := keys.CreateWithOptions(ctx, user, apikey.CreateOptions{Name: "active", AgentID: b.ID})
+	active, activeRaw, err := keys.CreateWithOptions(ctx, user, apikey.CreateOptions{WorkspaceID: domain.PersonalWorkspaceID(user), Name: "active", AgentID: b.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,12 +266,12 @@ func runAgentManagementSuite(t *testing.T, db *sql.DB) {
 		t.Fatalf("cross-owner credentials: %v", err)
 	}
 	for i := range 53 {
-		_, _, err := keys.CreateWithOptions(ctx, user, apikey.CreateOptions{Name: fmt.Sprintf("Key %d", i), AgentID: a.ID, Capabilities: []string{domain.CapabilityMemoryRead}})
+		_, _, err := keys.CreateWithOptions(ctx, user, apikey.CreateOptions{WorkspaceID: domain.PersonalWorkspaceID(user), Name: fmt.Sprintf("Key %d", i), AgentID: a.ID, Capabilities: []string{domain.CapabilityMemoryRead}})
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, _, err := keys.CreateWithOptions(ctx, user, apikey.CreateOptions{Name: "Unrelated", AgentID: agents[1].ID}); err != nil {
+	if _, _, err := keys.CreateWithOptions(ctx, user, apikey.CreateOptions{WorkspaceID: domain.PersonalWorkspaceID(user), Name: "Unrelated", AgentID: agents[1].ID}); err != nil {
 		t.Fatal(err)
 	}
 	var credentials []domain.CredentialAccess

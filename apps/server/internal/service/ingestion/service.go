@@ -2,6 +2,7 @@ package ingestion
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"unicode/utf8"
@@ -18,8 +19,11 @@ var (
 
 type Service struct {
 	repo         ports.IngestionRepository
+	media        ports.MediaRepository
 	windowTokens int
 }
+
+func (s *Service) SetMediaRepository(media ports.MediaRepository) { s.media = media }
 
 func NewService(repo ports.IngestionRepository, windowTokens int) *Service {
 	if windowTokens <= 0 {
@@ -45,6 +49,23 @@ func (s *Service) Observe(ctx context.Context, batch domain.ObserveBatch, key st
 	bound, err := security.WithDataScope(ctx, access.UserID, access.WorkspaceID, batch.PartitionID)
 	if err != nil {
 		return domain.IngestionReceipt{}, err
+	}
+	for _, event := range batch.Events {
+		for _, part := range event.Parts {
+			if part.Media == nil || part.Media.BlobID == "" {
+				continue
+			}
+			if err := security.RequireCapability(bound, domain.CapabilityFilesRead); err != nil {
+				return domain.IngestionReceipt{}, err
+			}
+			if s.media == nil {
+				return domain.IngestionReceipt{}, domain.ErrAccessDenied
+			}
+			blob, err := s.media.GetBlob(bound, access.UserID, part.Media.BlobID)
+			if err != nil || blob.DeletedAt != nil {
+				return domain.IngestionReceipt{}, domain.ErrAccessDenied
+			}
+		}
 	}
 	return s.repo.Observe(bound, batch, key, s.windowTokens)
 }
@@ -111,14 +132,35 @@ func ValidateBatch(batch domain.ObserveBatch, key string) error {
 			return ErrInvalidEvent
 		}
 		for _, part := range event.Parts {
+			if part.Type != "media" && part.Media != nil {
+				return ErrInvalidEvent
+			}
 			if !utf8.ValidString(part.Text) || len(part.Text) > 65536 {
 				return ErrInvalidEvent
 			}
 			total += len(part.Text)
 			switch part.Type {
+			case "media":
+				if part.Media == nil {
+					return ErrInvalidEvent
+				}
+				switch part.Media.Type {
+				case domain.ContentBlockImage, domain.ContentBlockAudio, domain.ContentBlockVideo, domain.ContentBlockFile:
+				default:
+					return ErrInvalidEvent
+				}
+				if part.Media.BlobID == "" && part.Media.SourceURL == "" && part.Media.ProviderFileID == "" {
+					return ErrInvalidEvent
+				}
+				encoded, err := json.Marshal(part.Media)
+				if err != nil {
+					return ErrInvalidEvent
+				}
+				total += len(encoded)
 			case "text", "quote":
 			case "mention":
-				if !validID(part.ActorID) {
+				external := part.Author != nil && validID(part.Author.ExternalID) && (part.Author.Kind == "human" || part.Author.Kind == "bot")
+				if !validID(part.ActorID) && !external {
 					return ErrInvalidEvent
 				}
 			default:

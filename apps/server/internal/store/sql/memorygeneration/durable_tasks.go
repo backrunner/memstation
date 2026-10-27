@@ -75,7 +75,7 @@ func validateActivationTx(ctx context.Context, tx *sql.Tx, g domain.MemoryGenera
 	if g.Metadata["rebuild_mode"] != "preserve_authoritative_records" {
 		// A newly written record without a captured source, including a concurrent
 		// human correction, cannot silently disappear during a re-extraction switch.
-		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM memory_nodes n JOIN memory_generations current ON current.generation_id=n.generation_id WHERE n.user_id=$1 AND n.workspace_id=$2 AND current.is_active AND n.access_status='active' AND n.node_type IN('summary','segment','fact','impression','event','task','procedure','artifact','entity','agent_action') AND (n.source_conversation_id='' OR n.embedding_revision>0 OR NOT EXISTS(SELECT 1 FROM memory_generation_sources gs WHERE gs.generation_id=$3 AND gs.conversation_id=n.source_conversation_id AND gs.status='completed')))
+		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM memory_nodes n JOIN memory_generations current ON current.generation_id=n.generation_id WHERE n.user_id=$1 AND n.workspace_id=$2 AND current.is_active AND n.access_status='active' AND n.node_type IN('summary','segment','fact','impression','episode','event','task','procedure','artifact','entity','agent_action') AND (n.source_conversation_id='' OR n.embedding_revision>0 OR NOT EXISTS(SELECT 1 FROM memory_generation_sources gs WHERE gs.generation_id=$3 AND gs.conversation_id=n.source_conversation_id AND gs.status='completed')))
  OR EXISTS(SELECT 1 FROM memory_candidates c WHERE c.user_id=$1 AND c.workspace_id=$2 AND c.status='approved' AND c.updated_at>$4)`, g.UserID, g.WorkspaceID, g.GenerationID, g.CreatedAt).Scan(&incomplete)
 		if err != nil {
 			return err

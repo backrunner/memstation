@@ -87,3 +87,35 @@ func validSystemConfig(sessionCookieSecure bool) bootstrap.Config {
 		},
 	}
 }
+
+func TestRerankModelNamespaceRoundtrip(t *testing.T) {
+	ctx := context.Background()
+	store := runtimeconfig.NewFileStore(filepath.Join(t.TempDir(), "runtime.json"))
+	defaults := DefaultsFromConfig(validSystemConfig(false))
+	service := NewService(store, defaults)
+	if _, err := service.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, model := range []string{"openrouter:qwen/model:tag", "rerank_compatible:local-ranker", ""} {
+		if _, err := service.Update(ctx, map[string]any{"rerank_model": model}); err != nil {
+			t.Fatal(err)
+		}
+		restored := NewService(store, defaults)
+		if _, err := restored.Bootstrap(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if restored.LiveSnapshot().RerankModel != model {
+			t.Fatal("rerank model did not persist")
+		}
+	}
+}
+
+func TestUnknownRuntimeFieldsRejected(t *testing.T) {
+	for _, key := range []string{"rerank_score_policy", "rerank_blend_weight", "unknown_setting"} {
+		for _, value := range []any{nil, "relevance_v1"} {
+			if _, err := applyFieldOverrides(Overrides{}, map[string]any{key: value}); err == nil {
+				t.Fatalf("accepted removed or unknown field %s", key)
+			}
+		}
+	}
+}

@@ -298,24 +298,54 @@ func (s *PGVectorStore) Upsert(ctx context.Context, input domain.VectorUpsertReq
 	return tx.Commit()
 }
 
-func (s *PGVectorStore) DeleteByNode(ctx context.Context, userID, nodeID string) error {
-	workspace, err := security.DataScope(ctx, userID, "")
+func (s *PGVectorStore) DeleteByNode(ctx context.Context, input domain.VectorDeleteRequest) error {
+	workspace, err := security.DataScope(ctx, input.UserID, "")
 	if err != nil {
 		return err
+	}
+	if input.NodeID == "" || input.EmbeddingRevision < 0 || (input.EmbeddingRevision > 0) == input.RequireMissingNode {
+		return domain.ErrAccessDenied
 	}
 	db := s.currentDB()
 	if db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		for key, item := range s.items {
-			if item.UserID == userID && item.WorkspaceID == workspace && item.NodeID == nodeID {
+			if item.UserID == input.UserID && item.WorkspaceID == workspace && item.NodeID == input.NodeID && security.CanReadPartition(ctx, item.PartitionID) && (input.RequireMissingNode || item.EmbeddingRevision < input.EmbeddingRevision) {
 				delete(s.items, key)
 			}
 		}
 		return nil
 	}
-	_, err = db.ExecContext(ctx, `DELETE FROM memory_embeddings WHERE user_id = $1 AND node_id = $2 AND workspace_id=$3`, userID, nodeID, workspace)
-	return err
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	// Share the node-creation lock so an absent-node cleanup cannot race recreation.
+	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "memory-node:"+input.NodeID); err != nil {
+		return err
+	}
+	var revision int64
+	var state, partition string
+	err = tx.QueryRowContext(ctx, `SELECT embedding_revision,embedding_status,partition_id FROM memory_nodes WHERE user_id=$1 AND workspace_id=$2 AND id=$3 FOR UPDATE`, input.UserID, workspace, input.NodeID).Scan(&revision, &state, &partition)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if err == nil {
+		if !security.CanReadPartition(ctx, partition) {
+			return domain.ErrAccessDenied
+		}
+		if input.RequireMissingNode || revision != input.EmbeddingRevision || state != "deleted" {
+			return tx.Commit()
+		}
+	} else if !input.RequireMissingNode {
+		return tx.Commit()
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM memory_embeddings WHERE user_id=$1 AND workspace_id=$2 AND node_id=$3`, input.UserID, workspace, input.NodeID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *PGVectorStore) Health(ctx context.Context) error {

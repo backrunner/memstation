@@ -6,20 +6,23 @@ import (
 	"testing"
 	"time"
 
+	conversationstore "memstation/apps/server/internal/store/sql/conversation"
+	mediastore "memstation/apps/server/internal/store/sql/media"
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/modelcap"
 	userservice "memstation/apps/server/internal/service/user"
-	sqlstore "memstation/apps/server/internal/store/sql"
 )
 
 func TestKeyMemoryCountsAreNotLimitedByPreviewPageSize(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conversations := sqlstore.NewInMemoryConversationRepository()
-	memories := sqlstore.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	users := userservice.NewService(nil)
-	service := NewService(conversations, sqlstore.NewInMemoryMediaRepository(), memories, nil, nil, modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""))
+	service := NewService(conversations, mediastore.NewInMemoryMediaRepository(), memories, nil, nil, modelcap.NewRegistry(domain.ProviderOpenAICompatible, "", "", "", ""))
 	service.AttachUserRuntime(users, nil, nil)
 
 	for idx := range 1005 {

@@ -58,7 +58,7 @@ func ClampDecayFactor(value float64) float64 {
 
 func BaseWindowForMemoryType(memoryType MemoryType) time.Duration {
 	switch memoryType {
-	case MemoryTypeSummary:
+	case MemoryTypeSummary, MemoryTypeEpisode:
 		return 90 * 24 * time.Hour
 	case MemoryTypeSegment:
 		return 7 * 24 * time.Hour

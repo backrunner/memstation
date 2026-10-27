@@ -38,22 +38,21 @@ func (r *Relay) Flush(ctx context.Context) error {
 		for _, event := range events {
 			var envelope taskScope
 			raw, marshalErr := json.Marshal(event.Payload)
-			if marshalErr != nil || json.Unmarshal(raw, &envelope) != nil || envelope.Version < 0 || envelope.Version > 2 || envelope.Version >= 1 && envelope.WorkspaceID == "" {
+			if marshalErr != nil || json.Unmarshal(raw, &envelope) != nil || envelope.Version != 2 || envelope.WorkspaceID == "" {
 				publishErrs = append(publishErrs, domain.ErrAccessDenied)
 				batchHadFailure = true
 				continue
 			}
 			user, _ := event.Payload["user_id"].(string)
 			workspace, _ := event.Payload["workspace_id"].(string)
-			bound, scopeErr := security.WithPersonalDataScope(ctx, event.UserID, workspace)
-			if envelope.Version == 2 {
-				if r.authority == nil {
-					scopeErr = domain.ErrAccessDenied
-				} else {
-					scopeErr = r.authority.ValidateMemoryTask(ctx, domain.MemoryTaskScope{ReceiptID: envelope.ReceiptID, OperationID: envelope.OperationID, UserID: user, WorkspaceID: workspace, PartitionID: envelope.PartitionID, ConversationID: envelope.ConversationID, NodeID: envelope.NodeID, GenerationID: envelope.GenerationID, ConversationRevision: envelope.ConversationRevision})
-					if scopeErr == nil {
-						bound, scopeErr = security.WithDataScope(ctx, user, workspace, envelope.PartitionID)
-					}
+			var bound context.Context
+			var scopeErr error
+			if r.authority == nil {
+				scopeErr = domain.ErrAccessDenied
+			} else {
+				scopeErr = r.authority.ValidateMemoryTask(ctx, domain.MemoryTaskScope{ReceiptID: envelope.ReceiptID, OperationID: envelope.OperationID, UserID: user, WorkspaceID: workspace, PartitionID: envelope.PartitionID, ConversationID: envelope.ConversationID, NodeID: envelope.NodeID, GenerationID: envelope.GenerationID, ConversationRevision: envelope.ConversationRevision})
+				if scopeErr == nil {
+					bound, scopeErr = security.WithDataScope(ctx, user, workspace, envelope.PartitionID)
 				}
 			}
 			if errors.Is(scopeErr, domain.ErrMemoryTaskObsolete) && user == event.UserID {

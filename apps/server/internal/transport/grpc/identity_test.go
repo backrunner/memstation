@@ -22,7 +22,7 @@ func TestAgentPrincipalAcrossGRPCMethods(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, raw, err := keys.CreateWithOptions(ctx, "owner", apikey.CreateOptions{Name: "Reader", AgentID: agent.ID})
+	key, raw, err := keys.CreateWithOptions(ctx, "owner", apikey.CreateOptions{WorkspaceID: domain.PersonalWorkspaceID("owner"), Name: "Reader", AgentID: agent.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

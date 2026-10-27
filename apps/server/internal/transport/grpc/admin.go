@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 
+	"memstation/apps/server/internal/security"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -110,7 +112,7 @@ func (s *adminServiceServer) GetConversationMemory(ctx context.Context, req *pb.
 			}
 			resolvedGenerationID = generation.GenerationID
 		} else {
-			resolvedGenerationID = memorygenservice.CurrentGenerationID(userID)
+			resolvedGenerationID = memorygenservice.CurrentGenerationID(security.WorkspaceID(ctx, userID))
 		}
 	}
 

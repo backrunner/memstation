@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -54,7 +55,7 @@ func PublicMemoryMetadata(metadata map[string]any) map[string]any {
 	}
 	public := make(map[string]any, len(metadata))
 	for key, item := range metadata {
-		if key == "_access" || key == "trusted_source" || key == "_llm_summary_checkpoint" || key == "_llm_analysis_checkpoint" || key == "_llm_keymemory_checkpoint" {
+		if key == "_access" || key == "trusted_source" || strings.HasPrefix(key, "_llm_") {
 			continue
 		}
 		public[key] = item

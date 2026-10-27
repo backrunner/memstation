@@ -13,6 +13,12 @@ import (
 	"testing"
 	"time"
 
+	conversationstore "memstation/apps/server/internal/store/sql/conversation"
+	mediastore "memstation/apps/server/internal/store/sql/media"
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
+	"memstation/apps/server/internal/testutil/authfixture"
+
 	"memstation/apps/server/internal/bootstrap"
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/modelcap"
@@ -33,7 +39,6 @@ import (
 	usageservice "memstation/apps/server/internal/service/usage"
 	userservice "memstation/apps/server/internal/service/user"
 	blobstore "memstation/apps/server/internal/store/blob"
-	"memstation/apps/server/internal/store/sql"
 	"memstation/apps/server/internal/store/vector"
 	"memstation/apps/server/internal/testutil/memoryllmfixture"
 	httptransport "memstation/apps/server/internal/transport/http"
@@ -133,7 +138,7 @@ func TestChatCompletionStreamingEndpoint(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(`{"model":"gpt-4.1-mini","stream":true,"messages":[{"role":"user","content":"hello"}]}`))
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer ms-local-dev")
+	request.Header.Set("Authorization", "Bearer "+authfixture.Token)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
 
@@ -155,7 +160,7 @@ func TestGatewayReturnsConversationHeadersAndSupportsMemoryPreview(t *testing.T)
 
 	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(`{"model":"gpt-4.1-mini","messages":[{"role":"user","content":"remember that i am validating the preview panel"}]}`))
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer ms-local-dev")
+	request.Header.Set("Authorization", "Bearer "+authfixture.Token)
 	request.Header.Set("X-MemStation-Memory-Persist", "false")
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
@@ -233,7 +238,7 @@ func TestProxyFileUploadDownloadDeleteLifecycle(t *testing.T) {
 
 	uploadRequest := httptest.NewRequest(http.MethodPost, "/v1/files", &body)
 	uploadRequest.Header.Set("Content-Type", writer.FormDataContentType())
-	uploadRequest.Header.Set("Authorization", "Bearer ms-local-dev")
+	uploadRequest.Header.Set("Authorization", "Bearer "+authfixture.Token)
 	uploadRecorder := httptest.NewRecorder()
 	router.ServeHTTP(uploadRecorder, uploadRequest)
 	if uploadRecorder.Code != http.StatusCreated {
@@ -251,7 +256,7 @@ func TestProxyFileUploadDownloadDeleteLifecycle(t *testing.T) {
 	}
 
 	getRequest := httptest.NewRequest(http.MethodGet, sourceURL, nil)
-	getRequest.Header.Set("Authorization", "Bearer ms-local-dev")
+	getRequest.Header.Set("Authorization", "Bearer "+authfixture.Token)
 	getRecorder := httptest.NewRecorder()
 	router.ServeHTTP(getRecorder, getRequest)
 	if getRecorder.Code != http.StatusOK {
@@ -262,7 +267,7 @@ func TestProxyFileUploadDownloadDeleteLifecycle(t *testing.T) {
 	}
 
 	deleteRequest := httptest.NewRequest(http.MethodDelete, "/v1/files/"+blobID, nil)
-	deleteRequest.Header.Set("Authorization", "Bearer ms-local-dev")
+	deleteRequest.Header.Set("Authorization", "Bearer "+authfixture.Token)
 	deleteRecorder := httptest.NewRecorder()
 	router.ServeHTTP(deleteRecorder, deleteRequest)
 	if deleteRecorder.Code != http.StatusNoContent {
@@ -270,7 +275,7 @@ func TestProxyFileUploadDownloadDeleteLifecycle(t *testing.T) {
 	}
 
 	missingRequest := httptest.NewRequest(http.MethodGet, sourceURL, nil)
-	missingRequest.Header.Set("Authorization", "Bearer ms-local-dev")
+	missingRequest.Header.Set("Authorization", "Bearer "+authfixture.Token)
 	missingRecorder := httptest.NewRecorder()
 	router.ServeHTTP(missingRecorder, missingRequest)
 	if missingRecorder.Code != http.StatusNotFound {
@@ -281,12 +286,12 @@ func TestProxyFileUploadDownloadDeleteLifecycle(t *testing.T) {
 func TestCORSPreflightAllowsConfiguredManagerOrigin(t *testing.T) {
 	t.Parallel()
 
-	memoryRepo := sql.NewInMemoryMemoryRepository()
-	conversations := sql.NewInMemoryConversationRepository()
-	mediaRepo := sql.NewInMemoryMediaRepository()
+	memoryRepo := memorystore.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	mediaRepo := mediastore.NewInMemoryMediaRepository()
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 	audit := auditsvc.NewService(nil)
-	admin := adminservice.NewService(conversations, mediaRepo, memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""))
+	admin := adminservice.NewService(conversations, mediaRepo, memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAICompatible, "", "", "", ""))
 	admin.SetMemoryProcessor(analysisservice.NewService(memoryllmfixture.Generator{}), []string{"preferences"})
 	engine := memoryservice.NewEngine(memoryRepo, vector.NewPGVectorStore(nil))
 	memorySvc := memoryservice.NewService(engine, memoryRepo)
@@ -299,9 +304,9 @@ func TestCORSPreflightAllowsConfiguredManagerOrigin(t *testing.T) {
 			CORSAllowedOrigins:  []string{"http://localhost:3000"},
 		},
 		Health:   observability.NewRegistry(),
-		Auth:     security.Authenticator{AdminToken: e2eTestAdminToken, DevAPIKey: "ms-local-dev", SessionManager: session},
+		Auth:     security.Authenticator{AdminToken: e2eTestAdminToken, LookupPrincipal: authfixture.LookupPrincipal, SessionManager: session},
 		Session:  session,
-		Models:   modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""),
+		Models:   modelcap.NewRegistry(domain.ProviderOpenAICompatible, "", "", "", ""),
 		Memory:   memorySvc,
 		Admin:    admin,
 		Audit:    audit,
@@ -476,7 +481,7 @@ func TestAdminConfigRuntimeUpdates(t *testing.T) {
 	router := newTestRouter()
 	cookies := loginCookies(t, router)
 
-	updateRequest := httptest.NewRequest(http.MethodPut, "/api/admin/config", bytes.NewBufferString(`{"runtime":{"default_provider":"anthropic","message_threshold":12,"provider_timeout_seconds":45,"rerank_model":"jina:jina-reranker-v2-base-multilingual","rerank_candidate_multiplier":8,"rerank_min_candidates":24,"rerank_max_candidates":80,"rerank_blend_weight":0.5,"memory_relation_max_hops":3,"memory_relation_hop_decay_lambda":0.5,"memory_relation_hop_decay_exponent":1.6,"multimodal_enabled":false,"multimodal_storage_backend":"local","multimodal_storage_local_root":"./data/runtime-test-blobs","multimodal_extract_image_model":"vision-v2","multimodal_audio_transcription_enabled":false,"multimodal_max_asset_bytes":2048,"multimodal_allowed_mime_types":["image/png","audio/mpeg"]}}`))
+	updateRequest := httptest.NewRequest(http.MethodPut, "/api/admin/config", bytes.NewBufferString(`{"runtime":{"default_provider":"anthropic","message_threshold":12,"provider_timeout_seconds":45,"rerank_model":"jina:jina-reranker-v2-base-multilingual","rerank_candidate_multiplier":8,"rerank_min_candidates":24,"rerank_max_candidates":80,"memory_relation_max_hops":3,"memory_relation_hop_decay_lambda":0.5,"memory_relation_hop_decay_exponent":1.6,"multimodal_enabled":false,"multimodal_storage_backend":"local","multimodal_storage_local_root":"./data/runtime-test-blobs","multimodal_extract_image_model":"vision-v2","multimodal_audio_transcription_enabled":false,"multimodal_max_asset_bytes":2048,"multimodal_allowed_mime_types":["image/png","audio/mpeg"]}}`))
 	updateRequest.Header.Set("Content-Type", "application/json")
 	for _, cookie := range cookies {
 		updateRequest.AddCookie(cookie)
@@ -518,9 +523,6 @@ func TestAdminConfigRuntimeUpdates(t *testing.T) {
 	}
 	if runtimeLive["rerank_max_candidates"] != float64(80) {
 		t.Fatalf("expected live rerank max candidates update, got %#v", runtimeLive["rerank_max_candidates"])
-	}
-	if runtimeLive["rerank_blend_weight"] != 0.5 {
-		t.Fatalf("expected live rerank blend weight update, got %#v", runtimeLive["rerank_blend_weight"])
 	}
 	if runtimeLive["memory_relation_max_hops"] != float64(3) {
 		t.Fatalf("expected live relation max hops update, got %#v", runtimeLive["memory_relation_max_hops"])
@@ -777,8 +779,8 @@ func TestAdminTaskDetailUnavailableWithoutInspector(t *testing.T) {
 }
 
 func newTestRouter() http.Handler {
-	memoryRepo := sql.NewInMemoryMemoryRepository()
-	conversations := sql.NewInMemoryConversationRepository()
+	memoryRepo := memorystore.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
 	_ = memoryRepo.StoreDocument(context.Background(), domain.MemoryDocument{
 		ID:             "summary-seeded",
 		NodeID:         "node-summary-seeded",
@@ -835,7 +837,6 @@ func newTestRouter() http.Handler {
 		RerankCandidateMultiplier:      6,
 		RerankMinCandidates:            20,
 		RerankMaxCandidates:            50,
-		RerankBlendWeight:              0.35,
 		MemoryRelationMaxHops:          2,
 		MemoryRelationHopDecayLambda:   0.35,
 		MemoryRelationHopDecayExponent: 1.25,
@@ -917,7 +918,7 @@ func newTestRouter() http.Handler {
 	})
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 	audit := auditsvc.NewService(nil)
-	admin := adminservice.NewService(conversations, sql.NewInMemoryMediaRepository(), memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""))
+	admin := adminservice.NewService(conversations, mediastore.NewInMemoryMediaRepository(), memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAICompatible, "", "", "", ""))
 	admin.SetMemoryProcessor(analysisservice.NewService(memoryllmfixture.Generator{}), []string{"preferences"})
 	users := userservice.NewService(nil)
 	apiKeys := apikeyservice.NewService(nil)
@@ -929,7 +930,6 @@ func newTestRouter() http.Handler {
 		CandidateMultiplier: cfg.RerankCandidateMultiplier,
 		MinCandidates:       cfg.RerankMinCandidates,
 		MaxCandidates:       cfg.RerankMaxCandidates,
-		BlendWeight:         cfg.RerankBlendWeight,
 	})
 	engine.SetRelationRecallConfig(memoryservice.RelationRecallConfig{
 		MaxHops:          cfg.MemoryRelationMaxHops,
@@ -947,7 +947,7 @@ func newTestRouter() http.Handler {
 			mockprovider.New(domain.ProviderOpenAIResponses),
 		),
 		engine,
-		conversationservice.NewService(conversations, sql.NewInMemoryOutboxRepository(), cfg.MessageThreshold, cfg.TokenThreshold),
+		conversationservice.NewService(conversations, conversationstore.NewInMemoryOutboxRepository(), cfg.MessageThreshold, cfg.TokenThreshold),
 		settings,
 		cfg.DefaultProvider,
 	)
@@ -964,13 +964,12 @@ func newTestRouter() http.Handler {
 		SetProviderTimeout:    func(time.Duration) {},
 		SetMaxContextTokens:   func(int) {},
 		SetMaxInjectionTokens: func(int) {},
-		SetRerankConfig: func(model string, candidateMultiplier, minCandidates, maxCandidates int, blendWeight float64) {
+		SetRerankConfig: func(model string, candidateMultiplier, minCandidates, maxCandidates int) {
 			engine.SetRerankConfig(memoryservice.RerankConfig{
 				Model:               model,
 				CandidateMultiplier: candidateMultiplier,
 				MinCandidates:       minCandidates,
 				MaxCandidates:       maxCandidates,
-				BlendWeight:         blendWeight,
 			})
 		},
 		SetMemoryRelationRecall: func(maxHops int, decayLambda, decayExponent float64) {
@@ -990,10 +989,10 @@ func newTestRouter() http.Handler {
 	return httptransport.NewRouter(httptransport.Dependencies{
 		Config:         cfg,
 		Health:         observability.NewRegistry(),
-		Auth:           security.Authenticator{AdminToken: e2eTestAdminToken, DevAPIKey: "ms-local-dev", SessionManager: session},
+		Auth:           security.Authenticator{AdminToken: e2eTestAdminToken, LookupPrincipal: authfixture.LookupPrincipal, SessionManager: session},
 		RateLimiter:    rateLimiter,
 		Session:        session,
-		Models:         modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""),
+		Models:         modelcap.NewRegistry(domain.ProviderOpenAICompatible, "", "", "", ""),
 		Gateway:        gateway,
 		Memory:         memorySvc,
 		Admin:          admin,
@@ -1008,12 +1007,12 @@ func newTestRouter() http.Handler {
 }
 
 func newProxyRouter() http.Handler {
-	memoryRepo := sql.NewInMemoryMemoryRepository()
-	conversations := sql.NewInMemoryConversationRepository()
-	outbox := sql.NewInMemoryOutboxRepository()
+	memoryRepo := memorystore.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	outbox := conversationstore.NewInMemoryOutboxRepository()
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 	audit := auditsvc.NewService(nil)
-	admin := adminservice.NewService(conversations, sql.NewInMemoryMediaRepository(), memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""))
+	admin := adminservice.NewService(conversations, mediastore.NewInMemoryMediaRepository(), memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAICompatible, "", "", "", ""))
 	admin.SetMemoryProcessor(analysisservice.NewService(memoryllmfixture.Generator{}), []string{"preferences"})
 	users := userservice.NewService(nil)
 	apiKeys := apikeyservice.NewService(nil)
@@ -1049,9 +1048,9 @@ func newProxyRouter() http.Handler {
 			},
 		},
 		Health:   observability.NewRegistry(),
-		Auth:     security.Authenticator{AdminToken: e2eTestAdminToken, DevAPIKey: "ms-local-dev", SessionManager: session},
+		Auth:     security.Authenticator{AdminToken: e2eTestAdminToken, LookupPrincipal: authfixture.LookupPrincipal, SessionManager: session},
 		Session:  session,
-		Models:   modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""),
+		Models:   modelcap.NewRegistry(domain.ProviderOpenAICompatible, "", "", "", ""),
 		Gateway:  gateway,
 		Memory:   memorySvc,
 		Admin:    admin,
@@ -1066,7 +1065,7 @@ func newProxyRouter() http.Handler {
 func newMultimodalProxyRouter(t *testing.T, root string) http.Handler {
 	t.Helper()
 
-	mediaRepo := sql.NewInMemoryMediaRepository()
+	mediaRepo := mediastore.NewInMemoryMediaRepository()
 	blobStore, err := blobstore.NewStore(bootstrap.MultimodalConfig{
 		Enabled:                   true,
 		StorageBackend:            "local",
@@ -1095,7 +1094,7 @@ func newMultimodalProxyRouter(t *testing.T, root string) http.Handler {
 			},
 		},
 		Health: observability.NewRegistry(),
-		Auth:   security.Authenticator{AdminToken: e2eTestAdminToken, DevAPIKey: "ms-local-dev"},
+		Auth:   security.Authenticator{AdminToken: e2eTestAdminToken, LookupPrincipal: authfixture.LookupPrincipal},
 		Multimodal: multimodalservice.NewService(mediaRepo, blobStore, bootstrap.MultimodalConfig{
 			Enabled:                   true,
 			StorageBackend:            "local",

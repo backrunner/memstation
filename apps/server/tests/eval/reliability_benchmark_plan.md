@@ -345,8 +345,7 @@ The main missing work is not foundational infrastructure. It is the addition of:
 `liveevalrun` now exercises synthetic source ingestion, summary/analysis materialization,
 HTTP retrieval, and default/derived-only/no-memory reader comparisons. It reports
 coverage failures in the full expected denominator. `storeloadrun` separately measures
-persistent HTTP retrieval with real embeddings and actual peak concurrency. See the
-[measured report](../../../../docs/memory-quality-2026-10-25.md). These do not yet
+persistent HTTP retrieval with real embeddings and actual peak concurrency. These do not yet
 implement the complete per-node evidence/embedding expectations, real-model rebuild
 equivalence, generation activation, or exhaustive injection-safety layers proposed
 above. No benchmark threshold was added to default CI.

@@ -7,6 +7,12 @@ import (
 	"testing"
 	"time"
 
+	conversationstore "memstation/apps/server/internal/store/sql/conversation"
+	mediastore "memstation/apps/server/internal/store/sql/media"
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
+	"memstation/apps/server/internal/testutil/authfixture"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
@@ -31,7 +37,6 @@ import (
 	settingsservice "memstation/apps/server/internal/service/settings"
 	usageservice "memstation/apps/server/internal/service/usage"
 	userservice "memstation/apps/server/internal/service/user"
-	"memstation/apps/server/internal/store/sql"
 	"memstation/apps/server/internal/store/vector"
 	grpctransport "memstation/apps/server/internal/transport/grpc"
 	pb "memstation/apps/server/proto/memstation/v1"
@@ -69,7 +74,7 @@ func TestGatewayMemoryAndAdminLifecycle(t *testing.T) {
 	memoryClient := pb.NewMemoryServiceClient(conn)
 	adminClient := pb.NewAdminServiceClient(conn)
 
-	proxyCtx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer ms-local-dev")
+	proxyCtx := metadata.AppendToOutgoingContext(context.Background(), "authorization", "Bearer "+authfixture.Token)
 	complete, err := gatewayClient.Complete(proxyCtx, &pb.CompleteRequest{
 		Request: &pb.UnifiedRequest{
 			Protocol: string(domain.ProtocolOpenAIChat),
@@ -117,7 +122,7 @@ func TestGatewayMemoryAndAdminLifecycle(t *testing.T) {
 	}
 
 	adminCtx := metadata.AppendToOutgoingContext(context.Background(), "x-admin-token", grpcTestAdminToken)
-	userID := security.DeriveUserIDFromAPIKey("ms-local-dev")
+	userID := security.DeriveUserIDFromAPIKey(authfixture.Token)
 	conversations, err := adminClient.ListConversations(adminCtx, &pb.ListConversationsRequest{
 		UserId: userID,
 		Limit:  10,
@@ -165,13 +170,13 @@ func newClient(t *testing.T) *grpc.ClientConn {
 }
 
 func newTestServer() (*grpc.Server, *bufconn.Listener) {
-	memoryRepo := sql.NewInMemoryMemoryRepository()
-	conversations := sql.NewInMemoryConversationRepository()
-	mediaRepo := sql.NewInMemoryMediaRepository()
-	outbox := sql.NewInMemoryOutboxRepository()
+	memoryRepo := memorystore.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	mediaRepo := mediastore.NewInMemoryMediaRepository()
+	outbox := conversationstore.NewInMemoryOutboxRepository()
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 	audit := auditsvc.NewService(nil)
-	admin := adminservice.NewService(conversations, mediaRepo, memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAI, "gpt-4.1-mini", "", "", ""))
+	admin := adminservice.NewService(conversations, mediaRepo, memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAICompatible, "gpt-4.1-mini", "", "", ""))
 	users := userservice.NewService(nil)
 	apiKeys := apikeyservice.NewService(nil)
 	usage := usageservice.NewService(nil, conversations)
@@ -181,25 +186,25 @@ func newTestServer() (*grpc.Server, *bufconn.Listener) {
 	memorySvc := memoryservice.NewService(engine, memoryRepo)
 	gateway := gatewayservice.NewService(
 		provider.NewRegistry(
-			domain.ProviderOpenAI,
-			mockprovider.New(domain.ProviderOpenAI),
+			domain.ProviderOpenAICompatible,
+			mockprovider.New(domain.ProviderOpenAICompatible),
 		),
 		engine,
 		conversationservice.NewService(conversations, outbox, 100, 100000),
 		settings,
-		domain.ProviderOpenAI,
+		domain.ProviderOpenAICompatible,
 	)
 
 	server := grpctransport.NewServer(grpctransport.Dependencies{
 		Config: bootstrap.Config{
 			Version:         "0.1.0",
-			DefaultProvider: domain.ProviderOpenAI,
+			DefaultProvider: domain.ProviderOpenAICompatible,
 			GRPCPort:        9090,
 		},
 		Health:      observability.NewRegistry(),
-		Auth:        security.Authenticator{AdminToken: grpcTestAdminToken, DevAPIKey: "ms-local-dev"},
+		Auth:        security.Authenticator{AdminToken: grpcTestAdminToken, LookupPrincipal: authfixture.LookupPrincipal},
 		RateLimiter: security.NewRateLimiter(20, 40),
-		Models:      modelcap.NewRegistry(domain.ProviderOpenAI, "gpt-4.1-mini", "", "", ""),
+		Models:      modelcap.NewRegistry(domain.ProviderOpenAICompatible, "gpt-4.1-mini", "", "", ""),
 		Gateway:     gateway,
 		Memory:      memorySvc,
 		Admin:       admin,

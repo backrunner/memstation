@@ -2,7 +2,7 @@ package domain
 
 import "time"
 
-// NormalizeMessageParts binds legacy empty fields while rejecting explicit
+// NormalizeMessageParts binds adapter output to its verified parent and rejects
 // parent substitutions. Callers validate the workspace before normalization.
 func NormalizeMessageParts(user, workspace, conversation string, parts []MessagePart) ([]MessagePart, error) {
 	out := append([]MessagePart(nil), parts...)

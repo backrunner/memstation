@@ -13,5 +13,5 @@ command -v pg_dump >/dev/null
 command -v pg_restore >/dev/null
 cd "$ROOT_DIR/apps/server"
 export MEMSTATION_TEST_BACKUP_RESTORE=1
-go test -json ./internal/store/sql -run '^TestDeletionJournalActualBackupRestore$' -count=1 >"$OUT_DIR/go-test.jsonl"
+go test -json ./internal/store/sql/lifecycle -run '^TestDeletionJournalActualBackupRestore$' -count=1 >"$OUT_DIR/go-test.jsonl"
 printf '{"status":"passed","scope":"isolated test schema","evidence":"go-test.jsonl"}\n' >"$OUT_DIR/report.json"

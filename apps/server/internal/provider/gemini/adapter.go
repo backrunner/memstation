@@ -22,6 +22,20 @@ type Adapter struct {
 	timeout  *runtimeconfig.DurationValue
 }
 
+func generationConfig(req domain.UnifiedRequest) map[string]any {
+	config := map[string]any{}
+	if req.MaxOutputTokens > 0 {
+		config["maxOutputTokens"] = req.MaxOutputTokens
+	}
+	if req.JSONOutput {
+		config["responseMimeType"] = "application/json"
+	}
+	if req.Temperature != nil {
+		config["temperature"] = *req.Temperature
+	}
+	return config
+}
+
 func NewAdapter(resolver provider.ConfigResolver, timeout time.Duration) *Adapter {
 	if timeout <= 0 {
 		timeout = 60 * time.Second
@@ -47,15 +61,7 @@ func (a *Adapter) Complete(ctx context.Context, req domain.UnifiedRequest) (*dom
 	payload := map[string]any{
 		"contents": buildContents(chatMessages),
 	}
-	if req.MaxOutputTokens > 0 {
-		payload["generationConfig"] = map[string]any{"maxOutputTokens": req.MaxOutputTokens}
-	}
-	if req.JSONOutput {
-		config, ok := payload["generationConfig"].(map[string]any)
-		if !ok {
-			config = map[string]any{}
-		}
-		config["responseMimeType"] = "application/json"
+	if config := generationConfig(req); len(config) > 0 {
 		payload["generationConfig"] = config
 	}
 	if systemText := provider.JoinSystem(systemParts); systemText != "" {
@@ -115,15 +121,7 @@ func (a *Adapter) Stream(ctx context.Context, req domain.UnifiedRequest, emit fu
 	payload := map[string]any{
 		"contents": buildContents(chatMessages),
 	}
-	if req.MaxOutputTokens > 0 {
-		payload["generationConfig"] = map[string]any{"maxOutputTokens": req.MaxOutputTokens}
-	}
-	if req.JSONOutput {
-		config, ok := payload["generationConfig"].(map[string]any)
-		if !ok {
-			config = map[string]any{}
-		}
-		config["responseMimeType"] = "application/json"
+	if config := generationConfig(req); len(config) > 0 {
 		payload["generationConfig"] = config
 	}
 	if systemText := provider.JoinSystem(systemParts); systemText != "" {
@@ -437,6 +435,10 @@ func geminiContentParts(message domain.UnifiedMessage) []map[string]any {
 				out = append(out, map[string]any{"text": text})
 			}
 		case domain.ContentBlockImage, domain.ContentBlockAudio, domain.ContentBlockVideo, domain.ContentBlockFile:
+			if mimeType, data, ok := provider.InlineData(block.SourceURL); ok {
+				out = append(out, map[string]any{"inlineData": map[string]any{"mimeType": mimeType, "data": data}})
+				continue
+			}
 			if block.SourceURL != "" {
 				out = append(out, map[string]any{
 					"fileData": map[string]any{

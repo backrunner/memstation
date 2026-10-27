@@ -25,11 +25,12 @@ func NewRegistry(defaultProvider domain.Provider, chatModel, summaryModel, analy
 			resolvedModelID = modelID
 		}
 		capabilities = append(capabilities, domain.ModelCapability{
-			ID:             resolvedModelID,
-			Provider:       providerName,
-			Role:           role,
-			SupportsTools:  supportsTools,
-			SupportsStream: supportsStream,
+			InputModalities: []string{"text"},
+			ID:              resolvedModelID,
+			Provider:        providerName,
+			Role:            role,
+			SupportsTools:   supportsTools,
+			SupportsStream:  supportsStream,
 		})
 	}
 	add(chatModel, "chat", true, true)
@@ -43,7 +44,18 @@ func NewRegistry(defaultProvider domain.Provider, chatModel, summaryModel, analy
 func (r *Registry) List() []domain.ModelCapability {
 	out := make([]domain.ModelCapability, len(r.capabilities))
 	copy(out, r.capabilities)
+	for i := range out {
+		out[i].InputModalities = append([]string(nil), out[i].InputModalities...)
+	}
 	return out
+}
+
+// SetInputPolicy is called during assembly, before the registry is published.
+func (r *Registry) SetInputPolicy(policy InputPolicy) {
+	for i := range r.capabilities {
+		c := &r.capabilities[i]
+		c.InputModalities = policy.Modalities(c.Provider, c.ID)
+	}
 }
 
 func splitModelReference(value string) (domain.Provider, string) {

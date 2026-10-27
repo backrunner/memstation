@@ -53,8 +53,9 @@ type EmbeddingPayload struct {
 }
 
 type EmbeddingDeletePayload struct {
-	UserID string `json:"user_id"`
-	NodeID string `json:"node_id"`
+	EmbeddingRevision int64  `json:"embedding_revision"`
+	UserID            string `json:"user_id"`
+	NodeID            string `json:"node_id"`
 }
 
 type KeyMemoryGraphSyncPayload struct {

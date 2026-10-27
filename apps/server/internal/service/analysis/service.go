@@ -10,17 +10,27 @@ import (
 	"math"
 	"slices"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/provider"
-	"memstation/apps/server/internal/security"
 	"memstation/apps/server/internal/service/memoryllm"
+	multimodalservice "memstation/apps/server/internal/service/multimodal"
 	"memstation/apps/server/internal/textutil"
 )
 
-type Service struct{ generator memoryllm.Generator }
+type Service struct {
+	generator        memoryllm.Generator
+	semanticEpisodes bool
+}
+
+type Options struct{ SemanticEpisodes bool }
+
+func NewServiceWithOptions(generator memoryllm.Generator, options Options) *Service {
+	return &Service{generator: generator, semanticEpisodes: options.SemanticEpisodes}
+}
+
+func (s *Service) SemanticEpisodesEnabled() bool { return s != nil && s.semanticEpisodes }
 
 func NewService(generators ...memoryllm.Generator) *Service {
 	s := &Service{}
@@ -31,16 +41,38 @@ func NewService(generators ...memoryllm.Generator) *Service {
 }
 
 type Input struct {
-	UserID         string
-	ConversationID string
-	Conversation   domain.ConversationRecord
-	Summary        domain.MemoryDocument
-	ExistingFacts  []domain.MemoryDocument
-	WritePolicy    MemoryWritePolicy
+	BatchCheckpoints BatchCheckpointStore
+	UserID           string
+	ConversationID   string
+	Conversation     domain.ConversationRecord
+	Summary          domain.MemoryDocument
+	ExistingFacts    []domain.MemoryDocument
+	WritePolicy      MemoryWritePolicy
 }
+
+// Only completely validated batch outputs may be saved. They are revalidated
+// against the exact request on retry; partial analysis is never published.
+type BatchCheckpointStore interface {
+	LoadAnalysisBatch(context.Context, int, string) (Extraction, bool, error)
+	StoreAnalysisBatch(context.Context, int, string, Extraction) error
+}
+
+var ErrBatchCheckpointConflict = errors.New("another worker persisted a different validated batch")
+
+func (s *Service) GenerationPolicyID() string {
+	if s == nil {
+		return ""
+	}
+	if g, ok := s.generator.(interface{ GenerationPolicyID() string }); ok {
+		return g.GenerationPolicyID()
+	}
+	return ""
+}
+
 type MemoryWritePolicy struct {
-	EnableGenericItems bool
-	MaxGenericItems    int
+	EnableSemanticEpisodes bool
+	EnableGenericItems     bool
+	MaxGenericItems        int
 }
 type Result struct {
 	Fact         domain.MemoryDocument
@@ -54,14 +86,15 @@ type Quote struct {
 	Text     string `json:"text"`
 }
 type Item struct {
-	SubjectActorIDs []string `json:"subject_actor_ids,omitempty"`
-	SubjectScope    string   `json:"subject_scope,omitempty"`
-	Content         string   `json:"content"`
-	Importance      float64  `json:"importance"`
-	DecayFactor     float64  `json:"decay_factor"`
-	Confidence      float64  `json:"confidence"`
-	Subject         string   `json:"subject"`
-	Quotes          []Quote  `json:"quotes"`
+	MediaObservations []MediaObservation `json:"media_observations,omitempty"`
+	SubjectActorIDs   []string           `json:"subject_actor_ids,omitempty"`
+	SubjectScope      string             `json:"subject_scope,omitempty"`
+	Content           string             `json:"content"`
+	Importance        float64            `json:"importance"`
+	DecayFactor       float64            `json:"decay_factor"`
+	Confidence        float64            `json:"confidence"`
+	Subject           string             `json:"subject"`
+	Quotes            []Quote            `json:"quotes"`
 }
 type Fact struct {
 	Item
@@ -89,20 +122,30 @@ type Relation struct {
 }
 
 type Extraction struct {
-	Relations  []Relation    `json:"relations,omitempty"`
-	Facts      []Fact        `json:"facts"`
-	Impression *Item         `json:"impression"`
-	Items      []GenericItem `json:"items"`
+	Episodes   []SemanticEpisode `json:"episodes"`
+	Relations  []Relation        `json:"relations,omitempty"`
+	Facts      []Fact            `json:"facts"`
+	Impression *Item             `json:"impression"`
+	Items      []GenericItem     `json:"items"`
 }
 type Summary struct {
-	Summary     string   `json:"summary"`
-	TopicLabel  string   `json:"topic_label"`
-	Keywords    []string `json:"keywords"`
-	Importance  float64  `json:"importance"`
-	DecayFactor float64  `json:"decay_factor"`
-	ChunkCount  int      `json:"-"`
+	GenerationPolicy string   `json:"-"`
+	Summary          string   `json:"summary"`
+	TopicLabel       string   `json:"topic_label"`
+	Keywords         []string `json:"keywords"`
+	Importance       float64  `json:"importance"`
+	DecayFactor      float64  `json:"decay_factor"`
+	ChunkCount       int      `json:"-"`
 }
 type Source struct {
+	media           []domain.ContentBlock
+	MediaSHA256     string             `json:"media_sha256,omitempty"`
+	NativeMedia     bool               `json:"native_media,omitempty"`
+	MediaModel      string             `json:"media_model,omitempty"`
+	MediaProvider   domain.Provider    `json:"media_provider,omitempty"`
+	sequenceBase    int                // Internal provenance; not an LLM input field.
+	ByteOffset      int                `json:"start_byte,omitempty"`
+	SourceTime      string             `json:"source_time,omitempty"`
 	Ref             *domain.SourceRef  `json:"source_ref,omitempty"`
 	SpeakerActorID  string             `json:"speaker_actor_id,omitempty"`
 	AuthorActorID   string             `json:"author_actor_id,omitempty"`
@@ -118,6 +161,15 @@ type Source struct {
 // Sources serializes original material. Splitting is transport budgeting, not memory generation.
 func Sources(conversation domain.ConversationRecord) []Source {
 	out := []Source{}
+	if len(conversation.Parts) == 0 && conversation.ContextMode != "events" {
+		parts := multimodalservice.MaterializeMessageParts(conversation)
+		for _, part := range parts {
+			if multimodalservice.IsMedia(part.PartType) {
+				conversation.Parts = parts
+				break
+			}
+		}
+	}
 	if conversation.ContextMode == "events" {
 		for seq, message := range conversation.Messages {
 			if message.Source == nil {
@@ -125,6 +177,11 @@ func Sources(conversation domain.ConversationRecord) []Source {
 			}
 			source := message.Source
 			for i, part := range source.Parts {
+				if part.Type == "media" && part.Media != nil {
+					ref := domain.SourceRef{WorkspaceID: source.WorkspaceID, MessageID: source.MessageID, Revision: source.Revision, PartIndex: i}
+					out = append(out, mediaSource(Source{sequenceBase: 1, SourceTime: episodeSourceTime(source.OccurredAt), PartID: fmt.Sprintf("part:%s:%03d:%03d", conversation.ConversationID, seq, i), ID: fmt.Sprintf("%s:%d:%d", source.MessageID, source.Revision, i), Role: message.Role, SequenceNum: seq + 1, Ref: &ref, SpeakerActorID: source.Speaker.ActorID}, *part.Media))
+					continue
+				}
 				if strings.TrimSpace(part.Text) == "" {
 					continue
 				}
@@ -142,13 +199,17 @@ func Sources(conversation domain.ConversationRecord) []Source {
 						mentions = append(mentions, p.ActorID)
 					}
 				}
-				out = append(out, Source{Kind: part.Type, ID: fmt.Sprintf("%s:%d:%d", source.MessageID, source.Revision, i), Role: message.Role, Text: part.Text, SequenceNum: seq + 1, Ref: &ref, SpeakerActorID: source.Speaker.ActorID, AuthorActorID: author, MentionActorIDs: mentions})
+				out = append(out, Source{sequenceBase: 1, SourceTime: episodeSourceTime(source.OccurredAt), Kind: part.Type, ID: fmt.Sprintf("%s:%d:%d", source.MessageID, source.Revision, i), Role: message.Role, Text: part.Text, SequenceNum: seq + 1, Ref: &ref, SpeakerActorID: source.Speaker.ActorID, AuthorActorID: author, MentionActorIDs: mentions})
 			}
 		}
 		return out
 	}
 	if len(conversation.Parts) > 0 {
 		for _, part := range conversation.Parts {
+			if multimodalservice.IsMedia(part.PartType) {
+				out = append(out, mediaSource(Source{ID: firstNonEmpty(part.PartID, fmt.Sprintf("message-%d", part.SequenceNum)), Role: part.Role, SequenceNum: part.SequenceNum, PartID: part.PartID}, partMedia(part)))
+				continue
+			}
 			text := part.TextContent
 			if text == "" {
 				text = part.RawPayload
@@ -173,22 +234,35 @@ func Sources(conversation domain.ConversationRecord) []Source {
 			if strings.TrimSpace(text) == "" {
 				continue
 			}
-			out = append(out, Source{ID: fmt.Sprintf("message-%d", index+1), Role: message.Role, Text: text, SequenceNum: index + 1})
+			out = append(out, Source{sequenceBase: 1, ID: fmt.Sprintf("message-%d", index+1), Role: message.Role, Text: text, SequenceNum: index + 1})
 		}
 	}
 	for _, artifact := range conversation.Artifacts {
 		if artifact.Status != "completed" || strings.TrimSpace(artifact.TextContent) == "" {
 			continue
 		}
-		out = append(out, Source{Kind: "artifact", ID: artifact.ArtifactID, Role: domain.RoleTool, Text: artifact.TextContent, PartID: artifact.PartID})
+		source := Source{sequenceBase: -1, Kind: "artifact", ID: artifact.ArtifactID, Role: domain.RoleTool, Text: artifact.TextContent, PartID: artifact.PartID}
+		for _, part := range conversation.Parts {
+			if part.PartID == artifact.PartID {
+				source.SequenceNum = part.SequenceNum
+				source.sequenceBase = 0
+				break
+			}
+		}
+		out = append(out, source)
 	}
 	return out
 }
 
 func sourceBatches(sources []Source) ([][]Source, error) {
+	return sourceBatchesWithLimits(sources, 16000, 12000, 0)
+}
+
+func sourceBatchesWithLimits(sources []Source, maxBytes, pieceBytes, maxSources int) ([][]Source, error) {
 	batches := [][]Source{}
 	batch := []Source{}
 	size := 0
+	mediaBytes := 0
 	for _, source := range sources {
 		remaining := source.Text
 		offset := 0
@@ -197,7 +271,8 @@ func sourceBatches(sources []Source) ([][]Source, error) {
 		}
 		for remaining != "" {
 			piece := source
-			piece.Text = textutil.PrefixBytes(remaining, 12000)
+			piece.ByteOffset = source.ByteOffset + len(source.Text) - len(remaining)
+			piece.Text = textutil.PrefixBytes(remaining, pieceBytes)
 			if source.Ref != nil {
 				ref := *source.Ref
 				ref.Span = &domain.TextSpan{Start: offset, End: offset + utf8.RuneCountInString(piece.Text)}
@@ -205,13 +280,15 @@ func sourceBatches(sources []Source) ([][]Source, error) {
 			}
 			offset += utf8.RuneCountInString(piece.Text)
 			remaining = remaining[len(piece.Text):]
-			if size+len(piece.Text) > 16000 && len(batch) > 0 {
+			if len(batch) > 0 && (size+len(piece.Text) > maxBytes || mediaBytes+sourceMediaBytes(piece) > 32<<20 || (maxSources > 0 && len(batch) >= maxSources)) {
 				batches = append(batches, batch)
 				batch = []Source{}
 				size = 0
+				mediaBytes = 0
 			}
 			batch = append(batch, piece)
 			size += len(piece.Text)
+			mediaBytes += sourceMediaBytes(piece)
 		}
 	}
 	if len(batch) > 0 {
@@ -226,7 +303,7 @@ func sourceBatches(sources []Source) ([][]Source, error) {
 	return batches, nil
 }
 
-func (s *Service) generate(ctx context.Context, input Input, task, role, instruction string, payload any, target any) error {
+func (s *Service) generate(ctx context.Context, input Input, task, role, instruction string, payload any, target any, validators ...func() error) error {
 	if s == nil || s.generator == nil {
 		return errors.New("memory LLM is not configured")
 	}
@@ -234,7 +311,16 @@ func (s *Service) generate(ctx context.Context, input Input, task, role, instruc
 	if task == "analysis.extract" {
 		budget = 8192
 	}
-	return memoryllm.GenerateDecoded(ctx, s.generator, memoryllm.Request{UserID: firstNonEmpty(input.UserID, input.Conversation.UserID), Role: role, Task: task, Instruction: instruction, Input: payload, MaxOutputTokens: budget}, target)
+	var validate func() error
+	if len(validators) > 0 {
+		validate = validators[0]
+	}
+	correctionHint := "Keep summary fields and scores within the exact requested schema."
+	if task == "analysis.extract" {
+		correctionHint = extractionCorrectionHint
+	}
+	instruction += nativeMediaInstruction
+	return memoryllm.GenerateValidated(ctx, s.generator, memoryllm.Request{Media: sourceMedia(payload), UserID: firstNonEmpty(input.UserID, input.Conversation.UserID), Role: role, Task: task, Instruction: instruction, Input: payload, MaxOutputTokens: budget}, target, memoryllm.Validation{Check: validate, CorrectionHint: correctionHint})
 }
 
 const summaryInstruction = `Summarize the supplied conversation sources faithfully, in their language. Preserve negation, attribution, uncertainty, decisions, changes and unresolved questions. Assistant suggestions are not user facts; plans are not completed events. Return {"summary":string,"topic_label":string,"keywords":[string],"importance":number,"decay_factor":number}. Importance must be 0.5..2 and decay_factor 0.5..3. No generic placeholder text.`
@@ -243,14 +329,18 @@ func (s *Service) SummarizeConversation(ctx context.Context, input Input) (Summa
 	if err := validateInput(input); err != nil {
 		return Summary{}, err
 	}
-	batches, err := sourceBatches(Sources(input.Conversation))
+	sources, err := s.prepareSources(ctx, input, "summary_model")
+	if err != nil {
+		return Summary{}, err
+	}
+	batches, err := sourceBatches(sources)
 	if err != nil {
 		return Summary{}, err
 	}
 	summaries := []Summary{}
 	for _, batch := range batches {
 		var result Summary
-		if err := s.generate(ctx, input, "summary.generate", "summary_model", summaryInstruction, map[string]any{"sources": batch}, &result); err != nil {
+		if err := s.generate(ctx, input, "summary.generate", "summary_model", summaryInstruction, map[string]any{"sources": batch}, &result, func() error { return validateSummary(result) }); err != nil {
 			return Summary{}, err
 		}
 		if err := validateSummary(result); err != nil {
@@ -266,7 +356,7 @@ func (s *Service) SummarizeConversation(ctx context.Context, input Input) (Summa
 			group := summaries[offset:min(offset+4, len(summaries))]
 			result := group[0]
 			if len(group) > 1 {
-				if err := s.generate(ctx, input, "summary.merge", "summary_model", summaryInstruction+" Merge all chunk summaries chronologically, removing overlap without dropping material facts.", map[string]any{"chunk_summaries": group}, &result); err != nil {
+				if err := s.generate(ctx, input, "summary.merge", "summary_model", summaryInstruction+" Merge all chunk summaries chronologically, removing overlap without dropping material facts.", map[string]any{"chunk_summaries": group}, &result, func() error { return validateSummary(result) }); err != nil {
 					return Summary{}, err
 				}
 				if err := validateSummary(result); err != nil {
@@ -279,6 +369,7 @@ func (s *Service) SummarizeConversation(ctx context.Context, input Input) (Summa
 	}
 	result := summaries[0]
 	result.ChunkCount = len(batches)
+	result.GenerationPolicy = s.GenerationPolicyID()
 	return result, nil
 }
 
@@ -295,7 +386,7 @@ func validateSummary(s Summary) error {
 }
 
 const extractionInstruction = `Extract only durable, supported memories from the original sources. The summary and existing facts are context, never new evidence. Interpret negation, corrections, hypothetical examples, speaker attribution and temporal changes. Do not treat assistant suggestions as user commitments. Return {"facts":[],"impression":null,"items":[]}. Empty arrays and null impression are correct when there is nothing to remember.
-Each fact is {"key":string,"category":string,"subject":string,"content":string,"confidence":number,"importance":number,"decay_factor":number,"quotes":[{"source_id":string,"text":string}],"supersedes":[existing_fact_id],"valid_from":optional_RFC3339,"valid_to":optional_RFC3339}. Use stable semantic snake_case keys specific to subject and project; reuse an existing key only for the same attribute. Supersede only facts explicitly corrected or replaced, never merely similar facts. Every supersedes entry must be an exact id from existing_facts, and that existing fact's key and subject must exactly equal the emitted fact's key and subject. For a correction of the same attribute, preserve the existing key and subject verbatim; never generate a new key or subject while referencing its old id. If there is no supported matching replacement, use an empty supersedes array. Quotes must be exact spans from user or tool sources.
+Each fact is {"key":string,"category":string,"subject":string,"content":string,"confidence":number,"importance":number,"decay_factor":number,"quotes":[{"source_id":string,"text":string}],"supersedes":[existing_fact_id],"valid_from":optional_RFC3339,"valid_to":optional_RFC3339}. Use stable semantic snake_case keys specific to subject and project; reuse an existing key only for the same attribute. Supersede only facts explicitly corrected or replaced, never merely similar facts. Every supersedes entry must be an exact id from existing_facts, and that existing fact's key and subject must exactly equal the emitted fact's key and subject. For a correction of the same attribute, preserve the existing key and subject verbatim; never generate a new key or subject while referencing its old id. If there is no supported matching replacement, use an empty supersedes array. Quotes must be exact spans from user or tool sources. Copy source_id strings exactly from evidence_source_ids; assistant and system sources provide context only. For optional valid_from/valid_to use only supported RFC3339 instants with an explicit time zone, never date-only strings or relative expressions. If the sources do not establish an exact instant, omit the field and preserve supported temporal wording in content instead.
 Optional impression has content, subject, confidence, importance, decay_factor, quotes and describes only supported observations, not fixed personality labels.
 Each item is {"key":string,"type":string,"title":string,"status":string,"subject":string,"content":string,"confidence":number,"importance":number,"decay_factor":number,"quotes":[{"source_id":string,"text":string}]}. All these item fields are required, including subject and scores for completed or cancelled tasks. Subject identifies the person or project the assertion concerns; do not return an empty subject or content. If the subject cannot be supported, omit that item. Type is task,event,procedure,entity,agent_action,artifact. A future plan is a task, never a completed event. Entities additionally have entity_kind and canonical_name. Do not invent tool calls or artifact IDs. An artifact may include artifact_id only when supplied in an artifact source. Optionally return relations:[{source_key,target_key,type,weight}] between your emitted fact/item keys; allowed types are used_tool,produced_artifact,mentions_entity,depends_on,resulted_in,supports. Weight 0..1. Never copy credentials, tokens, passwords or raw debug payloads into memories or quotes. Confidence 0..1, importance 0.5..2, decay_factor 0.5..3; these ranges apply to every fact, impression and item, with no exceptions for task status. At most 16 facts and 12 items per response.
 When sources contain source_ref and actor identifiers, every item/fact/impression must include subject_scope (actor or workspace) and subject_actor_ids. Use exact supplied author_actor_id or mention_actor_ids for actor subjects. A quoted statement belongs to its author, not the quoting speaker. Unknown authors stay unknown: omit unsupported actor claims. Workspace habits use subject_scope=workspace and an empty subject_actor_ids array. Never use the owner as an implicit subject or infer an actor identity from a display name.`
@@ -309,8 +400,15 @@ func (s *Service) AnalyzeConversation(ctx context.Context, input Input) (Result,
 	if err := validateInput(input); err != nil {
 		return Result{}, err
 	}
-	sources := Sources(input.Conversation)
+	sources, err := s.prepareSources(ctx, input, "analysis_model")
+	if err != nil {
+		return Result{}, err
+	}
+	enableEpisodes := input.WritePolicy.EnableSemanticEpisodes || s.SemanticEpisodesEnabled()
 	batches, err := sourceBatches(sources)
+	if enableEpisodes {
+		batches, err = sourceBatchesWithLimits(sources, episodeBatchBytes, episodeBatchBytes, episodeBatchSources)
+	}
 	if err != nil {
 		return Result{}, err
 	}
@@ -338,164 +436,57 @@ func (s *Service) AnalyzeConversation(ctx context.Context, input Input) (Result,
 		providedFacts = append(providedFacts, fact)
 		existingBytes += len(encoded) + 1
 	}
-	relationCount := 0
-	result := Result{Facts: []domain.MemoryDocument{}, GenericItems: []domain.MemoryDocument{}}
-	seen := map[string]bool{}
+	state := extractionState{result: Result{Facts: []domain.MemoryDocument{}, GenericItems: []domain.MemoryDocument{}}, seen: map[string]bool{}}
 	policy := normalizeMemoryWritePolicy(input.WritePolicy)
-	for _, batch := range batches {
-		nodeByKey := map[string]string{}
-		omittedKeys := map[string]bool{}
+	policy.EnableSemanticEpisodes = enableEpisodes
+	for index, batch := range batches {
 		var extracted Extraction
-		payload := map[string]any{"sources": batch, "summary": input.Summary.Content, "existing_facts": existing, "existing_facts_truncated": existingTruncated}
-		if err := s.generate(ctx, input, "analysis.extract", "analysis_model", extractionInstruction, payload, &extracted); err != nil {
+		evidenceIDs := []string{}
+		for _, source := range batch {
+			if source.Role == domain.RoleUser || source.Role == domain.RoleTool {
+				evidenceIDs = append(evidenceIDs, source.ID)
+			}
+		}
+		payload := map[string]any{"sources": batch, "evidence_source_ids": evidenceIDs, "summary": input.Summary.Content, "existing_facts": existing, "existing_facts_truncated": existingTruncated}
+		instruction := extractionInstruction
+		if policy.EnableSemanticEpisodes {
+			instruction += semanticEpisodeInstruction
+		}
+		identity, err := json.Marshal([]any{"analysis_batch_v1", instruction, extractionCorrectionHint, payload, policy, s.GenerationPolicyID()})
+		if err != nil {
 			return Result{}, err
 		}
-		relationCount += len(extracted.Relations)
-		if relationCount > 64 {
-			return Result{}, errors.New("too many LLM relations")
-		}
-		if extracted.Facts == nil || extracted.Items == nil || len(extracted.Facts) > 16 || len(extracted.Items) > 12 {
-			return Result{}, errors.New("invalid LLM analysis collections")
-		}
-		for _, fact := range extracted.Facts {
-			if !validKey(fact.Key) || !validText(fact.Category, 80) {
-				return Result{}, errors.New("invalid LLM fact identity")
-			}
-			doc, err := documentFromItem(fact.Item, domain.MemoryTypeFact, user, conversation, sources)
+		digest := sha256.Sum256(identity)
+		batchHash := hex.EncodeToString(digest[:])
+		cached := false
+		if input.BatchCheckpoints != nil {
+			extracted, cached, err = input.BatchCheckpoints.LoadAnalysisBatch(ctx, index, batchHash)
 			if err != nil {
 				return Result{}, err
 			}
-			doc.Metadata["category"] = fact.Category
-			doc.Metadata["fact_key"] = fact.Key
-			// An empty model decision is explicit: storage must not infer a
-			// replacement merely because another fact shares the semantic key.
-			doc.Metadata["supersedes_fact_ids"] = append([]string{}, fact.Supersedes...)
-			for _, date := range []string{fact.ValidFrom, fact.ValidTo} {
-				if date != "" {
-					if _, err := time.Parse(time.RFC3339, date); err != nil {
-						return Result{}, errors.New("invalid LLM fact validity timestamp")
-					}
-				}
-			}
-			if fact.ValidFrom != "" {
-				doc.Metadata["valid_from"] = fact.ValidFrom
-			}
-			if fact.ValidTo != "" {
-				doc.Metadata["valid_to"] = fact.ValidTo
-			}
-			if fact.ValidFrom != "" && fact.ValidTo != "" {
-				from, _ := time.Parse(time.RFC3339, fact.ValidFrom)
-				to, _ := time.Parse(time.RFC3339, fact.ValidTo)
-				if !to.After(from) {
-					return Result{}, errors.New("invalid LLM fact validity interval")
-				}
-			}
-			doc = applyFactLineageMetadata(doc, user, conversation)
-			doc.ID = FactRevisionDocumentID(conversation, fact.Key, metadataString(doc.Metadata, "lineage_revision_key"))
-			doc.NodeID = FactRevisionNodeID(conversation, fact.Key, metadataString(doc.Metadata, "lineage_revision_key"))
-			if err := validateSupersedes(fact, providedFacts); err != nil {
-				return Result{}, err
-			}
-			if len(fact.Supersedes) > 0 {
-				doc.Metadata["supersedes_fact_ids"] = fact.Supersedes
-			}
-			if previous := nodeByKey[fact.Key]; previous != "" && previous != doc.NodeID {
-				return Result{}, errors.New("duplicate LLM fact key")
-			}
-			nodeByKey[fact.Key] = doc.NodeID
-			if !seen[doc.ID] {
-				result.Facts = append(result.Facts, doc)
-				seen[doc.ID] = true
-			}
 		}
-		if extracted.Impression != nil && result.Impression.ID == "" {
-			doc, err := documentFromItem(*extracted.Impression, domain.MemoryTypeImpression, user, conversation, sources)
-			if err != nil {
-				return Result{}, err
-			}
-			doc.ID = ImpressionDocumentID(conversation)
-			doc.NodeID = ImpressionNodeID(conversation)
-			result.Impression = doc
-			nodeByKey["impression"] = doc.NodeID
+		var candidate extractionState
+		validate := func() error {
+			candidate = state.clone()
+			return applyExtractionBatch(ctx, input, user, conversation, batch, providedFacts, policy, extracted, &candidate)
 		}
-		for _, item := range extracted.Items {
-			if !domain.IsGenericMemoryType(item.Type) || !validKey(item.Key) || !validText(item.Title, 240) || !validText(item.Status, 40) {
-				return Result{}, errors.New("invalid LLM generic memory fields")
-			}
-			if !policy.EnableGenericItems || len(result.GenericItems) >= policy.MaxGenericItems {
-				omittedKeys[item.Key] = true
-				continue
-			}
-			doc, err := documentFromItem(item.Item, item.Type, user, conversation, sources)
-			if err != nil {
+		if cached {
+			if err := validate(); err != nil {
 				return Result{}, err
 			}
-			doc.Metadata["title"] = item.Title
-			doc.Metadata["status"] = item.Status
-			doc.Metadata["item_type"] = string(item.Type)
-			doc.Metadata["review_status"] = "auto"
-			seed := genericItemSeed(item.Type, conversation, item.Content, doc.Metadata)
-			doc.ID = GenericMemoryDocumentID(user, item.Type, conversation, seed)
-			doc.NodeID = GenericMemoryNodeID(user, item.Type, conversation, seed)
-			if item.Type == domain.MemoryTypeEntity {
-				if !validText(item.CanonicalName, 240) || !validText(item.EntityKind, 80) {
-					return Result{}, errors.New("invalid LLM entity identity")
-				}
-				doc.Metadata["title"] = item.CanonicalName
-				doc.Metadata["entity_kind"] = item.EntityKind
-				doc.Metadata["entity_scope"] = metadataString(input.Conversation.Metadata, "entity_scope")
-				if len(doc.SourceRefs) > 0 || security.WritePartition(ctx) != "" {
-					actors := append([]string{}, doc.SubjectActorIDs...)
-					slices.Sort(actors)
-					scopeData, _ := json.Marshal([]any{security.WorkspaceID(ctx, user), security.WritePartition(ctx), actors})
-					doc.Metadata["entity_scope"] = domain.AccessID("subject-scope", string(scopeData))
-				}
+		} else if err := s.generate(ctx, input, "analysis.extract", "analysis_model", instruction, payload, &extracted, validate); err != nil {
+			return Result{}, err
+		}
+		state = candidate
 
-				key := canonicalEntityKey(doc.Content, doc.Metadata)
-				doc.Metadata["canonical_key"] = key
-				doc.Metadata["aliases"] = []string{item.Title}
-				doc.Metadata["mention_conversation_ids"] = []string{conversation}
-				doc.ID = CanonicalEntityDocumentID(user, key)
-				doc.NodeID = CanonicalEntityNodeID(user, key)
+		if !cached && input.BatchCheckpoints != nil {
+			if err := input.BatchCheckpoints.StoreAnalysisBatch(ctx, index, batchHash, extracted); err != nil {
+				return Result{}, err
 			}
-			if item.ArtifactID != "" {
-				valid := false
-				for _, source := range sources {
-					if source.ID == item.ArtifactID && source.Kind == "artifact" {
-						valid = true
-					}
-				}
-				if !valid {
-					return Result{}, errors.New("LLM artifact references unknown source")
-				}
-				doc.Metadata["artifact_id"] = item.ArtifactID
-			}
-			if previous := nodeByKey[item.Key]; previous != "" && previous != doc.NodeID {
-				return Result{}, errors.New("duplicate LLM document key")
-			}
-			nodeByKey[item.Key] = doc.NodeID
-			if !seen[doc.ID] {
-				result.GenericItems = append(result.GenericItems, doc)
-				seen[doc.ID] = true
-			}
-		}
-		for _, relation := range extracted.Relations {
-			if omittedKeys[relation.SourceKey] || omittedKeys[relation.TargetKey] {
-				continue
-			}
-			src, dst := nodeByKey[relation.SourceKey], nodeByKey[relation.TargetKey]
-			if src == "" || dst == "" || src == dst || !finiteRange(relation.Weight, 0, 1) {
-				return Result{}, errors.New("invalid LLM relation endpoints")
-			}
-			switch relation.Type {
-			case domain.MemoryRelationUsedTool, domain.MemoryRelationProducedArtifact, domain.MemoryRelationMentionsEntity, domain.MemoryRelationDependsOn, domain.MemoryRelationResultedIn, domain.MemoryRelationSupports:
-			default:
-				return Result{}, errors.New("invalid LLM relation type")
-			}
-			result.Relations = append(result.Relations, domain.MemoryRelation{UserID: user, SrcNodeID: src, DstNodeID: dst, RelationType: relation.Type, Weight: relation.Weight, Source: "llm", Metadata: map[string]any{"conversation_id": conversation}})
 		}
 	}
 
+	result := state.result
 	if len(result.Facts) > 0 {
 		result.Fact = result.Facts[0]
 	}
@@ -505,6 +496,9 @@ func (s *Service) AnalyzeConversation(ctx context.Context, input Input) (Result,
 	}
 	for _, doc := range all {
 		doc.Metadata["source_conversation_revision"] = input.Conversation.Revision
+		if date := metadataString(input.Conversation.Metadata, "source_session_time"); validText(date, 240) {
+			doc.Metadata["source_session_time"] = date
+		}
 	}
 	if input.Summary.NodeID != "" {
 		for _, doc := range all {
@@ -548,9 +542,15 @@ func documentFromItem(item Item, kind domain.MemoryType, user, conversation stri
 			if source.Role != domain.RoleUser && source.Role != domain.RoleTool {
 				return domain.MemoryDocument{}, errors.New("LLM quote cannot use assistant or system assertion as evidence")
 			}
+			if source.MediaSHA256 != "" {
+				return domain.MemoryDocument{}, errors.New("media markers cannot be quoted as evidence; use media_observations for attached native media")
+			}
 			start := strings.Index(source.Text, quote.Text)
-			if !validText(quote.Text, 8000) || start < 0 {
+			if !validText(quote.Text, 8000) {
 				return domain.MemoryDocument{}, errors.New("LLM quote is not an exact source span")
+			}
+			if start < 0 {
+				continue
 			}
 			if source.Ref != nil {
 				eventSources = true
@@ -569,7 +569,7 @@ func documentFromItem(item Item, kind domain.MemoryType, user, conversation stri
 					supportedActors[actor] = true
 				}
 			}
-			raw := fmt.Sprintf("%s|%s|%s|%d|%s|%d|%d", user, conversation, source.ID, source.SequenceNum, source.PartID, start, start+len(quote.Text))
+			raw := fmt.Sprintf("%s|%s|%s|%d|%s|%d|%d", user, conversation, source.ID, source.SequenceNum, source.PartID, source.ByteOffset+start, source.ByteOffset+start+len(quote.Text))
 			sum := sha256.Sum256([]byte(raw))
 			support := "model_inference"
 			if doc.Content == quote.Text {
@@ -583,7 +583,7 @@ func documentFromItem(item Item, kind domain.MemoryType, user, conversation stri
 			if source.Kind == "artifact" {
 				artifactID = source.ID
 			}
-			quotes = append(quotes, map[string]any{"part_id": source.PartID, "artifact_id": artifactID, "sequence_num": source.SequenceNum, "quote": quote.Text, "start_byte": start, "end_byte": start + len(quote.Text), "support_kind": support, "source_id": hex.EncodeToString(sum[:])})
+			quotes = append(quotes, map[string]any{"part_id": source.PartID, "artifact_id": artifactID, "sequence_num": source.SequenceNum, "sequence_base": source.sequenceBase, "quote": quote.Text, "start_byte": source.ByteOffset + start, "end_byte": source.ByteOffset + start + len(quote.Text), "support_kind": support, "source_id": hex.EncodeToString(sum[:])})
 			if source.PartID != "" {
 				parts = append(parts, source.PartID)
 			}
@@ -593,9 +593,6 @@ func documentFromItem(item Item, kind domain.MemoryType, user, conversation stri
 		if !found {
 			return domain.MemoryDocument{}, errors.New("LLM quote references unknown source")
 		}
-	}
-	if len(quotes) == 0 {
-		return domain.MemoryDocument{}, errors.New("LLM memory requires original source evidence")
 	}
 	if eventSources {
 		if item.SubjectScope == "workspace" {
@@ -617,6 +614,16 @@ func documentFromItem(item Item, kind domain.MemoryType, user, conversation stri
 	}
 	doc.Metadata["source_quotes"] = quotes
 	doc.Metadata["source_part_ids"] = parts
+	if item.SubjectScope == "workspace" {
+		doc.Metadata["subject_scope"] = "workspace"
+	}
+	mediaCount, err := addMediaObservations(&doc, item.MediaObservations, sources)
+	if err != nil {
+		return domain.MemoryDocument{}, err
+	}
+	if len(quotes) == 0 && mediaCount == 0 {
+		return domain.MemoryDocument{}, errors.New("LLM memory requires original source evidence")
+	}
 	return doc, nil
 }
 

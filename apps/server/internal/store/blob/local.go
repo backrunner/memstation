@@ -113,10 +113,7 @@ func (s *LocalStore) Delete(ctx context.Context, blob domain.BlobObject) error {
 }
 
 func scopedKey(blob domain.BlobObject) string {
-	if blob.PartitionID != "" {
-		return filepath.Join("v3", blob.WorkspaceID, domain.AccessID("partition", blob.PartitionID), domain.AccessID("blob", blob.BlobID), "content")
-	}
-	return filepath.Join("v2", blob.WorkspaceID, domain.AccessID("blob", blob.BlobID), "content")
+	return filepath.Join("v3", blob.WorkspaceID, domain.AccessID("partition", blob.PartitionID), domain.AccessID("blob", blob.BlobID), "content")
 }
 
 func validateBlobKey(ctx context.Context, blob domain.BlobObject) error {
@@ -129,18 +126,7 @@ func validateBlobKey(ctx context.Context, blob domain.BlobObject) error {
 	if blob.BlobID == "" || blob.StorageKey == "" || !filepath.IsLocal(blob.StorageKey) || filepath.Clean(blob.StorageKey) != blob.StorageKey {
 		return domain.ErrAccessDenied
 	}
-	if blob.StorageKey == scopedKey(blob) {
-		return nil
-	}
-	if blob.PartitionID != "" {
-		return domain.ErrAccessDenied
-	}
-	// Existing on-disk uploads retain their original layout. Only an exact
-	// owner/blob directory is accepted, never an arbitrary metadata path.
-	if filepath.Base(blob.UserID) != blob.UserID || filepath.Base(blob.BlobID) != blob.BlobID || blob.UserID == "." || blob.UserID == ".." || blob.BlobID == "." || blob.BlobID == ".." {
-		return domain.ErrAccessDenied
-	}
-	if filepath.Dir(blob.StorageKey) != filepath.Join(blob.UserID, blob.BlobID) {
+	if blob.StorageKey != scopedKey(blob) {
 		return domain.ErrAccessDenied
 	}
 	return nil

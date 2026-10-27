@@ -25,7 +25,7 @@ type Reranker interface {
 type VectorStore interface {
 	Search(ctx context.Context, input domain.VectorSearchInput) ([]domain.VectorSearchResult, error)
 	Upsert(ctx context.Context, input domain.VectorUpsertRequest) error
-	DeleteByNode(ctx context.Context, userID, nodeID string) error
+	DeleteByNode(ctx context.Context, input domain.VectorDeleteRequest) error
 	Health(ctx context.Context) error
 	ReindexVersion(ctx context.Context, version int) error
 }
@@ -78,7 +78,7 @@ type MemoryRepository interface {
 	ListDocumentsByConversation(ctx context.Context, userID, conversationID string) ([]domain.MemoryDocument, error)
 	ListDocumentsByConversationInGeneration(ctx context.Context, userID, generationID, conversationID string) ([]domain.MemoryDocument, error)
 	ListConversationDocumentsInGeneration(ctx context.Context, userID, generationID, conversationID string, includeSegments bool) ([]domain.MemoryDocument, error)
-	SearchKeywordMatches(ctx context.Context, userID, generationID, query string, limit int) ([]domain.KeywordMatch, error)
+	SearchKeywordMatches(ctx context.Context, userID, generationID, query string, limit int, allowedTypes ...domain.MemoryType) ([]domain.KeywordMatch, error)
 	UpdateDocument(ctx context.Context, userID, id string, kind domain.MemoryType, content string) (domain.MemoryDocument, error)
 	ListFactLineage(ctx context.Context, userID, generationID, factID string) (domain.FactLineage, error)
 	ListFactLineageByKey(ctx context.Context, userID, generationID, factKey string) (domain.FactLineage, error)

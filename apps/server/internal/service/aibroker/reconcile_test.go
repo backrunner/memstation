@@ -49,7 +49,7 @@ func TestReconcileUnknownUsesLedgerWithoutInvokingModel(t *testing.T) {
 	if _, err = service.Reconcile(ctx, call.ID); err != nil || requests != before {
 		t.Fatal("completed call reissued")
 	}
-	if _, err = service.Reconcile(security.WithAccess(context.Background(), domain.AccessContext{UserID: "owner", WorkspaceID: "group", ScopeVersion: 2}), call.ID); err == nil {
+	if _, err = service.Reconcile(security.WithAccess(context.Background(), domain.AccessContext{UserID: "owner", WorkspaceID: "group", ScopeVersion: 2, PartitionIDs: []string{""}}), call.ID); err == nil {
 		t.Fatal("usage read without capability")
 	}
 	calls, _ := ledger.AICalls(ctx, "", 100)

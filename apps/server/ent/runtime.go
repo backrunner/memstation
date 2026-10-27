@@ -136,10 +136,6 @@ func init() {
 	agentDescRevision := agentFields[6].Descriptor()
 	// agent.DefaultRevision holds the default value on creation for the revision field.
 	agent.DefaultRevision = agentDescRevision.Default.(int64)
-	// agentDescLegacy is the schema descriptor for legacy field.
-	agentDescLegacy := agentFields[7].Descriptor()
-	// agent.DefaultLegacy holds the default value on creation for the legacy field.
-	agent.DefaultLegacy = agentDescLegacy.Default.(bool)
 	auditeventMixin := schema.AuditEvent{}.Mixin()
 	auditeventMixinFields0 := auditeventMixin[0].Fields()
 	_ = auditeventMixinFields0

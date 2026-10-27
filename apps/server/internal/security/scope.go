@@ -14,9 +14,7 @@ type dataScope struct {
 
 const dataScopeKey contextKey = "memstation.data_scope"
 
-// PersonalScope is the compatibility boundary while the remaining memory data
-// plane is migrated. Explicit unsupported scopes fail closed, never widen to a
-// user-wide query. Missing scope is supported only for trusted legacy callers.
+// PersonalScope restricts an explicitly Personal operation to its owner.
 func PersonalScope(ctx context.Context, user, explicit string) (string, error) {
 	if user == "" {
 		return "", domain.ErrAccessDenied
@@ -57,7 +55,7 @@ func DataScope(ctx context.Context, user, explicit string) (string, error) {
 		workspace = scope.WorkspaceID
 	}
 	if access, ok := AccessFromContext(ctx); ok {
-		if access.UserID != user || access.WorkspaceID == "" || access.WorkspaceID != domain.PersonalWorkspaceID(user) && access.ScopeVersion < 2 {
+		if access.UserID != user || access.WorkspaceID == "" || access.ScopeVersion != 2 {
 			return "", domain.ErrAccessDenied
 		}
 		if scope, bound := ctx.Value(dataScopeKey).(dataScope); bound && scope.WorkspaceID != access.WorkspaceID {
@@ -81,7 +79,7 @@ func WithDataScope(ctx context.Context, user, workspace string, partitions ...st
 		partitions = []string{""}
 	}
 	if access, ok := AccessFromContext(ctx); ok {
-		if access.UserID != user || access.WorkspaceID != workspace || workspace != domain.PersonalWorkspaceID(user) && access.ScopeVersion < 2 {
+		if access.UserID != user || access.WorkspaceID != workspace || access.ScopeVersion != 2 {
 			return ctx, domain.ErrAccessDenied
 		}
 		for _, partition := range partitions {
@@ -114,7 +112,7 @@ func Partitions(ctx context.Context) []string {
 	if scope, ok := ctx.Value(dataScopeKey).(dataScope); ok {
 		return slices.Clone(scope.PartitionIDs)
 	}
-	if access, ok := AccessFromContext(ctx); ok && access.ScopeVersion >= 2 {
+	if access, ok := AccessFromContext(ctx); ok && access.ScopeVersion == 2 {
 		return slices.Clone(access.PartitionIDs)
 	}
 	return []string{""}
@@ -143,22 +141,15 @@ func WritePartition(ctx context.Context) string {
 	return ""
 }
 
-// ScopedIdentity preserves legacy Personal IDs while separating all new spaces
-// and private partitions. It is an identity component, not an authorization check.
+// ScopedIdentity includes the workspace and partition for every record.
 func ScopedIdentity(ctx context.Context, user string) string {
 	workspace := WorkspaceID(ctx, user)
 	partition := WritePartition(ctx)
-	if workspace == domain.PersonalWorkspaceID(user) && partition == "" {
-		return user
-	}
 	return domain.AccessID("scope", user+"\x00"+workspace+"\x00"+partition)
 }
 
 func WorkspaceIdentity(ctx context.Context, user string) string {
 	workspace := WorkspaceID(ctx, user)
-	if workspace == domain.PersonalWorkspaceID(user) {
-		return user
-	}
 	return domain.AccessID("workspace-scope", user+"\x00"+workspace)
 }
 

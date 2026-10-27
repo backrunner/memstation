@@ -9,13 +9,16 @@ import (
 	"testing"
 	"time"
 
+	conversationstore "memstation/apps/server/internal/store/sql/conversation"
+	mediastore "memstation/apps/server/internal/store/sql/media"
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
 	"github.com/go-chi/chi/v5"
 
 	"memstation/apps/server/internal/domain"
 	adminservice "memstation/apps/server/internal/service/admin"
 	memoryservice "memstation/apps/server/internal/service/memory"
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
-	sqlstore "memstation/apps/server/internal/store/sql"
 )
 
 type recordingTaskPublisher struct {
@@ -31,13 +34,13 @@ func TestAdminConversationDetailHandlerRespectsGenerationQuery(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conversations := sqlstore.NewInMemoryConversationRepository()
-	media := sqlstore.NewInMemoryMediaRepository()
-	memories := sqlstore.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	media := mediastore.NewInMemoryMediaRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	service := adminservice.NewService(conversations, media, memories, nil, nil, nil)
 	userID := "user-1"
 	conversationID := "conv-1"
-	currentGenerationID := memorygenservice.CurrentGenerationID(userID)
+	currentGenerationID := memorygenservice.CurrentGenerationID(domain.PersonalWorkspaceID(userID))
 	candidateGenerationID := "gen:rebuild:user-1"
 	now := time.Date(2026, 4, 9, 9, 0, 0, 0, time.UTC)
 
@@ -45,7 +48,7 @@ func TestAdminConversationDetailHandlerRespectsGenerationQuery(t *testing.T) {
 		ConversationID: conversationID,
 		UserID:         userID,
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		SummaryStatus:  domain.ProcessingStatusCompleted,
@@ -54,7 +57,7 @@ func TestAdminConversationDetailHandlerRespectsGenerationQuery(t *testing.T) {
 			"memory_generation_id": currentGenerationID,
 		},
 		CreatedAt: now,
-		UpdatedAt: now,
+		UpdatedAt: now, AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("persist conversation: %v", err)
 	}
@@ -115,7 +118,7 @@ func TestAdminConversationMemoryHandlerReturnsResolvedGenerationID(t *testing.T)
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	generations := memorygenservice.NewService(nil, "test-embedding")
 	activeGeneration, err := generations.GetActiveGeneration(ctx, "user-1")
 	if err != nil {
@@ -170,13 +173,13 @@ func TestAdminMemoryRebuildCreateHandlerRequiresPublisher(t *testing.T) {
 		UserID:         "user-1",
 		ConversationID: "conv-1",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		UpdatedAt:      time.Now().UTC(),
 		Messages: []domain.UnifiedMessage{
 			{Role: domain.RoleUser, Text: "retained snapshot for rebuild"},
-		},
+		}, AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("capture snapshot: %v", err)
 	}
@@ -208,13 +211,13 @@ func TestAdminMemoryRebuildCreateHandlerRejectsConversationAutoActivation(t *tes
 		UserID:         "user-1",
 		ConversationID: "conv-1",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		UpdatedAt:      time.Now().UTC(),
 		Messages: []domain.UnifiedMessage{
 			{Role: domain.RoleUser, Text: "retained snapshot for conversation-only rebuild"},
-		},
+		}, AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("capture snapshot: %v", err)
 	}

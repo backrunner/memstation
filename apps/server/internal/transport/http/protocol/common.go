@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"memstation/apps/server/internal/domain"
+	"memstation/apps/server/internal/provider"
 )
 
 type HeaderOptions struct {
@@ -160,7 +161,7 @@ func blockFromMap(item map[string]any) domain.ContentBlock {
 			BlobID:         anyString(item["blob_id"]),
 			SourceURL:      sourceURL,
 			ProviderFileID: providerFileID,
-			Filename:       firstNonEmpty(anyString(item["filename"]), anyString(metadata["filename"])),
+			Filename:       firstNonEmpty(anyString(item["filename"]), anyString(metadata["filename"]), provider.NativeSourceFilename(item)),
 			Text:           firstNonEmpty(anyString(item["text"]), anyString(metadata["caption"]), anyString(metadata["ocr_text"])),
 			Raw:            rawJSONText(item),
 			Metadata:       metadata,
@@ -173,7 +174,7 @@ func blockFromMap(item map[string]any) domain.ContentBlock {
 			BlobID:         anyString(item["blob_id"]),
 			SourceURL:      sourceURL,
 			ProviderFileID: providerFileID,
-			Filename:       firstNonEmpty(anyString(item["filename"]), anyString(metadata["filename"])),
+			Filename:       firstNonEmpty(anyString(item["filename"]), anyString(metadata["filename"]), provider.NativeSourceFilename(item)),
 			Text:           firstNonEmpty(anyString(item["text"]), anyString(metadata["transcript"]), anyString(metadata["summary"])),
 			Raw:            rawJSONText(item),
 			StartMS:        anyInt64(item["start_ms"]),
@@ -189,7 +190,7 @@ func blockFromMap(item map[string]any) domain.ContentBlock {
 			BlobID:         anyString(item["blob_id"]),
 			SourceURL:      sourceURL,
 			ProviderFileID: providerFileID,
-			Filename:       firstNonEmpty(anyString(item["filename"]), anyString(metadata["filename"])),
+			Filename:       firstNonEmpty(anyString(item["filename"]), anyString(metadata["filename"]), provider.NativeSourceFilename(item)),
 			Text:           firstNonEmpty(anyString(item["text"]), anyString(metadata["transcript"]), anyString(metadata["summary"])),
 			Raw:            rawJSONText(item),
 			StartMS:        anyInt64(item["start_ms"]),
@@ -205,7 +206,7 @@ func blockFromMap(item map[string]any) domain.ContentBlock {
 			BlobID:         anyString(item["blob_id"]),
 			SourceURL:      sourceURL,
 			ProviderFileID: providerFileID,
-			Filename:       firstNonEmpty(anyString(item["filename"]), anyString(metadata["filename"])),
+			Filename:       firstNonEmpty(anyString(item["filename"]), anyString(metadata["filename"]), provider.NativeSourceFilename(item)),
 			Text:           firstNonEmpty(anyString(item["text"]), anyString(metadata["document_text"]), anyString(metadata["parsed_text"])),
 			Raw:            rawJSONText(item),
 			PageIndex:      anyInt(item["page_index"]),
@@ -269,6 +270,9 @@ func metadataWithout(item map[string]any, keys ...string) map[string]any {
 }
 
 func imageSourceFields(item map[string]any) (string, string, string, map[string]any) {
+	if u, id, mimeType, ok := provider.NativeSourceFields(item, "image"); ok {
+		return u, id, mimeType, nil
+	}
 	metadata := metadataWithout(item, "type", "text", "image_url", "file_id", "mime_type", "detail")
 	if raw := item["image_url"]; raw != nil {
 		switch typed := raw.(type) {
@@ -283,6 +287,9 @@ func imageSourceFields(item map[string]any) (string, string, string, map[string]
 }
 
 func mediaSourceFields(item map[string]any, key string) (string, string, string, map[string]any) {
+	if u, id, mimeType, ok := provider.NativeSourceFields(item, key); ok {
+		return u, id, mimeType, nil
+	}
 	metadata := metadataWithout(item, "type", "text", key, "mime_type", "file_id", "source_url")
 	if raw := item[key]; raw != nil {
 		switch typed := raw.(type) {

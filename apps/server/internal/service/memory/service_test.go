@@ -8,10 +8,11 @@ import (
 	"testing"
 	"time"
 
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
 	"memstation/apps/server/internal/cache"
 	"memstation/apps/server/internal/domain"
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
-	sqlstore "memstation/apps/server/internal/store/sql"
 	vectorstore "memstation/apps/server/internal/store/vector"
 )
 
@@ -25,7 +26,7 @@ func TestServiceInvalidatesKeyMemoryListCacheByPrefix(t *testing.T) {
 	}
 	defer func() { _ = store.Close(context.Background()) }()
 
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	service := NewService(nil, repo)
 	service.SetKeyMemoryCache(store)
 
@@ -90,7 +91,7 @@ func TestServiceUpsertKeyMemoryCreatesSearchableEmbedding(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	vectors := vectorstore.NewPGVectorStore(nil)
 	engine := NewEngine(repo, vectors)
 	service := NewService(engine, repo)
@@ -128,7 +129,7 @@ func TestServiceUpsertKeyMemoryReusesExistingIdentity(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	vectors := vectorstore.NewPGVectorStore(nil)
 	engine := NewEngine(repo, vectors)
 	service := NewService(engine, repo)
@@ -207,7 +208,7 @@ func TestServiceUpsertKeyMemoryFindsExistingPastListLimit(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	vectors := vectorstore.NewPGVectorStore(nil)
 	engine := NewEngine(repo, vectors)
 	service := NewService(engine, repo)
@@ -280,7 +281,7 @@ func TestListDocumentsByConversationInGenerationDefaultsToActiveGeneration(t *te
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	service := NewService(nil, repo)
 	generations := memorygenservice.NewService(nil, "text-embedding-3-large")
 	service.SetGenerationService(generations)
@@ -331,7 +332,7 @@ func TestServiceUpsertKeyMemoryLinksConversationSources(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	service := NewService(nil, repo)
 
 	summary := domain.MemoryDocument{
@@ -394,7 +395,7 @@ func TestStoreDocumentSyncsFactSupersedesRelations(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 
 	older := domain.MemoryDocument{
 		ID:      "fact-old",
@@ -492,7 +493,7 @@ func TestStoreDocumentMarksExplicitlySupersededFacts(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 
 	older := domain.MemoryDocument{
 		ID:      "fact-location-old",
@@ -568,7 +569,7 @@ func TestServiceSearchFoldsSupersededFactToCurrentHead(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	engine := NewEngine(repo, nil)
 	service := NewService(engine, repo)
 
@@ -627,7 +628,7 @@ func TestServiceSearchFoldsLongFactLineageToCurrentHead(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	engine := NewEngine(repo, nil)
 	service := NewService(engine, repo)
 
@@ -672,7 +673,7 @@ func TestServiceGetDocumentHydratesRelatedAndSupportsUpdateDelete(t *testing.T) 
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	vectors := vectorstore.NewPGVectorStore(nil)
 	engine := NewEngine(repo, vectors)
 	service := NewService(engine, repo)
@@ -790,7 +791,7 @@ func TestSearchKeyMemoriesRanksByEffectiveScoreInsteadOfUpdatedAt(t *testing.T) 
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	service := NewService(nil, repo)
 
 	now := time.Now().UTC()
@@ -937,6 +938,27 @@ func TestMergeInjectionMemoriesUsesTypePriority(t *testing.T) {
 	}
 }
 
+func TestInjectionBudgetPreservesEpisodesBeforeSummariesAndImpressions(t *testing.T) {
+	t.Parallel()
+
+	// Only the pinned profile and one recalled item fit. A supported episode
+	// must not fall into the unknown-type bucket and lose to a generic summary.
+	profile := domain.MemoryDocument{ID: "profile", NodeID: "profile-node", Type: domain.MemoryTypeKeyMemory, Content: "profile", EffectiveScore: .01}
+	episode := domain.MemoryDocument{ID: "episode", NodeID: "episode-node", Type: domain.MemoryTypeEpisode, Content: "episode", EffectiveScore: .8}
+	merged := mergeInjectionMemories([]domain.MemoryDocument{
+		{ID: "summary", NodeID: "summary-node", Type: domain.MemoryTypeSummary, Content: "summary", EffectiveScore: .99},
+		{ID: "impression", NodeID: "impression-node", Type: domain.MemoryTypeImpression, Content: "impress", EffectiveScore: .99},
+		episode,
+	}, []domain.MemoryDocument{profile})
+	selected := packInjectionMemories(merged, estimateMemoryTokens(profile)+estimateMemoryTokens(episode))
+	if len(selected) != 2 || selected[0].ID != profile.ID || selected[1].ID != episode.ID {
+		t.Fatalf("expected pinned profile and episode within the budget, got %+v", selected)
+	}
+	if prompt := buildInjectionSystemPrompt(selected); !strings.Contains(prompt, episode.Content) {
+		t.Fatalf("selected episode missing from injected prompt: %q", prompt)
+	}
+}
+
 func TestBuildInjectionSystemPromptIncludesGenericAgentMemorySections(t *testing.T) {
 	t.Parallel()
 
@@ -1030,7 +1052,7 @@ func TestDeleteDocumentIsIdempotentForMissingSegment(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 
 	if err := repo.DeleteDocument(ctx, "user-1", "segment:missing:000", domain.MemoryTypeSegment); err != nil {
 		t.Fatalf("expected deleting a missing segment document to be idempotent, got %v", err)

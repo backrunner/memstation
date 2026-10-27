@@ -17,14 +17,14 @@ func TestCaptureSourceSnapshotVersionsConversationHistory(t *testing.T) {
 		UserID:         "user-1",
 		ConversationID: "conv-1",
 		RequestFormat:  "chat_completions",
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		UpdatedAt:      time.Now().UTC(),
 		Messages: []domain.UnifiedMessage{
 			{Role: domain.RoleUser, Text: "hello"},
 			{Role: domain.RoleAssistant, Text: "hi there"},
-		},
+		}, AgentID: "fixture-agent",
 	}
 
 	first, created, err := service.CaptureSourceSnapshot(ctx, conversation)
@@ -71,7 +71,7 @@ func TestCaptureSourceSnapshotPreservesPartsAndArtifacts(t *testing.T) {
 		UserID:         "user-1",
 		ConversationID: "conv-artifact",
 		RequestFormat:  "chat_completions",
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		UpdatedAt:      now,
@@ -101,7 +101,7 @@ func TestCaptureSourceSnapshotPreservesPartsAndArtifacts(t *testing.T) {
 			Confidence:     0.91,
 			CreatedAt:      now,
 			UpdatedAt:      now,
-		}},
+		}}, AgentID: "fixture-agent",
 	}
 
 	first, created, err := service.CaptureSourceSnapshot(ctx, conversation)
@@ -149,13 +149,13 @@ func TestCreateRebuildGenerationUsesLatestRetainedSnapshots(t *testing.T) {
 			UserID:         "user-1",
 			ConversationID: conversationID,
 			RequestFormat:  "chat_completions",
-			Provider:       domain.ProviderOpenAI,
+			Provider:       domain.ProviderOpenAICompatible,
 			Mode:           domain.ModeTransparent,
 			FinalizeStatus: domain.FinalizeStatusEnded,
 			UpdatedAt:      time.Now().UTC(),
 			Messages: []domain.UnifiedMessage{
 				{Role: domain.RoleUser, Text: conversationID},
-			},
+			}, AgentID: "fixture-agent",
 		}); err != nil {
 			t.Fatalf("capture snapshot for %s: %v", conversationID, err)
 		}
@@ -189,13 +189,13 @@ func TestActivateGenerationRequiresCompletedBuild(t *testing.T) {
 		UserID:         "user-1",
 		ConversationID: "conv-1",
 		RequestFormat:  "chat_completions",
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		UpdatedAt:      time.Now().UTC(),
 		Messages: []domain.UnifiedMessage{
 			{Role: domain.RoleUser, Text: "keep a retained snapshot"},
-		},
+		}, AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("capture snapshot: %v", err)
 	}
@@ -243,13 +243,13 @@ func TestCreateConversationScopedRebuildRejectsAutoActivation(t *testing.T) {
 		UserID:         "user-1",
 		ConversationID: "conv-1",
 		RequestFormat:  "chat_completions",
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		UpdatedAt:      time.Now().UTC(),
 		Messages: []domain.UnifiedMessage{
 			{Role: domain.RoleUser, Text: "retained snapshot for a conversation-scoped rebuild"},
-		},
+		}, AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("capture snapshot: %v", err)
 	}
@@ -273,13 +273,13 @@ func TestConversationScopedGenerationCannotBeActivated(t *testing.T) {
 		UserID:         "user-1",
 		ConversationID: "conv-1",
 		RequestFormat:  "chat_completions",
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		UpdatedAt:      time.Now().UTC(),
 		Messages: []domain.UnifiedMessage{
 			{Role: domain.RoleUser, Text: "retained snapshot for a conversation candidate"},
-		},
+		}, AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("capture snapshot: %v", err)
 	}
@@ -312,13 +312,13 @@ func TestIsCurrentGenerationSourceTracksLatestSnapshotPerConversation(t *testing
 		UserID:         "user-1",
 		ConversationID: "conv-1",
 		RequestFormat:  "chat_completions",
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		UpdatedAt:      time.Now().UTC(),
 		Messages: []domain.UnifiedMessage{
 			{Role: domain.RoleUser, Text: "initial snapshot"},
-		},
+		}, AgentID: "fixture-agent",
 	}
 
 	first, _, err := service.CaptureSourceSnapshot(ctx, conversation)
@@ -380,13 +380,13 @@ func TestCompletedGenerationDoesNotBlockOrAbsorbLaterRebuilds(t *testing.T) {
 		UserID:         "user-1",
 		ConversationID: "conv-1",
 		RequestFormat:  "chat_completions",
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		UpdatedAt:      time.Now().UTC(),
 		Messages: []domain.UnifiedMessage{
 			{Role: domain.RoleUser, Text: "first retained conversation"},
-		},
+		}, AgentID: "fixture-agent",
 	}
 
 	first, _, err := service.CaptureSourceSnapshot(ctx, firstConversation)
@@ -422,13 +422,13 @@ func TestCompletedGenerationDoesNotBlockOrAbsorbLaterRebuilds(t *testing.T) {
 		UserID:         "user-1",
 		ConversationID: "conv-2",
 		RequestFormat:  "chat_completions",
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		UpdatedAt:      time.Now().UTC(),
 		Messages: []domain.UnifiedMessage{
 			{Role: domain.RoleUser, Text: "new retained conversation after candidate completion"},
-		},
+		}, AgentID: "fixture-agent",
 	})
 	if err != nil {
 		t.Fatalf("capture second snapshot: %v", err)

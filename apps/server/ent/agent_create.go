@@ -100,20 +100,6 @@ func (_c *AgentCreate) SetNillableRevision(v *int64) *AgentCreate {
 	return _c
 }
 
-// SetLegacy sets the "legacy" field.
-func (_c *AgentCreate) SetLegacy(v bool) *AgentCreate {
-	_c.mutation.SetLegacy(v)
-	return _c
-}
-
-// SetNillableLegacy sets the "legacy" field if the given value is not nil.
-func (_c *AgentCreate) SetNillableLegacy(v *bool) *AgentCreate {
-	if v != nil {
-		_c.SetLegacy(*v)
-	}
-	return _c
-}
-
 // SetID sets the "id" field.
 func (_c *AgentCreate) SetID(v string) *AgentCreate {
 	_c.mutation.SetID(v)
@@ -171,10 +157,6 @@ func (_c *AgentCreate) defaults() {
 		v := agent.DefaultRevision
 		_c.mutation.SetRevision(v)
 	}
-	if _, ok := _c.mutation.Legacy(); !ok {
-		v := agent.DefaultLegacy
-		_c.mutation.SetLegacy(v)
-	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -202,9 +184,6 @@ func (_c *AgentCreate) check() error {
 	}
 	if _, ok := _c.mutation.Revision(); !ok {
 		return &ValidationError{Name: "revision", err: errors.New(`ent: missing required field "Agent.revision"`)}
-	}
-	if _, ok := _c.mutation.Legacy(); !ok {
-		return &ValidationError{Name: "legacy", err: errors.New(`ent: missing required field "Agent.legacy"`)}
 	}
 	return nil
 }
@@ -272,10 +251,6 @@ func (_c *AgentCreate) createSpec() (*Agent, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Revision(); ok {
 		_spec.SetField(agent.FieldRevision, field.TypeInt64, value)
 		_node.Revision = value
-	}
-	if value, ok := _c.mutation.Legacy(); ok {
-		_spec.SetField(agent.FieldLegacy, field.TypeBool, value)
-		_node.Legacy = value
 	}
 	return _node, _spec
 }

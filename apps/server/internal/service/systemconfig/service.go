@@ -28,7 +28,6 @@ type Snapshot struct {
 	RerankCandidateMultiplier           int             `json:"rerank_candidate_multiplier"`
 	RerankMinCandidates                 int             `json:"rerank_min_candidates"`
 	RerankMaxCandidates                 int             `json:"rerank_max_candidates"`
-	RerankBlendWeight                   float64         `json:"rerank_blend_weight"`
 	MemoryRelationMaxHops               int             `json:"memory_relation_max_hops"`
 	MemoryRelationHopDecayLambda        float64         `json:"memory_relation_hop_decay_lambda"`
 	MemoryRelationHopDecayExponent      float64         `json:"memory_relation_hop_decay_exponent"`
@@ -69,7 +68,7 @@ type LiveApplier struct {
 	SetProviderTimeout         func(time.Duration)
 	SetMaxContextTokens        func(int)
 	SetMaxInjectionTokens      func(int)
-	SetRerankConfig            func(model string, candidateMultiplier, minCandidates, maxCandidates int, blendWeight float64)
+	SetRerankConfig            func(model string, candidateMultiplier, minCandidates, maxCandidates int)
 	SetMemoryRelationRecall    func(maxHops int, decayLambda, decayExponent float64)
 	SetRateLimit               func(rps, burst int)
 	SetCacheTTL                func(time.Duration)
@@ -90,7 +89,6 @@ type Overrides struct {
 	RerankCandidateMultiplier           *int
 	RerankMinCandidates                 *int
 	RerankMaxCandidates                 *int
-	RerankBlendWeight                   *float64
 	MemoryRelationMaxHops               *int
 	MemoryRelationHopDecayLambda        *float64
 	MemoryRelationHopDecayExponent      *float64
@@ -138,7 +136,6 @@ func DefaultsFromConfig(cfg bootstrap.Config) Snapshot {
 		RerankCandidateMultiplier:           cfg.RerankCandidateMultiplier,
 		RerankMinCandidates:                 cfg.RerankMinCandidates,
 		RerankMaxCandidates:                 cfg.RerankMaxCandidates,
-		RerankBlendWeight:                   cfg.RerankBlendWeight,
 		MemoryRelationMaxHops:               cfg.MemoryRelationMaxHops,
 		MemoryRelationHopDecayLambda:        cfg.MemoryRelationHopDecayLambda,
 		MemoryRelationHopDecayExponent:      cfg.MemoryRelationHopDecayExponent,
@@ -289,13 +286,11 @@ func (s *Service) Update(ctx context.Context, fields map[string]any) (map[string
 			desired.RerankCandidateMultiplier,
 			desired.RerankMinCandidates,
 			desired.RerankMaxCandidates,
-			desired.RerankBlendWeight,
 		)
 		live.RerankModel = desired.RerankModel
 		live.RerankCandidateMultiplier = desired.RerankCandidateMultiplier
 		live.RerankMinCandidates = desired.RerankMinCandidates
 		live.RerankMaxCandidates = desired.RerankMaxCandidates
-		live.RerankBlendWeight = desired.RerankBlendWeight
 	}
 	if hooks.SetMemoryRelationRecall != nil {
 		hooks.SetMemoryRelationRecall(desired.MemoryRelationMaxHops, desired.MemoryRelationHopDecayLambda, desired.MemoryRelationHopDecayExponent)
@@ -353,7 +348,6 @@ func (s Snapshot) AsMap() map[string]any {
 		"rerank_candidate_multiplier":             s.RerankCandidateMultiplier,
 		"rerank_min_candidates":                   s.RerankMinCandidates,
 		"rerank_max_candidates":                   s.RerankMaxCandidates,
-		"rerank_blend_weight":                     s.RerankBlendWeight,
 		"memory_relation_max_hops":                s.MemoryRelationMaxHops,
 		"memory_relation_hop_decay_lambda":        s.MemoryRelationHopDecayLambda,
 		"memory_relation_hop_decay_exponent":      s.MemoryRelationHopDecayExponent,
@@ -391,7 +385,6 @@ func (s Snapshot) ApplyConfig(cfg bootstrap.Config) bootstrap.Config {
 	cfg.RerankCandidateMultiplier = s.RerankCandidateMultiplier
 	cfg.RerankMinCandidates = s.RerankMinCandidates
 	cfg.RerankMaxCandidates = s.RerankMaxCandidates
-	cfg.RerankBlendWeight = s.RerankBlendWeight
 	cfg.MemoryRelationMaxHops = s.MemoryRelationMaxHops
 	cfg.MemoryRelationHopDecayLambda = s.MemoryRelationHopDecayLambda
 	cfg.MemoryRelationHopDecayExponent = s.MemoryRelationHopDecayExponent
@@ -462,9 +455,6 @@ func (o Overrides) Apply(defaults Snapshot) Snapshot {
 	}
 	if o.RerankMaxCandidates != nil {
 		snapshot.RerankMaxCandidates = *o.RerankMaxCandidates
-	}
-	if o.RerankBlendWeight != nil {
-		snapshot.RerankBlendWeight = *o.RerankBlendWeight
 	}
 	if o.MemoryRelationMaxHops != nil {
 		snapshot.MemoryRelationMaxHops = *o.MemoryRelationMaxHops
@@ -634,7 +624,7 @@ func metadataForOverrides(overrides Overrides) map[string]FieldMeta {
 			ApplyMode:   "live",
 			Source:      sourceFor(overrides.RerankModel != nil),
 			Category:    "memory",
-			Description: "Reranker model reference with provider prefix, for example cohere:rerank-v3.5 or jina:jina-reranker-v2-base-multilingual.",
+			Description: "Reranker model reference: cohere:model, jina:model, openrouter:vendor/model or rerank_compatible:model. Leave empty to disable.",
 		},
 		"rerank_candidate_multiplier": {
 			ApplyMode:   "live",
@@ -652,13 +642,7 @@ func metadataForOverrides(overrides Overrides) map[string]FieldMeta {
 			ApplyMode:   "live",
 			Source:      sourceFor(overrides.RerankMaxCandidates != nil),
 			Category:    "memory",
-			Description: "Maximum number of vector candidates allowed into the reranking stage before score blending.",
-		},
-		"rerank_blend_weight": {
-			ApplyMode:   "live",
-			Source:      sourceFor(overrides.RerankBlendWeight != nil),
-			Category:    "memory",
-			Description: "Blend factor applied when combining semantic ranking with reranker scores. Set to 0 to disable score blending while keeping the model configured.",
+			Description: "Maximum number of retrieved candidates submitted to the reranker.",
 		},
 		"memory_relation_max_hops": {
 			ApplyMode:   "live",
@@ -881,12 +865,6 @@ func applyFieldOverrides(base Overrides, fields map[string]any) (Overrides, erro
 				return Overrides{}, err
 			}
 			next.RerankMaxCandidates = value
-		case "rerank_blend_weight":
-			value, err := float64Override(raw)
-			if err != nil {
-				return Overrides{}, err
-			}
-			next.RerankBlendWeight = value
 		case "memory_relation_max_hops":
 			value, err := intOverride(raw)
 			if err != nil {
@@ -1035,6 +1013,8 @@ func applyFieldOverrides(base Overrides, fields map[string]any) (Overrides, erro
 				return Overrides{}, err
 			}
 			next.MultimodalAllowedMIMETypes = value
+		default:
+			return Overrides{}, fmt.Errorf("unsupported runtime field: %s", key)
 		}
 	}
 	if next.RerankCandidateMultiplier != nil && (*next.RerankCandidateMultiplier < 1 || *next.RerankCandidateMultiplier > 16) {
@@ -1048,9 +1028,6 @@ func applyFieldOverrides(base Overrides, fields map[string]any) (Overrides, erro
 	}
 	if next.RerankMinCandidates != nil && next.RerankMaxCandidates != nil && *next.RerankMaxCandidates < *next.RerankMinCandidates {
 		return Overrides{}, errors.New("rerank_max_candidates must be greater than or equal to rerank_min_candidates")
-	}
-	if next.RerankBlendWeight != nil && (*next.RerankBlendWeight < 0 || *next.RerankBlendWeight > 1) {
-		return Overrides{}, errors.New("rerank_blend_weight must be between 0 and 1")
 	}
 	return next, nil
 }
@@ -1214,29 +1191,8 @@ func validateRerankModelReference(value string) error {
 		return nil
 	}
 
-	providerPart, modelPart, ok := strings.Cut(value, ":")
-	if !ok {
-		providerPart, modelPart, ok = strings.Cut(value, "/")
-	}
-	if !ok {
-		return errors.New("rerank_model must include a provider prefix like cohere:model or jina:model")
-	}
-
-	providerName := domain.NormalizeProvider(providerPart)
-	supported := false
-	for _, candidate := range domain.RerankProviders() {
-		if providerName == candidate {
-			supported = true
-			break
-		}
-	}
-	if !supported {
-		return fmt.Errorf("rerank_model provider %q is not supported", providerName)
-	}
-	if strings.TrimSpace(modelPart) == "" {
-		return errors.New("rerank_model model name is required")
-	}
-	return nil
+	_, _, err := domain.ParseRerankModel(value)
+	return err
 }
 
 func validateSnapshot(snapshot Snapshot) error {
@@ -1278,9 +1234,6 @@ func validateSnapshot(snapshot Snapshot) error {
 	}
 	if snapshot.RerankMaxCandidates < snapshot.RerankMinCandidates {
 		return errors.New("rerank_max_candidates must be greater than or equal to rerank_min_candidates")
-	}
-	if snapshot.RerankBlendWeight < 0 || snapshot.RerankBlendWeight > 1 {
-		return errors.New("rerank_blend_weight must be between 0 and 1")
 	}
 	if err := validateCORSAllowedOrigins(&snapshot.CORSAllowedOrigins); err != nil {
 		return err
@@ -1331,9 +1284,6 @@ func overridesToPersistedMap(overrides Overrides) (map[string]any, error) {
 	}
 	if value := nullableInt(overrides.RerankMaxCandidates); value != nil {
 		out["rerank_max_candidates"] = value
-	}
-	if value := nullableFloat64(overrides.RerankBlendWeight); value != nil {
-		out["rerank_blend_weight"] = value
 	}
 	if value := nullableInt(overrides.MemoryRelationMaxHops); value != nil {
 		out["memory_relation_max_hops"] = value

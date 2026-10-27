@@ -47,7 +47,7 @@ func TestServiceEmbedsWithOpenAICompatibleEndpoint(t *testing.T) {
 	defer server.Close()
 
 	service := NewService(provider.StaticConfigResolver{
-		domain.ProviderOpenAI: {
+		domain.ProviderOpenAICompatible: {
 			APIKey:  "sk-global",
 			BaseURL: server.URL + "/v1",
 		},

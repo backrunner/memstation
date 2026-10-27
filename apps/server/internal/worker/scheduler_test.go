@@ -8,16 +8,17 @@ import (
 	"testing"
 	"time"
 
+	conversationstore "memstation/apps/server/internal/store/sql/conversation"
+
 	conversationservice "memstation/apps/server/internal/service/conversation"
-	sqlstore "memstation/apps/server/internal/store/sql"
 )
 
 func TestSchedulerRunStopsOnContextCancelAndTracksTimeoutWindow(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	relay := NewRelay(logger, sqlstore.NewInMemoryOutboxRepository(), NewPublisher(logger, nil))
-	conversations := conversationservice.NewService(sqlstore.NewInMemoryConversationRepository(), sqlstore.NewInMemoryOutboxRepository(), 4, 256)
+	relay := NewRelay(logger, conversationstore.NewInMemoryOutboxRepository(), NewPublisher(logger, nil))
+	conversations := conversationservice.NewService(conversationstore.NewInMemoryConversationRepository(), conversationstore.NewInMemoryOutboxRepository(), 4, 256)
 	scheduler := NewScheduler(logger, relay, conversations, 5*time.Minute)
 
 	if got := scheduler.currentTimeoutWindow(); got != 5*time.Minute {

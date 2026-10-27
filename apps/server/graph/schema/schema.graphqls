@@ -18,8 +18,6 @@ type Query {
 }
 
 type Mutation {
-  createAPIKey(name: String!): APIKey!
-  revokeAPIKey(id: ID!): Boolean!
   updateUserSetting(chatModel: String, summaryModel: String, analysisModel: String, embeddingModel: String, toolWriteEnabled: Boolean, maxInjectionTokens: Int): UserSetting!
   createKeyMemory(key: String!, value: String!, category: String): KeyMemory!
   updateKeyMemory(id: ID!, value: String!): KeyMemory!

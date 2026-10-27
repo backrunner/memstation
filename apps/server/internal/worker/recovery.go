@@ -11,11 +11,16 @@ import (
 	"sync"
 	"time"
 
+	conversationstore "memstation/apps/server/internal/store/sql/conversation"
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
+	"memstation/apps/server/internal/ports"
+	"memstation/apps/server/internal/security"
+
 	"github.com/hibiken/asynq"
 
 	"memstation/apps/server/internal/domain"
 	analysisservice "memstation/apps/server/internal/service/analysis"
-	sqlstore "memstation/apps/server/internal/store/sql"
 	vectorstore "memstation/apps/server/internal/store/vector"
 	"memstation/apps/server/internal/testutil/memoryllmfixture"
 )
@@ -92,13 +97,14 @@ func RunRecoveryDrill(ctx context.Context, options RecoveryOptions) (RecoveryRep
 	ctx, cancel := context.WithTimeout(ctx, options.Timeout)
 	defer cancel()
 
-	conversations := sqlstore.NewInMemoryConversationRepository()
-	memories := sqlstore.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	vectors := vectorstore.NewPGVectorStore(nil)
-	outbox := sqlstore.NewInMemoryOutboxRepository()
+	outbox := conversationstore.NewInMemoryOutboxRepository()
 	queue := newRecoveryQueue(options.QueueBuffer)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	services := Services{
+		TaskAuthority:  recoveryTaskAuthority{conversations, memories},
 		Conversations:  conversations,
 		Memories:       memories,
 		Vectors:        vectors,
@@ -110,6 +116,7 @@ func RunRecoveryDrill(ctx context.Context, options RecoveryOptions) (RecoveryRep
 		},
 	}
 	relay := NewRelay(logger, outbox, queue)
+	relay.SetTaskAuthority(services.TaskAuthority)
 	handlers := map[string]func(context.Context, *asynq.Task) error{
 		TypeConversationFinalize: handleConversationFinalize(logger, services),
 		TypeSummaryGenerate:      handleSummaryGenerate(logger, services),
@@ -199,6 +206,7 @@ func RunRecoveryDrill(ctx context.Context, options RecoveryOptions) (RecoveryRep
 	factDocs := countRecoveryDocuments(ctx, memories, userIDs, domain.MemoryTypeFact)
 	impressionDocs := countRecoveryDocuments(ctx, memories, userIDs, domain.MemoryTypeImpression)
 	genericDocs := countRecoveryDocuments(ctx, memories, userIDs,
+		domain.MemoryTypeEpisode,
 		domain.MemoryTypeEvent,
 		domain.MemoryTypeTask,
 		domain.MemoryTypeProcedure,
@@ -269,7 +277,7 @@ func ValidateRecoveryReport(report RecoveryReport, maxDrain time.Duration) error
 	return nil
 }
 
-func seedRecoveryFixtures(ctx context.Context, conversations *sqlstore.InMemoryConversationRepository, outbox *sqlstore.InMemoryOutboxRepository, options RecoveryOptions) ([]string, error) {
+func seedRecoveryFixtures(ctx context.Context, conversations *conversationstore.InMemoryConversationRepository, outbox *conversationstore.InMemoryOutboxRepository, options RecoveryOptions) ([]string, error) {
 	now := time.Now().UTC()
 	userIDs := make([]string, 0, options.Conversations)
 	for idx := 0; idx < options.Conversations; idx++ {
@@ -285,9 +293,10 @@ func seedRecoveryFixtures(ctx context.Context, conversations *sqlstore.InMemoryC
 		}
 		if err := conversations.PersistExchange(ctx, domain.ConversationRecord{
 			ConversationID: conversationID,
+			AgentID:        "recovery-drill-agent",
 			UserID:         userID,
 			RequestFormat:  string(domain.ProtocolOpenAIChat),
-			Provider:       domain.ProviderOpenAI,
+			Provider:       domain.ProviderOpenAICompatible,
 			Mode:           domain.ModeInject,
 			FinalizeStatus: domain.FinalizeStatusActive,
 			SummaryStatus:  domain.ProcessingStatusPending,
@@ -305,6 +314,7 @@ func seedRecoveryFixtures(ctx context.Context, conversations *sqlstore.InMemoryC
 			AggregateType: "conversation",
 			AggregateID:   conversationID,
 			Payload: map[string]any{
+				"schema_version": 2, "workspace_id": domain.PersonalWorkspaceID(userID), "partition_id": "", "agent_id": "recovery-drill-agent",
 				"conversation_id": conversationID,
 				"user_id":         userID,
 				"finalize_reason": "backlog_recovery_drill",
@@ -488,7 +498,7 @@ func maxFloat(values []float64) float64 {
 	return maxValue
 }
 
-func countRecoveryConversations(ctx context.Context, conversations *sqlstore.InMemoryConversationRepository, userIDs []string) (int, int, int, error) {
+func countRecoveryConversations(ctx context.Context, conversations *conversationstore.InMemoryConversationRepository, userIDs []string) (int, int, int, error) {
 	completedConversations := 0
 	summaryCompleted := 0
 	analysisCompleted := 0
@@ -512,7 +522,7 @@ func countRecoveryConversations(ctx context.Context, conversations *sqlstore.InM
 	return completedConversations, summaryCompleted, analysisCompleted, nil
 }
 
-func countRecoveryDocuments(ctx context.Context, memories *sqlstore.InMemoryMemoryRepository, userIDs []string, memoryTypes ...domain.MemoryType) int {
+func countRecoveryDocuments(ctx context.Context, memories *memorystore.InMemoryMemoryRepository, userIDs []string, memoryTypes ...domain.MemoryType) int {
 	count := 0
 	for _, userID := range userIDs {
 		items, err := memories.ListDocuments(ctx, userID, memoryTypes, 128)
@@ -523,7 +533,7 @@ func countRecoveryDocuments(ctx context.Context, memories *sqlstore.InMemoryMemo
 	return count
 }
 
-func countRecoveryKeyMemories(ctx context.Context, memories *sqlstore.InMemoryMemoryRepository, userIDs []string) int {
+func countRecoveryKeyMemories(ctx context.Context, memories *memorystore.InMemoryMemoryRepository, userIDs []string) int {
 	count := 0
 	for _, userID := range userIDs {
 		items, err := memories.ListKeyMemories(ctx, userID, 10)
@@ -539,4 +549,34 @@ func maxInt(left, right int) int {
 		return left
 	}
 	return right
+}
+
+type recoveryTaskAuthority struct {
+	conversations ports.ConversationRepository
+	memories      ports.MemoryRepository
+}
+
+func (a recoveryTaskAuthority) ValidateMemoryTask(ctx context.Context, s domain.MemoryTaskScope) error {
+	if s.UserID == "" || s.WorkspaceID != domain.PersonalWorkspaceID(s.UserID) || s.PartitionID != "" {
+		return domain.ErrAccessDenied
+	}
+	bound, err := security.WithDataScope(ctx, s.UserID, s.WorkspaceID)
+	if err != nil {
+		return err
+	}
+	if s.ConversationID != "" {
+		_, err = a.conversations.GetConversation(bound, s.UserID, s.ConversationID)
+		return err
+	}
+	if s.NodeID != "" {
+		docs, err := a.memories.ListDocumentsByNodeIDs(bound, s.UserID, []string{s.NodeID})
+		if err != nil {
+			return err
+		}
+		if len(docs) != 1 {
+			return domain.ErrAccessDenied
+		}
+		return nil
+	}
+	return domain.ErrAccessDenied
 }

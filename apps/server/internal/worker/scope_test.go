@@ -2,20 +2,22 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
+
+	conversationstore "memstation/apps/server/internal/store/sql/conversation"
 
 	"github.com/hibiken/asynq"
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/security"
-	sqlstore "memstation/apps/server/internal/store/sql"
 )
 
 func TestTaskScopeValidationPrecedesSideEffects(t *testing.T) {
 	ctx := context.Background()
-	services := Services{Conversations: conversationsFromRecords(t, "owner", "conversation")}
-	base := map[string]any{"schema_version": 1, "user_id": "owner", "workspace_id": domain.PersonalWorkspaceID("owner"), "conversation_id": "conversation", "agent_id": domain.LegacyAgentID("owner")}
+	services := Services{Conversations: conversationsFromRecords(t, "owner", "conversation"), TaskAuthority: fixtureTaskAuthority{}}
+	base := map[string]any{"schema_version": 2, "user_id": "owner", "workspace_id": domain.PersonalWorkspaceID("owner"), "conversation_id": "conversation", "agent_id": "fixture-agent"}
 	bound, err := bindTaskScope(ctx, newTask(t, TypeConversationFinalize, base), services)
 	if err != nil {
 		t.Fatal(err)
@@ -24,7 +26,7 @@ func TestTaskScopeValidationPrecedesSideEffects(t *testing.T) {
 		t.Fatal("worker context allowed another owner")
 	}
 	for _, change := range []map[string]any{
-		{"workspace_id": "another"}, {"user_id": "another"}, {"agent_id": "another"}, {"schema_version": 2}, {"schema_version": -1}, {"schema_version": 1, "workspace_id": ""}, {"workspace_id": 123}, {"user_id": ""}, {"conversation_id": "missing"},
+		{"workspace_id": "another"}, {"user_id": "another"}, {"agent_id": "another"}, {"schema_version": 1}, {"schema_version": -1}, {"schema_version": 1, "workspace_id": ""}, {"workspace_id": 123}, {"user_id": ""}, {"conversation_id": "missing"},
 	} {
 		payload := cloneMap(base)
 		for k, v := range change {
@@ -35,12 +37,13 @@ func TestTaskScopeValidationPrecedesSideEffects(t *testing.T) {
 		}
 	}
 	legacy := map[string]any{"user_id": "owner", "conversation_id": "conversation"}
-	if _, err = bindTaskScope(ctx, newTask(t, TypeConversationFinalize, legacy), services); err != nil {
-		t.Fatalf("legacy Personal job: %v", err)
+	raw, _ := json.Marshal(legacy)
+	if _, err = bindTaskScope(ctx, asynq.NewTask(TypeConversationFinalize, raw), services); !errors.Is(err, asynq.SkipRetry) {
+		t.Fatalf("unversioned task accepted: %v", err)
 	}
 	// Every registered handler rejects an unsupported workspace before touching
 	// nil dependencies or invoking external analysis, embedding or media services.
-	mux := NewServeMux(nilLogger(), Services{})
+	mux := NewServeMux(nilLogger(), Services{TaskAuthority: fixtureTaskAuthority{}})
 	for _, kind := range []string{TypeConversationFinalize, TypeMediaExtract, TypeSummaryGenerate, TypeAnalysisExtract, TypeEmbeddingGenerate, TypeEmbeddingDelete, TypeKeyMemoryGraphSync, TypeKeyMemoryReconcile, TypeMemoryRebuildConversation, TypeMemoryRebuildActivate} {
 		err = mux.ProcessTask(ctx, newTask(t, kind, map[string]any{"user_id": "owner", "workspace_id": "other", "schema_version": 1}))
 		if !errors.Is(err, asynq.SkipRetry) {
@@ -63,7 +66,7 @@ func TestTaskPublicationPreservesScopeAndStableIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if prepared.UniqueKey != retry.UniqueKey || prepared.Payload["schema_version"] != 1 || prepared.Payload["workspace_id"] != domain.PersonalWorkspaceID("owner") {
+	if prepared.UniqueKey != retry.UniqueKey || prepared.Payload["schema_version"] != 2 || prepared.Payload["workspace_id"] != domain.PersonalWorkspaceID("owner") {
 		t.Fatal("unstable/unscoped task")
 	}
 	if _, ok := task.Payload["workspace_id"]; ok {
@@ -88,7 +91,7 @@ func TestTaskPublicationPreservesScopeAndStableIdentity(t *testing.T) {
 
 func TestRelayRejectsPayloadOwnerSubstitution(t *testing.T) {
 	ctx := context.Background()
-	outbox := sqlstore.NewInMemoryOutboxRepository()
+	outbox := conversationstore.NewInMemoryOutboxRepository()
 	publisher := &recordingPublisher{}
 	if err := outbox.Enqueue(ctx, domain.OutboxEvent{ID: "bad-owner", UserID: "owner", EventType: TypeEmbeddingDelete, Payload: map[string]any{"user_id": "another", "node_id": "node"}}); err != nil {
 		t.Fatal(err)
@@ -123,7 +126,7 @@ func TestFinalizeRetryPublishesQueuedSummary(t *testing.T) {
 	ctx := context.Background()
 	repo := conversationsFromRecords(t, "owner", "conversation")
 	publisher := &failFirstPublisher{}
-	handler := handleConversationFinalize(nilLogger(), Services{Conversations: repo, Publisher: publisher})
+	handler := handleConversationFinalize(nilLogger(), Services{Conversations: repo, Publisher: publisher, TaskAuthority: fixtureTaskAuthority{}})
 	task := newTask(t, TypeConversationFinalize, map[string]any{"user_id": "owner", "conversation_id": "conversation", "finalize_reason": "explicit", "finalize_status": "ended"})
 	if err := handler(ctx, task); !errors.Is(err, ErrQueueUnavailable) {
 		t.Fatalf("first publish: %v", err)
@@ -133,5 +136,18 @@ func TestFinalizeRetryPublishesQueuedSummary(t *testing.T) {
 	}
 	if len(publisher.tasks) != 1 || publisher.tasks[0].Type != TypeSummaryGenerate {
 		t.Fatal("queued state swallowed retry after publish failure")
+	}
+}
+
+func TestTaskPublisherRejectsExplicitRetiredVersions(t *testing.T) {
+	ctx, err := security.WithPersonalDataScope(context.Background(), "owner", domain.PersonalWorkspaceID("owner"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, version := range []int{0, 1, 3} {
+		_, err = prepareScopedTask(ctx, domain.TaskMessage{Type: TypeSummaryGenerate, Payload: map[string]any{"schema_version": version, "user_id": "owner", "workspace_id": domain.PersonalWorkspaceID("owner")}})
+		if !errors.Is(err, domain.ErrAccessDenied) {
+			t.Fatalf("publisher rewrote unsupported version %d: %v", version, err)
+		}
 	}
 }

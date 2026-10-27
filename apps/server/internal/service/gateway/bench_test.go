@@ -6,12 +6,14 @@ import (
 	"testing"
 	"time"
 
+	conversationstore "memstation/apps/server/internal/store/sql/conversation"
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/provider"
 	conversationservice "memstation/apps/server/internal/service/conversation"
 	memoryservice "memstation/apps/server/internal/service/memory"
 	settingsservice "memstation/apps/server/internal/service/settings"
-	sqlstore "memstation/apps/server/internal/store/sql"
 	vectorstore "memstation/apps/server/internal/store/vector"
 )
 
@@ -126,7 +128,7 @@ func setupGatewayBench(b *testing.B) *Service {
 	b.Helper()
 	ctx := context.Background()
 
-	memRepo := sqlstore.NewInMemoryMemoryRepository()
+	memRepo := memorystore.NewInMemoryMemoryRepository()
 	vectors := vectorstore.NewPGVectorStore(nil)
 	engine := memoryservice.NewEngine(memRepo, vectors)
 
@@ -153,8 +155,8 @@ func setupGatewayBench(b *testing.B) *Service {
 		})
 	}
 
-	convRepo := sqlstore.NewInMemoryConversationRepository()
-	outbox := sqlstore.NewInMemoryOutboxRepository()
+	convRepo := conversationstore.NewInMemoryConversationRepository()
+	outbox := conversationstore.NewInMemoryOutboxRepository()
 	conversations := conversationservice.NewService(convRepo, outbox, 32, 64000)
 
 	settings := settingsservice.NewService(nil, nil, "gpt-5", "gpt-5-mini", "gpt-5-mini", "text-embedding-3-large", 2048)
@@ -174,6 +176,6 @@ func newBenchRequest(stream bool) domain.UnifiedRequest {
 		Stream:   stream,
 		Messages: []domain.UnifiedMessage{
 			{Role: domain.RoleUser, Text: "Remind me what we decided about the rollout plan."},
-		},
+		}, AgentID: "fixture-agent",
 	}
 }

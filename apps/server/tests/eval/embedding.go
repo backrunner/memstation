@@ -42,7 +42,7 @@ func normalizeEmbeddingOptions(options EmbeddingOptions) (EmbeddingOptions, erro
 		mode = EmbeddingModeDeterministic
 	}
 	options.Mode = mode
-	options.Provider = firstNonEmptyLiteral(strings.TrimSpace(options.Provider), string(domain.ProviderOpenAI))
+	options.Provider = firstNonEmptyLiteral(strings.TrimSpace(options.Provider), string(domain.ProviderOpenAICompatible))
 	options.Model = strings.TrimSpace(options.Model)
 	options.BaseURL = strings.TrimSpace(options.BaseURL)
 	options.APIKey = strings.TrimSpace(options.APIKey)
@@ -98,7 +98,7 @@ func newEvalEmbeddingClient(options EmbeddingOptions) (ports.EmbeddingClient, er
 		return nil, nil
 	case EmbeddingModeProvider:
 		resolver := provider.StaticConfigResolver{
-			domain.ProviderOpenAI: {
+			domain.ProviderOpenAICompatible: {
 				APIKey:  options.APIKey,
 				BaseURL: options.BaseURL,
 			},

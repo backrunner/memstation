@@ -27,7 +27,9 @@ func NewService(db runtimeconfig.DBHandle, model string) *Service {
 	return &Service{Repository: memorygeneration.NewRepository(db, model)}
 }
 
-func CurrentGenerationID(userID string) string { return memorygeneration.CurrentGenerationID(userID) }
+func CurrentGenerationID(workspaceID string) string {
+	return memorygeneration.CurrentGenerationID(workspaceID)
+}
 
 func (s *Service) CreateRebuildGeneration(ctx context.Context, in CreateRebuildInput) (domain.MemoryGeneration, []domain.MemoryGenerationSource, error) {
 	if in.Scope != "conversation" && security.AdminFromContext(ctx) {

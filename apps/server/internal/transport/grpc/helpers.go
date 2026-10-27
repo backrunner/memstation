@@ -193,11 +193,12 @@ func toProtoModelCapabilities(items []domain.ModelCapability) []*pb.ModelCapabil
 	out := make([]*pb.ModelCapability, 0, len(items))
 	for _, item := range items {
 		out = append(out, &pb.ModelCapability{
-			Id:             item.ID,
-			Provider:       string(item.Provider),
-			Role:           item.Role,
-			SupportsTools:  item.SupportsTools,
-			SupportsStream: item.SupportsStream,
+			InputModalities: append([]string{}, item.InputModalities...),
+			Id:              item.ID,
+			Provider:        string(item.Provider),
+			Role:            item.Role,
+			SupportsTools:   item.SupportsTools,
+			SupportsStream:  item.SupportsStream,
 		})
 	}
 	return out
@@ -215,6 +216,7 @@ func toProtoContentBlocks(items []domain.ContentBlock) []*pb.ContentBlock {
 	out := make([]*pb.ContentBlock, 0, len(items))
 	for _, item := range items {
 		out = append(out, &pb.ContentBlock{
+			MimeType: item.MIMEType, BlobId: item.BlobID, SourceUrl: item.SourceURL, ProviderFileId: item.ProviderFileID, Filename: item.Filename, SizeBytes: item.SizeBytes, Sha256: item.SHA256, PageIndex: int32(item.PageIndex), StartMs: item.StartMS, EndMs: item.EndMS, DurationMs: item.DurationMS,
 			Type:     string(item.Type),
 			Text:     item.Text,
 			Raw:      item.Raw,
@@ -293,6 +295,7 @@ func fromProtoContentBlocks(items []*pb.ContentBlock) []domain.ContentBlock {
 	out := make([]domain.ContentBlock, 0, len(items))
 	for _, item := range items {
 		out = append(out, domain.ContentBlock{
+			MIMEType: item.GetMimeType(), BlobID: item.GetBlobId(), SourceURL: item.GetSourceUrl(), ProviderFileID: item.GetProviderFileId(), Filename: item.GetFilename(), SizeBytes: item.GetSizeBytes(), SHA256: item.GetSha256(), PageIndex: int(item.GetPageIndex()), StartMS: item.GetStartMs(), EndMS: item.GetEndMs(), DurationMS: item.GetDurationMs(),
 			Type:     domain.ContentBlockType(strings.TrimSpace(strings.ToLower(item.GetType()))),
 			Text:     item.GetText(),
 			Raw:      item.GetRaw(),

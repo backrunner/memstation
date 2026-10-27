@@ -19,6 +19,7 @@ import (
 	"memstation/apps/server/internal/aicall"
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/ports"
+	openaiprovider "memstation/apps/server/internal/provider/openai"
 	"memstation/apps/server/internal/security"
 
 	"github.com/google/uuid"
@@ -31,11 +32,12 @@ import (
 )
 
 type Config struct {
-	BaseURL    string
-	Credential string
-	Roles      map[string]string
-	Embedding  domain.EmbeddingIdentity
-	Timeout    time.Duration
+	BaseURL           string
+	Credential        string
+	Roles             map[string]string
+	Embedding         domain.EmbeddingIdentity
+	Timeout           time.Duration
+	GenerationTimeout time.Duration
 }
 type Client struct {
 	config   Config
@@ -62,6 +64,9 @@ func New(config Config, ledger ports.AICallRepository) (*Client, error) {
 	}
 	if config.Timeout <= 0 {
 		config.Timeout = 90 * time.Second
+	}
+	if config.GenerationTimeout <= 0 {
+		config.GenerationTimeout = config.Timeout
 	}
 	duration, err := otel.Meter("memstation.aibroker").Float64Histogram("memstation.memory.broker.duration", metric.WithUnit("s"))
 	if err != nil {
@@ -92,14 +97,17 @@ func (a *textAdapter) Complete(ctx context.Context, in domain.UnifiedRequest) (*
 	if in.Model != a.client.config.Roles[a.role] || in.Stream || len(in.Tools) > 0 {
 		return nil, domain.ErrAccessDenied
 	}
-	messages := []map[string]string{}
+	messages := []map[string]any{}
 	for _, m := range in.Messages {
 		if m.Role != domain.RoleSystem && m.Role != domain.RoleUser && m.Role != domain.RoleAssistant {
 			return nil, domain.ErrAccessDenied
 		}
-		messages = append(messages, map[string]string{"role": string(m.Role), "content": m.Text})
+		messages = append(messages, map[string]any{"role": string(m.Role), "content": openaiprovider.ChatContent(m)})
 	}
 	body := map[string]any{"model": in.Model, "messages": messages, "stream": false, "max_tokens": in.MaxOutputTokens, "response_format": map[string]string{"type": "json_object"}}
+	if in.ReasoningEffort != "" {
+		body["reasoning_effort"] = in.ReasoningEffort
+	}
 	raw, _, err := a.client.post(ctx, in.UserID, a.role, "/chat/completions", body, nil)
 	if err != nil {
 		return nil, err
@@ -138,7 +146,11 @@ func (c *Client) post(ctx context.Context, user, role, path string, payload any,
 	if err != nil {
 		return nil, nil, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, c.config.Timeout)
+	timeout := c.config.Timeout
+	if role == "summary" || role == "analysis" {
+		timeout = c.config.GenerationTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	ctx, operation := otel.Tracer("memstation.aibroker").Start(ctx, "memory.broker.call", trace.WithAttributes(attribute.String("memory.role", role), attribute.String("memory.workspace_id", workspace)))
 	started := time.Now()

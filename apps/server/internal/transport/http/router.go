@@ -948,7 +948,7 @@ func adminConversationMemoryHandler(service *admin.Service, memories *memoryserv
 					}
 					resolvedGenerationID = generation.GenerationID
 				} else {
-					resolvedGenerationID = memorygenservice.CurrentGenerationID(userID)
+					resolvedGenerationID = memorygenservice.CurrentGenerationID(security.WorkspaceID(r.Context(), userID))
 				}
 			}
 			documents, err := memories.ListDocumentsByConversationInGeneration(r.Context(), userID, resolvedGenerationID, conversationID)
@@ -1783,6 +1783,8 @@ func adminProviderDiagnosticsHandler(cfg bootstrap.Config, systemConfig *systemc
 		liveGatewayDefault := cfg.DefaultProvider
 		desiredInternalDefault := cfg.InternalDefaultProvider
 		liveInternalDefault := cfg.InternalDefaultProvider
+		desiredRerankDefault, _, _ := domain.ParseRerankModel(cfg.RerankModel)
+		liveRerankDefault := desiredRerankDefault
 		desiredTimeoutSeconds := int(cfg.ProviderTimeout.Seconds())
 		liveTimeoutSeconds := int(cfg.ProviderTimeout.Seconds())
 		if systemConfig != nil {
@@ -1792,17 +1794,21 @@ func adminProviderDiagnosticsHandler(cfg bootstrap.Config, systemConfig *systemc
 			liveGatewayDefault = live.DefaultProvider
 			desiredInternalDefault = desired.InternalDefaultProvider
 			liveInternalDefault = live.InternalDefaultProvider
+			desiredRerankDefault, _, _ = domain.ParseRerankModel(desired.RerankModel)
+			liveRerankDefault, _, _ = domain.ParseRerankModel(live.RerankModel)
 			desiredTimeoutSeconds = desired.ProviderTimeoutSeconds
 			liveTimeoutSeconds = live.ProviderTimeoutSeconds
 		}
 		desiredDefaults := map[providerconfigservice.Scope]domain.Provider{
 			providerconfigservice.ScopeGateway:   desiredGatewayDefault,
 			providerconfigservice.ScopeInternal:  desiredInternalDefault,
+			providerconfigservice.ScopeRerank:    desiredRerankDefault,
 			providerconfigservice.ScopeEmbedding: domain.ProviderOpenAICompatible,
 		}
 		liveDefaults := map[providerconfigservice.Scope]domain.Provider{
 			providerconfigservice.ScopeGateway:   liveGatewayDefault,
 			providerconfigservice.ScopeInternal:  liveInternalDefault,
+			providerconfigservice.ScopeRerank:    liveRerankDefault,
 			providerconfigservice.ScopeEmbedding: domain.ProviderOpenAICompatible,
 		}
 		items, err := providerConfig.Diagnostics(r.Context(), desiredDefaults, liveDefaults, desiredTimeoutSeconds, liveTimeoutSeconds)
@@ -2568,27 +2574,29 @@ func parseMemoryTypeList(values []string) ([]domain.MemoryType, error) {
 
 func parseMemoryKind(value string) (domain.MemoryType, error) {
 	switch strings.TrimSpace(strings.ToLower(value)) {
-	case "summary", "summaries":
+	case "summary":
 		return domain.MemoryTypeSummary, nil
-	case "segment", "segments":
+	case "segment":
 		return domain.MemoryTypeSegment, nil
-	case "impression", "impressions":
+	case "impression":
 		return domain.MemoryTypeImpression, nil
-	case "fact", "facts":
+	case "fact":
 		return domain.MemoryTypeFact, nil
-	case "key_memory", "keymemories", "key_memories", "key-memory":
+	case "key_memory":
 		return domain.MemoryTypeKeyMemory, nil
-	case "event", "events":
+	case "episode":
+		return domain.MemoryTypeEpisode, nil
+	case "event":
 		return domain.MemoryTypeEvent, nil
-	case "task", "tasks":
+	case "task":
 		return domain.MemoryTypeTask, nil
-	case "procedure", "procedures":
+	case "procedure":
 		return domain.MemoryTypeProcedure, nil
-	case "artifact", "artifacts":
+	case "artifact":
 		return domain.MemoryTypeArtifact, nil
-	case "entity", "entities":
+	case "entity":
 		return domain.MemoryTypeEntity, nil
-	case "agent_action", "agent_actions", "agent-action", "agent-actions":
+	case "agent_action":
 		return domain.MemoryTypeAgentAction, nil
 	default:
 		return "", fmt.Errorf("unsupported memory kind: %s", value)

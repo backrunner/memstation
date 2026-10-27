@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"memstation/apps/server/internal/domain"
@@ -26,6 +28,64 @@ type analysisCheckpoint struct {
 	Version    int                    `json:"version"`
 	SourceHash string                 `json:"source_hash"`
 	Result     analysisservice.Result `json:"result"`
+}
+
+type analysisBatchCheckpoint struct {
+	Version    int                        `json:"version"`
+	SourceHash string                     `json:"source_hash"`
+	Result     analysisservice.Extraction `json:"result"`
+}
+
+type analysisBatchStore struct {
+	services Services
+	summary  domain.MemoryDocument
+}
+
+func (s analysisBatchStore) LoadAnalysisBatch(ctx context.Context, index int, hash string) (analysisservice.Extraction, bool, error) {
+	stored, err := s.services.Memories.GetDocumentInGeneration(ctx, s.summary.UserID, s.summary.GenerationID, s.summary.ID, domain.MemoryTypeSummary)
+	if err != nil {
+		return analysisservice.Extraction{}, false, err
+	}
+	if stored.Content != s.summary.Content || stored.ConversationID != s.summary.ConversationID {
+		return analysisservice.Extraction{}, false, domain.ErrAccessConflict
+	}
+	value := stored.Metadata[fmt.Sprintf("_llm_analysis_batch_%02d", index)]
+	if value == nil {
+		return analysisservice.Extraction{}, false, nil
+	}
+	raw, err := json.Marshal(value)
+	var checkpoint analysisBatchCheckpoint
+	if err == nil {
+		err = json.Unmarshal(raw, &checkpoint)
+	}
+	if err != nil {
+		return checkpoint.Result, false, errors.New("invalid persisted analysis batch")
+	}
+	return checkpoint.Result, checkpoint.Version == 1 && checkpoint.SourceHash == hash, nil
+}
+
+func (s analysisBatchStore) StoreAnalysisBatch(ctx context.Context, index int, hash string, result analysisservice.Extraction) error {
+	checkpoint := analysisBatchCheckpoint{Version: 1, SourceHash: hash, Result: result}
+	raw, err := json.Marshal(checkpoint)
+	if err != nil {
+		return err
+	}
+	if len(raw) > 256*1024 {
+		return errors.New("analysis batch checkpoint exceeds budget")
+	}
+	stored, err := storeCheckpoint(ctx, s.services, s.summary, fmt.Sprintf("_llm_analysis_batch_%02d", index), checkpoint)
+	if err != nil {
+		return err
+	}
+	var authoritative analysisBatchCheckpoint
+	if json.Unmarshal(stored, &authoritative) != nil {
+		return errors.New("invalid persisted analysis batch")
+	}
+	a, _ := json.Marshal(authoritative)
+	if string(a) != string(raw) {
+		return analysisservice.ErrBatchCheckpointConflict
+	}
+	return nil
 }
 
 type keyMemoryWriteSnapshot struct {
@@ -117,9 +177,11 @@ func reconcileWithCheckpoint(ctx context.Context, services Services, input analy
 
 func llmSourceHash(input analysisservice.Input) string {
 	raw, _ := json.Marshal(struct {
-		Sources []analysisservice.Source
-		Summary string
-	}{analysisservice.Sources(input.Conversation), input.Summary.Content})
+		Sources              []analysisservice.Source
+		Summary              string
+		ConversationRevision int64  `json:"conversation_revision,omitempty"`
+		SourceSessionTime    string `json:"source_session_time,omitempty"`
+	}{analysisservice.Sources(input.Conversation), input.Summary.Content, input.Conversation.Revision, stringValue(input.Conversation.Metadata, "source_session_time")})
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }
@@ -141,7 +203,16 @@ func analyzeWithCheckpoint(ctx context.Context, services Services, input analysi
 			input.Summary = stored
 		}
 	}
+	input.WritePolicy.EnableSemanticEpisodes = input.WritePolicy.EnableSemanticEpisodes || services.Analysis.SemanticEpisodesEnabled()
 	hash := llmSourceHash(input)
+	if input.WritePolicy.EnableSemanticEpisodes || services.Analysis.GenerationPolicyID() != "" {
+		policy, err := json.Marshal([]any{hash, analysisservice.SemanticEpisodePolicyHash(), services.Analysis.GenerationPolicyID(), input.WritePolicy})
+		if err != nil {
+			return analysisservice.Result{}, err
+		}
+		sum := sha256.Sum256(policy)
+		hash = hex.EncodeToString(sum[:])
+	}
 	if value := input.Summary.Metadata["_llm_analysis_checkpoint"]; value != nil {
 		raw, err := json.Marshal(value)
 		if err != nil {
@@ -164,7 +235,14 @@ func analyzeWithCheckpoint(ctx context.Context, services Services, input analysi
 			return cached.Result, nil
 		}
 	}
+	if input.Summary.ID != "" {
+		input.BatchCheckpoints = analysisBatchStore{services: services, summary: input.Summary}
+	}
 	result, err := services.Analysis.AnalyzeConversation(ctx, input)
+	if errors.Is(err, analysisservice.ErrBatchCheckpointConflict) {
+		// Adopt the first validated result, rather than publish the losing one.
+		result, err = services.Analysis.AnalyzeConversation(ctx, input)
+	}
 	if err != nil {
 		return result, err
 	}
@@ -214,8 +292,9 @@ func summarizeWithCheckpoint(ctx context.Context, services Services, input analy
 		if err := json.Unmarshal(raw, &checkpoint); err != nil {
 			return analysisservice.Summary{}, errors.New("invalid persisted LLM summary")
 		}
-		if checkpoint.Version == llmCheckpointVersion && checkpoint.SourceHash == llmSourceHash(input) {
+		if checkpoint.Version == llmCheckpointVersion && checkpoint.SourceHash == summarySourceHash(input, services.Analysis.GenerationPolicyID()) {
 			checkpoint.Result.ChunkCount = checkpoint.Chunks
+			checkpoint.Result.GenerationPolicy = services.Analysis.GenerationPolicyID()
 			return checkpoint.Result, nil
 		}
 	}
@@ -223,7 +302,13 @@ func summarizeWithCheckpoint(ctx context.Context, services Services, input analy
 }
 
 func newSummaryCheckpoint(conversation domain.ConversationRecord, generated analysisservice.Summary) summaryCheckpoint {
-	return summaryCheckpoint{Version: llmCheckpointVersion, SourceHash: llmSourceHash(analysisservice.Input{Conversation: conversation}), Chunks: generated.ChunkCount, Result: generated}
+	return summaryCheckpoint{Version: llmCheckpointVersion, SourceHash: summarySourceHash(analysisservice.Input{Conversation: conversation}, generated.GenerationPolicy), Chunks: generated.ChunkCount, Result: generated}
+}
+
+func summarySourceHash(input analysisservice.Input, policy string) string {
+	raw, _ := json.Marshal([]string{llmSourceHash(input), policy})
+	digest := sha256.Sum256(raw)
+	return hex.EncodeToString(digest[:])
 }
 
 func storeSummaryWithCheckpoint(ctx context.Context, services Services, document domain.MemoryDocument) (domain.MemoryDocument, error) {
@@ -241,6 +326,11 @@ func storeSummaryWithCheckpoint(ctx context.Context, services Services, document
 			document.Metadata = cloneMap(document.Metadata)
 			for _, key := range []string{"_llm_analysis_checkpoint", "_llm_keymemory_checkpoint"} {
 				if value := previous.Metadata[key]; value != nil {
+					document.Metadata[key] = value
+				}
+			}
+			for key, value := range previous.Metadata {
+				if strings.HasPrefix(key, "_llm_analysis_batch_") {
 					document.Metadata[key] = value
 				}
 			}

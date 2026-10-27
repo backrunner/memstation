@@ -46,7 +46,7 @@ func (s *Service) Embed(ctx context.Context, input domain.EmbeddingInput) (domai
 	raw, _, err := provider.DoJSONRequest(
 		ctx,
 		s.client,
-		domain.ProviderOpenAI,
+		domain.ProviderOpenAICompatible,
 		http.MethodPost,
 		strings.TrimRight(runtime.BaseURL, "/")+"/embeddings",
 		map[string]string{
@@ -91,7 +91,7 @@ func (s *Service) resolveRuntime(ctx context.Context, input domain.EmbeddingInpu
 		return settingsservice.EmbeddingRuntime{}, errors.New("embedding config resolver is not configured")
 	}
 
-	baseConfig, err := s.resolver.Resolve(ctx, domain.ProviderOpenAI)
+	baseConfig, err := s.resolver.Resolve(ctx, domain.ProviderOpenAICompatible)
 	if err != nil {
 		return settingsservice.EmbeddingRuntime{}, err
 	}
@@ -160,13 +160,9 @@ func parseModelReference(value string) (domain.Provider, string) {
 	if value == "" {
 		return "", ""
 	}
-	for _, separator := range []string{":", "/"} {
-		parts := strings.SplitN(value, separator, 2)
-		if len(parts) != 2 {
-			continue
-		}
-		if providerName, ok := domain.ParseProvider(parts[0]); ok {
-			return providerName, strings.TrimSpace(parts[1])
+	if prefix, model, ok := strings.Cut(value, ":"); ok {
+		if providerName, ok := domain.ParseProvider(prefix); ok {
+			return providerName, strings.TrimSpace(model)
 		}
 	}
 	return "", value

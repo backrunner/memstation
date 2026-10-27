@@ -62,6 +62,23 @@ type ConversationFinalization struct {
 	TimeoutBefore *time.Time
 }
 
+// SegmentSourceSlice uses UTF-8 byte offsets [start,end), unlike SourceRef.Span
+// which uses code points. Offsets address the named original text field and the
+// rendered segment. SourceSHA256 covers the complete field, not just the slice.
+// The enclosing memory carries conversation revision / snapshot / generation.
+type SegmentSourceSlice struct {
+	SequenceNum      int    `json:"sequence_num"`
+	PartID           string `json:"part_id,omitempty"`
+	ArtifactID       string `json:"artifact_id,omitempty"`
+	Field            string `json:"field"`
+	Index            int    `json:"index"`
+	SourceSHA256     string `json:"source_sha256"`
+	ByteStart        int    `json:"byte_start"`
+	ByteEnd          int    `json:"byte_end"`
+	ContentByteStart int    `json:"content_byte_start"`
+	ContentByteEnd   int    `json:"content_byte_end"`
+}
+
 type ConversationSegment struct {
 	ID                  string         `json:"id"`
 	GenerationID        string         `json:"generation_id,omitempty"`

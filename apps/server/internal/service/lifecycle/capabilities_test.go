@@ -11,7 +11,7 @@ import (
 
 func TestProbeUsesEffectivePermissionsAndRecoveryAvailability(t *testing.T) {
 	s := NewService(nil)
-	ctx := security.WithAccess(context.Background(), domain.AccessContext{WorkspaceID: "group", Capabilities: []string{domain.CapabilityMemoryRead}})
+	ctx := security.WithAccess(context.Background(), domain.AccessContext{WorkspaceID: "group", Capabilities: []string{domain.CapabilityMemoryRead}, ScopeVersion: 2, PartitionIDs: []string{""}})
 	for _, check := range []func(context.Context) error{nil, func(context.Context) error { return errors.New("unavailable") }} {
 		s.SetReady(check)
 		result := s.Probe(ctx, "test")

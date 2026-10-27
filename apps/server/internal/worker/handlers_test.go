@@ -10,6 +10,12 @@ import (
 	"testing"
 	"time"
 
+	conversationstore "memstation/apps/server/internal/store/sql/conversation"
+	mediastore "memstation/apps/server/internal/store/sql/media"
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
+	"memstation/apps/server/internal/ports"
+
 	"github.com/hibiken/asynq"
 
 	"memstation/apps/server/internal/bootstrap"
@@ -19,7 +25,6 @@ import (
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
 	multimodalservice "memstation/apps/server/internal/service/multimodal"
 	blobstore "memstation/apps/server/internal/store/blob"
-	"memstation/apps/server/internal/store/sql"
 	"memstation/apps/server/internal/store/vector"
 	"memstation/apps/server/internal/testutil/memoryllmfixture"
 )
@@ -48,7 +53,7 @@ func (s *recordingVectorStore) Upsert(_ context.Context, input domain.VectorUpse
 	return nil
 }
 
-func (s *recordingVectorStore) DeleteByNode(context.Context, string, string) error {
+func (s *recordingVectorStore) DeleteByNode(context.Context, domain.VectorDeleteRequest) error {
 	return nil
 }
 
@@ -62,14 +67,14 @@ func (s *recordingVectorStore) ReindexVersion(context.Context, int) error {
 
 func TestConversationFinalizeHandlerTransitionsToFinalAndQueuesSummary(t *testing.T) {
 	t.Parallel()
-	conversations := sql.NewInMemoryConversationRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
 	publisher := &recordingPublisher{}
 
 	if err := conversations.PersistExchange(context.Background(), domain.ConversationRecord{
 		ConversationID: "conv-1",
 		UserID:         "user-1",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusActive,
 		SummaryStatus:  domain.ProcessingStatusPending,
@@ -79,7 +84,7 @@ func TestConversationFinalizeHandlerTransitionsToFinalAndQueuesSummary(t *testin
 			Text: "hello",
 		}},
 		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(), AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("persist conversation: %v", err)
 	}
@@ -87,7 +92,7 @@ func TestConversationFinalizeHandlerTransitionsToFinalAndQueuesSummary(t *testin
 	handler := handleConversationFinalize(nilLogger(), Services{
 		Analysis:      analysisservice.NewService(memoryllmfixture.Generator{}),
 		Conversations: conversations,
-		Publisher:     publisher,
+		Publisher:     publisher, TaskAuthority: fixtureTaskAuthority{},
 	})
 	task := newTask(t, TypeConversationFinalize, map[string]any{
 		"conversation_id": "conv-1",
@@ -117,15 +122,15 @@ func TestConversationFinalizeHandlerTransitionsToFinalAndQueuesSummary(t *testin
 func TestSummaryGenerateHandlerIsDeterministicAndMarksCompleted(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	conversations := sql.NewInMemoryConversationRepository()
-	memories := sql.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	publisher := &recordingPublisher{}
 
 	if err := conversations.PersistExchange(ctx, domain.ConversationRecord{
 		ConversationID: "conv-1",
 		UserID:         "user-1",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		SummaryStatus:  domain.ProcessingStatusQueued,
@@ -135,7 +140,7 @@ func TestSummaryGenerateHandlerIsDeterministicAndMarksCompleted(t *testing.T) {
 			{Role: domain.RoleAssistant, Text: "hi there"},
 		},
 		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(), AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("persist conversation: %v", err)
 	}
@@ -146,7 +151,7 @@ func TestSummaryGenerateHandlerIsDeterministicAndMarksCompleted(t *testing.T) {
 		Memories:       memories,
 		Vectors:        vector.NewPGVectorStore(nil),
 		Publisher:      publisher,
-		EmbeddingModel: "test-embedding",
+		EmbeddingModel: "test-embedding", TaskAuthority: fixtureTaskAuthority{},
 	})
 	task := newTask(t, TypeSummaryGenerate, SummaryPayload{
 		ConversationID: "conv-1",
@@ -168,7 +173,7 @@ func TestSummaryGenerateHandlerIsDeterministicAndMarksCompleted(t *testing.T) {
 	if len(docs) != 1 {
 		t.Fatalf("expected exactly one summary doc, got %d", len(docs))
 	}
-	if docs[0].ID != "summary:conv-1:v1" {
+	if docs[0].ID != currentFixtureID("summary:conv-1:v1") {
 		t.Fatalf("unexpected summary id: %s", docs[0].ID)
 	}
 	if got := docs[0].Metadata["segment_count"]; got != 1 {
@@ -210,8 +215,8 @@ func TestSummaryGenerateHandlerStoresSegmentGraphAndEmbeddings(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conversations := sql.NewInMemoryConversationRepository()
-	memories := sql.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	publisher := &recordingPublisher{}
 
 	messages := []domain.UnifiedMessage{
@@ -229,14 +234,14 @@ func TestSummaryGenerateHandlerStoresSegmentGraphAndEmbeddings(t *testing.T) {
 		ConversationID: "conv-segments",
 		UserID:         "user-1",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		SummaryStatus:  domain.ProcessingStatusQueued,
 		AnalysisStatus: domain.ProcessingStatusPending,
 		Messages:       messages,
 		CreatedAt:      time.Now().UTC(),
-		UpdatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(), AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("persist conversation: %v", err)
 	}
@@ -247,7 +252,7 @@ func TestSummaryGenerateHandlerStoresSegmentGraphAndEmbeddings(t *testing.T) {
 		Memories:       memories,
 		Vectors:        vector.NewPGVectorStore(nil),
 		Publisher:      publisher,
-		EmbeddingModel: "test-embedding",
+		EmbeddingModel: "test-embedding", TaskAuthority: fixtureTaskAuthority{},
 	})
 	if err := handler(ctx, newTask(t, TypeSummaryGenerate, SummaryPayload{
 		ConversationID: "conv-segments",
@@ -266,8 +271,8 @@ func TestSummaryGenerateHandlerStoresSegmentGraphAndEmbeddings(t *testing.T) {
 		t.Fatalf("expected 2 segment docs, got %d", len(segments))
 	}
 
-	summaryNodeID := "node:summary:conv-segments:v1"
-	secondSegmentNodeID := segmentNodeID("segment:conv-segments:001")
+	summaryNodeID := currentFixtureID("node:summary:conv-segments:v1")
+	secondSegmentNodeID := segmentNodeID(currentFixtureID("segment:conv-segments:001"))
 	relations, err := memories.ListRelations(ctx, "user-1", "", []string{secondSegmentNodeID}, 1)
 	if err != nil {
 		t.Fatalf("list segment relations: %v", err)
@@ -281,7 +286,7 @@ func TestSummaryGenerateHandlerStoresSegmentGraphAndEmbeddings(t *testing.T) {
 				foundSummaryLink = true
 			}
 		case "follows_segment":
-			if relation.SrcNodeID == secondSegmentNodeID && relation.DstNodeID == segmentNodeID("segment:conv-segments:000") {
+			if relation.SrcNodeID == secondSegmentNodeID && relation.DstNodeID == segmentNodeID(currentFixtureID("segment:conv-segments:000")) {
 				foundFollowsLink = true
 			}
 		}
@@ -316,8 +321,8 @@ func TestSummaryGenerateHandlerCompactsToolPayloadsForMemory(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conversations := sql.NewInMemoryConversationRepository()
-	memories := sql.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	publisher := &recordingPublisher{}
 	hugePayload := strings.Repeat("tool schema fragment ", 80)
 
@@ -359,14 +364,14 @@ func TestSummaryGenerateHandlerCompactsToolPayloadsForMemory(t *testing.T) {
 		ConversationID: "conv-tool-summary",
 		UserID:         "user-1",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		SummaryStatus:  domain.ProcessingStatusQueued,
 		AnalysisStatus: domain.ProcessingStatusPending,
 		Messages:       messages,
 		CreatedAt:      time.Now().UTC(),
-		UpdatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(), AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("persist conversation: %v", err)
 	}
@@ -377,7 +382,7 @@ func TestSummaryGenerateHandlerCompactsToolPayloadsForMemory(t *testing.T) {
 		Memories:       memories,
 		Vectors:        vector.NewPGVectorStore(nil),
 		Publisher:      publisher,
-		EmbeddingModel: "test-embedding",
+		EmbeddingModel: "test-embedding", TaskAuthority: fixtureTaskAuthority{},
 	})
 	if err := handler(ctx, newTask(t, TypeSummaryGenerate, SummaryPayload{
 		ConversationID: "conv-tool-summary",
@@ -388,7 +393,7 @@ func TestSummaryGenerateHandlerCompactsToolPayloadsForMemory(t *testing.T) {
 		t.Fatalf("handle summary: %v", err)
 	}
 
-	doc, err := memories.GetDocument(ctx, "user-1", "summary:conv-tool-summary:v1", domain.MemoryTypeSummary)
+	doc, err := memories.GetDocument(ctx, "user-1", currentFixtureID("summary:conv-tool-summary:v1"), domain.MemoryTypeSummary)
 	if err != nil {
 		t.Fatalf("get summary doc: %v", err)
 	}
@@ -407,8 +412,8 @@ func TestSummaryGenerateHandlerRemovesStaleSegmentsAfterRewrite(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conversations := sql.NewInMemoryConversationRepository()
-	memories := sql.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	vectors := vector.NewPGVectorStore(nil)
 	publisher := &recordingPublisher{}
 
@@ -427,14 +432,14 @@ func TestSummaryGenerateHandlerRemovesStaleSegmentsAfterRewrite(t *testing.T) {
 		ConversationID: "conv-rewrite-segments",
 		UserID:         "user-1",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		SummaryStatus:  domain.ProcessingStatusQueued,
 		AnalysisStatus: domain.ProcessingStatusPending,
 		Messages:       initialMessages,
 		CreatedAt:      time.Now().UTC(),
-		UpdatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(), AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("persist initial conversation: %v", err)
 	}
@@ -445,7 +450,7 @@ func TestSummaryGenerateHandlerRemovesStaleSegmentsAfterRewrite(t *testing.T) {
 		Memories:       memories,
 		Vectors:        vectors,
 		Publisher:      publisher,
-		EmbeddingModel: "test-embedding",
+		EmbeddingModel: "test-embedding", TaskAuthority: fixtureTaskAuthority{},
 	})
 	task := newTask(t, TypeSummaryGenerate, SummaryPayload{
 		ConversationID: "conv-rewrite-segments",
@@ -494,14 +499,14 @@ func TestSummaryGenerateHandlerRemovesStaleSegmentsAfterRewrite(t *testing.T) {
 		ConversationID: "conv-rewrite-segments",
 		UserID:         "user-1",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		SummaryStatus:  domain.ProcessingStatusQueued,
 		AnalysisStatus: domain.ProcessingStatusPending,
 		Messages:       rewrittenMessages,
 		CreatedAt:      time.Now().UTC(),
-		UpdatedAt:      time.Now().UTC().Add(time.Minute),
+		UpdatedAt:      time.Now().UTC().Add(time.Minute), AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("persist rewritten shorter conversation: %v", err)
 	}
@@ -551,8 +556,8 @@ func TestSummaryGenerateHandlerRemovesStaleSegmentsAfterSideTableRewrite(t *test
 	t.Parallel()
 
 	ctx := context.Background()
-	conversations := sql.NewInMemoryConversationRepository()
-	memories := sql.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	vectors := vector.NewPGVectorStore(nil)
 	publisher := &recordingPublisher{}
 	now := time.Now().UTC()
@@ -565,14 +570,14 @@ func TestSummaryGenerateHandlerRemovesStaleSegmentsAfterSideTableRewrite(t *test
 		ConversationID: "conv-side-table-rewrite",
 		UserID:         "user-1",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		SummaryStatus:  domain.ProcessingStatusQueued,
 		AnalysisStatus: domain.ProcessingStatusPending,
 		Messages:       currentMessages,
 		CreatedAt:      now,
-		UpdatedAt:      now,
+		UpdatedAt:      now, AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("persist rewritten conversation: %v", err)
 	}
@@ -640,7 +645,7 @@ func TestSummaryGenerateHandlerRemovesStaleSegmentsAfterSideTableRewrite(t *test
 		Memories:       memories,
 		Vectors:        vectors,
 		Publisher:      publisher,
-		EmbeddingModel: "test-embedding",
+		EmbeddingModel: "test-embedding", TaskAuthority: fixtureTaskAuthority{},
 	})
 	if err := handler(ctx, newTask(t, TypeSummaryGenerate, SummaryPayload{
 		ConversationID: "conv-side-table-rewrite",
@@ -681,7 +686,7 @@ func TestSummaryGenerateHandlerRemovesStaleSegmentsAfterSideTableRewrite(t *test
 func TestKeyMemoryReconcileHandlerEnforcesWhitelistAndAudits(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	memories := sql.NewInMemoryMemoryRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	var audits []domain.AuditEvent
 	var invalidated []string
 
@@ -711,7 +716,7 @@ func TestKeyMemoryReconcileHandlerEnforcesWhitelistAndAudits(t *testing.T) {
 	denied := handleKeyMemoryReconcile(nilLogger(), Services{
 		Analysis:      analysisservice.NewService(memoryllmfixture.Generator{}),
 		Conversations: conversationsFromRecords(t, "user-1", "conv-1"),
-		Memories:      memories,
+		Memories:      memories, TaskAuthority: fixtureTaskAuthority{},
 	})
 	if err := denied(ctx, newTask(t, TypeKeyMemoryReconcile, map[string]any{"user_id": "user-1", "conversation_id": "conv-1"})); err != nil {
 		t.Fatal(err)
@@ -732,7 +737,7 @@ func TestKeyMemoryReconcileHandlerEnforcesWhitelistAndAudits(t *testing.T) {
 		},
 		InvalidateKeyMemory: func(_ context.Context, userID string) {
 			invalidated = append(invalidated, userID)
-		},
+		}, TaskAuthority: fixtureTaskAuthority{},
 	})
 	if err := allowed(ctx, newTask(t, TypeKeyMemoryReconcile, map[string]any{
 		"user_id":         "user-1",
@@ -780,8 +785,8 @@ func TestKeyMemoryReconcileHandlerScopesRelationsToRequestedGeneration(t *testin
 	t.Parallel()
 
 	ctx := context.Background()
-	memories := sql.NewInMemoryMemoryRepository()
-	currentGenerationID := memorygenservice.CurrentGenerationID("user-1")
+	memories := memorystore.NewInMemoryMemoryRepository()
+	currentGenerationID := memorygenservice.CurrentGenerationID(domain.PersonalWorkspaceID("user-1"))
 	candidateGenerationID := "gen:rebuild:user-1"
 
 	for _, doc := range []domain.MemoryDocument{
@@ -815,7 +820,7 @@ func TestKeyMemoryReconcileHandlerScopesRelationsToRequestedGeneration(t *testin
 		Memories:      memories,
 		AllowedKeyMemoryKeys: map[string]struct{}{
 			"recent_conversation": {},
-		},
+		}, TaskAuthority: fixtureTaskAuthority{},
 	})
 	if err := handler(ctx, newTask(t, TypeKeyMemoryReconcile, KeyMemoryReconcilePayload{
 		UserID:         "user-1",
@@ -861,15 +866,15 @@ func TestAnalysisExtractHandlerStoresDerivedDocumentsAndFollowups(t *testing.T) 
 	t.Parallel()
 
 	ctx := context.Background()
-	conversations := sql.NewInMemoryConversationRepository()
-	memories := sql.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	publisher := &recordingPublisher{}
 
 	if err := conversations.PersistExchange(ctx, domain.ConversationRecord{
 		ConversationID: "conv-1",
 		UserID:         "user-1",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeInject,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		SummaryStatus:  domain.ProcessingStatusCompleted,
@@ -879,7 +884,7 @@ func TestAnalysisExtractHandlerStoresDerivedDocumentsAndFollowups(t *testing.T) 
 			{Role: domain.RoleAssistant, Text: "We should start from the gateway and memory pipeline."},
 		},
 		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(), AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("persist conversation: %v", err)
 	}
@@ -899,7 +904,7 @@ func TestAnalysisExtractHandlerStoresDerivedDocumentsAndFollowups(t *testing.T) 
 		Memories:       memories,
 		Publisher:      publisher,
 		Analysis:       analysisservice.NewService(memoryllmfixture.Generator{}),
-		EmbeddingModel: "test-embedding",
+		EmbeddingModel: "test-embedding", TaskAuthority: fixtureTaskAuthority{},
 	})
 	if err := handler(ctx, newTask(t, TypeAnalysisExtract, AnalysisPayload{
 		UserID:         "user-1",
@@ -946,8 +951,8 @@ func TestAnalysisExtractHandlerQueuesKeyMemoryForActiveNonCurrentGeneration(t *t
 	t.Parallel()
 
 	ctx := context.Background()
-	conversations := sql.NewInMemoryConversationRepository()
-	memories := sql.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	publisher := &recordingPublisher{}
 	generations := memorygenservice.NewService(nil, "test-embedding")
 	now := time.Now().UTC()
@@ -956,13 +961,13 @@ func TestAnalysisExtractHandlerQueuesKeyMemoryForActiveNonCurrentGeneration(t *t
 		ConversationID: "conv-active-generation",
 		UserID:         "user-1",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeInject,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		UpdatedAt:      now,
 		Messages: []domain.UnifiedMessage{
 			{Role: domain.RoleUser, Text: "Retained source state for active generation."},
-		},
+		}, AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("capture retained source: %v", err)
 	}
@@ -988,7 +993,7 @@ func TestAnalysisExtractHandlerQueuesKeyMemoryForActiveNonCurrentGeneration(t *t
 		ConversationID: "conv-active-generation",
 		UserID:         "user-1",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeInject,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		SummaryStatus:  domain.ProcessingStatusCompleted,
@@ -1001,7 +1006,7 @@ func TestAnalysisExtractHandlerQueuesKeyMemoryForActiveNonCurrentGeneration(t *t
 			"memory_generation_id": generation.GenerationID,
 		},
 		CreatedAt: now,
-		UpdatedAt: now,
+		UpdatedAt: now, AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("persist active-generation conversation: %v", err)
 	}
@@ -1025,7 +1030,7 @@ func TestAnalysisExtractHandlerQueuesKeyMemoryForActiveNonCurrentGeneration(t *t
 		Publisher:      publisher,
 		Analysis:       analysisservice.NewService(memoryllmfixture.Generator{}),
 		Generations:    generations,
-		EmbeddingModel: "test-embedding",
+		EmbeddingModel: "test-embedding", TaskAuthority: fixtureTaskAuthority{},
 	})
 	if err := handler(ctx, newTask(t, TypeAnalysisExtract, AnalysisPayload{
 		UserID:         "user-1",
@@ -1060,13 +1065,13 @@ func TestMemoryRebuildConversationSkipsSupersededSnapshot(t *testing.T) {
 		UserID:         "user-1",
 		ConversationID: "conv-rebuild-stale",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		UpdatedAt:      time.Now().UTC(),
 		Messages: []domain.UnifiedMessage{
 			{Role: domain.RoleUser, Text: "initial retained snapshot"},
-		},
+		}, AgentID: "fixture-agent",
 	}
 
 	first, _, err := generations.CaptureSourceSnapshot(ctx, conversation)
@@ -1096,7 +1101,7 @@ func TestMemoryRebuildConversationSkipsSupersededSnapshot(t *testing.T) {
 
 	handler := handleMemoryRebuildConversation(nilLogger(), Services{
 		Analysis:    analysisservice.NewService(memoryllmfixture.Generator{}),
-		Generations: generations,
+		Generations: generations, TaskAuthority: fixtureTaskAuthority{},
 	})
 	if err := handler(ctx, newTask(t, TypeMemoryRebuildConversation, MemoryRebuildConversationPayload{
 		UserID:       "user-1",
@@ -1127,14 +1132,14 @@ func TestMemoryRebuildConversationReplaysSnapshotArtifacts(t *testing.T) {
 
 	ctx := context.Background()
 	generations := memorygenservice.NewService(nil, "test-embedding")
-	memories := sql.NewInMemoryMemoryRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	vectors := &recordingVectorStore{}
 	now := time.Now().UTC()
 	conversation := domain.ConversationRecord{
 		UserID:         "user-1",
 		ConversationID: "conv-rebuild-artifact",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		UpdatedAt:      now,
@@ -1165,7 +1170,7 @@ func TestMemoryRebuildConversationReplaysSnapshotArtifacts(t *testing.T) {
 			Confidence:     0.91,
 			CreatedAt:      now,
 			UpdatedAt:      now,
-		}},
+		}}, AgentID: "fixture-agent",
 	}
 
 	snapshot, _, err := generations.CaptureSourceSnapshot(ctx, conversation)
@@ -1186,7 +1191,7 @@ func TestMemoryRebuildConversationReplaysSnapshotArtifacts(t *testing.T) {
 		Analysis:    analysisservice.NewService(memoryllmfixture.Generator{GenericTypes: []string{"artifact"}, PreferLastSource: true}),
 		Generations: generations,
 		Memories:    memories,
-		Vectors:     vectors,
+		Vectors:     vectors, TaskAuthority: fixtureTaskAuthority{},
 	})
 	if err := handler(ctx, newTask(t, TypeMemoryRebuildConversation, MemoryRebuildConversationPayload{
 		UserID:       "user-1",
@@ -1229,8 +1234,8 @@ func TestAnalysisExtractHandlerSelectsSummaryDocumentByType(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conversations := sql.NewInMemoryConversationRepository()
-	memories := sql.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	publisher := &recordingPublisher{}
 	now := time.Now().UTC()
 
@@ -1238,7 +1243,7 @@ func TestAnalysisExtractHandlerSelectsSummaryDocumentByType(t *testing.T) {
 		ConversationID: "conv-typed-summary",
 		UserID:         "user-1",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeInject,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		SummaryStatus:  domain.ProcessingStatusCompleted,
@@ -1248,14 +1253,14 @@ func TestAnalysisExtractHandlerSelectsSummaryDocumentByType(t *testing.T) {
 			{Role: domain.RoleAssistant, Text: "The summary should stay attached to the conversation summary node."},
 		},
 		CreatedAt: now,
-		UpdatedAt: now,
+		UpdatedAt: now, AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("persist conversation: %v", err)
 	}
 
 	if err := memories.StoreDocument(ctx, domain.MemoryDocument{
-		ID:             "summary:conv-typed-summary:v1",
-		NodeID:         "node:summary:conv-typed-summary:v1",
+		ID:             currentFixtureID("summary:conv-typed-summary:v1"),
+		NodeID:         currentFixtureID("node:summary:conv-typed-summary:v1"),
 		UserID:         "user-1",
 		ConversationID: "conv-typed-summary",
 		Type:           domain.MemoryTypeSummary,
@@ -1283,23 +1288,23 @@ func TestAnalysisExtractHandlerSelectsSummaryDocumentByType(t *testing.T) {
 		Memories:       memories,
 		Publisher:      publisher,
 		Analysis:       analysisservice.NewService(memoryllmfixture.Generator{}),
-		EmbeddingModel: "test-embedding",
+		EmbeddingModel: "test-embedding", TaskAuthority: fixtureTaskAuthority{},
 	})
 	if err := handler(ctx, newTask(t, TypeAnalysisExtract, AnalysisPayload{
 		UserID:         "user-1",
 		ConversationID: "conv-typed-summary",
-		SummaryIDs:     []string{"summary:conv-typed-summary:v1"},
+		SummaryIDs:     []string{currentFixtureID("summary:conv-typed-summary:v1")},
 	})); err != nil {
 		t.Fatalf("handle analysis: %v", err)
 	}
 
-	relations, err := memories.ListRelations(ctx, "user-1", "", []string{"node:summary:conv-typed-summary:v1"}, 1)
+	relations, err := memories.ListRelations(ctx, "user-1", "", []string{currentFixtureID("node:summary:conv-typed-summary:v1")}, 1)
 	if err != nil {
 		t.Fatalf("list summary relations: %v", err)
 	}
 	foundSummaryRelation := false
 	for _, relation := range relations {
-		if relation.SrcNodeID == "node:summary:conv-typed-summary:v1" && relation.RelationType == "derived_from" {
+		if relation.SrcNodeID == currentFixtureID("node:summary:conv-typed-summary:v1") && relation.RelationType == "derived_from" {
 			foundSummaryRelation = true
 			break
 		}
@@ -1313,14 +1318,14 @@ func TestConversationFinalizeHandlerSkipsMemoryPipelineWhenPersistDisabled(t *te
 	t.Parallel()
 
 	ctx := context.Background()
-	conversations := sql.NewInMemoryConversationRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
 	publisher := &recordingPublisher{}
 
 	if err := conversations.PersistExchange(ctx, domain.ConversationRecord{
 		ConversationID: "conv-skip",
 		UserID:         "user-1",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusActive,
 		SummaryStatus:  domain.ProcessingStatusPending,
@@ -1328,7 +1333,7 @@ func TestConversationFinalizeHandlerSkipsMemoryPipelineWhenPersistDisabled(t *te
 		Metadata: map[string]any{
 			"memory_persist_enabled": false,
 		},
-		UpdatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(), AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("persist conversation: %v", err)
 	}
@@ -1336,7 +1341,7 @@ func TestConversationFinalizeHandlerSkipsMemoryPipelineWhenPersistDisabled(t *te
 	handler := handleConversationFinalize(nilLogger(), Services{
 		Analysis:      analysisservice.NewService(memoryllmfixture.Generator{}),
 		Conversations: conversations,
-		Publisher:     publisher,
+		Publisher:     publisher, TaskAuthority: fixtureTaskAuthority{},
 	})
 	if err := handler(ctx, newTask(t, TypeConversationFinalize, map[string]any{
 		"conversation_id": "conv-skip",
@@ -1365,7 +1370,7 @@ func TestEmbeddingHandlersAndHelpers(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sql.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	vectors := vector.NewPGVectorStore(nil)
 
 	summary := domain.MemoryDocument{
@@ -1397,7 +1402,7 @@ func TestEmbeddingHandlersAndHelpers(t *testing.T) {
 		t.Fatalf("store fact: %v", err)
 	}
 
-	embed := handleEmbeddingGenerate(nilLogger(), Services{Vectors: vectors})
+	embed := handleEmbeddingGenerate(nilLogger(), Services{Vectors: vectors, TaskAuthority: fixtureTaskAuthority{}})
 	if err := embed(ctx, newTask(t, TypeEmbeddingGenerate, EmbeddingPayload{
 		UserID:           "user-1",
 		NodeID:           "node-summary-1",
@@ -1425,7 +1430,7 @@ func TestEmbeddingHandlersAndHelpers(t *testing.T) {
 		Conversations: conversationsFromRecords(t, "user-1", "conv-helper"),
 		Memories:      repo,
 		Vectors:       vectors,
-		Publisher:     &recordingPublisher{},
+		Publisher:     &recordingPublisher{}, TaskAuthority: fixtureTaskAuthority{},
 	})
 	if mux == nil {
 		t.Fatal("expected serve mux")
@@ -1455,9 +1460,9 @@ func TestEmbeddingGenerateUsesCurrentStoredDocumentContent(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sql.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	vectors := &recordingVectorStore{}
-	generationID := memorygenservice.CurrentGenerationID("user-1")
+	generationID := memorygenservice.CurrentGenerationID(domain.PersonalWorkspaceID("user-1"))
 
 	if err := repo.StoreDocument(ctx, domain.MemoryDocument{
 		ID:           generationID + ":summary:conv-embed:v1",
@@ -1479,7 +1484,7 @@ func TestEmbeddingGenerateUsesCurrentStoredDocumentContent(t *testing.T) {
 	handler := handleEmbeddingGenerate(nilLogger(), Services{
 		Analysis: analysisservice.NewService(memoryllmfixture.Generator{}),
 		Memories: repo,
-		Vectors:  vectors,
+		Vectors:  vectors, TaskAuthority: fixtureTaskAuthority{},
 	})
 	if err := handler(ctx, newTask(t, TypeEmbeddingGenerate, EmbeddingPayload{
 		UserID:           "user-1",
@@ -1505,14 +1510,14 @@ func TestEmbeddingGenerateSkipsDeletedDocument(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sql.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	vectors := &recordingVectorStore{}
-	generationID := memorygenservice.CurrentGenerationID("user-1")
+	generationID := memorygenservice.CurrentGenerationID(domain.PersonalWorkspaceID("user-1"))
 
 	handler := handleEmbeddingGenerate(nilLogger(), Services{
 		Analysis: analysisservice.NewService(memoryllmfixture.Generator{}),
 		Memories: repo,
-		Vectors:  vectors,
+		Vectors:  vectors, TaskAuthority: fixtureTaskAuthority{},
 	})
 	if err := handler(ctx, newTask(t, TypeEmbeddingGenerate, EmbeddingPayload{
 		UserID:           "user-1",
@@ -1534,22 +1539,22 @@ func TestMarkConversationFailedAndRecordAuditHelpers(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conversations := sql.NewInMemoryConversationRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
 	if err := conversations.PersistExchange(ctx, domain.ConversationRecord{
 		ConversationID: "conv-fail",
 		UserID:         "user-1",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeInject,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		SummaryStatus:  domain.ProcessingStatusRunning,
 		AnalysisStatus: domain.ProcessingStatusRunning,
-		UpdatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(), AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("persist conversation: %v", err)
 	}
 
-	markConversationFailed(ctx, Services{Conversations: conversations}, "user-1", "conv-fail", true)
+	markConversationFailed(ctx, Services{Conversations: conversations, TaskAuthority: fixtureTaskAuthority{}}, "user-1", "conv-fail", true)
 	conversation, err := conversations.GetConversation(ctx, "user-1", "conv-fail")
 	if err != nil {
 		t.Fatalf("get failed conversation: %v", err)
@@ -1563,7 +1568,7 @@ func TestMarkConversationFailedAndRecordAuditHelpers(t *testing.T) {
 		Analysis: analysisservice.NewService(memoryllmfixture.Generator{}),
 		RecordAudit: func(_ context.Context, event domain.AuditEvent) {
 			recorded = append(recorded, event)
-		},
+		}, TaskAuthority: fixtureTaskAuthority{},
 	}, domain.AuditEvent{Action: "test"})
 	if len(recorded) != 1 || recorded[0].Action != "test" {
 		t.Fatalf("expected recorded audit event, got %+v", recorded)
@@ -1574,9 +1579,9 @@ func TestMultimodalTimelineFeedsSummaryAndEvidence(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conversations := sql.NewInMemoryConversationRepository()
-	media := sql.NewInMemoryMediaRepository()
-	memories := sql.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	media := mediastore.NewInMemoryMediaRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	publisher := &recordingPublisher{}
 	multimodal := multimodalservice.NewService(media, nil, bootstrap.MultimodalConfig{
 		Enabled:                   true,
@@ -1589,7 +1594,7 @@ func TestMultimodalTimelineFeedsSummaryAndEvidence(t *testing.T) {
 		ConversationID: "conv-mm",
 		UserID:         "user-1",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		SummaryStatus:  domain.ProcessingStatusQueued,
@@ -1629,7 +1634,7 @@ func TestMultimodalTimelineFeedsSummaryAndEvidence(t *testing.T) {
 			},
 		},
 		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(), AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("persist conversation: %v", err)
 	}
@@ -1639,7 +1644,7 @@ func TestMultimodalTimelineFeedsSummaryAndEvidence(t *testing.T) {
 		Conversations: conversations,
 		MediaStore:    media,
 		Multimodal:    multimodal,
-		Publisher:     publisher,
+		Publisher:     publisher, TaskAuthority: fixtureTaskAuthority{},
 	})
 	if err := mediaHandler(ctx, newTask(t, TypeMediaExtract, MediaExtractPayload{
 		UserID:         "user-1",
@@ -1675,7 +1680,7 @@ func TestMultimodalTimelineFeedsSummaryAndEvidence(t *testing.T) {
 		Vectors:        vector.NewPGVectorStore(nil),
 		Publisher:      publisher,
 		Multimodal:     multimodal,
-		EmbeddingModel: "test-embedding",
+		EmbeddingModel: "test-embedding", TaskAuthority: fixtureTaskAuthority{},
 	})
 	if err := summaryHandler(ctx, newTask(t, TypeSummaryGenerate, SummaryPayload{
 		UserID:         "user-1",
@@ -1712,8 +1717,8 @@ func TestMediaExtractRefreshesRetainedSourceSnapshotWithArtifacts(t *testing.T) 
 	t.Parallel()
 
 	ctx := context.Background()
-	conversations := sql.NewInMemoryConversationRepository()
-	media := sql.NewInMemoryMediaRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	media := mediastore.NewInMemoryMediaRepository()
 	generations := memorygenservice.NewService(nil, "test-embedding")
 	publisher := &recordingPublisher{}
 	multimodal := multimodalservice.NewService(media, nil, bootstrap.MultimodalConfig{
@@ -1725,7 +1730,7 @@ func TestMediaExtractRefreshesRetainedSourceSnapshotWithArtifacts(t *testing.T) 
 		ConversationID: "conv-retain-media",
 		UserID:         "user-1",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusActive,
 		SummaryStatus:  domain.ProcessingStatusPending,
@@ -1744,7 +1749,7 @@ func TestMediaExtractRefreshesRetainedSourceSnapshotWithArtifacts(t *testing.T) 
 			}},
 		}},
 		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(), AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("persist conversation: %v", err)
 	}
@@ -1754,7 +1759,7 @@ func TestMediaExtractRefreshesRetainedSourceSnapshotWithArtifacts(t *testing.T) 
 		Conversations: conversations,
 		Generations:   generations,
 		Multimodal:    multimodal,
-		Publisher:     publisher,
+		Publisher:     publisher, TaskAuthority: fixtureTaskAuthority{},
 	})(ctx, newTask(t, TypeConversationFinalize, map[string]any{
 		"conversation_id": "conv-retain-media",
 		"user_id":         "user-1",
@@ -1784,7 +1789,7 @@ func TestMediaExtractRefreshesRetainedSourceSnapshotWithArtifacts(t *testing.T) 
 		Generations:   generations,
 		MediaStore:    media,
 		Multimodal:    multimodal,
-		Publisher:     publisher,
+		Publisher:     publisher, TaskAuthority: fixtureTaskAuthority{},
 	})(ctx, newTask(t, TypeMediaExtract, MediaExtractPayload{
 		UserID:         "user-1",
 		ConversationID: "conv-retain-media",
@@ -1812,9 +1817,9 @@ func TestToolPayloadMultimodalContentEntersTimeline(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conversations := sql.NewInMemoryConversationRepository()
-	media := sql.NewInMemoryMediaRepository()
-	memories := sql.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	media := mediastore.NewInMemoryMediaRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	publisher := &recordingPublisher{}
 	multimodal := multimodalservice.NewService(media, nil, bootstrap.MultimodalConfig{
 		Enabled:                   true,
@@ -1827,7 +1832,7 @@ func TestToolPayloadMultimodalContentEntersTimeline(t *testing.T) {
 		ConversationID: "conv-tool-mm",
 		UserID:         "user-1",
 		RequestFormat:  string(domain.ProtocolOpenAIResponses),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		SummaryStatus:  domain.ProcessingStatusQueued,
@@ -1874,7 +1879,7 @@ func TestToolPayloadMultimodalContentEntersTimeline(t *testing.T) {
 			},
 		},
 		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(), AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("persist conversation: %v", err)
 	}
@@ -1887,7 +1892,7 @@ func TestToolPayloadMultimodalContentEntersTimeline(t *testing.T) {
 		Vectors:        vector.NewPGVectorStore(nil),
 		Publisher:      publisher,
 		Multimodal:     multimodal,
-		EmbeddingModel: "test-embedding",
+		EmbeddingModel: "test-embedding", TaskAuthority: fixtureTaskAuthority{},
 	}
 
 	if err := handleMediaExtract(nilLogger(), services)(ctx, newTask(t, TypeMediaExtract, MediaExtractPayload{
@@ -2017,9 +2022,9 @@ func TestAnalysisCleanupRemovesBlobButKeepsArtifactsAndEvidences(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	conversations := sql.NewInMemoryConversationRepository()
-	media := sql.NewInMemoryMediaRepository()
-	memories := sql.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	media := mediastore.NewInMemoryMediaRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	publisher := &recordingPublisher{}
 
 	root := t.TempDir()
@@ -2055,7 +2060,7 @@ func TestAnalysisCleanupRemovesBlobButKeepsArtifactsAndEvidences(t *testing.T) {
 		ConversationID: "conv-retain-false",
 		UserID:         "user-1",
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusEnded,
 		SummaryStatus:  domain.ProcessingStatusQueued,
@@ -2073,7 +2078,7 @@ func TestAnalysisCleanupRemovesBlobButKeepsArtifactsAndEvidences(t *testing.T) {
 			}},
 		}},
 		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(), AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("persist conversation: %v", err)
 	}
@@ -2086,7 +2091,7 @@ func TestAnalysisCleanupRemovesBlobButKeepsArtifactsAndEvidences(t *testing.T) {
 		Publisher:      publisher,
 		Analysis:       analysisservice.NewService(memoryllmfixture.Generator{}),
 		Multimodal:     multimodal,
-		EmbeddingModel: "test-embedding",
+		EmbeddingModel: "test-embedding", TaskAuthority: fixtureTaskAuthority{},
 	}
 
 	if err := handleMediaExtract(nilLogger(), services)(ctx, newTask(t, TypeMediaExtract, MediaExtractPayload{
@@ -2152,19 +2157,19 @@ func TestAnalysisCleanupRemovesBlobButKeepsArtifactsAndEvidences(t *testing.T) {
 	}
 }
 
-func conversationsFromRecords(t *testing.T, userID, conversationID string) *sql.InMemoryConversationRepository {
+func conversationsFromRecords(t *testing.T, userID, conversationID string) *conversationstore.InMemoryConversationRepository {
 	t.Helper()
-	repo := sql.NewInMemoryConversationRepository()
+	repo := conversationstore.NewInMemoryConversationRepository()
 	if err := repo.PersistExchange(context.Background(), domain.ConversationRecord{
 		ConversationID: conversationID,
 		UserID:         userID,
 		RequestFormat:  string(domain.ProtocolOpenAIChat),
-		Provider:       domain.ProviderOpenAI,
+		Provider:       domain.ProviderOpenAICompatible,
 		Mode:           domain.ModeTransparent,
 		FinalizeStatus: domain.FinalizeStatusActive,
 		SummaryStatus:  domain.ProcessingStatusPending,
 		AnalysisStatus: domain.ProcessingStatusPending,
-		UpdatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(), AgentID: "fixture-agent",
 	}); err != nil {
 		t.Fatalf("seed conversation repo: %v", err)
 	}
@@ -2177,9 +2182,44 @@ func newTask(t *testing.T, taskType string, payload any) *asynq.Task {
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
 	}
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := fields["schema_version"]; !ok {
+		fields["schema_version"] = 2
+	}
+	if user, ok := fields["user_id"].(string); ok {
+		if _, exists := fields["workspace_id"]; !exists {
+			fields["workspace_id"] = domain.PersonalWorkspaceID(user)
+		}
+	}
+	raw, err = json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
 	return asynq.NewTask(taskType, raw)
 }
 
 func nilLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+func currentFixtureID(id string) string {
+	return currentGenerationID(domain.PersonalWorkspaceID("user-1")) + ":" + id
+}
+
+type fixtureTaskAuthority struct{}
+
+func (fixtureTaskAuthority) ValidateMemoryTask(_ context.Context, s domain.MemoryTaskScope) error {
+	if s.UserID == "" || s.WorkspaceID != domain.PersonalWorkspaceID(s.UserID) || s.PartitionID != "" {
+		return domain.ErrAccessDenied
+	}
+	return nil
+}
+
+func fixtureRelay(logger *slog.Logger, outbox ports.OutboxRepository, publisher ports.TaskPublisher) *Relay {
+	r := NewRelay(logger, outbox, publisher)
+	r.SetTaskAuthority(fixtureTaskAuthority{})
+	return r
 }

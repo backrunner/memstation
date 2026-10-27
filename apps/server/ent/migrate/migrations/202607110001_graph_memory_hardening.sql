@@ -1,64 +1,6 @@
 ALTER TABLE memory_nodes
   ADD COLUMN IF NOT EXISTS embedding_revision BIGINT NOT NULL DEFAULT 0;
 
-UPDATE memory_relations
-SET weight = LEAST(1, GREATEST(0, weight))
-WHERE weight < 0 OR weight > 1;
-
-DELETE FROM memory_relations
-WHERE src_node_id = dst_node_id OR BTRIM(relation_type) = '';
-
-DELETE FROM memory_relations relation
-WHERE NOT EXISTS (
-  SELECT 1 FROM memory_nodes node
-  WHERE node.user_id = relation.user_id AND node.id = relation.src_node_id
-) OR NOT EXISTS (
-  SELECT 1 FROM memory_nodes node
-  WHERE node.user_id = relation.user_id AND node.id = relation.dst_node_id
-);
-
-DELETE FROM memory_embeddings embedding
-WHERE NOT EXISTS (
-  SELECT 1 FROM memory_nodes node
-  WHERE node.user_id = embedding.user_id AND node.id = embedding.node_id
-);
-
-DELETE FROM memory_evidences evidence
-WHERE NOT EXISTS (
-  SELECT 1 FROM memory_nodes node
-  WHERE node.user_id = evidence.user_id AND node.id = evidence.node_id
-);
-
-DELETE FROM memory_summaries document
-WHERE NOT EXISTS (
-  SELECT 1 FROM memory_nodes node
-  WHERE node.user_id = document.user_id AND node.id = document.node_id
-);
-
-DELETE FROM impressions document
-WHERE NOT EXISTS (
-  SELECT 1 FROM memory_nodes node
-  WHERE node.user_id = document.user_id AND node.id = document.node_id
-);
-
-DELETE FROM facts document
-WHERE NOT EXISTS (
-  SELECT 1 FROM memory_nodes node
-  WHERE node.user_id = document.user_id AND node.id = document.node_id
-);
-
-DELETE FROM key_memories document
-WHERE NOT EXISTS (
-  SELECT 1 FROM memory_nodes node
-  WHERE node.user_id = document.user_id AND node.id = document.node_id
-);
-
-DELETE FROM memory_items document
-WHERE NOT EXISTS (
-  SELECT 1 FROM memory_nodes node
-  WHERE node.user_id = document.user_id AND node.id = document.node_id
-);
-
 CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_nodes_user_id
   ON memory_nodes (user_id, id);
 

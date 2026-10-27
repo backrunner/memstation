@@ -184,7 +184,7 @@ func (s *Service) Probe(ctx context.Context, version string) domain.MemoryCapabi
 		Runtime: s.runtime, ContractVersion: "1.0", ServerVersion: version, Status: "ready", Access: a,
 		Capabilities: map[string]bool{
 			"server_isolation": true, "multi_workspace": true, "private_audience": true, "publishing": security.AdminFromContext(ctx),
-			"independent_ingestion": allowed(domain.CapabilityEventsWrite), "actor_attribution": true, "batch_idempotency": true,
+			"independent_ingestion": allowed(domain.CapabilityEventsWrite), "actor_attribution": true, "external_actor_mentions": true, "batch_idempotency": true,
 			"source_retraction": allowed(domain.CapabilitySourcesRetract), "forget": allowed(domain.CapabilityMemoryForget),
 			"source_read": allowed(domain.CapabilitySourcesRead), "processing_watermarks": allowed(domain.CapabilityEventsWrite),
 			"candidates": allowed(domain.CapabilityCandidatesWrite), "memory_inspect": allowed(domain.CapabilityMemoryRead),

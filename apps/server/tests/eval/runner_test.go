@@ -5,16 +5,17 @@ import (
 	"path/filepath"
 	"testing"
 
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
 	"memstation/apps/server/internal/domain"
 	memoryservice "memstation/apps/server/internal/service/memory"
-	sqlstore "memstation/apps/server/internal/store/sql"
 )
 
 func TestRunVariantHonorsConversationAndSegmentFlags(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	for _, doc := range []domain.MemoryDocument{
 		{
 			ID:             "summary-freeze",
@@ -32,7 +33,7 @@ func TestRunVariantHonorsConversationAndSegmentFlags(t *testing.T) {
 			UserID:         "user-1",
 			ConversationID: "conv-freeze",
 			Type:           domain.MemoryTypeFact,
-			Content:        "Dana owns the freeze exception approval.",
+			Content:        "Dana approves release exceptions.",
 			Importance:     1,
 			DecayFactor:    1,
 		},

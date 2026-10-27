@@ -6,12 +6,13 @@ import (
 	"strings"
 	"time"
 
+	identitystore "memstation/apps/server/internal/store/sql/identity"
+
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/ports"
 	"memstation/apps/server/internal/runtimeconfig"
 	"memstation/apps/server/internal/security"
 	"memstation/apps/server/internal/service/identity"
-	sqlstore "memstation/apps/server/internal/store/sql"
 
 	"github.com/google/uuid"
 )
@@ -19,9 +20,9 @@ import (
 type Record = domain.Credential
 
 type CreateOptions struct {
-	WorkspaceID  string     `json:"workspace_id,omitempty"`
+	WorkspaceID  string     `json:"workspace_id"`
 	Name         string     `json:"name"`
-	AgentID      string     `json:"agent_id,omitempty"`
+	AgentID      string     `json:"agent_id"`
 	Capabilities []string   `json:"capabilities,omitempty"`
 	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
 }
@@ -32,57 +33,25 @@ type Service struct {
 }
 
 func NewService(db runtimeconfig.DBHandle) *Service {
-	repo := sqlstore.NewIdentityRepository(db)
+	repo := identitystore.NewIdentityRepository(db)
 	return &Service{repo: repo, identities: identity.NewService(repo)}
 }
 func (s *Service) Identities() *identity.Service { return s.identities }
 
-// The configured development key has a fixed ceiling but must still obey the
-// current legacy Agent grant and workspace policy, including continuation checks.
-func (s *Service) DevelopmentPrincipal(ctx context.Context, user string) (domain.AccessContext, error) {
-	if _, err := s.identities.Personal(ctx, user); err != nil {
-		return domain.AccessContext{}, err
-	}
-	detail, err := s.identities.Detail(ctx, user, domain.LegacyAgentID(user))
-	if err != nil {
-		return domain.AccessContext{}, err
-	}
-	if detail.Agent.Status != "active" || detail.Workspace.Status != "active" {
-		return domain.AccessContext{}, domain.ErrAccessDenied
-	}
-	return domain.AccessContext{
-		UserID: user, AgentID: detail.Agent.ID, CredentialID: "development", WorkspaceID: detail.Workspace.ID,
-		Capabilities: detail.EffectiveCapabilities, PolicyVersion: detail.Workspace.PolicyVersion, GrantRevision: detail.Grant.Revision, Legacy: true,
-	}, nil
-}
-
-func (s *Service) Create(ctx context.Context, user, name string) (Record, string, error) {
-	return s.CreateWithOptions(ctx, user, CreateOptions{Name: name})
-}
-
 func (s *Service) CreateWithOptions(ctx context.Context, user string, input CreateOptions) (Record, string, error) {
 	input.Name = strings.TrimSpace(input.Name)
-	if user == "" || !identity.ValidateName(input.Name) || input.ExpiresAt != nil && !input.ExpiresAt.After(time.Now()) {
+	if user == "" || strings.TrimSpace(input.AgentID) == "" || strings.TrimSpace(input.WorkspaceID) == "" || !identity.ValidateName(input.Name) || input.ExpiresAt != nil && !input.ExpiresAt.After(time.Now()) {
 		return Record{}, "", identity.ErrInvalidInput
 	}
 	if err := identity.ValidateCapabilities(input.Capabilities); err != nil {
 		return Record{}, "", err
 	}
-	var w domain.Workspace
-	var err error
-	if input.WorkspaceID == "" {
-		w, err = s.identities.Personal(ctx, user)
-	} else {
-		w, err = s.identities.Workspace(ctx, user, input.WorkspaceID)
-	}
+	w, err := s.identities.Workspace(ctx, user, input.WorkspaceID)
 	if err != nil {
 		return Record{}, "", err
 	}
 	if w.Status != "active" {
 		return Record{}, "", domain.ErrAccessDenied
-	}
-	if input.AgentID == "" {
-		input.AgentID = domain.LegacyAgentID(user)
 	}
 	grant, err := s.identities.WorkspaceGrant(ctx, user, w.ID, input.AgentID)
 	if err != nil {
@@ -125,10 +94,6 @@ func (s *Service) LookupPrincipalByHash(ctx context.Context, prefix, hash string
 	return s.repo.Authenticate(ctx, prefix, hash)
 }
 
-func (s *Service) LookupUserByHash(ctx context.Context, prefix, hash string) (string, error) {
-	a, err := s.LookupPrincipalByHash(ctx, prefix, hash)
-	return a.UserID, err
-}
 func (s *Service) List(ctx context.Context) ([]Record, error) { return s.repo.ListCredentials(ctx) }
 func PrefixAndHash(raw string) (string, string, error) {
 	prefix, hash, err := (security.APIKeyHasher{}).Hash(raw)
@@ -184,12 +149,6 @@ func (s *Service) ListForAgent(ctx context.Context, user, agent, after string, l
 }
 
 func (s *Service) ResolveAccess(ctx context.Context, p domain.AccessContext, workspace string, audience domain.Audience) (domain.AccessContext, error) {
-	if p.CredentialID == "development" {
-		if workspace != "" && workspace != p.WorkspaceID || audience.Kind != "" && audience.Kind != "workspace" || len(audience.ActorIDs) > 0 {
-			return domain.AccessContext{}, domain.ErrAccessDenied
-		}
-		return p, nil
-	}
 	repo, ok := s.repo.(ports.WorkspaceAdministration)
 	if !ok {
 		return domain.AccessContext{}, domain.ErrAccessDenied

@@ -31,6 +31,7 @@ func main() {
 		embeddingAPIKey             string
 		embeddingTimeout            time.Duration
 		locomoSkipCategoryFive      bool
+		locomoIncludeCaptions       bool
 		longMemEvalGranularityValue string
 	)
 
@@ -49,6 +50,7 @@ func main() {
 	flag.StringVar(&embeddingAPIKey, "embedding-api-key", envOrDefault("EMBEDDING_API_KEY", ""), "API key used for provider-backed embeddings.")
 	flag.DurationVar(&embeddingTimeout, "embedding-timeout", 60*time.Second, "Timeout for embedding requests in provider mode.")
 	flag.BoolVar(&locomoSkipCategoryFive, "locomo-skip-category-five", true, "Skip LOCOMO category-5 questions for retrieval/ranking runs.")
+	flag.BoolVar(&locomoIncludeCaptions, "locomo-include-captions", false, "Include marked machine-generated image captions in a separate LOCOMO input track.")
 	flag.StringVar(&longMemEvalGranularityValue, "longmemeval-granularity", string(eval.LongMemEvalGranularitySession), "LongMemEval retrieval granularity: session or turn.")
 	flag.Parse()
 
@@ -72,6 +74,7 @@ func main() {
 	dataset, err := eval.LoadDatasetWithOptions(datasetPath, formatValue, eval.DatasetLoadOptions{
 		LOCOMO: eval.LOCOMOOptions{
 			SkipCategoryFive: locomoSkipCategoryFive,
+			IncludeCaptions:  locomoIncludeCaptions,
 		},
 		LongMemEval: eval.LongMemEvalOptions{
 			Granularity: eval.LongMemEvalGranularity(strings.TrimSpace(longMemEvalGranularityValue)),
@@ -88,7 +91,7 @@ func main() {
 	ctx := context.Background()
 	embeddingOptions := eval.EmbeddingOptions{
 		Mode:     eval.EmbeddingMode(strings.TrimSpace(embeddingModeValue)),
-		Provider: string(domain.ProviderOpenAI),
+		Provider: string(domain.ProviderOpenAICompatible),
 		Model:    strings.TrimSpace(embeddingModel),
 		BaseURL:  strings.TrimSpace(embeddingBaseURL),
 		APIKey:   strings.TrimSpace(embeddingAPIKey),

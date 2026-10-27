@@ -2637,7 +2637,6 @@ type AgentMutation struct {
 	default_workspace_id *string
 	revision             *int64
 	addrevision          *int64
-	legacy               *bool
 	clearedFields        map[string]struct{}
 	done                 bool
 	oldValue             func(context.Context) (*Agent, error)
@@ -3056,42 +3055,6 @@ func (m *AgentMutation) ResetRevision() {
 	m.addrevision = nil
 }
 
-// SetLegacy sets the "legacy" field.
-func (m *AgentMutation) SetLegacy(b bool) {
-	m.legacy = &b
-}
-
-// Legacy returns the value of the "legacy" field in the mutation.
-func (m *AgentMutation) Legacy() (r bool, exists bool) {
-	v := m.legacy
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldLegacy returns the old "legacy" field's value of the Agent entity.
-// If the Agent object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *AgentMutation) OldLegacy(ctx context.Context) (v bool, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldLegacy is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldLegacy requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldLegacy: %w", err)
-	}
-	return oldValue.Legacy, nil
-}
-
-// ResetLegacy resets all changes to the "legacy" field.
-func (m *AgentMutation) ResetLegacy() {
-	m.legacy = nil
-}
-
 // Where appends a list predicates to the AgentMutation builder.
 func (m *AgentMutation) Where(ps ...predicate.Agent) {
 	m.predicates = append(m.predicates, ps...)
@@ -3126,7 +3089,7 @@ func (m *AgentMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AgentMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 8)
 	if m.created_at != nil {
 		fields = append(fields, agent.FieldCreatedAt)
 	}
@@ -3150,9 +3113,6 @@ func (m *AgentMutation) Fields() []string {
 	}
 	if m.revision != nil {
 		fields = append(fields, agent.FieldRevision)
-	}
-	if m.legacy != nil {
-		fields = append(fields, agent.FieldLegacy)
 	}
 	return fields
 }
@@ -3178,8 +3138,6 @@ func (m *AgentMutation) Field(name string) (ent.Value, bool) {
 		return m.DefaultWorkspaceID()
 	case agent.FieldRevision:
 		return m.Revision()
-	case agent.FieldLegacy:
-		return m.Legacy()
 	}
 	return nil, false
 }
@@ -3205,8 +3163,6 @@ func (m *AgentMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldDefaultWorkspaceID(ctx)
 	case agent.FieldRevision:
 		return m.OldRevision(ctx)
-	case agent.FieldLegacy:
-		return m.OldLegacy(ctx)
 	}
 	return nil, fmt.Errorf("unknown Agent field %s", name)
 }
@@ -3271,13 +3227,6 @@ func (m *AgentMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRevision(v)
-		return nil
-	case agent.FieldLegacy:
-		v, ok := value.(bool)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetLegacy(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Agent field %s", name)
@@ -3366,9 +3315,6 @@ func (m *AgentMutation) ResetField(name string) error {
 		return nil
 	case agent.FieldRevision:
 		m.ResetRevision()
-		return nil
-	case agent.FieldLegacy:
-		m.ResetLegacy()
 		return nil
 	}
 	return fmt.Errorf("unknown Agent field %s", name)

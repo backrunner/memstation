@@ -26,11 +26,12 @@ func (g Generator) Generate(ctx context.Context, request memoryllm.Request) (jso
 	raw, _ := json.Marshal(request.Input)
 	var input struct {
 		Sources []struct {
-			ID     string            `json:"id"`
-			Role   string            `json:"role"`
-			Text   string            `json:"text"`
-			Author string            `json:"author_actor_id"`
-			Ref    *domain.SourceRef `json:"source_ref"`
+			ID          string            `json:"id"`
+			MediaSHA256 string            `json:"media_sha256"`
+			Role        string            `json:"role"`
+			Text        string            `json:"text"`
+			Author      string            `json:"author_actor_id"`
+			Ref         *domain.SourceRef `json:"source_ref"`
 		} `json:"sources"`
 		Chunks []struct {
 			Summary string `json:"summary"`
@@ -63,11 +64,12 @@ func (g Generator) Generate(ctx context.Context, request memoryllm.Request) (jso
 		return json.Marshal(map[string]any{"summary": summary, "topic_label": "Fixture topic", "keywords": []string{"fixture"}, "importance": 1, "decay_factor": 1})
 	case "analysis.extract":
 		sources := append([]struct {
-			ID     string            `json:"id"`
-			Role   string            `json:"role"`
-			Text   string            `json:"text"`
-			Author string            `json:"author_actor_id"`
-			Ref    *domain.SourceRef `json:"source_ref"`
+			ID          string            `json:"id"`
+			MediaSHA256 string            `json:"media_sha256"`
+			Role        string            `json:"role"`
+			Text        string            `json:"text"`
+			Author      string            `json:"author_actor_id"`
+			Ref         *domain.SourceRef `json:"source_ref"`
 		}{}, input.Sources...)
 		if g.PreferLastSource {
 			for i, j := 0, len(sources)-1; i < j; i, j = i+1, j-1 {
@@ -75,7 +77,7 @@ func (g Generator) Generate(ctx context.Context, request memoryllm.Request) (jso
 			}
 		}
 		for _, source := range sources {
-			if source.Role != "user" && source.Role != "tool" {
+			if source.MediaSHA256 != "" || (source.Role != "user" && source.Role != "tool") {
 				continue
 			}
 			item := map[string]any{"content": source.Text, "subject": "user", "importance": 1, "decay_factor": 1, "confidence": .9, "quotes": []any{map[string]any{"source_id": source.ID, "text": source.Text}}}

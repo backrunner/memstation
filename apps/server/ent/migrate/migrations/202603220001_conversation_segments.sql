@@ -1,17 +1,3 @@
-WITH ranked_messages AS (
-  SELECT
-    ctid,
-    ROW_NUMBER() OVER (
-      PARTITION BY user_id, conversation_id, sequence_num
-      ORDER BY updated_at DESC, created_at DESC, id DESC
-    ) AS row_num
-  FROM messages
-)
-DELETE FROM messages m
-USING ranked_messages r
-WHERE m.ctid = r.ctid
-  AND r.row_num > 1;
-
 CREATE UNIQUE INDEX IF NOT EXISTS messages_user_conversation_sequence_idx
   ON messages (user_id, conversation_id, sequence_num);
 

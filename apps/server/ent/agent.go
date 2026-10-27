@@ -32,9 +32,7 @@ type Agent struct {
 	// DefaultWorkspaceID holds the value of the "default_workspace_id" field.
 	DefaultWorkspaceID string `json:"default_workspace_id,omitempty"`
 	// Revision holds the value of the "revision" field.
-	Revision int64 `json:"revision,omitempty"`
-	// Legacy holds the value of the "legacy" field.
-	Legacy       bool `json:"legacy,omitempty"`
+	Revision     int64 `json:"revision,omitempty"`
 	selectValues sql.SelectValues
 }
 
@@ -43,8 +41,6 @@ func (*Agent) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case agent.FieldLegacy:
-			values[i] = new(sql.NullBool)
 		case agent.FieldRevision:
 			values[i] = new(sql.NullInt64)
 		case agent.FieldID, agent.FieldUserID, agent.FieldActorID, agent.FieldName, agent.FieldStatus, agent.FieldDefaultWorkspaceID:
@@ -120,12 +116,6 @@ func (_m *Agent) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Revision = value.Int64
 			}
-		case agent.FieldLegacy:
-			if value, ok := values[i].(*sql.NullBool); !ok {
-				return fmt.Errorf("unexpected type %T for field legacy", values[i])
-			} else if value.Valid {
-				_m.Legacy = value.Bool
-			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -185,9 +175,6 @@ func (_m *Agent) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("revision=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Revision))
-	builder.WriteString(", ")
-	builder.WriteString("legacy=")
-	builder.WriteString(fmt.Sprintf("%v", _m.Legacy))
 	builder.WriteByte(')')
 	return builder.String()
 }

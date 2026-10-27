@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"memstation/apps/server/internal/security"
+
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/modelcap"
 	"memstation/apps/server/internal/ports"
@@ -70,7 +72,6 @@ type UserSummary struct {
 }
 
 type UserDetail struct {
-	IdentityMode  string                 `json:"identity_mode,omitempty"`
 	Agents        []domain.Agent         `json:"agents,omitempty"`
 	User          userservice.Record     `json:"user"`
 	Settings      map[string]any         `json:"settings"`
@@ -451,7 +452,6 @@ func (s *Service) UserDetail(ctx context.Context, userID string) (UserDetail, er
 	}
 
 	return UserDetail{
-		IdentityMode:  "personal_only",
 		Agents:        agents,
 		User:          user,
 		Settings:      settings,
@@ -480,7 +480,7 @@ func countDocumentsByType(ctx context.Context, repo ports.MemoryRepository, gene
 		generationID = generation.GenerationID
 	}
 	if generationID == "" && userID != "" {
-		generationID = memorygenservice.CurrentGenerationID(userID)
+		generationID = memorygenservice.CurrentGenerationID(security.WorkspaceID(ctx, userID))
 	}
 	items, err := repo.ListDocumentsInGeneration(ctx, userID, generationID, kinds, 1000)
 	if err != nil {
@@ -506,7 +506,7 @@ func (s *Service) activeGenerationID(ctx context.Context, userID string) (string
 		return "", nil
 	}
 	if s.generations == nil {
-		return memorygenservice.CurrentGenerationID(userID), nil
+		return memorygenservice.CurrentGenerationID(security.WorkspaceID(ctx, userID)), nil
 	}
 	generation, err := s.generations.GetActiveGeneration(ctx, userID)
 	if err != nil {

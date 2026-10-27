@@ -13,26 +13,6 @@ import (
 	"memstation/apps/server/internal/domain"
 )
 
-// CreateAPIKey is the resolver for the createAPIKey field.
-func (r *mutationResolver) CreateAPIKey(ctx context.Context, name string) (*generated.APIKey, error) {
-	userID := userIDFromContext(ctx)
-	record, _, err := r.APIKeyService.Create(ctx, userID, name)
-	if err != nil {
-		return nil, err
-	}
-	r.recordAudit(ctx, "create_api_key", "api_key", record.ID, map[string]any{"name": name})
-	return &generated.APIKey{ID: record.ID, Prefix: record.Prefix}, nil
-}
-
-// RevokeAPIKey is the resolver for the revokeAPIKey field.
-func (r *mutationResolver) RevokeAPIKey(ctx context.Context, id string) (bool, error) {
-	if err := r.APIKeyService.Revoke(ctx, id); err != nil {
-		return false, err
-	}
-	r.recordAudit(ctx, "revoke_api_key", "api_key", id, nil)
-	return true, nil
-}
-
 // UpdateUserSetting is the resolver for the updateUserSetting field.
 func (r *mutationResolver) UpdateUserSetting(ctx context.Context, chatModel *string, summaryModel *string, analysisModel *string, embeddingModel *string, toolWriteEnabled *bool, maxInjectionTokens *int) (*generated.UserSetting, error) {
 	fields := map[string]any{}

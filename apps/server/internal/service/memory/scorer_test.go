@@ -6,9 +6,10 @@ import (
 	"errors"
 	"testing"
 
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/service/memoryllm"
-	sqlstore "memstation/apps/server/internal/store/sql"
 )
 
 type scoreGenerator func(context.Context, memoryllm.Request) (json.RawMessage, error)
@@ -31,7 +32,7 @@ func TestScoreFailuresNeverProduceHeuristicValuesOrWrites(t *testing.T) {
 			scorer := &Scorer{generator: scoreGenerator(func(context.Context, memoryllm.Request) (json.RawMessage, error) {
 				return json.RawMessage(tc.raw), tc.err
 			})}
-			repo := sqlstore.NewInMemoryMemoryRepository()
+			repo := memorystore.NewInMemoryMemoryRepository()
 			service := NewService(nil, repo)
 			service.SetScorer(scorer)
 			if _, err := service.UpsertKeyMemory(context.Background(), domain.KeyMemory{UserID: "owner", Key: "preferences", Value: "I strongly prefer this permanently"}); err == nil {

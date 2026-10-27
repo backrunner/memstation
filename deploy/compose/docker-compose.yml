@@ -29,7 +29,6 @@ services:
       MEMSTATION_DELETION_JOURNAL_PATH: /var/lib/memstation-deletions/history.jsonl
       MEMSTATION_ADMIN_TOKEN: ${MEMSTATION_ADMIN_TOKEN:-memstation-local-admin-token}
       MEMSTATION_MASTER_KEY: ${MEMSTATION_MASTER_KEY:-memstation-local-master-key}
-      MEMSTATION_DEV_API_KEY: ${MEMSTATION_DEV_API_KEY:-ms-local-dev}
       MEMSTATION_CORS_ALLOWED_ORIGINS: ${MEMSTATION_CORS_ALLOWED_ORIGINS:-}
       MEMSTATION_SESSION_COOKIE_SECURE: "false"
       MEMSTATION_SESSION_COOKIE_CROSS_SITE: "false"
@@ -65,7 +64,6 @@ services:
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
       MEMSTATION_ADMIN_TOKEN: ${MEMSTATION_ADMIN_TOKEN:-memstation-local-admin-token}
       MEMSTATION_MASTER_KEY: ${MEMSTATION_MASTER_KEY:-memstation-local-master-key}
-      MEMSTATION_DEV_API_KEY: ${MEMSTATION_DEV_API_KEY:-ms-local-dev}
       MEMSTATION_CORS_ALLOWED_ORIGINS: ${MEMSTATION_CORS_ALLOWED_ORIGINS:-}
       MEMSTATION_SESSION_COOKIE_SECURE: "false"
       MEMSTATION_SESSION_COOKIE_CROSS_SITE: "false"
@@ -93,7 +91,6 @@ services:
       MEMSTATION_DELETION_JOURNAL_PATH: /var/lib/memstation-deletions/history.jsonl
       MEMSTATION_ADMIN_TOKEN: ${MEMSTATION_ADMIN_TOKEN:-memstation-local-admin-token}
       MEMSTATION_MASTER_KEY: ${MEMSTATION_MASTER_KEY:-memstation-local-master-key}
-      MEMSTATION_DEV_API_KEY: ${MEMSTATION_DEV_API_KEY:-ms-local-dev}
     depends_on:
       postgres:
         condition: service_healthy
@@ -115,7 +112,6 @@ services:
       MEMSTATION_DELETION_JOURNAL_PATH: /var/lib/memstation-deletions/history.jsonl
       MEMSTATION_ADMIN_TOKEN: ${MEMSTATION_ADMIN_TOKEN:-memstation-local-admin-token}
       MEMSTATION_MASTER_KEY: ${MEMSTATION_MASTER_KEY:-memstation-local-master-key}
-      MEMSTATION_DEV_API_KEY: ${MEMSTATION_DEV_API_KEY:-ms-local-dev}
     depends_on:
       postgres:
         condition: service_healthy

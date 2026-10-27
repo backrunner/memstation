@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
+	conversationstore "memstation/apps/server/internal/store/sql/conversation"
+
 	"memstation/apps/server/internal/domain"
-	sqlstore "memstation/apps/server/internal/store/sql"
 )
 
 func TestRunRecoveryDrillCompletesBacklog(t *testing.T) {
@@ -95,9 +96,9 @@ func TestRelayFlushProcessesMultiplePendingBatches(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	outbox := sqlstore.NewInMemoryOutboxRepository()
+	outbox := conversationstore.NewInMemoryOutboxRepository()
 	publisher := &recordingPublisher{}
-	relay := NewRelay(slog.New(slog.NewTextHandler(io.Discard, nil)), outbox, publisher)
+	relay := fixtureRelay(slog.New(slog.NewTextHandler(io.Discard, nil)), outbox, publisher)
 
 	for idx := 0; idx < 135; idx++ {
 		if err := outbox.Enqueue(ctx, domain.OutboxEvent{
@@ -108,7 +109,7 @@ func TestRelayFlushProcessesMultiplePendingBatches(t *testing.T) {
 			AggregateID:   fmt.Sprintf("conv-%03d", idx),
 			Payload: map[string]any{
 				"conversation_id": fmt.Sprintf("conv-%03d", idx),
-				"user_id":         "user-1",
+				"schema_version":  2, "workspace_id": domain.PersonalWorkspaceID("user-1"), "user_id": "user-1",
 			},
 			Status:      "pending",
 			AvailableAt: time.Now().UTC(),

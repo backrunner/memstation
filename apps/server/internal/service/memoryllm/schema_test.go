@@ -107,3 +107,43 @@ func TestSchemaCorrectionDoesNotRetryTransportErrorsOrCancelledWork(t *testing.T
 		t.Fatalf("cancelled correction continued: %v calls=%d", err, calls)
 	}
 }
+
+func TestGroundingCorrectionIsBoundedDoesNotLeakAndRestoresRejectedTarget(t *testing.T) {
+	var target struct {
+		Value string `json:"value"`
+	}
+	target.Value = "original"
+	calls := 0
+	source := map[string]string{"source": "only original material"}
+	g := schemaGenerator(func(_ context.Context, r Request) (json.RawMessage, error) {
+		calls++
+		if !reflect.DeepEqual(r.Input, source) || strings.Contains(r.Instruction, "INJECTED_VALIDATOR_ERROR") {
+			t.Fatal("source or trust boundary changed")
+		}
+		return json.RawMessage(`{"value":"rejected"}`), nil
+	})
+	err := GenerateValidated(context.Background(), g, Request{Input: source}, &target, Validation{Check: func() error { return errors.New("INJECTED_VALIDATOR_ERROR") }})
+	if err == nil || calls != 2 || target.Value != "original" {
+		t.Fatal("unbounded or leaked rejected output", err, calls, target)
+	}
+}
+
+func TestRejectedNonJSONHasOneModelCorrection(t *testing.T) {
+	calls := 0
+	g := schemaGenerator(func(_ context.Context, r Request) (json.RawMessage, error) {
+		calls++
+		if calls == 1 {
+			return nil, ErrInvalidJSONOutput
+		}
+		if !strings.Contains(r.Instruction, "only format correction attempt") {
+			t.Fatal("missing controlled format feedback")
+		}
+		return json.RawMessage(`{"value":"valid"}`), nil
+	})
+	var target struct {
+		Value string `json:"value"`
+	}
+	if err := GenerateDecoded(context.Background(), g, Request{}, &target); err != nil || calls != 2 || target.Value != "valid" {
+		t.Fatal("format failure was not recovered", err, calls, target)
+	}
+}

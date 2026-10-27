@@ -17,7 +17,7 @@ func TestLocalBlobScopeAndAtomicPublication(t *testing.T) {
 	root := t.TempDir()
 	s := &LocalStore{root: root}
 	user := "owner/with opaque components"
-	ctx := security.WithAccess(context.Background(), domain.AccessContext{UserID: user, WorkspaceID: domain.PersonalWorkspaceID(user)})
+	ctx := security.WithAccess(context.Background(), domain.AccessContext{UserID: user, WorkspaceID: domain.PersonalWorkspaceID(user), ScopeVersion: 2, PartitionIDs: []string{""}})
 	input := domain.BlobObject{UserID: user, BlobID: "blob:one", OriginalFilename: "../../secret"}
 	b, err := s.Put(ctx, input, strings.NewReader("visible"))
 	if err != nil {
@@ -73,7 +73,7 @@ type brokenReader struct{}
 
 func (brokenReader) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
 
-func TestLegacyBlobLayoutAndSymlinkBoundary(t *testing.T) {
+func TestBlobRejectsRetiredLayoutAndSymlinkEscape(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
 	s := &LocalStore{root: root}
@@ -87,10 +87,10 @@ func TestLegacyBlobLayoutAndSymlinkBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	f, err := s.Open(ctx, b)
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		f.Close()
+		t.Fatal("retired blob layout accepted")
 	}
-	f.Close()
 	if err = os.Remove(path); err != nil {
 		t.Fatal(err)
 	}

@@ -28,38 +28,36 @@ type taskScope struct {
 	ConversationID       string `json:"conversation_id"`
 }
 
-// Legacy payloads can resolve only to the deterministic Personal workspace.
-// No unsupported scope or malformed payload is silently treated as owner-wide.
+// Consumers accept only the current, authority-verified task envelope.
 func bindTaskScope(ctx context.Context, task *asynq.Task, services Services) (context.Context, error) {
 	var scope taskScope
 	if err := json.Unmarshal(task.Payload(), &scope); err != nil {
 		return ctx, fmt.Errorf("invalid task scope: %w", asynq.SkipRetry)
 	}
-	if scope.Version < 0 || scope.Version > 2 || scope.Version >= 1 && scope.WorkspaceID == "" {
+	if scope.Version != 2 || scope.WorkspaceID == "" {
 		return ctx, errors.Join(domain.ErrAccessDenied, asynq.SkipRetry)
 	}
 	var bound context.Context
 	var err error
-	if scope.Version == 2 {
-		if services.TaskAuthority == nil {
-			return ctx, errors.Join(domain.ErrAccessDenied, asynq.SkipRetry)
-		}
-		if err = services.TaskAuthority.ValidateMemoryTask(ctx, domain.MemoryTaskScope{ReceiptID: scope.ReceiptID, OperationID: scope.OperationID, UserID: scope.UserID, WorkspaceID: scope.WorkspaceID, PartitionID: scope.PartitionID, ConversationID: scope.ConversationID, NodeID: scope.NodeID, GenerationID: scope.GenerationID, ConversationRevision: scope.ConversationRevision}); err != nil {
-			// Obsolete is returned only after persisted identity and partition were
-			// verified. Preserve that scope for the terminal job ledger, never run it.
-			if errors.Is(err, domain.ErrMemoryTaskObsolete) {
-				bound, bindErr := security.WithDataScope(ctx, scope.UserID, scope.WorkspaceID, scope.PartitionID)
-				if bindErr != nil {
-					return ctx, bindErr
-				}
-				return bound, err
-			}
-			return ctx, err
-		}
-		bound, err = security.WithDataScope(ctx, scope.UserID, scope.WorkspaceID, scope.PartitionID)
-	} else {
-		bound, err = security.WithPersonalDataScope(ctx, scope.UserID, scope.WorkspaceID)
+	if services.TaskAuthority == nil {
+		return ctx, errors.Join(domain.ErrAccessDenied, asynq.SkipRetry)
 	}
+	if err = services.TaskAuthority.ValidateMemoryTask(ctx, domain.MemoryTaskScope{ReceiptID: scope.ReceiptID, OperationID: scope.OperationID, UserID: scope.UserID, WorkspaceID: scope.WorkspaceID, PartitionID: scope.PartitionID, ConversationID: scope.ConversationID, NodeID: scope.NodeID, GenerationID: scope.GenerationID, ConversationRevision: scope.ConversationRevision}); err != nil {
+		// Obsolete is returned only after persisted identity and partition were
+		// verified. Preserve that scope for the terminal job ledger, never run it.
+		if errors.Is(err, domain.ErrMemoryTaskObsolete) {
+			bound, bindErr := security.WithDataScope(ctx, scope.UserID, scope.WorkspaceID, scope.PartitionID)
+			if bindErr != nil {
+				return ctx, bindErr
+			}
+			return bound, err
+		}
+		if errors.Is(err, domain.ErrAccessDenied) {
+			return ctx, errors.Join(err, asynq.SkipRetry)
+		}
+		return ctx, err
+	}
+	bound, err = security.WithDataScope(ctx, scope.UserID, scope.WorkspaceID, scope.PartitionID)
 	if err != nil {
 		return ctx, errors.Join(err, asynq.SkipRetry)
 	}
@@ -90,7 +88,7 @@ func prepareScopedTask(ctx context.Context, task domain.TaskMessage) (domain.Tas
 	if err = json.Unmarshal(raw, &scope); err != nil {
 		return task, domain.ErrAccessDenied
 	}
-	if scope.Version < 0 || scope.Version > 2 || scope.Version >= 1 && scope.WorkspaceID == "" {
+	if _, versioned := task.Payload["schema_version"]; versioned && scope.Version != 2 || scope.Version == 2 && scope.WorkspaceID == "" {
 		return task, domain.ErrAccessDenied
 	}
 	user, ok := task.Payload["user_id"].(string)
@@ -113,12 +111,9 @@ func prepareScopedTask(ctx context.Context, task domain.TaskMessage) (domain.Tas
 	for k, v := range task.Payload {
 		payload[k] = v
 	}
-	payload["schema_version"] = 1
-	if workspace != domain.PersonalWorkspaceID(user) || security.WritePartition(ctx) != "" || scope.Version == 2 {
-		payload["schema_version"] = 2
-	}
+	payload["schema_version"] = 2
 	payload["partition_id"] = security.WritePartition(ctx)
-	if parent, ok := ctx.Value(parentTaskScopeKey{}).(taskScope); ok && parent.Version == 2 {
+	if parent, ok := ctx.Value(parentTaskScopeKey{}).(taskScope); ok {
 		payload["schema_version"] = 2
 		if _, exists := payload["conversation_id"]; !exists && parent.ConversationID != "" {
 			payload["conversation_id"] = parent.ConversationID
@@ -130,9 +125,7 @@ func prepareScopedTask(ctx context.Context, task domain.TaskMessage) (domain.Tas
 	task.Payload = payload
 	if task.UniqueKey != "" {
 		components := []string{user, workspace, task.Type, task.UniqueKey}
-		if payload["schema_version"] == 2 {
-			components = append(components, security.WritePartition(ctx))
-		}
+		components = append(components, security.WritePartition(ctx))
 		identity, _ := json.Marshal(components)
 		task.UniqueKey = domain.AccessID("task", string(identity))
 	}

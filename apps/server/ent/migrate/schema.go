@@ -92,7 +92,6 @@ var (
 		{Name: "status", Type: field.TypeString, Default: "active"},
 		{Name: "default_workspace_id", Type: field.TypeString},
 		{Name: "revision", Type: field.TypeInt64, Default: 1},
-		{Name: "legacy", Type: field.TypeBool, Default: false},
 	}
 	// AgentsTable holds the schema information for the "agents" table.
 	AgentsTable = &schema.Table{

@@ -215,21 +215,27 @@ func (e *Engine) searchHistoricalFacts(ctx context.Context, input domain.SearchI
 		// retained for display but must not penalize a then-valid fact.
 		scored := d
 		scored.Metadata = mergeSearchMetadata(d.Metadata, map[string]any{"is_superseded": false, "superseded_by_id": "", "valid_to": nil})
-		comp := scoreDocumentAt(scored, scores[d.NodeID], d.Score, 0, 0, 0, 0, 0, now, cfg)
+		comp := scoreDocumentAt(scored, scores[d.NodeID], d.Score, 0, 0, 0, 0, false, now, cfg)
 		candidates = append(candidates, searchCandidate{Document: d, PreliminaryScore: comp.EffectiveScore, BaseSemanticScore: scores[d.NodeID], KeywordScore: d.Score})
 	}
-	rs, rr := e.rerankCandidates(ctx, input, candidates)
+	rs, rr, rerankDiagnostics := e.rerankCandidates(ctx, input, candidates)
+	if err := ctx.Err(); err != nil {
+		return DebugSearchResult{}, err
+	}
 	out := []domain.MemoryDocument{}
 	components := map[string]ScoreComponents{}
 	for _, c := range candidates {
 		d := c.Document
+		if !rerankEligible(d.NodeID, rr, rerankDiagnostics) {
+			continue
+		}
 		scored := d
 		scored.Metadata = mergeSearchMetadata(d.Metadata, map[string]any{"is_superseded": false, "superseded_by_id": "", "valid_to": nil})
-		weight := 0.0
+		rerankApplied := false
 		if _, ok := rr[d.NodeID]; ok {
-			weight = e.RerankConfig().BlendWeight
+			rerankApplied = true
 		}
-		comp := scoreDocumentAt(scored, c.BaseSemanticScore, c.KeywordScore, 0, 0, 0, rs[d.NodeID], weight, now, cfg)
+		comp := scoreDocumentAt(scored, c.BaseSemanticScore, c.KeywordScore, 0, 0, 0, rs[d.NodeID], rerankApplied, now, cfg)
 		d.Score = comp.SemanticScore
 		d.EffectiveScore = comp.EffectiveScore
 		d.Metadata = mergeSearchMetadata(d.Metadata, map[string]any{"historical_snapshot": true, "as_of": input.AsOf, "known_at": input.KnownAt})
@@ -247,5 +253,5 @@ func (e *Engine) searchHistoricalFacts(ctx context.Context, input domain.SearchI
 	if len(out) > input.TopN {
 		out = out[:input.TopN]
 	}
-	return DebugSearchResult{Result: domain.SearchResult{Memories: out, Total: len(out)}, Variant: variant, Components: components, BaseScores: scores}, nil
+	return DebugSearchResult{Result: domain.SearchResult{Memories: out, Total: len(out)}, Variant: variant, Components: components, BaseScores: scores, Rerank: rerankDiagnostics}, nil
 }

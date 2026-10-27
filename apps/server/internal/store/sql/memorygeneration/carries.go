@@ -19,13 +19,13 @@ func prepareCarriesTx(ctx context.Context, tx *sql.Tx, g *domain.MemoryGeneratio
 		return nil
 	}
 	var preserve bool
-	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM memory_nodes n WHERE n.user_id=$1 AND n.workspace_id=$2 AND (n.generation_id=$3 OR n.node_type='key_memory') AND n.access_status='active' AND n.node_type IN('summary','segment','fact','impression','key_memory','event','task','procedure','artifact','entity','agent_action') AND (n.source_conversation_id='' OR n.embedding_revision>0 OR EXISTS(SELECT 1 FROM memory_candidates c WHERE c.target_node_id=n.id AND c.status='approved')))`, g.UserID, g.WorkspaceID, active).Scan(&preserve)
+	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM memory_nodes n WHERE n.user_id=$1 AND n.workspace_id=$2 AND (n.generation_id=$3 OR n.node_type='key_memory') AND n.access_status='active' AND n.node_type IN('summary','segment','fact','impression','key_memory','episode','event','task','procedure','artifact','entity','agent_action') AND (n.source_conversation_id='' OR n.embedding_revision>0 OR EXISTS(SELECT 1 FROM memory_candidates c WHERE c.target_node_id=n.id AND c.status='approved')))`, g.UserID, g.WorkspaceID, active).Scan(&preserve)
 	if err != nil || !preserve {
 		return err
 	}
 	result, err := tx.ExecContext(ctx, `INSERT INTO memory_generation_carries(id,user_id,workspace_id,partition_id,generation_id,node_id,source_generation_id,source_revision,embedding_revision)
  SELECT $1||':'||n.id,n.user_id,n.workspace_id,n.partition_id,$1,n.id,n.generation_id,n.revision,n.embedding_revision FROM memory_nodes n
- WHERE n.user_id=$2 AND n.workspace_id=$3 AND (n.generation_id=$4 OR n.node_type='key_memory') AND n.access_status='active' AND n.node_type IN('summary','segment','fact','impression','key_memory','event','task','procedure','artifact','entity','agent_action') AND `+storeaccess.PartitionSQL(ctx, "n.partition_id"), g.GenerationID, g.UserID, g.WorkspaceID, active)
+ WHERE n.user_id=$2 AND n.workspace_id=$3 AND (n.generation_id=$4 OR n.node_type='key_memory') AND n.access_status='active' AND n.node_type IN('summary','segment','fact','impression','key_memory','episode','event','task','procedure','artifact','entity','agent_action') AND `+storeaccess.PartitionSQL(ctx, "n.partition_id"), g.GenerationID, g.UserID, g.WorkspaceID, active)
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func validateCarriesTx(ctx context.Context, tx *sql.Tx, g domain.MemoryGeneratio
 	}
 	var invalid bool
 	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM memory_generation_carries c JOIN memory_nodes n ON n.id=c.node_id WHERE c.generation_id=$1 AND (c.status<>'completed' OR c.source_revision<>n.revision OR c.source_generation_id<>n.generation_id OR n.access_status<>'active' OR NOT EXISTS(SELECT 1 FROM memory_embeddings e WHERE e.node_id=n.id AND e.generation_id=$1 AND e.embedding_version=$4)))
- OR EXISTS(SELECT 1 FROM memory_nodes n LEFT JOIN memory_generations g ON g.generation_id=n.generation_id WHERE n.user_id=$2 AND n.workspace_id=$3 AND (g.is_active OR n.node_type='key_memory') AND n.access_status='active' AND n.node_type IN('summary','segment','fact','impression','key_memory','event','task','procedure','artifact','entity','agent_action') AND NOT EXISTS(SELECT 1 FROM memory_generation_carries c WHERE c.generation_id=$1 AND c.node_id=n.id))`, g.GenerationID, g.UserID, g.WorkspaceID, g.EmbeddingVersion).Scan(&invalid)
+ OR EXISTS(SELECT 1 FROM memory_nodes n LEFT JOIN memory_generations g ON g.generation_id=n.generation_id WHERE n.user_id=$2 AND n.workspace_id=$3 AND (g.is_active OR n.node_type='key_memory') AND n.access_status='active' AND n.node_type IN('summary','segment','fact','impression','key_memory','episode','event','task','procedure','artifact','entity','agent_action') AND NOT EXISTS(SELECT 1 FROM memory_generation_carries c WHERE c.generation_id=$1 AND c.node_id=n.id))`, g.GenerationID, g.UserID, g.WorkspaceID, g.EmbeddingVersion).Scan(&invalid)
 	if err != nil {
 		return err
 	}

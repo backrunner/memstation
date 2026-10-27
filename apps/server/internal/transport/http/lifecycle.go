@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"memstation/apps/server/internal/domain"
@@ -12,6 +13,20 @@ import (
 
 	"github.com/go-chi/chi/v5"
 )
+
+// chi keeps escaped route segments from URL.RawPath. Memory node identifiers
+// contain colons; decode exactly once before the scoped repository lookup.
+func memoryRouteID(r *http.Request, name string) string {
+	value := chi.URLParam(r, name)
+	if r.URL.RawPath == "" {
+		return value
+	}
+	value, err := url.PathUnescape(value)
+	if err != nil {
+		return ""
+	}
+	return value
+}
 
 func memoryRecoveryBarrier(check func(context.Context) error) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -56,7 +71,7 @@ func registerLifecycleRoutes(r chi.Router, s *lifecycleservice.Service, prefix s
 		if !ready(w) {
 			return
 		}
-		doc, err := s.Inspect(r.Context(), chi.URLParam(r, "id"))
+		doc, err := s.Inspect(r.Context(), memoryRouteID(r, "id"))
 		if err != nil {
 			lifecycleError(w, err)
 			return

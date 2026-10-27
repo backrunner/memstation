@@ -87,7 +87,7 @@ func TestBrokerBudgetRetryHasSeparateAuthoritativeUsage(t *testing.T) {
 			t.Error("broker scope or role lost")
 		}
 		var body map[string]any
-		if json.NewDecoder(r.Body).Decode(&body) != nil || body["model"] != "memory.summary" {
+		if json.NewDecoder(r.Body).Decode(&body) != nil || body["model"] != "memory.summary" || body["reasoning_effort"] != "low" {
 			t.Error("logical alias lost")
 		}
 		usageHeaders(w, r)
@@ -106,7 +106,7 @@ func TestBrokerBudgetRetryHasSeparateAuthoritativeUsage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := memoryllm.NewClient(nil, nil, time.Second)
+	client := memoryllm.NewClientWithOptions(nil, nil, time.Second, memoryllm.Options{ReasoningEffort: "low"})
 	client.SetRuntime(broker)
 	raw, err := client.Generate(brokerContext(t), memoryllm.Request{UserID: "owner", Role: "summary_model", Task: "summary", Input: map[string]string{"source": "fixture"}, MaxOutputTokens: 4096})
 	if err != nil || string(raw) != `{"summary":"validated fixture"}` {
@@ -216,4 +216,46 @@ func (l *callLedger) AICall(ctx context.Context, id string) (domain.AICall, erro
 		}
 	}
 	return domain.AICall{}, domain.ErrAccessNotFound
+}
+
+type deadlineProbeTransport struct{ remaining time.Duration }
+
+func (p *deadlineProbeTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	deadline, ok := r.Context().Deadline()
+	if !ok {
+		return nil, errors.New("missing request deadline")
+	}
+	p.remaining = time.Until(deadline)
+	return nil, errors.New("measured deadline without network")
+}
+
+func TestBrokerGenerationDeadlineDoesNotExpandRetrievalDeadline(t *testing.T) {
+	cfg := brokerConfig("http://127.0.0.1:1")
+	cfg.Timeout = time.Second
+	cfg.GenerationTimeout = 5 * time.Minute
+	client, err := New(cfg, &callLedger{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := &deadlineProbeTransport{}
+	client.http.Transport = probe
+	for _, role := range []string{"summary", "analysis", "embedding", "rerank"} {
+		_, _, err = client.post(brokerContext(t), "owner", role, "/probe", map[string]any{}, nil)
+		if err == nil {
+			t.Fatal("transport probe did not run")
+		}
+		if role == "summary" || role == "analysis" {
+			if probe.remaining < 4*time.Minute {
+				t.Fatal("generation retained retrieval deadline", probe.remaining)
+			}
+		} else if probe.remaining > 2*time.Second {
+			t.Fatal("retrieval inherited generation deadline", probe.remaining)
+		}
+	}
+	ctx, cancel := context.WithTimeout(brokerContext(t), 100*time.Millisecond)
+	defer cancel()
+	_, _, _ = client.post(ctx, "owner", "summary", "/probe", map[string]any{}, nil)
+	if probe.remaining > 200*time.Millisecond {
+		t.Fatal("caller cancellation budget was expanded", probe.remaining)
+	}
 }

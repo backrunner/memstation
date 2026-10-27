@@ -8,18 +8,20 @@ import (
 	"testing"
 	"time"
 
+	conversationstore "memstation/apps/server/internal/store/sql/conversation"
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/security"
 	"memstation/apps/server/internal/service/admin"
 	"memstation/apps/server/internal/service/apikey"
 	"memstation/apps/server/internal/service/memory"
-	sqlstore "memstation/apps/server/internal/store/sql"
 )
 
 func TestWorkspaceMemoryEditContract(t *testing.T) {
 	ctx := context.Background()
 	keys := apikey.NewService(nil)
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	for _, user := range []string{"alice", "bob"} {
 		if _, err := keys.Identities().Personal(ctx, user); err != nil {
 			t.Fatal(err)
@@ -30,7 +32,7 @@ func TestWorkspaceMemoryEditContract(t *testing.T) {
 	}
 	svc := memory.NewService(nil, repo)
 	sessions := security.NewAdminSessionManager("scope-test-master", time.Hour)
-	router := NewRouter(Dependencies{APIKeys: keys, Admin: admin.NewService(sqlstore.NewInMemoryConversationRepository(), nil, repo, nil, nil, nil), Memory: svc, Session: sessions, Auth: security.Authenticator{AdminToken: "test-admin", SessionManager: sessions}})
+	router := NewRouter(Dependencies{APIKeys: keys, Admin: admin.NewService(conversationstore.NewInMemoryConversationRepository(), nil, repo, nil, nil, nil), Memory: svc, Session: sessions, Auth: security.Authenticator{AdminToken: "test-admin", SessionManager: sessions}})
 	login := httptest.NewRecorder()
 	router.ServeHTTP(login, httptest.NewRequest("POST", "/api/admin/login", strings.NewReader(`{"token":"test-admin"}`)))
 	if login.Code != 200 {

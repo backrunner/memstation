@@ -21,7 +21,7 @@ func TestProxyIdentityCapabilitiesAndWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, raw, err := keys.CreateWithOptions(ctx, "owner", apikey.CreateOptions{Name: "Reader key", AgentID: agent.ID})
+	key, raw, err := keys.CreateWithOptions(ctx, "owner", apikey.CreateOptions{WorkspaceID: domain.PersonalWorkspaceID("owner"), Name: "Reader key", AgentID: agent.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestAdminAgentCredentialFlow(t *testing.T) {
 	if response = call("PUT", "/api/admin/users/owner/agents/"+agent.ID, `{"name":"Reader","status":"disabled","expected_revision":99}`, true); response.Code != 409 {
 		t.Fatal("stale admin editor did not conflict")
 	}
-	response = call("POST", "/api/admin/users/owner/api-keys", `{"name":"Reader key","agent_id":"`+agent.ID+`","capabilities":["memory.read"]}`, true)
+	response = call("POST", "/api/admin/users/owner/api-keys", `{"name":"Reader key","workspace_id":"`+agent.DefaultWorkspaceID+`","agent_id":"`+agent.ID+`","capabilities":["memory.read"]}`, true)
 	if response.Code != 200 || response.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("key issuance: %d", response.Code)
 	}

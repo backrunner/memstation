@@ -20,12 +20,12 @@ func TestResolveRequestDefaultsAppliesSourceRetainSetting(t *testing.T) {
 		t.Fatalf("update settings: %v", err)
 	}
 
-	service := NewService(nil, nil, nil, settings, domain.ProviderOpenAI)
+	service := NewService(nil, nil, nil, settings, domain.ProviderOpenAICompatible)
 	resolved, err := service.ResolveRequestDefaults(ctx, domain.UnifiedRequest{
 		UserID:        "user-1",
 		Protocol:      domain.ProtocolOpenAIChat,
 		Mode:          domain.ModeTransparent,
-		MemoryPersist: boolPtr(false),
+		MemoryPersist: boolPtr(false), AgentID: "fixture-agent",
 	})
 	if err != nil {
 		t.Fatalf("resolve defaults: %v", err)
@@ -49,12 +49,12 @@ func TestResolveRequestDefaultsPreservesExplicitSourceRetainOverride(t *testing.
 		t.Fatalf("update settings: %v", err)
 	}
 
-	service := NewService(nil, nil, nil, settings, domain.ProviderOpenAI)
+	service := NewService(nil, nil, nil, settings, domain.ProviderOpenAICompatible)
 	resolved, err := service.ResolveRequestDefaults(ctx, domain.UnifiedRequest{
 		UserID:       "user-1",
 		Protocol:     domain.ProtocolOpenAIChat,
 		Mode:         domain.ModeTransparent,
-		SourceRetain: boolPtr(true),
+		SourceRetain: boolPtr(true), AgentID: "fixture-agent",
 	})
 	if err != nil {
 		t.Fatalf("resolve defaults: %v", err)

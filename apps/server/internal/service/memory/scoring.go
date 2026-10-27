@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"math"
 	"time"
 
 	"memstation/apps/server/internal/domain"
@@ -16,11 +17,12 @@ const (
 )
 
 type ScoreComponents struct {
+	ScorePolicy       string  `json:"score_policy"`
 	BaseSemanticScore float64 `json:"base_semantic_score"`
 	KeywordScore      float64 `json:"keyword_score"`
 	DirectScore       float64 `json:"direct_score"`
 	RerankScore       float64 `json:"rerank_score"`
-	RerankWeight      float64 `json:"rerank_weight"`
+	RerankApplied     bool    `json:"rerank_applied"`
 	RelationExpansion float64 `json:"relation_expansion"`
 	SupersessionBoost float64 `json:"supersession_boost"`
 	ConversationBoost float64 `json:"conversation_boost"`
@@ -31,95 +33,54 @@ type ScoreComponents struct {
 	EffectiveScore    float64 `json:"effective_score"`
 }
 
-type searchConfig struct {
-	useRelations  bool
-	useImportance bool
-	useTimeDecay  bool
-}
+type searchConfig struct{ useRelations, useImportance, useTimeDecay bool }
 
-func configForVariant(variant SearchVariant) searchConfig {
-	switch variant {
+func configForVariant(v SearchVariant) searchConfig {
+	switch v {
 	case SearchVariantSemanticOnly:
-		return searchConfig{useRelations: false}
+		return searchConfig{}
 	case SearchVariantSemanticImportance:
 		return searchConfig{useImportance: true}
 	case SearchVariantFullNoRelations:
 		return searchConfig{useImportance: true, useTimeDecay: true}
-	case SearchVariantFull:
-		fallthrough
 	default:
 		return searchConfig{useRelations: true, useImportance: true, useTimeDecay: true}
 	}
 }
 
-func scoreDocument(doc domain.MemoryDocument, baseSemanticScore, keywordScore, relationExpansion, supersessionBoost, conversationBoost, rerankScore, rerankWeight float64, cfg searchConfig) ScoreComponents {
-	return scoreDocumentAt(doc, baseSemanticScore, keywordScore, relationExpansion, supersessionBoost, conversationBoost, rerankScore, rerankWeight, time.Now().UTC(), cfg)
+func scoreDocument(doc domain.MemoryDocument, base, keyword, relation, supersession, conversation, rerank float64, rerankApplied bool, cfg searchConfig) ScoreComponents {
+	return scoreDocumentAt(doc, base, keyword, relation, supersession, conversation, rerank, rerankApplied, time.Now().UTC(), cfg)
 }
 
-func scoreDocumentAt(doc domain.MemoryDocument, baseSemanticScore, keywordScore, relationExpansion, supersessionBoost, conversationBoost, rerankScore, rerankWeight float64, now time.Time, cfg searchConfig) ScoreComponents {
+func scoreDocumentAt(doc domain.MemoryDocument, base, keyword, relation, supersession, conversation, rerank float64, rerankApplied bool, now time.Time, cfg searchConfig) ScoreComponents {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	directScore := combineDirectSignal(baseSemanticScore, keywordScore)
-	if rerankWeight > 1 {
-		rerankWeight = 1
+	// Candidate admission is separate from final query relevance.
+	// Without a validated reranker batch, use bounded direct/graph relevance;
+	// there is no alternate scoring policy or late conversation bonus.
+	direct := combineDirectSignal(base, keyword)
+	c := ScoreComponents{ScorePolicy: "hybrid_v1", BaseSemanticScore: base, KeywordScore: keyword, DirectScore: direct, RerankScore: rerank, RerankApplied: rerankApplied, RelationExpansion: relation, SupersessionBoost: supersession, ConversationBoost: conversation, SemanticScore: clamp(math.Max(direct, relation), 0, 1), ImportanceWeight: 1, TimeDecay: 1, FreshnessPenalty: domain.StalePenalty(doc, now)}
+	if rerankApplied {
+		c.ScorePolicy = "relevance_v1"
+		c.SemanticScore = rerank
 	}
-	if rerankWeight < 0 {
-		rerankWeight = 0
-	}
-	components := ScoreComponents{
-		BaseSemanticScore: baseSemanticScore,
-		KeywordScore:      keywordScore,
-		DirectScore:       directScore,
-		RerankScore:       rerankScore,
-		RerankWeight:      rerankWeight,
-		RelationExpansion: relationExpansion,
-		SupersessionBoost: supersessionBoost,
-		ConversationBoost: conversationBoost,
-		SemanticScore:     blendDirectScore(directScore, rerankScore, rerankWeight) + relationExpansion + supersessionBoost + conversationBoost,
-		ImportanceWeight:  1,
-		TimeDecay:         1,
-		FreshnessPenalty:  1,
-	}
-	components.EffectiveScore = components.SemanticScore
 	if cfg.useImportance {
-		components.ImportanceWeight = domain.ClampImportance(doc.Importance)
-		components.EffectiveScore *= components.ImportanceWeight
+		c.ImportanceWeight = clamp(domain.ClampImportance(doc.Importance), .9, 1.1)
 	}
 	if cfg.useTimeDecay {
-		components.TimeDecay = domain.TimeDecay(doc.Type, doc.ActivityAt, doc.DecayFactor, doc.Importance, now)
-		components.EffectiveScore *= components.TimeDecay
+		c.TimeDecay = .9 + .1*domain.TimeDecay(doc.Type, doc.ActivityAt, doc.DecayFactor, doc.Importance, now)
 	}
-	components.FreshnessPenalty = domain.StalePenalty(doc, now)
-	components.EffectiveScore *= components.FreshnessPenalty
-	return components
+	c.EffectiveScore = c.SemanticScore * c.ImportanceWeight * c.TimeDecay * c.FreshnessPenalty
+	return c
 }
 
-func ExplainDocumentScore(doc domain.MemoryDocument, baseSemanticScore, keywordScore, relationExpansion, supersessionBoost, conversationBoost, rerankScore, rerankWeight float64, variant SearchVariant) ScoreComponents {
-	return scoreDocument(doc, baseSemanticScore, keywordScore, relationExpansion, supersessionBoost, conversationBoost, rerankScore, rerankWeight, configForVariant(variant))
+func ExplainDocumentScore(doc domain.MemoryDocument, base, keyword, relation, supersession, conversation, rerank float64, rerankApplied bool, variant SearchVariant) ScoreComponents {
+	return scoreDocument(doc, base, keyword, relation, supersession, conversation, rerank, rerankApplied, configForVariant(variant))
 }
 
-func keywordSignalBoost(keywordScore float64) float64 {
-	if keywordScore <= 0 {
-		return 0
-	}
-	return keywordScore * 0.35
+func ExplainDocumentScoreAt(doc domain.MemoryDocument, signals ScoreComponents, now time.Time, variant SearchVariant, rerankApplied bool) ScoreComponents {
+	return scoreDocumentAt(doc, signals.BaseSemanticScore, signals.KeywordScore, signals.RelationExpansion, signals.SupersessionBoost, signals.ConversationBoost, signals.RerankScore, rerankApplied, now, configForVariant(variant))
 }
 
-func combineDirectSignal(baseSemanticScore, keywordScore float64) float64 {
-	switch {
-	case baseSemanticScore <= 0:
-		return keywordScore
-	case keywordScore <= 0:
-		return baseSemanticScore
-	default:
-		return baseSemanticScore + keywordSignalBoost(keywordScore)
-	}
-}
-
-func blendDirectScore(directScore, rerankScore, rerankWeight float64) float64 {
-	if rerankWeight <= 0 {
-		return directScore
-	}
-	return ((1 - rerankWeight) * directScore) + (rerankWeight * rerankScore)
-}
+func combineDirectSignal(base, keyword float64) float64 { return clamp(math.Max(base, keyword), 0, 1) }

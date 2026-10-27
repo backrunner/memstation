@@ -21,7 +21,11 @@ func TestWorkspaceAdminContractAndProxyDiscovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, raw, err := keys.CreateWithOptions(ctx, "owner", apikey.CreateOptions{Name: "read", Capabilities: []string{domain.CapabilityMemoryRead}})
+	agent, err := keys.Identities().Create(ctx, "owner", "Reader", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, raw, err := keys.CreateWithOptions(ctx, "owner", apikey.CreateOptions{WorkspaceID: w.ID, AgentID: agent.ID, Name: "read", Capabilities: []string{domain.CapabilityMemoryRead}})
 	if err != nil {
 		t.Fatal(err)
 	}

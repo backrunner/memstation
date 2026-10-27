@@ -513,7 +513,7 @@ func (s *Service) deleteKeyMemory(ctx context.Context, userID, memoryKey string,
 				nodeID = existingNodeID
 			}
 		}
-		if err := s.vectors.DeleteByNode(ctx, userID, nodeID); err != nil {
+		if err := s.vectors.DeleteByNode(ctx, domain.VectorDeleteRequest{UserID: userID, NodeID: nodeID, RequireMissingNode: true}); err != nil {
 			return err
 		}
 	}
@@ -1231,7 +1231,7 @@ func (s *Service) resolveGenerationID(ctx context.Context, userID, generationID 
 		return generationID, nil
 	}
 	if s.generations == nil {
-		return memorygenservice.CurrentGenerationID(userID), nil
+		return memorygenservice.CurrentGenerationID(security.WorkspaceID(ctx, userID)), nil
 	}
 	generation, err := s.generations.GetActiveGeneration(ctx, userID)
 	if err != nil {

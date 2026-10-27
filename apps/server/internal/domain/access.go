@@ -37,7 +37,7 @@ func PersonalCapabilities() []string {
 	return []string{CapabilityGateway, CapabilityMemoryRead, CapabilityMemoryEdit, CapabilityFilesRead, CapabilityFilesWrite}
 }
 
-// AllCapabilities is the registry, not the default grant of a legacy key.
+// AllCapabilities is the registry, not a default credential grant.
 func AllCapabilities() []string {
 	return append(PersonalCapabilities(), CapabilityEventsWrite, CapabilitySourcesRead, CapabilitySourcesRetract, CapabilityCandidatesWrite, CapabilityMemoryForget, CapabilityMemoryExport, CapabilityUsageRead)
 }
@@ -53,7 +53,6 @@ func AccessID(kind, userID string) string {
 }
 
 func PersonalWorkspaceID(userID string) string { return AccessID("personal", userID) }
-func LegacyAgentID(userID string) string       { return AccessID("legacy", userID) }
 
 type Workspace struct {
 	ID            string    `json:"id"`
@@ -88,7 +87,6 @@ type Agent struct {
 	Status             string    `json:"status"`
 	DefaultWorkspaceID string    `json:"default_workspace_id"`
 	Revision           int64     `json:"revision"`
-	Legacy             bool      `json:"legacy"`
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
 }
@@ -148,7 +146,6 @@ type AccessContext struct {
 	Capabilities  []string `json:"capabilities"`
 	PolicyVersion int64    `json:"policy_version"`
 	GrantRevision int64    `json:"grant_revision"`
-	Legacy        bool     `json:"legacy"`
 }
 
 func (a AccessContext) Allows(capability string) bool {

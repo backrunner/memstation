@@ -12,13 +12,10 @@ import (
 )
 
 type Authenticator struct {
-	ResolveAccess              func(context.Context, domain.AccessContext, string, domain.Audience) (domain.AccessContext, error)
-	AdminToken                 string
-	DevAPIKey                  string
-	SessionManager             *AdminSessionManager
-	LookupAPIKey               func(context.Context, string, string) (string, error)
-	LookupPrincipal            func(context.Context, string, string) (domain.AccessContext, error)
-	LookupDevelopmentPrincipal func(context.Context, string) (domain.AccessContext, error)
+	ResolveAccess   func(context.Context, domain.AccessContext, string, domain.Audience) (domain.AccessContext, error)
+	AdminToken      string
+	SessionManager  *AdminSessionManager
+	LookupPrincipal func(context.Context, string, string) (domain.AccessContext, error)
 }
 
 func (a Authenticator) AuthenticateAPIKey(ctx context.Context, r *http.Request) (string, error) {
@@ -30,20 +27,10 @@ func (a Authenticator) AuthenticateAPIKeyToken(ctx context.Context, token string
 	return principal.UserID, err
 }
 
-func legacyPrincipal(user, credential string) domain.AccessContext {
-	return domain.AccessContext{UserID: user, AgentID: domain.LegacyAgentID(user), CredentialID: credential, WorkspaceID: domain.PersonalWorkspaceID(user), Capabilities: domain.PersonalCapabilities(), PolicyVersion: 1, GrantRevision: 1, Legacy: true}
-}
-
 func (a Authenticator) AuthenticatePrincipal(ctx context.Context, token string) (domain.AccessContext, error) {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return domain.AccessContext{}, errors.New("missing api key")
-	}
-	if a.DevAPIKey != "" && token == a.DevAPIKey {
-		if a.LookupDevelopmentPrincipal != nil {
-			return a.LookupDevelopmentPrincipal(ctx, DeriveUserIDFromAPIKey(token))
-		}
-		return legacyPrincipal(DeriveUserIDFromAPIKey(token), "development"), nil
 	}
 	if strings.HasPrefix(token, "ms-") {
 		prefix, hash, err := (APIKeyHasher{}).Hash(token)
@@ -52,18 +39,12 @@ func (a Authenticator) AuthenticatePrincipal(ctx context.Context, token string) 
 		}
 		if a.LookupPrincipal != nil {
 			p, err := a.LookupPrincipal(ctx, prefix, hash)
-			if err != nil || p.UserID == "" || p.AgentID == "" || p.CredentialID == "" || p.WorkspaceID == "" || (p.WorkspaceID != domain.PersonalWorkspaceID(p.UserID) && p.ScopeVersion < 2) {
+			if err != nil || p.UserID == "" || p.AgentID == "" || p.CredentialID == "" || p.WorkspaceID == "" || p.ScopeVersion != 2 {
 				return domain.AccessContext{}, errors.New("invalid api key")
 			}
 			return p, nil
 		}
-		// Compatibility for embedded callers; production uses LookupPrincipal.
-		if a.LookupAPIKey != nil {
-			user, err := a.LookupAPIKey(ctx, prefix, hash)
-			if err == nil && user != "" {
-				return legacyPrincipal(user, prefix), nil
-			}
-		}
+
 	}
 	return domain.AccessContext{}, errors.New("invalid api key")
 }

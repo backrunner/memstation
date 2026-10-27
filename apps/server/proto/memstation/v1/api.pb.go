@@ -155,14 +155,15 @@ func (x *HealthComponent) GetError() string {
 }
 
 type ModelCapability struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Provider       string                 `protobuf:"bytes,2,opt,name=provider,proto3" json:"provider,omitempty"`
-	Role           string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
-	SupportsTools  bool                   `protobuf:"varint,4,opt,name=supports_tools,json=supportsTools,proto3" json:"supports_tools,omitempty"`
-	SupportsStream bool                   `protobuf:"varint,5,opt,name=supports_stream,json=supportsStream,proto3" json:"supports_stream,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Id              string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Provider        string                 `protobuf:"bytes,2,opt,name=provider,proto3" json:"provider,omitempty"`
+	Role            string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
+	SupportsTools   bool                   `protobuf:"varint,4,opt,name=supports_tools,json=supportsTools,proto3" json:"supports_tools,omitempty"`
+	SupportsStream  bool                   `protobuf:"varint,5,opt,name=supports_stream,json=supportsStream,proto3" json:"supports_stream,omitempty"`
+	InputModalities []string               `protobuf:"bytes,6,rep,name=input_modalities,json=inputModalities,proto3" json:"input_modalities,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ModelCapability) Reset() {
@@ -228,6 +229,13 @@ func (x *ModelCapability) GetSupportsStream() bool {
 		return x.SupportsStream
 	}
 	return false
+}
+
+func (x *ModelCapability) GetInputModalities() []string {
+	if x != nil {
+		return x.InputModalities
+	}
+	return nil
 }
 
 type ListModelsResponse struct {
@@ -751,13 +759,24 @@ func (x *UnifiedMessage) GetMetadata() *structpb.Struct {
 }
 
 type ContentBlock struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
-	Raw           string                 `protobuf:"bytes,3,opt,name=raw,proto3" json:"raw,omitempty"`
-	Metadata      *structpb.Struct       `protobuf:"bytes,4,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Type           string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Text           string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	Raw            string                 `protobuf:"bytes,3,opt,name=raw,proto3" json:"raw,omitempty"`
+	Metadata       *structpb.Struct       `protobuf:"bytes,4,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	MimeType       string                 `protobuf:"bytes,5,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
+	BlobId         string                 `protobuf:"bytes,6,opt,name=blob_id,json=blobId,proto3" json:"blob_id,omitempty"`
+	SourceUrl      string                 `protobuf:"bytes,7,opt,name=source_url,json=sourceUrl,proto3" json:"source_url,omitempty"`
+	ProviderFileId string                 `protobuf:"bytes,8,opt,name=provider_file_id,json=providerFileId,proto3" json:"provider_file_id,omitempty"`
+	Filename       string                 `protobuf:"bytes,9,opt,name=filename,proto3" json:"filename,omitempty"`
+	SizeBytes      int64                  `protobuf:"varint,10,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	Sha256         string                 `protobuf:"bytes,11,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	PageIndex      int32                  `protobuf:"varint,12,opt,name=page_index,json=pageIndex,proto3" json:"page_index,omitempty"`
+	StartMs        int64                  `protobuf:"varint,13,opt,name=start_ms,json=startMs,proto3" json:"start_ms,omitempty"`
+	EndMs          int64                  `protobuf:"varint,14,opt,name=end_ms,json=endMs,proto3" json:"end_ms,omitempty"`
+	DurationMs     int64                  `protobuf:"varint,15,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ContentBlock) Reset() {
@@ -816,6 +835,83 @@ func (x *ContentBlock) GetMetadata() *structpb.Struct {
 		return x.Metadata
 	}
 	return nil
+}
+
+func (x *ContentBlock) GetMimeType() string {
+	if x != nil {
+		return x.MimeType
+	}
+	return ""
+}
+
+func (x *ContentBlock) GetBlobId() string {
+	if x != nil {
+		return x.BlobId
+	}
+	return ""
+}
+
+func (x *ContentBlock) GetSourceUrl() string {
+	if x != nil {
+		return x.SourceUrl
+	}
+	return ""
+}
+
+func (x *ContentBlock) GetProviderFileId() string {
+	if x != nil {
+		return x.ProviderFileId
+	}
+	return ""
+}
+
+func (x *ContentBlock) GetFilename() string {
+	if x != nil {
+		return x.Filename
+	}
+	return ""
+}
+
+func (x *ContentBlock) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *ContentBlock) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *ContentBlock) GetPageIndex() int32 {
+	if x != nil {
+		return x.PageIndex
+	}
+	return 0
+}
+
+func (x *ContentBlock) GetStartMs() int64 {
+	if x != nil {
+		return x.StartMs
+	}
+	return 0
+}
+
+func (x *ContentBlock) GetEndMs() int64 {
+	if x != nil {
+		return x.EndMs
+	}
+	return 0
+}
+
+func (x *ContentBlock) GetDurationMs() int64 {
+	if x != nil {
+		return x.DurationMs
+	}
+	return 0
 }
 
 type ToolDefinition struct {
@@ -3769,6 +3865,7 @@ type SourcePart struct {
 	ActorId       string                 `protobuf:"bytes,3,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
 	Source        *SourceRef             `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"`
 	Author        *SourceSpeaker         `protobuf:"bytes,5,opt,name=author,proto3" json:"author,omitempty"`
+	Media         *ContentBlock          `protobuf:"bytes,6,opt,name=media,proto3" json:"media,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3834,6 +3931,13 @@ func (x *SourcePart) GetSource() *SourceRef {
 func (x *SourcePart) GetAuthor() *SourceSpeaker {
 	if x != nil {
 		return x.Author
+	}
+	return nil
+}
+
+func (x *SourcePart) GetMedia() *ContentBlock {
+	if x != nil {
+		return x.Media
 	}
 	return nil
 }
@@ -7640,7 +7744,6 @@ type WorkspaceAgent struct {
 	Status             string                 `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
 	DefaultWorkspaceId string                 `protobuf:"bytes,6,opt,name=default_workspace_id,json=defaultWorkspaceId,proto3" json:"default_workspace_id,omitempty"`
 	Revision           int64                  `protobuf:"varint,7,opt,name=revision,proto3" json:"revision,omitempty"`
-	Legacy             bool                   `protobuf:"varint,8,opt,name=legacy,proto3" json:"legacy,omitempty"`
 	CreatedAt          string                 `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt          string                 `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	unknownFields      protoimpl.UnknownFields
@@ -7724,13 +7827,6 @@ func (x *WorkspaceAgent) GetRevision() int64 {
 		return x.Revision
 	}
 	return 0
-}
-
-func (x *WorkspaceAgent) GetLegacy() bool {
-	if x != nil {
-		return x.Legacy
-	}
-	return false
 }
 
 func (x *WorkspaceAgent) GetCreatedAt() string {
@@ -8258,13 +8354,14 @@ const file_proto_memstation_v1_api_proto_rawDesc = "" +
 	"\x0fHealthComponent\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"\xa1\x01\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"\xcc\x01\n" +
 	"\x0fModelCapability\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\bprovider\x18\x02 \x01(\tR\bprovider\x12\x12\n" +
 	"\x04role\x18\x03 \x01(\tR\x04role\x12%\n" +
 	"\x0esupports_tools\x18\x04 \x01(\bR\rsupportsTools\x12'\n" +
-	"\x0fsupports_stream\x18\x05 \x01(\bR\x0esupportsStream\"J\n" +
+	"\x0fsupports_stream\x18\x05 \x01(\bR\x0esupportsStream\x12)\n" +
+	"\x10input_modalities\x18\x06 \x03(\tR\x0finputModalities\"J\n" +
 	"\x12ListModelsResponse\x124\n" +
 	"\x05items\x18\x01 \x03(\v2\x1e.memstation.v1.ModelCapabilityR\x05items\"J\n" +
 	"\x0fCompleteRequest\x127\n" +
@@ -8315,12 +8412,28 @@ const file_proto_memstation_v1_api_proto_rawDesc = "" +
 	"\n" +
 	"tool_calls\x18\x04 \x03(\v2\x17.memstation.v1.ToolCallR\ttoolCalls\x12<\n" +
 	"\ftool_results\x18\x05 \x03(\v2\x19.memstation.v1.ToolResultR\vtoolResults\x123\n" +
-	"\bmetadata\x18\x06 \x01(\v2\x17.google.protobuf.StructR\bmetadata\"}\n" +
+	"\bmetadata\x18\x06 \x01(\v2\x17.google.protobuf.StructR\bmetadata\"\xc1\x03\n" +
 	"\fContentBlock\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12\x10\n" +
 	"\x03raw\x18\x03 \x01(\tR\x03raw\x123\n" +
-	"\bmetadata\x18\x04 \x01(\v2\x17.google.protobuf.StructR\bmetadata\"\x9f\x01\n" +
+	"\bmetadata\x18\x04 \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12\x1b\n" +
+	"\tmime_type\x18\x05 \x01(\tR\bmimeType\x12\x17\n" +
+	"\ablob_id\x18\x06 \x01(\tR\x06blobId\x12\x1d\n" +
+	"\n" +
+	"source_url\x18\a \x01(\tR\tsourceUrl\x12(\n" +
+	"\x10provider_file_id\x18\b \x01(\tR\x0eproviderFileId\x12\x1a\n" +
+	"\bfilename\x18\t \x01(\tR\bfilename\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\n" +
+	" \x01(\x03R\tsizeBytes\x12\x16\n" +
+	"\x06sha256\x18\v \x01(\tR\x06sha256\x12\x1d\n" +
+	"\n" +
+	"page_index\x18\f \x01(\x05R\tpageIndex\x12\x19\n" +
+	"\bstart_ms\x18\r \x01(\x03R\astartMs\x12\x15\n" +
+	"\x06end_ms\x18\x0e \x01(\x03R\x05endMs\x12\x1f\n" +
+	"\vduration_ms\x18\x0f \x01(\x03R\n" +
+	"durationMs\"\x9f\x01\n" +
 	"\x0eToolDefinition\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12:\n" +
@@ -8610,14 +8723,15 @@ const file_proto_memstation_v1_api_proto_rawDesc = "" +
 	"externalId\x12\x19\n" +
 	"\bactor_id\x18\x02 \x01(\tR\aactorId\x12!\n" +
 	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x12\n" +
-	"\x04kind\x18\x04 \x01(\tR\x04kind\"\xb7\x01\n" +
+	"\x04kind\x18\x04 \x01(\tR\x04kind\"\xea\x01\n" +
 	"\n" +
 	"SourcePart\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12\x19\n" +
 	"\bactor_id\x18\x03 \x01(\tR\aactorId\x120\n" +
 	"\x06source\x18\x04 \x01(\v2\x18.memstation.v1.SourceRefR\x06source\x124\n" +
-	"\x06author\x18\x05 \x01(\v2\x1c.memstation.v1.SourceSpeakerR\x06author\"\xa4\x03\n" +
+	"\x06author\x18\x05 \x01(\v2\x1c.memstation.v1.SourceSpeakerR\x06author\x121\n" +
+	"\x05media\x18\x06 \x01(\v2\x1b.memstation.v1.ContentBlockR\x05media\"\xa4\x03\n" +
 	"\vSourceEvent\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12*\n" +
@@ -8958,7 +9072,7 @@ const file_proto_memstation_v1_api_proto_rawDesc = "" +
 	"\x14WorkspaceAgentCreate\x128\n" +
 	"\x05scope\x18\x01 \x01(\v2\".memstation.v1.AdminWorkspaceScopeR\x05scope\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\"\n" +
-	"\fcapabilities\x18\x03 \x03(\tR\fcapabilities\"\xa4\x02\n" +
+	"\fcapabilities\x18\x03 \x03(\tR\fcapabilities\"\x8c\x02\n" +
 	"\x0eWorkspaceAgent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x19\n" +
@@ -8966,8 +9080,7 @@ const file_proto_memstation_v1_api_proto_rawDesc = "" +
 	"\x04name\x18\x04 \x01(\tR\x04name\x12\x16\n" +
 	"\x06status\x18\x05 \x01(\tR\x06status\x120\n" +
 	"\x14default_workspace_id\x18\x06 \x01(\tR\x12defaultWorkspaceId\x12\x1a\n" +
-	"\brevision\x18\a \x01(\x03R\brevision\x12\x16\n" +
-	"\x06legacy\x18\b \x01(\bR\x06legacy\x12\x1d\n" +
+	"\brevision\x18\a \x01(\x03R\brevision\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\t \x01(\tR\tcreatedAt\x12\x1d\n" +
 	"\n" +
@@ -9300,183 +9413,184 @@ var file_proto_memstation_v1_api_proto_depIdxs = []int32{
 	41,  // 73: memstation.v1.SourceRef.span:type_name -> memstation.v1.TextSpan
 	42,  // 74: memstation.v1.SourcePart.source:type_name -> memstation.v1.SourceRef
 	43,  // 75: memstation.v1.SourcePart.author:type_name -> memstation.v1.SourceSpeaker
-	43,  // 76: memstation.v1.SourceEvent.speaker:type_name -> memstation.v1.SourceSpeaker
-	44,  // 77: memstation.v1.SourceEvent.parts:type_name -> memstation.v1.SourcePart
-	42,  // 78: memstation.v1.SourceEvent.reply_to:type_name -> memstation.v1.SourceRef
-	45,  // 79: memstation.v1.IngestBatch.events:type_name -> memstation.v1.SourceEvent
-	46,  // 80: memstation.v1.ObserveRequest.batch:type_name -> memstation.v1.IngestBatch
-	48,  // 81: memstation.v1.IngestionReceipt.events:type_name -> memstation.v1.EventAcceptance
-	50,  // 82: memstation.v1.OpenWindowRequest.window:type_name -> memstation.v1.WindowInput
-	44,  // 83: memstation.v1.SourceRecord.parts:type_name -> memstation.v1.SourcePart
-	42,  // 84: memstation.v1.SourceRecord.reply_to:type_name -> memstation.v1.SourceRef
-	42,  // 85: memstation.v1.CandidateInput.source_refs:type_name -> memstation.v1.SourceRef
-	42,  // 86: memstation.v1.MemoryCandidate.source_refs:type_name -> memstation.v1.SourceRef
-	56,  // 87: memstation.v1.CandidateList.items:type_name -> memstation.v1.MemoryCandidate
-	42,  // 88: memstation.v1.ForgetSelector.source_refs:type_name -> memstation.v1.SourceRef
-	58,  // 89: memstation.v1.ForgetRequest.selector:type_name -> memstation.v1.ForgetSelector
-	104, // 90: memstation.v1.MemoryOperation.result:type_name -> google.protobuf.Struct
-	104, // 91: memstation.v1.MemoryCapabilities.access:type_name -> google.protobuf.Struct
-	100, // 92: memstation.v1.MemoryCapabilities.capabilities:type_name -> memstation.v1.MemoryCapabilities.CapabilitiesEntry
-	95,  // 93: memstation.v1.MemoryCapabilities.runtime:type_name -> memstation.v1.MemoryRuntime
-	63,  // 94: memstation.v1.ReviewCandidateRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
-	101, // 95: memstation.v1.PublicationInput.actor_mapping:type_name -> memstation.v1.PublicationInput.ActorMappingEntry
-	63,  // 96: memstation.v1.PublishRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
-	65,  // 97: memstation.v1.PublishRequest.publication:type_name -> memstation.v1.PublicationInput
-	67,  // 98: memstation.v1.PublicationList.items:type_name -> memstation.v1.MemoryPublication
-	63,  // 99: memstation.v1.RetractPublicationRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
-	71,  // 100: memstation.v1.AIUsageResponse.items:type_name -> memstation.v1.AICall
-	73,  // 101: memstation.v1.WorkspaceListResponse.items:type_name -> memstation.v1.WorkspaceConfig
-	76,  // 102: memstation.v1.IntegrationList.items:type_name -> memstation.v1.IntegrationConfig
-	78,  // 103: memstation.v1.PartitionList.items:type_name -> memstation.v1.PartitionConfig
-	63,  // 104: memstation.v1.WorkspaceGrantRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
-	63,  // 105: memstation.v1.AdminRecordRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
-	63,  // 106: memstation.v1.AdminCandidateRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
-	55,  // 107: memstation.v1.AdminCandidateRequest.candidate:type_name -> memstation.v1.CandidateInput
-	63,  // 108: memstation.v1.AdminForgetRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
-	59,  // 109: memstation.v1.AdminForgetRequest.request:type_name -> memstation.v1.ForgetRequest
-	63,  // 110: memstation.v1.AdminExportRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
-	63,  // 111: memstation.v1.AdminUsageRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
-	70,  // 112: memstation.v1.AdminUsageRequest.request:type_name -> memstation.v1.AIUsageRequest
-	63,  // 113: memstation.v1.MemoryControlRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
-	88,  // 114: memstation.v1.MemoryControlOverview.actors:type_name -> memstation.v1.WorkspaceActor
-	89,  // 115: memstation.v1.MemoryControlOverview.sources:type_name -> memstation.v1.SourceSummary
-	49,  // 116: memstation.v1.MemoryControlOverview.receipts:type_name -> memstation.v1.IngestionReceipt
-	90,  // 117: memstation.v1.MemoryControlOverview.jobs:type_name -> memstation.v1.MemoryJob
-	61,  // 118: memstation.v1.MemoryControlOverview.operations:type_name -> memstation.v1.MemoryOperation
-	63,  // 119: memstation.v1.WorkspaceAgentCreate.scope:type_name -> memstation.v1.AdminWorkspaceScope
-	93,  // 120: memstation.v1.WorkspaceAgentDetail.agent:type_name -> memstation.v1.WorkspaceAgent
-	80,  // 121: memstation.v1.WorkspaceAgentDetail.grant:type_name -> memstation.v1.WorkspaceGrant
-	73,  // 122: memstation.v1.WorkspaceAgentDetail.workspace:type_name -> memstation.v1.WorkspaceConfig
-	102, // 123: memstation.v1.MemoryRuntime.role_aliases:type_name -> memstation.v1.MemoryRuntime.RoleAliasesEntry
-	96,  // 124: memstation.v1.MemoryRuntime.embedding:type_name -> memstation.v1.EmbeddingIdentity
-	104, // 125: memstation.v1.MemoryGeneration.metadata:type_name -> google.protobuf.Struct
-	97,  // 126: memstation.v1.GenerationList.items:type_name -> memstation.v1.MemoryGeneration
-	63,  // 127: memstation.v1.GenerationRebuildRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
-	107, // 128: memstation.v1.HealthService.GetStatus:input_type -> google.protobuf.Empty
-	107, // 129: memstation.v1.GatewayService.ListModels:input_type -> google.protobuf.Empty
-	4,   // 130: memstation.v1.GatewayService.Complete:input_type -> memstation.v1.CompleteRequest
-	14,  // 131: memstation.v1.MemoryService.Search:input_type -> memstation.v1.SearchRequest
-	24,  // 132: memstation.v1.MemoryService.ListKeyMemories:input_type -> memstation.v1.ListKeyMemoriesRequest
-	27,  // 133: memstation.v1.MemoryService.UpsertKeyMemory:input_type -> memstation.v1.UpsertKeyMemoryRequest
-	28,  // 134: memstation.v1.MemoryService.DeleteKeyMemory:input_type -> memstation.v1.DeleteKeyMemoryRequest
-	30,  // 135: memstation.v1.AdminService.Overview:input_type -> memstation.v1.OverviewRequest
-	32,  // 136: memstation.v1.AdminService.ListConversations:input_type -> memstation.v1.ListConversationsRequest
-	35,  // 137: memstation.v1.AdminService.GetConversation:input_type -> memstation.v1.GetConversationRequest
-	38,  // 138: memstation.v1.AdminService.GetConversationMemory:input_type -> memstation.v1.GetConversationMemoryRequest
-	107, // 139: memstation.v1.MemoryDataService.Probe:input_type -> google.protobuf.Empty
-	47,  // 140: memstation.v1.MemoryDataService.Observe:input_type -> memstation.v1.ObserveRequest
-	40,  // 141: memstation.v1.MemoryDataService.Progress:input_type -> memstation.v1.RecordRequest
-	51,  // 142: memstation.v1.MemoryDataService.OpenWindow:input_type -> memstation.v1.OpenWindowRequest
-	40,  // 143: memstation.v1.MemoryDataService.GetWindow:input_type -> memstation.v1.RecordRequest
-	52,  // 144: memstation.v1.MemoryDataService.Finalize:input_type -> memstation.v1.FinalizeWindowRequest
-	40,  // 145: memstation.v1.MemoryDataService.Inspect:input_type -> memstation.v1.RecordRequest
-	40,  // 146: memstation.v1.MemoryDataService.Source:input_type -> memstation.v1.RecordRequest
-	55,  // 147: memstation.v1.MemoryDataService.Propose:input_type -> memstation.v1.CandidateInput
-	40,  // 148: memstation.v1.MemoryDataService.Candidates:input_type -> memstation.v1.RecordRequest
-	59,  // 149: memstation.v1.MemoryDataService.Retract:input_type -> memstation.v1.ForgetRequest
-	59,  // 150: memstation.v1.MemoryDataService.Forget:input_type -> memstation.v1.ForgetRequest
-	60,  // 151: memstation.v1.MemoryDataService.Export:input_type -> memstation.v1.ExportRequest
-	40,  // 152: memstation.v1.MemoryDataService.Operation:input_type -> memstation.v1.RecordRequest
-	40,  // 153: memstation.v1.MemoryDataService.ReconcileUsage:input_type -> memstation.v1.RecordRequest
-	70,  // 154: memstation.v1.MemoryDataService.Usage:input_type -> memstation.v1.AIUsageRequest
-	63,  // 155: memstation.v1.WorkspaceAdminService.Generations:input_type -> memstation.v1.AdminWorkspaceScope
-	99,  // 156: memstation.v1.WorkspaceAdminService.Rebuild:input_type -> memstation.v1.GenerationRebuildRequest
-	82,  // 157: memstation.v1.WorkspaceAdminService.ActivateGeneration:input_type -> memstation.v1.AdminRecordRequest
-	82,  // 158: memstation.v1.WorkspaceAdminService.DiscardGeneration:input_type -> memstation.v1.AdminRecordRequest
-	63,  // 159: memstation.v1.WorkspaceAdminService.Capabilities:input_type -> memstation.v1.AdminWorkspaceScope
-	92,  // 160: memstation.v1.WorkspaceAdminService.CreateAgent:input_type -> memstation.v1.WorkspaceAgentCreate
-	81,  // 161: memstation.v1.WorkspaceAdminService.Agent:input_type -> memstation.v1.WorkspaceGrantRequest
-	74,  // 162: memstation.v1.WorkspaceAdminService.Workspaces:input_type -> memstation.v1.WorkspaceListRequest
-	73,  // 163: memstation.v1.WorkspaceAdminService.CreateWorkspace:input_type -> memstation.v1.WorkspaceConfig
-	73,  // 164: memstation.v1.WorkspaceAdminService.UpdateWorkspace:input_type -> memstation.v1.WorkspaceConfig
-	63,  // 165: memstation.v1.WorkspaceAdminService.Integrations:input_type -> memstation.v1.AdminWorkspaceScope
-	76,  // 166: memstation.v1.WorkspaceAdminService.PutIntegration:input_type -> memstation.v1.IntegrationConfig
-	63,  // 167: memstation.v1.WorkspaceAdminService.Partitions:input_type -> memstation.v1.AdminWorkspaceScope
-	78,  // 168: memstation.v1.WorkspaceAdminService.PutPartition:input_type -> memstation.v1.PartitionConfig
-	81,  // 169: memstation.v1.WorkspaceAdminService.Grant:input_type -> memstation.v1.WorkspaceGrantRequest
-	80,  // 170: memstation.v1.WorkspaceAdminService.SetGrant:input_type -> memstation.v1.WorkspaceGrant
-	87,  // 171: memstation.v1.WorkspaceAdminService.Control:input_type -> memstation.v1.MemoryControlRequest
-	82,  // 172: memstation.v1.WorkspaceAdminService.ReplayJob:input_type -> memstation.v1.AdminRecordRequest
-	82,  // 173: memstation.v1.WorkspaceAdminService.Inspect:input_type -> memstation.v1.AdminRecordRequest
-	82,  // 174: memstation.v1.WorkspaceAdminService.Source:input_type -> memstation.v1.AdminRecordRequest
-	82,  // 175: memstation.v1.WorkspaceAdminService.Progress:input_type -> memstation.v1.AdminRecordRequest
-	82,  // 176: memstation.v1.WorkspaceAdminService.Candidates:input_type -> memstation.v1.AdminRecordRequest
-	83,  // 177: memstation.v1.WorkspaceAdminService.Propose:input_type -> memstation.v1.AdminCandidateRequest
-	84,  // 178: memstation.v1.WorkspaceAdminService.Forget:input_type -> memstation.v1.AdminForgetRequest
-	84,  // 179: memstation.v1.WorkspaceAdminService.Retract:input_type -> memstation.v1.AdminForgetRequest
-	85,  // 180: memstation.v1.WorkspaceAdminService.Export:input_type -> memstation.v1.AdminExportRequest
-	82,  // 181: memstation.v1.WorkspaceAdminService.Operation:input_type -> memstation.v1.AdminRecordRequest
-	82,  // 182: memstation.v1.WorkspaceAdminService.ReconcileUsage:input_type -> memstation.v1.AdminRecordRequest
-	86,  // 183: memstation.v1.WorkspaceAdminService.Usage:input_type -> memstation.v1.AdminUsageRequest
-	64,  // 184: memstation.v1.WorkspaceAdminService.ReviewCandidate:input_type -> memstation.v1.ReviewCandidateRequest
-	66,  // 185: memstation.v1.WorkspaceAdminService.Publish:input_type -> memstation.v1.PublishRequest
-	63,  // 186: memstation.v1.WorkspaceAdminService.Publications:input_type -> memstation.v1.AdminWorkspaceScope
-	69,  // 187: memstation.v1.WorkspaceAdminService.RetractPublication:input_type -> memstation.v1.RetractPublicationRequest
-	0,   // 188: memstation.v1.HealthService.GetStatus:output_type -> memstation.v1.HealthStatusResponse
-	3,   // 189: memstation.v1.GatewayService.ListModels:output_type -> memstation.v1.ListModelsResponse
-	5,   // 190: memstation.v1.GatewayService.Complete:output_type -> memstation.v1.CompleteResponse
-	15,  // 191: memstation.v1.MemoryService.Search:output_type -> memstation.v1.SearchResponse
-	25,  // 192: memstation.v1.MemoryService.ListKeyMemories:output_type -> memstation.v1.ListKeyMemoriesResponse
-	26,  // 193: memstation.v1.MemoryService.UpsertKeyMemory:output_type -> memstation.v1.KeyMemory
-	29,  // 194: memstation.v1.MemoryService.DeleteKeyMemory:output_type -> memstation.v1.DeleteKeyMemoryResponse
-	31,  // 195: memstation.v1.AdminService.Overview:output_type -> memstation.v1.OverviewResponse
-	33,  // 196: memstation.v1.AdminService.ListConversations:output_type -> memstation.v1.ListConversationsResponse
-	36,  // 197: memstation.v1.AdminService.GetConversation:output_type -> memstation.v1.ConversationRecord
-	39,  // 198: memstation.v1.AdminService.GetConversationMemory:output_type -> memstation.v1.ConversationMemoryResponse
-	62,  // 199: memstation.v1.MemoryDataService.Probe:output_type -> memstation.v1.MemoryCapabilities
-	49,  // 200: memstation.v1.MemoryDataService.Observe:output_type -> memstation.v1.IngestionReceipt
-	49,  // 201: memstation.v1.MemoryDataService.Progress:output_type -> memstation.v1.IngestionReceipt
-	53,  // 202: memstation.v1.MemoryDataService.OpenWindow:output_type -> memstation.v1.ConversationWindow
-	53,  // 203: memstation.v1.MemoryDataService.GetWindow:output_type -> memstation.v1.ConversationWindow
-	53,  // 204: memstation.v1.MemoryDataService.Finalize:output_type -> memstation.v1.ConversationWindow
-	20,  // 205: memstation.v1.MemoryDataService.Inspect:output_type -> memstation.v1.MemoryDocument
-	54,  // 206: memstation.v1.MemoryDataService.Source:output_type -> memstation.v1.SourceRecord
-	56,  // 207: memstation.v1.MemoryDataService.Propose:output_type -> memstation.v1.MemoryCandidate
-	57,  // 208: memstation.v1.MemoryDataService.Candidates:output_type -> memstation.v1.CandidateList
-	61,  // 209: memstation.v1.MemoryDataService.Retract:output_type -> memstation.v1.MemoryOperation
-	61,  // 210: memstation.v1.MemoryDataService.Forget:output_type -> memstation.v1.MemoryOperation
-	61,  // 211: memstation.v1.MemoryDataService.Export:output_type -> memstation.v1.MemoryOperation
-	61,  // 212: memstation.v1.MemoryDataService.Operation:output_type -> memstation.v1.MemoryOperation
-	71,  // 213: memstation.v1.MemoryDataService.ReconcileUsage:output_type -> memstation.v1.AICall
-	72,  // 214: memstation.v1.MemoryDataService.Usage:output_type -> memstation.v1.AIUsageResponse
-	98,  // 215: memstation.v1.WorkspaceAdminService.Generations:output_type -> memstation.v1.GenerationList
-	97,  // 216: memstation.v1.WorkspaceAdminService.Rebuild:output_type -> memstation.v1.MemoryGeneration
-	97,  // 217: memstation.v1.WorkspaceAdminService.ActivateGeneration:output_type -> memstation.v1.MemoryGeneration
-	97,  // 218: memstation.v1.WorkspaceAdminService.DiscardGeneration:output_type -> memstation.v1.MemoryGeneration
-	62,  // 219: memstation.v1.WorkspaceAdminService.Capabilities:output_type -> memstation.v1.MemoryCapabilities
-	93,  // 220: memstation.v1.WorkspaceAdminService.CreateAgent:output_type -> memstation.v1.WorkspaceAgent
-	94,  // 221: memstation.v1.WorkspaceAdminService.Agent:output_type -> memstation.v1.WorkspaceAgentDetail
-	75,  // 222: memstation.v1.WorkspaceAdminService.Workspaces:output_type -> memstation.v1.WorkspaceListResponse
-	73,  // 223: memstation.v1.WorkspaceAdminService.CreateWorkspace:output_type -> memstation.v1.WorkspaceConfig
-	73,  // 224: memstation.v1.WorkspaceAdminService.UpdateWorkspace:output_type -> memstation.v1.WorkspaceConfig
-	77,  // 225: memstation.v1.WorkspaceAdminService.Integrations:output_type -> memstation.v1.IntegrationList
-	76,  // 226: memstation.v1.WorkspaceAdminService.PutIntegration:output_type -> memstation.v1.IntegrationConfig
-	79,  // 227: memstation.v1.WorkspaceAdminService.Partitions:output_type -> memstation.v1.PartitionList
-	78,  // 228: memstation.v1.WorkspaceAdminService.PutPartition:output_type -> memstation.v1.PartitionConfig
-	80,  // 229: memstation.v1.WorkspaceAdminService.Grant:output_type -> memstation.v1.WorkspaceGrant
-	80,  // 230: memstation.v1.WorkspaceAdminService.SetGrant:output_type -> memstation.v1.WorkspaceGrant
-	91,  // 231: memstation.v1.WorkspaceAdminService.Control:output_type -> memstation.v1.MemoryControlOverview
-	107, // 232: memstation.v1.WorkspaceAdminService.ReplayJob:output_type -> google.protobuf.Empty
-	20,  // 233: memstation.v1.WorkspaceAdminService.Inspect:output_type -> memstation.v1.MemoryDocument
-	54,  // 234: memstation.v1.WorkspaceAdminService.Source:output_type -> memstation.v1.SourceRecord
-	49,  // 235: memstation.v1.WorkspaceAdminService.Progress:output_type -> memstation.v1.IngestionReceipt
-	57,  // 236: memstation.v1.WorkspaceAdminService.Candidates:output_type -> memstation.v1.CandidateList
-	56,  // 237: memstation.v1.WorkspaceAdminService.Propose:output_type -> memstation.v1.MemoryCandidate
-	61,  // 238: memstation.v1.WorkspaceAdminService.Forget:output_type -> memstation.v1.MemoryOperation
-	61,  // 239: memstation.v1.WorkspaceAdminService.Retract:output_type -> memstation.v1.MemoryOperation
-	61,  // 240: memstation.v1.WorkspaceAdminService.Export:output_type -> memstation.v1.MemoryOperation
-	61,  // 241: memstation.v1.WorkspaceAdminService.Operation:output_type -> memstation.v1.MemoryOperation
-	71,  // 242: memstation.v1.WorkspaceAdminService.ReconcileUsage:output_type -> memstation.v1.AICall
-	72,  // 243: memstation.v1.WorkspaceAdminService.Usage:output_type -> memstation.v1.AIUsageResponse
-	56,  // 244: memstation.v1.WorkspaceAdminService.ReviewCandidate:output_type -> memstation.v1.MemoryCandidate
-	67,  // 245: memstation.v1.WorkspaceAdminService.Publish:output_type -> memstation.v1.MemoryPublication
-	68,  // 246: memstation.v1.WorkspaceAdminService.Publications:output_type -> memstation.v1.PublicationList
-	67,  // 247: memstation.v1.WorkspaceAdminService.RetractPublication:output_type -> memstation.v1.MemoryPublication
-	188, // [188:248] is the sub-list for method output_type
-	128, // [128:188] is the sub-list for method input_type
-	128, // [128:128] is the sub-list for extension type_name
-	128, // [128:128] is the sub-list for extension extendee
-	0,   // [0:128] is the sub-list for field type_name
+	9,   // 76: memstation.v1.SourcePart.media:type_name -> memstation.v1.ContentBlock
+	43,  // 77: memstation.v1.SourceEvent.speaker:type_name -> memstation.v1.SourceSpeaker
+	44,  // 78: memstation.v1.SourceEvent.parts:type_name -> memstation.v1.SourcePart
+	42,  // 79: memstation.v1.SourceEvent.reply_to:type_name -> memstation.v1.SourceRef
+	45,  // 80: memstation.v1.IngestBatch.events:type_name -> memstation.v1.SourceEvent
+	46,  // 81: memstation.v1.ObserveRequest.batch:type_name -> memstation.v1.IngestBatch
+	48,  // 82: memstation.v1.IngestionReceipt.events:type_name -> memstation.v1.EventAcceptance
+	50,  // 83: memstation.v1.OpenWindowRequest.window:type_name -> memstation.v1.WindowInput
+	44,  // 84: memstation.v1.SourceRecord.parts:type_name -> memstation.v1.SourcePart
+	42,  // 85: memstation.v1.SourceRecord.reply_to:type_name -> memstation.v1.SourceRef
+	42,  // 86: memstation.v1.CandidateInput.source_refs:type_name -> memstation.v1.SourceRef
+	42,  // 87: memstation.v1.MemoryCandidate.source_refs:type_name -> memstation.v1.SourceRef
+	56,  // 88: memstation.v1.CandidateList.items:type_name -> memstation.v1.MemoryCandidate
+	42,  // 89: memstation.v1.ForgetSelector.source_refs:type_name -> memstation.v1.SourceRef
+	58,  // 90: memstation.v1.ForgetRequest.selector:type_name -> memstation.v1.ForgetSelector
+	104, // 91: memstation.v1.MemoryOperation.result:type_name -> google.protobuf.Struct
+	104, // 92: memstation.v1.MemoryCapabilities.access:type_name -> google.protobuf.Struct
+	100, // 93: memstation.v1.MemoryCapabilities.capabilities:type_name -> memstation.v1.MemoryCapabilities.CapabilitiesEntry
+	95,  // 94: memstation.v1.MemoryCapabilities.runtime:type_name -> memstation.v1.MemoryRuntime
+	63,  // 95: memstation.v1.ReviewCandidateRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	101, // 96: memstation.v1.PublicationInput.actor_mapping:type_name -> memstation.v1.PublicationInput.ActorMappingEntry
+	63,  // 97: memstation.v1.PublishRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	65,  // 98: memstation.v1.PublishRequest.publication:type_name -> memstation.v1.PublicationInput
+	67,  // 99: memstation.v1.PublicationList.items:type_name -> memstation.v1.MemoryPublication
+	63,  // 100: memstation.v1.RetractPublicationRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	71,  // 101: memstation.v1.AIUsageResponse.items:type_name -> memstation.v1.AICall
+	73,  // 102: memstation.v1.WorkspaceListResponse.items:type_name -> memstation.v1.WorkspaceConfig
+	76,  // 103: memstation.v1.IntegrationList.items:type_name -> memstation.v1.IntegrationConfig
+	78,  // 104: memstation.v1.PartitionList.items:type_name -> memstation.v1.PartitionConfig
+	63,  // 105: memstation.v1.WorkspaceGrantRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	63,  // 106: memstation.v1.AdminRecordRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	63,  // 107: memstation.v1.AdminCandidateRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	55,  // 108: memstation.v1.AdminCandidateRequest.candidate:type_name -> memstation.v1.CandidateInput
+	63,  // 109: memstation.v1.AdminForgetRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	59,  // 110: memstation.v1.AdminForgetRequest.request:type_name -> memstation.v1.ForgetRequest
+	63,  // 111: memstation.v1.AdminExportRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	63,  // 112: memstation.v1.AdminUsageRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	70,  // 113: memstation.v1.AdminUsageRequest.request:type_name -> memstation.v1.AIUsageRequest
+	63,  // 114: memstation.v1.MemoryControlRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	88,  // 115: memstation.v1.MemoryControlOverview.actors:type_name -> memstation.v1.WorkspaceActor
+	89,  // 116: memstation.v1.MemoryControlOverview.sources:type_name -> memstation.v1.SourceSummary
+	49,  // 117: memstation.v1.MemoryControlOverview.receipts:type_name -> memstation.v1.IngestionReceipt
+	90,  // 118: memstation.v1.MemoryControlOverview.jobs:type_name -> memstation.v1.MemoryJob
+	61,  // 119: memstation.v1.MemoryControlOverview.operations:type_name -> memstation.v1.MemoryOperation
+	63,  // 120: memstation.v1.WorkspaceAgentCreate.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	93,  // 121: memstation.v1.WorkspaceAgentDetail.agent:type_name -> memstation.v1.WorkspaceAgent
+	80,  // 122: memstation.v1.WorkspaceAgentDetail.grant:type_name -> memstation.v1.WorkspaceGrant
+	73,  // 123: memstation.v1.WorkspaceAgentDetail.workspace:type_name -> memstation.v1.WorkspaceConfig
+	102, // 124: memstation.v1.MemoryRuntime.role_aliases:type_name -> memstation.v1.MemoryRuntime.RoleAliasesEntry
+	96,  // 125: memstation.v1.MemoryRuntime.embedding:type_name -> memstation.v1.EmbeddingIdentity
+	104, // 126: memstation.v1.MemoryGeneration.metadata:type_name -> google.protobuf.Struct
+	97,  // 127: memstation.v1.GenerationList.items:type_name -> memstation.v1.MemoryGeneration
+	63,  // 128: memstation.v1.GenerationRebuildRequest.scope:type_name -> memstation.v1.AdminWorkspaceScope
+	107, // 129: memstation.v1.HealthService.GetStatus:input_type -> google.protobuf.Empty
+	107, // 130: memstation.v1.GatewayService.ListModels:input_type -> google.protobuf.Empty
+	4,   // 131: memstation.v1.GatewayService.Complete:input_type -> memstation.v1.CompleteRequest
+	14,  // 132: memstation.v1.MemoryService.Search:input_type -> memstation.v1.SearchRequest
+	24,  // 133: memstation.v1.MemoryService.ListKeyMemories:input_type -> memstation.v1.ListKeyMemoriesRequest
+	27,  // 134: memstation.v1.MemoryService.UpsertKeyMemory:input_type -> memstation.v1.UpsertKeyMemoryRequest
+	28,  // 135: memstation.v1.MemoryService.DeleteKeyMemory:input_type -> memstation.v1.DeleteKeyMemoryRequest
+	30,  // 136: memstation.v1.AdminService.Overview:input_type -> memstation.v1.OverviewRequest
+	32,  // 137: memstation.v1.AdminService.ListConversations:input_type -> memstation.v1.ListConversationsRequest
+	35,  // 138: memstation.v1.AdminService.GetConversation:input_type -> memstation.v1.GetConversationRequest
+	38,  // 139: memstation.v1.AdminService.GetConversationMemory:input_type -> memstation.v1.GetConversationMemoryRequest
+	107, // 140: memstation.v1.MemoryDataService.Probe:input_type -> google.protobuf.Empty
+	47,  // 141: memstation.v1.MemoryDataService.Observe:input_type -> memstation.v1.ObserveRequest
+	40,  // 142: memstation.v1.MemoryDataService.Progress:input_type -> memstation.v1.RecordRequest
+	51,  // 143: memstation.v1.MemoryDataService.OpenWindow:input_type -> memstation.v1.OpenWindowRequest
+	40,  // 144: memstation.v1.MemoryDataService.GetWindow:input_type -> memstation.v1.RecordRequest
+	52,  // 145: memstation.v1.MemoryDataService.Finalize:input_type -> memstation.v1.FinalizeWindowRequest
+	40,  // 146: memstation.v1.MemoryDataService.Inspect:input_type -> memstation.v1.RecordRequest
+	40,  // 147: memstation.v1.MemoryDataService.Source:input_type -> memstation.v1.RecordRequest
+	55,  // 148: memstation.v1.MemoryDataService.Propose:input_type -> memstation.v1.CandidateInput
+	40,  // 149: memstation.v1.MemoryDataService.Candidates:input_type -> memstation.v1.RecordRequest
+	59,  // 150: memstation.v1.MemoryDataService.Retract:input_type -> memstation.v1.ForgetRequest
+	59,  // 151: memstation.v1.MemoryDataService.Forget:input_type -> memstation.v1.ForgetRequest
+	60,  // 152: memstation.v1.MemoryDataService.Export:input_type -> memstation.v1.ExportRequest
+	40,  // 153: memstation.v1.MemoryDataService.Operation:input_type -> memstation.v1.RecordRequest
+	40,  // 154: memstation.v1.MemoryDataService.ReconcileUsage:input_type -> memstation.v1.RecordRequest
+	70,  // 155: memstation.v1.MemoryDataService.Usage:input_type -> memstation.v1.AIUsageRequest
+	63,  // 156: memstation.v1.WorkspaceAdminService.Generations:input_type -> memstation.v1.AdminWorkspaceScope
+	99,  // 157: memstation.v1.WorkspaceAdminService.Rebuild:input_type -> memstation.v1.GenerationRebuildRequest
+	82,  // 158: memstation.v1.WorkspaceAdminService.ActivateGeneration:input_type -> memstation.v1.AdminRecordRequest
+	82,  // 159: memstation.v1.WorkspaceAdminService.DiscardGeneration:input_type -> memstation.v1.AdminRecordRequest
+	63,  // 160: memstation.v1.WorkspaceAdminService.Capabilities:input_type -> memstation.v1.AdminWorkspaceScope
+	92,  // 161: memstation.v1.WorkspaceAdminService.CreateAgent:input_type -> memstation.v1.WorkspaceAgentCreate
+	81,  // 162: memstation.v1.WorkspaceAdminService.Agent:input_type -> memstation.v1.WorkspaceGrantRequest
+	74,  // 163: memstation.v1.WorkspaceAdminService.Workspaces:input_type -> memstation.v1.WorkspaceListRequest
+	73,  // 164: memstation.v1.WorkspaceAdminService.CreateWorkspace:input_type -> memstation.v1.WorkspaceConfig
+	73,  // 165: memstation.v1.WorkspaceAdminService.UpdateWorkspace:input_type -> memstation.v1.WorkspaceConfig
+	63,  // 166: memstation.v1.WorkspaceAdminService.Integrations:input_type -> memstation.v1.AdminWorkspaceScope
+	76,  // 167: memstation.v1.WorkspaceAdminService.PutIntegration:input_type -> memstation.v1.IntegrationConfig
+	63,  // 168: memstation.v1.WorkspaceAdminService.Partitions:input_type -> memstation.v1.AdminWorkspaceScope
+	78,  // 169: memstation.v1.WorkspaceAdminService.PutPartition:input_type -> memstation.v1.PartitionConfig
+	81,  // 170: memstation.v1.WorkspaceAdminService.Grant:input_type -> memstation.v1.WorkspaceGrantRequest
+	80,  // 171: memstation.v1.WorkspaceAdminService.SetGrant:input_type -> memstation.v1.WorkspaceGrant
+	87,  // 172: memstation.v1.WorkspaceAdminService.Control:input_type -> memstation.v1.MemoryControlRequest
+	82,  // 173: memstation.v1.WorkspaceAdminService.ReplayJob:input_type -> memstation.v1.AdminRecordRequest
+	82,  // 174: memstation.v1.WorkspaceAdminService.Inspect:input_type -> memstation.v1.AdminRecordRequest
+	82,  // 175: memstation.v1.WorkspaceAdminService.Source:input_type -> memstation.v1.AdminRecordRequest
+	82,  // 176: memstation.v1.WorkspaceAdminService.Progress:input_type -> memstation.v1.AdminRecordRequest
+	82,  // 177: memstation.v1.WorkspaceAdminService.Candidates:input_type -> memstation.v1.AdminRecordRequest
+	83,  // 178: memstation.v1.WorkspaceAdminService.Propose:input_type -> memstation.v1.AdminCandidateRequest
+	84,  // 179: memstation.v1.WorkspaceAdminService.Forget:input_type -> memstation.v1.AdminForgetRequest
+	84,  // 180: memstation.v1.WorkspaceAdminService.Retract:input_type -> memstation.v1.AdminForgetRequest
+	85,  // 181: memstation.v1.WorkspaceAdminService.Export:input_type -> memstation.v1.AdminExportRequest
+	82,  // 182: memstation.v1.WorkspaceAdminService.Operation:input_type -> memstation.v1.AdminRecordRequest
+	82,  // 183: memstation.v1.WorkspaceAdminService.ReconcileUsage:input_type -> memstation.v1.AdminRecordRequest
+	86,  // 184: memstation.v1.WorkspaceAdminService.Usage:input_type -> memstation.v1.AdminUsageRequest
+	64,  // 185: memstation.v1.WorkspaceAdminService.ReviewCandidate:input_type -> memstation.v1.ReviewCandidateRequest
+	66,  // 186: memstation.v1.WorkspaceAdminService.Publish:input_type -> memstation.v1.PublishRequest
+	63,  // 187: memstation.v1.WorkspaceAdminService.Publications:input_type -> memstation.v1.AdminWorkspaceScope
+	69,  // 188: memstation.v1.WorkspaceAdminService.RetractPublication:input_type -> memstation.v1.RetractPublicationRequest
+	0,   // 189: memstation.v1.HealthService.GetStatus:output_type -> memstation.v1.HealthStatusResponse
+	3,   // 190: memstation.v1.GatewayService.ListModels:output_type -> memstation.v1.ListModelsResponse
+	5,   // 191: memstation.v1.GatewayService.Complete:output_type -> memstation.v1.CompleteResponse
+	15,  // 192: memstation.v1.MemoryService.Search:output_type -> memstation.v1.SearchResponse
+	25,  // 193: memstation.v1.MemoryService.ListKeyMemories:output_type -> memstation.v1.ListKeyMemoriesResponse
+	26,  // 194: memstation.v1.MemoryService.UpsertKeyMemory:output_type -> memstation.v1.KeyMemory
+	29,  // 195: memstation.v1.MemoryService.DeleteKeyMemory:output_type -> memstation.v1.DeleteKeyMemoryResponse
+	31,  // 196: memstation.v1.AdminService.Overview:output_type -> memstation.v1.OverviewResponse
+	33,  // 197: memstation.v1.AdminService.ListConversations:output_type -> memstation.v1.ListConversationsResponse
+	36,  // 198: memstation.v1.AdminService.GetConversation:output_type -> memstation.v1.ConversationRecord
+	39,  // 199: memstation.v1.AdminService.GetConversationMemory:output_type -> memstation.v1.ConversationMemoryResponse
+	62,  // 200: memstation.v1.MemoryDataService.Probe:output_type -> memstation.v1.MemoryCapabilities
+	49,  // 201: memstation.v1.MemoryDataService.Observe:output_type -> memstation.v1.IngestionReceipt
+	49,  // 202: memstation.v1.MemoryDataService.Progress:output_type -> memstation.v1.IngestionReceipt
+	53,  // 203: memstation.v1.MemoryDataService.OpenWindow:output_type -> memstation.v1.ConversationWindow
+	53,  // 204: memstation.v1.MemoryDataService.GetWindow:output_type -> memstation.v1.ConversationWindow
+	53,  // 205: memstation.v1.MemoryDataService.Finalize:output_type -> memstation.v1.ConversationWindow
+	20,  // 206: memstation.v1.MemoryDataService.Inspect:output_type -> memstation.v1.MemoryDocument
+	54,  // 207: memstation.v1.MemoryDataService.Source:output_type -> memstation.v1.SourceRecord
+	56,  // 208: memstation.v1.MemoryDataService.Propose:output_type -> memstation.v1.MemoryCandidate
+	57,  // 209: memstation.v1.MemoryDataService.Candidates:output_type -> memstation.v1.CandidateList
+	61,  // 210: memstation.v1.MemoryDataService.Retract:output_type -> memstation.v1.MemoryOperation
+	61,  // 211: memstation.v1.MemoryDataService.Forget:output_type -> memstation.v1.MemoryOperation
+	61,  // 212: memstation.v1.MemoryDataService.Export:output_type -> memstation.v1.MemoryOperation
+	61,  // 213: memstation.v1.MemoryDataService.Operation:output_type -> memstation.v1.MemoryOperation
+	71,  // 214: memstation.v1.MemoryDataService.ReconcileUsage:output_type -> memstation.v1.AICall
+	72,  // 215: memstation.v1.MemoryDataService.Usage:output_type -> memstation.v1.AIUsageResponse
+	98,  // 216: memstation.v1.WorkspaceAdminService.Generations:output_type -> memstation.v1.GenerationList
+	97,  // 217: memstation.v1.WorkspaceAdminService.Rebuild:output_type -> memstation.v1.MemoryGeneration
+	97,  // 218: memstation.v1.WorkspaceAdminService.ActivateGeneration:output_type -> memstation.v1.MemoryGeneration
+	97,  // 219: memstation.v1.WorkspaceAdminService.DiscardGeneration:output_type -> memstation.v1.MemoryGeneration
+	62,  // 220: memstation.v1.WorkspaceAdminService.Capabilities:output_type -> memstation.v1.MemoryCapabilities
+	93,  // 221: memstation.v1.WorkspaceAdminService.CreateAgent:output_type -> memstation.v1.WorkspaceAgent
+	94,  // 222: memstation.v1.WorkspaceAdminService.Agent:output_type -> memstation.v1.WorkspaceAgentDetail
+	75,  // 223: memstation.v1.WorkspaceAdminService.Workspaces:output_type -> memstation.v1.WorkspaceListResponse
+	73,  // 224: memstation.v1.WorkspaceAdminService.CreateWorkspace:output_type -> memstation.v1.WorkspaceConfig
+	73,  // 225: memstation.v1.WorkspaceAdminService.UpdateWorkspace:output_type -> memstation.v1.WorkspaceConfig
+	77,  // 226: memstation.v1.WorkspaceAdminService.Integrations:output_type -> memstation.v1.IntegrationList
+	76,  // 227: memstation.v1.WorkspaceAdminService.PutIntegration:output_type -> memstation.v1.IntegrationConfig
+	79,  // 228: memstation.v1.WorkspaceAdminService.Partitions:output_type -> memstation.v1.PartitionList
+	78,  // 229: memstation.v1.WorkspaceAdminService.PutPartition:output_type -> memstation.v1.PartitionConfig
+	80,  // 230: memstation.v1.WorkspaceAdminService.Grant:output_type -> memstation.v1.WorkspaceGrant
+	80,  // 231: memstation.v1.WorkspaceAdminService.SetGrant:output_type -> memstation.v1.WorkspaceGrant
+	91,  // 232: memstation.v1.WorkspaceAdminService.Control:output_type -> memstation.v1.MemoryControlOverview
+	107, // 233: memstation.v1.WorkspaceAdminService.ReplayJob:output_type -> google.protobuf.Empty
+	20,  // 234: memstation.v1.WorkspaceAdminService.Inspect:output_type -> memstation.v1.MemoryDocument
+	54,  // 235: memstation.v1.WorkspaceAdminService.Source:output_type -> memstation.v1.SourceRecord
+	49,  // 236: memstation.v1.WorkspaceAdminService.Progress:output_type -> memstation.v1.IngestionReceipt
+	57,  // 237: memstation.v1.WorkspaceAdminService.Candidates:output_type -> memstation.v1.CandidateList
+	56,  // 238: memstation.v1.WorkspaceAdminService.Propose:output_type -> memstation.v1.MemoryCandidate
+	61,  // 239: memstation.v1.WorkspaceAdminService.Forget:output_type -> memstation.v1.MemoryOperation
+	61,  // 240: memstation.v1.WorkspaceAdminService.Retract:output_type -> memstation.v1.MemoryOperation
+	61,  // 241: memstation.v1.WorkspaceAdminService.Export:output_type -> memstation.v1.MemoryOperation
+	61,  // 242: memstation.v1.WorkspaceAdminService.Operation:output_type -> memstation.v1.MemoryOperation
+	71,  // 243: memstation.v1.WorkspaceAdminService.ReconcileUsage:output_type -> memstation.v1.AICall
+	72,  // 244: memstation.v1.WorkspaceAdminService.Usage:output_type -> memstation.v1.AIUsageResponse
+	56,  // 245: memstation.v1.WorkspaceAdminService.ReviewCandidate:output_type -> memstation.v1.MemoryCandidate
+	67,  // 246: memstation.v1.WorkspaceAdminService.Publish:output_type -> memstation.v1.MemoryPublication
+	68,  // 247: memstation.v1.WorkspaceAdminService.Publications:output_type -> memstation.v1.PublicationList
+	67,  // 248: memstation.v1.WorkspaceAdminService.RetractPublication:output_type -> memstation.v1.MemoryPublication
+	189, // [189:249] is the sub-list for method output_type
+	129, // [129:189] is the sub-list for method input_type
+	129, // [129:129] is the sub-list for extension type_name
+	129, // [129:129] is the sub-list for extension extendee
+	0,   // [0:129] is the sub-list for field type_name
 }
 
 func init() { file_proto_memstation_v1_api_proto_init() }

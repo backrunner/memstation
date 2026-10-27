@@ -102,6 +102,30 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "fixture generation failed", 500)
 			return
 		}
+		if task == "analysis.extract" && strings.Contains(in.Messages[0].Content, "Additionally return episodes") {
+			var body map[string]any
+			if json.Unmarshal(raw, &body) != nil {
+				http.Error(w, "invalid episode fixture", 500)
+				return
+			}
+			episodes := []any{}
+			if facts, ok := body["facts"].([]any); ok && len(facts) > 0 {
+				fact, _ := facts[0].(map[string]any)
+				episode := map[string]any{"key": "source_episode", "type": "episode", "title": "Source episode", "status": "unspecified", "participants": []string{}, "time_anchor": nil}
+				for _, key := range []string{"content", "subject", "subject_scope", "subject_actor_ids", "confidence", "importance", "decay_factor", "quotes"} {
+					if v, ok := fact[key]; ok {
+						episode[key] = v
+					}
+				}
+				episodes = append(episodes, episode)
+			}
+			body["episodes"] = episodes
+			raw, err = json.Marshal(body)
+			if err != nil {
+				http.Error(w, "invalid episode fixture", 500)
+				return
+			}
+		}
 		result = map[string]any{"id": "response-" + call, "model": version, "choices": []any{map[string]any{"finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": string(raw)}}}}
 	case "/v1/embeddings":
 		if role != "embedding" || in.Dimensions != 3 || r.Header.Get("X-MemStation-Embedding-Fingerprint") != "fixture-embedding-v1:3" {

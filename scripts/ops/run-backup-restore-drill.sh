@@ -294,15 +294,15 @@ INSERT INTO user_settings (id, user_id, chat_model, summary_model, analysis_mode
 VALUES ('settings-$DRILL_SUFFIX', '$DRILL_USER_ID', 'chat-model', 'summary-model', 'analysis-model', 'embedding-model', FALSE, 2048);
 INSERT INTO provider_credentials (scope, provider, encrypted_api_key, base_url) VALUES ('gateway', 'openai_compatible', 'ciphertext-drill', 'https://api.example.com');
 INSERT INTO conversations (id, user_id, workspace_id, agent_id, request_format, upstream_provider, mode, finalize_status, summary_status, analysis_status, metadata)
-VALUES ('$DRILL_CONVERSATION_ID', '$DRILL_USER_ID', 'personal-' || encode(sha256(convert_to('$DRILL_USER_ID','UTF8')),'hex'), 'agent-$DRILL_SUFFIX', 'openai_chat', 'openai', 'inject', 'ended', 'completed', 'completed', '{"drill":true}'::jsonb);
+VALUES ('$DRILL_CONVERSATION_ID', '$DRILL_USER_ID', 'personal-' || encode(sha256(convert_to('$DRILL_USER_ID','UTF8')),'hex'), 'agent-$DRILL_SUFFIX', 'openai_chat', 'openai_compatible', 'inject', 'ended', 'completed', 'completed', '{"drill":true}'::jsonb);
 INSERT INTO messages (id, user_id, workspace_id, conversation_id, role, content_blocks, text_content, provider_payload, sequence_num)
 VALUES
   ('msg-user-$DRILL_SUFFIX', '$DRILL_USER_ID', 'personal-' || encode(sha256(convert_to('$DRILL_USER_ID','UTF8')),'hex'), '$DRILL_CONVERSATION_ID', 'user', '[{"type":"text","text":"remember my deployment window"}]'::jsonb, 'remember my deployment window', '{}'::jsonb, 1),
   ('msg-assistant-$DRILL_SUFFIX', '$DRILL_USER_ID', 'personal-' || encode(sha256(convert_to('$DRILL_USER_ID','UTF8')),'hex'), '$DRILL_CONVERSATION_ID', 'assistant', '[{"type":"text","text":"captured deployment window"}]'::jsonb, 'captured deployment window', '{}'::jsonb, 2);
 INSERT INTO token_usages (id, user_id, workspace_id, conversation_id, provider, model, input_tokens, output_tokens, total_tokens, cost)
-VALUES ('usage-$DRILL_SUFFIX', '$DRILL_USER_ID', 'personal-' || encode(sha256(convert_to('$DRILL_USER_ID','UTF8')),'hex'), '$DRILL_CONVERSATION_ID', 'openai', 'chat-model', 12, 18, 30, 0.03);
+VALUES ('usage-$DRILL_SUFFIX', '$DRILL_USER_ID', 'personal-' || encode(sha256(convert_to('$DRILL_USER_ID','UTF8')),'hex'), '$DRILL_CONVERSATION_ID', 'openai_compatible', 'chat-model', 12, 18, 30, 0.03);
 INSERT INTO blob_objects (blob_id,user_id,workspace_id,source_kind,storage_backend,storage_key)
-VALUES ('blob-$DRILL_SUFFIX','$DRILL_USER_ID','personal-' || encode(sha256(convert_to('$DRILL_USER_ID','UTF8')),'hex'),'upload','local','$DRILL_USER_ID/blob-$DRILL_SUFFIX/fixture.txt');
+VALUES ('blob-$DRILL_SUFFIX','$DRILL_USER_ID','personal-' || encode(sha256(convert_to('$DRILL_USER_ID','UTF8')),'hex'),'upload','local','v3/personal-' || encode(sha256(convert_to('$DRILL_USER_ID','UTF8')),'hex') || '/partition-' || encode(sha256(convert_to('','UTF8')),'hex') || '/blob-' || encode(sha256(convert_to('blob-$DRILL_SUFFIX','UTF8')),'hex') || '/content');
 INSERT INTO message_parts (part_id,user_id,workspace_id,conversation_id,role,part_type,blob_id,text_content)
 VALUES ('part-$DRILL_SUFFIX','$DRILL_USER_ID','personal-' || encode(sha256(convert_to('$DRILL_USER_ID','UTF8')),'hex'),'$DRILL_CONVERSATION_ID','user','file','blob-$DRILL_SUFFIX','Retained source fixture');
 INSERT INTO message_part_artifacts (artifact_id,part_id,user_id,workspace_id,conversation_id,artifact_type,status,text_content)
@@ -310,7 +310,7 @@ VALUES ('artifact-$DRILL_SUFFIX','part-$DRILL_SUFFIX','$DRILL_USER_ID','personal
 INSERT INTO memory_generations (generation_id,user_id,workspace_id,status,is_active)
 VALUES ('generation-$DRILL_SUFFIX','$DRILL_USER_ID','personal-' || encode(sha256(convert_to('$DRILL_USER_ID','UTF8')),'hex'),'activated',true);
 INSERT INTO memory_source_snapshots (snapshot_id,user_id,workspace_id,conversation_id,snapshot_version,source_hash,request_format,message_count,message_parts)
-VALUES ('snapshot-$DRILL_SUFFIX','$DRILL_USER_ID','personal-' || encode(sha256(convert_to('$DRILL_USER_ID','UTF8')),'hex'),'$DRILL_CONVERSATION_ID',1,'source-hash','openai_chat',1,'[{"part_id":"part-$DRILL_SUFFIX","blob_id":"blob-$DRILL_SUFFIX"}]'::jsonb);
+VALUES ('snapshot-$DRILL_SUFFIX','$DRILL_USER_ID','personal-' || encode(sha256(convert_to('$DRILL_USER_ID','UTF8')),'hex'),'$DRILL_CONVERSATION_ID',1,'source-hash','openai_chat',1,jsonb_build_array(jsonb_build_object('part_id','part-$DRILL_SUFFIX','blob_id','blob-$DRILL_SUFFIX','user_id','$DRILL_USER_ID','workspace_id','personal-' || encode(sha256(convert_to('$DRILL_USER_ID','UTF8')),'hex'),'conversation_id','$DRILL_CONVERSATION_ID','role','user','part_type','file','sequence_num',0,'text_content','Retained source fixture')));
 INSERT INTO memory_source_messages (id,snapshot_id,user_id,workspace_id,conversation_id,snapshot_version,sequence_num,role,text_content)
 VALUES ('source-message-$DRILL_SUFFIX','snapshot-$DRILL_SUFFIX','$DRILL_USER_ID','personal-' || encode(sha256(convert_to('$DRILL_USER_ID','UTF8')),'hex'),'$DRILL_CONVERSATION_ID',1,1,'user','Retained source fixture');
 INSERT INTO memory_generation_sources (id,generation_id,user_id,workspace_id,snapshot_id,conversation_id,source_hash,status)
@@ -333,14 +333,14 @@ INSERT INTO impressions (id, user_id, conversation_id, node_id, subject, subject
 VALUES ('impression-$DRILL_SUFFIX', '$DRILL_USER_ID', '$DRILL_CONVERSATION_ID', 'impression-node-$DRILL_SUFFIX', 'Backup Drill User', 'person', 'reliable', 'positive', 'known', 'Reliable deployment operator.');
 INSERT INTO facts (id, user_id, conversation_id, node_id, category, subject, content, confidence)
 VALUES ('fact-$DRILL_SUFFIX', '$DRILL_USER_ID', '$DRILL_CONVERSATION_ID', 'fact-node-$DRILL_SUFFIX', 'preference', 'deployment window', 'Deployment window is every Tuesday 09:00 CST.', 0.98);
-INSERT INTO key_memories (id, user_id, node_id, key, value, category, source, review_status)
-VALUES ('key-$DRILL_SUFFIX', '$DRILL_USER_ID', 'key-node-$DRILL_SUFFIX', 'recent_conversation', '$DRILL_CONVERSATION_ID', 'system', 'drill', 'approved');
+INSERT INTO key_memories (id, user_id, node_id, key, value, category, source, review_status,workspace_id)
+VALUES ('key-$DRILL_SUFFIX', '$DRILL_USER_ID', 'key-node-$DRILL_SUFFIX', 'recent_conversation', '$DRILL_CONVERSATION_ID', 'system', 'drill', 'approved','personal-' || encode(sha256(convert_to('$DRILL_USER_ID','UTF8')),'hex'));
 INSERT INTO memory_relations (id, user_id, src_node_id, dst_node_id, relation_type, weight, source, metadata)
 VALUES ('relation-$DRILL_SUFFIX', '$DRILL_USER_ID', '$DRILL_NODE_ID', 'fact-node-$DRILL_SUFFIX', 'supports', 1.0, 'drill', '{"marker":"$MARKER_VALUE"}'::jsonb);
 INSERT INTO memory_embeddings (embedding_id, workspace_id, user_id, node_id, node_type, embedding_version, embedding_model, content_hash, vector)
 VALUES ('embedding-$DRILL_SUFFIX', 'personal-' || encode(sha256(convert_to('$DRILL_USER_ID','UTF8')),'hex'), '$DRILL_USER_ID', '$DRILL_NODE_ID', 'summary', 1, 'embedding-model', 'hash-$DRILL_SUFFIX', '[0.11,0.22,0.33]');
 INSERT INTO system_settings (id, default_provider, vector_store_backend, conversation_timeout_seconds, provider_timeout_seconds, message_threshold, token_threshold, max_context_tokens, max_injection_tokens, rate_limit_rps, rate_limit_burst, cache_ttl_seconds, cors_allowed_origins, session_cookie_cross_site)
-VALUES ('system-$DRILL_SUFFIX', 'openai', 'pgvector', 1800, 60, 40, 4000, 8192, 2048, 10, 20, 60, '["http://localhost:4173"]'::jsonb, TRUE);
+VALUES ('system-$DRILL_SUFFIX', 'openai_compatible', 'pgvector', 1800, 60, 40, 4000, 8192, 2048, 10, 20, 60, '["http://localhost:4173"]'::jsonb, TRUE);
 SQL
   compose_cmd "$project" "$file" exec -T redis redis-cli set "$REDIS_MARKER_KEY" "$MARKER_VALUE" >/dev/null
   compose_cmd "$project" "$file" exec -T redis redis-cli hset "$REDIS_META_HASH" user_id "$DRILL_USER_ID" conversation_id "$DRILL_CONVERSATION_ID" >/dev/null

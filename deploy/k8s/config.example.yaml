@@ -5,7 +5,7 @@ metadata:
 data:
   MEMSTATION_PORT: "8080"
   MEMSTATION_GRPC_PORT: "9090"
-  MEMSTATION_DEFAULT_PROVIDER: "openai"
+  MEMSTATION_DEFAULT_PROVIDER: "openai_compatible"
   DATABASE_URL: "postgres://memstation:memstation_dev@postgres:5432/memstation?sslmode=disable"
   REDIS_URL: "redis://redis:6379/0"
   VECTOR_STORE_BACKEND: "pgvector"
@@ -33,7 +33,6 @@ type: Opaque
 stringData:
   MEMSTATION_ADMIN_TOKEN: "replace-with-a-strong-admin-token"
   MEMSTATION_MASTER_KEY: "replace-with-a-strong-master-key"
-  MEMSTATION_DEV_API_KEY: "ms-local-dev"
   OPENAI_API_KEY: ""
   ANTHROPIC_API_KEY: ""
   GEMINI_API_KEY: ""

@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
 	"memstation/apps/server/internal/domain"
-	sqlstore "memstation/apps/server/internal/store/sql"
 	vectorstore "memstation/apps/server/internal/store/vector"
 )
 
@@ -74,7 +75,7 @@ func BenchmarkInject(b *testing.B) {
 		MaxInjectionTokens: 2048,
 		Messages: []domain.UnifiedMessage{
 			{Role: domain.RoleUser, Text: "Remind me what we decided about the rollout plan."},
-		},
+		}, AgentID: "fixture-agent",
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -124,7 +125,7 @@ func BenchmarkScoreDocument(b *testing.B) {
 	cfg := configForVariant(SearchVariantFull)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		scoreDocument(doc, 0.78, 0.24, 0.12, 0.05, 0.05, 0.0, 0.0, cfg)
+		scoreDocument(doc, 0.78, 0.24, 0.12, 0.05, 0.05, 0.0, false, cfg)
 	}
 }
 
@@ -179,7 +180,7 @@ func BenchmarkBuildInjectionSystemPrompt(b *testing.B) {
 func setupEngineBench(b *testing.B, total int) (*Engine, domain.SearchInput) {
 	b.Helper()
 	ctx := context.Background()
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	vectors := vectorstore.NewPGVectorStore(nil)
 	engine := NewEngine(repo, vectors)
 

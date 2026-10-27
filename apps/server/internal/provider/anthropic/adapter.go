@@ -48,6 +48,9 @@ func (a *Adapter) Complete(ctx context.Context, req domain.UnifiedRequest) (*dom
 		"max_tokens": 1024,
 		"messages":   buildMessages(chatMessages),
 	}
+	if req.Temperature != nil {
+		payload["temperature"] = *req.Temperature
+	}
 	if req.MaxOutputTokens > 0 {
 		payload["max_tokens"] = req.MaxOutputTokens
 	}
@@ -224,6 +227,9 @@ func (a *Adapter) Stream(ctx context.Context, req domain.UnifiedRequest, emit fu
 		"max_tokens": 1024,
 		"stream":     true,
 		"messages":   buildMessages(chatMessages),
+	}
+	if req.Temperature != nil {
+		payload["temperature"] = *req.Temperature
 	}
 	if req.MaxOutputTokens > 0 {
 		payload["max_tokens"] = req.MaxOutputTokens
@@ -592,57 +598,26 @@ func anthropicBlocks(message domain.UnifiedMessage) []map[string]any {
 		switch block.Type {
 		case domain.ContentBlockText:
 			out = append(out, map[string]any{"type": "text", "text": block.TextProxy()})
-		case domain.ContentBlockImage:
-			item := map[string]any{"type": "image"}
-			if block.SourceURL != "" {
-				item["source_url"] = block.SourceURL
+		case domain.ContentBlockImage, domain.ContentBlockFile:
+			kind := "image"
+			if block.Type == domain.ContentBlockFile {
+				kind = "document"
 			}
+			source := map[string]any{}
 			if block.ProviderFileID != "" {
-				item["file_id"] = block.ProviderFileID
+				source = map[string]any{"type": "file", "file_id": block.ProviderFileID}
+			} else if mimeType, data, ok := provider.InlineData(block.SourceURL); ok {
+				source = map[string]any{"type": "base64", "media_type": mimeType, "data": data}
+			} else if block.SourceURL != "" {
+				source = map[string]any{"type": "url", "url": block.SourceURL}
 			}
-			if block.MIMEType != "" {
-				item["mime_type"] = block.MIMEType
+			if len(source) > 0 {
+				out = append(out, map[string]any{"type": kind, "source": source})
+			} else {
+				out = append(out, map[string]any{"type": "text", "text": "[" + string(block.Type) + " omitted: source unavailable]"})
 			}
-			out = append(out, item)
-		case domain.ContentBlockFile:
-			item := map[string]any{"type": "document"}
-			if block.SourceURL != "" {
-				item["source_url"] = block.SourceURL
-			}
-			if block.ProviderFileID != "" {
-				item["file_id"] = block.ProviderFileID
-			}
-			if block.MIMEType != "" {
-				item["mime_type"] = block.MIMEType
-			}
-			if block.Filename != "" {
-				item["filename"] = block.Filename
-			}
-			out = append(out, item)
-		case domain.ContentBlockAudio:
-			item := map[string]any{"type": "audio"}
-			if block.SourceURL != "" {
-				item["source_url"] = block.SourceURL
-			}
-			if block.ProviderFileID != "" {
-				item["file_id"] = block.ProviderFileID
-			}
-			if block.MIMEType != "" {
-				item["mime_type"] = block.MIMEType
-			}
-			out = append(out, item)
-		case domain.ContentBlockVideo:
-			item := map[string]any{"type": "video"}
-			if block.SourceURL != "" {
-				item["source_url"] = block.SourceURL
-			}
-			if block.ProviderFileID != "" {
-				item["file_id"] = block.ProviderFileID
-			}
-			if block.MIMEType != "" {
-				item["mime_type"] = block.MIMEType
-			}
-			out = append(out, item)
+		case domain.ContentBlockAudio, domain.ContentBlockVideo:
+			out = append(out, map[string]any{"type": "text", "text": "[" + string(block.Type) + " omitted: unsupported by protocol]"})
 		default:
 			if text := block.TextProxy(); text != "" {
 				out = append(out, map[string]any{"type": "text", "text": text})

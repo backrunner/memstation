@@ -89,7 +89,6 @@ container run --detach \
   --env VECTOR_STORE_BACKEND=pgvector \
   --env MEMSTATION_ADMIN_TOKEN="${MEMSTATION_ADMIN_TOKEN:-memstation-local-admin-token}" \
   --env MEMSTATION_MASTER_KEY="${MEMSTATION_MASTER_KEY:-memstation-local-master-key}" \
-  --env MEMSTATION_DEV_API_KEY="${MEMSTATION_DEV_API_KEY:-ms-local-dev}" \
   --env MEMSTATION_CORS_ALLOWED_ORIGINS="${MEMSTATION_CORS_ALLOWED_ORIGINS:-}" \
   --env MEMSTATION_SESSION_COOKIE_SECURE=false \
   --env MEMSTATION_SESSION_COOKIE_CROSS_SITE=false \

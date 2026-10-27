@@ -104,11 +104,6 @@ func Revision(v int64) predicate.Agent {
 	return predicate.Agent(sql.FieldEQ(FieldRevision, v))
 }
 
-// Legacy applies equality check predicate on the "legacy" field. It's identical to LegacyEQ.
-func Legacy(v bool) predicate.Agent {
-	return predicate.Agent(sql.FieldEQ(FieldLegacy, v))
-}
-
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.Agent {
 	return predicate.Agent(sql.FieldEQ(FieldCreatedAt, v))
@@ -552,16 +547,6 @@ func RevisionLT(v int64) predicate.Agent {
 // RevisionLTE applies the LTE predicate on the "revision" field.
 func RevisionLTE(v int64) predicate.Agent {
 	return predicate.Agent(sql.FieldLTE(FieldRevision, v))
-}
-
-// LegacyEQ applies the EQ predicate on the "legacy" field.
-func LegacyEQ(v bool) predicate.Agent {
-	return predicate.Agent(sql.FieldEQ(FieldLegacy, v))
-}
-
-// LegacyNEQ applies the NEQ predicate on the "legacy" field.
-func LegacyNEQ(v bool) predicate.Agent {
-	return predicate.Agent(sql.FieldNEQ(FieldLegacy, v))
 }
 
 // And groups predicates with the AND operator between them.

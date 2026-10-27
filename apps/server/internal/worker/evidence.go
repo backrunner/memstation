@@ -244,6 +244,21 @@ func groundedNodeEvidences(doc domain.MemoryDocument, source []domain.MemoryEvid
 		evidence := domain.MemoryEvidence{ID: memoryEvidenceID(doc.NodeID, doc.ConversationID, part, sourceID, seq, 0), UserID: doc.UserID, GenerationID: doc.GenerationID, NodeID: doc.NodeID, ConversationID: doc.ConversationID, SequenceNum: seq, PartID: part, ArtifactID: artifact, ExcerptText: quote, EvidenceKind: "exact_quote", Weight: 1, Metadata: cloneMap(q), CreatedAt: time.Now().UTC()}
 		out = append(out, evidence)
 	}
+	observations, _ := doc.Metadata["source_media_observations"].([]any)
+	for index, raw := range observations {
+		m, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		part, _ := m["part_id"].(string)
+		sourceID, _ := m["source_id"].(string)
+		text, _ := m["observation"].(string)
+		if sourceID == "" || text == "" {
+			continue
+		}
+		seq := intValue(m, "sequence_num")
+		out = append(out, domain.MemoryEvidence{ID: memoryEvidenceID(doc.NodeID, doc.ConversationID, part, sourceID, seq, index), UserID: doc.UserID, GenerationID: doc.GenerationID, NodeID: doc.NodeID, ConversationID: doc.ConversationID, SequenceNum: seq, PartID: part, ExcerptText: text, EvidenceKind: "media_observation", Weight: 0.5, Metadata: cloneMap(m), CreatedAt: time.Now().UTC()})
+	}
 	if len(out) > 0 {
 		return out
 	}
@@ -277,7 +292,7 @@ func relationWithEvidence(ctx context.Context, services Services, relation domai
 	for _, e := range evidences {
 		source := stringValue(e.Metadata, "source_id")
 		kind := stringValue(e.Metadata, "support_kind")
-		if source == "" || kind == "model_inference" || seen[source] {
+		if source == "" || kind == "model_inference" || kind == "media_observation" || seen[source] {
 			continue
 		}
 		seen[source] = true

@@ -37,9 +37,6 @@ func trackMemoryJob(services Services) asynq.MiddlewareFunc {
 			if err := json.Unmarshal(task.Payload(), &scope); err != nil {
 				return err
 			}
-			if scope.Version < 2 {
-				return next.ProcessTask(ctx, task)
-			}
 			bound, err := bindTaskScope(ctx, task, services)
 			obsolete := errors.Is(err, domain.ErrMemoryTaskObsolete)
 			if err != nil && !obsolete {

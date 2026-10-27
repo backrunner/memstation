@@ -20,6 +20,7 @@ import (
 	"memstation/apps/server/internal/bootstrap"
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/ports"
+	"memstation/apps/server/internal/provider"
 	"memstation/apps/server/internal/security"
 )
 
@@ -436,6 +437,9 @@ func payloadMediaBlock(item map[string]any, hint, path string, ctx toolPayloadCo
 	if blockType == "" {
 		return domain.ContentBlock{}, false
 	}
+	if sourceURL, fileID, mimeType, ok := provider.NativeSourceFields(item, string(blockType)); ok {
+		return domain.ContentBlock{Type: blockType, SourceURL: sourceURL, ProviderFileID: fileID, MIMEType: mimeType, Filename: provider.NativeSourceFilename(item), Raw: rawJSONString(item)}, true
+	}
 
 	sourceMap := map[string]any{}
 	switch blockType {
@@ -678,9 +682,6 @@ func (s *Service) partTextSource(ctx context.Context, userID string, part domain
 	if strings.TrimSpace(part.TextContent) != "" {
 		return strings.TrimSpace(part.TextContent), textMeta, nil
 	}
-	if strings.TrimSpace(part.RawPayload) != "" {
-		return strings.TrimSpace(part.RawPayload), textMeta, nil
-	}
 	if strings.TrimSpace(part.BlobID) == "" || blobs == nil || s.repo == nil {
 		return "", textMeta, nil
 	}
@@ -789,6 +790,13 @@ func dedupeArtifacts(items []domain.MessagePartArtifact) []domain.MessagePartArt
 }
 
 func toolResultText(result domain.ToolResult) string {
+	// A structured result can contain native media. Its textual projection must
+	// not turn image URLs, base64, or raw media JSON into extracted evidence.
+	sanitized, _, err := (&InputPreparer{}).prepareToolValue(context.Background(), domain.UnifiedRequest{}, result.Output, result.ToolCallID, 0)
+	if err != nil {
+		return "[tool output unavailable]"
+	}
+	result.Output = sanitized
 	if output, ok := result.Output.(map[string]any); ok {
 		if content, ok := output["content"]; ok {
 			if text := toolPayloadText(content); text != "" {
@@ -853,7 +861,7 @@ func normalizeMIMEType(value, filename string) string {
 
 func isTextLikeMIME(mimeType string) bool {
 	mimeType = strings.TrimSpace(strings.ToLower(mimeType))
-	return strings.HasPrefix(mimeType, "text/") || mimeType == "application/json" || mimeType == "application/xml" || mimeType == "application/pdf"
+	return strings.HasPrefix(mimeType, "text/") || mimeType == "application/json" || mimeType == "application/xml"
 }
 
 func mergeMaps(base map[string]any, extras map[string]any) map[string]any {

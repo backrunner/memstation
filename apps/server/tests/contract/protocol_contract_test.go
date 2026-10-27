@@ -10,6 +10,12 @@ import (
 	"testing"
 	"time"
 
+	conversationstore "memstation/apps/server/internal/store/sql/conversation"
+	mediastore "memstation/apps/server/internal/store/sql/media"
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
+	"memstation/apps/server/internal/testutil/authfixture"
+
 	"memstation/apps/server/internal/bootstrap"
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/modelcap"
@@ -24,7 +30,6 @@ import (
 	gatewayservice "memstation/apps/server/internal/service/gateway"
 	memoryservice "memstation/apps/server/internal/service/memory"
 	settingsservice "memstation/apps/server/internal/service/settings"
-	"memstation/apps/server/internal/store/sql"
 	"memstation/apps/server/internal/store/vector"
 	httptransport "memstation/apps/server/internal/transport/http"
 )
@@ -284,14 +289,14 @@ func newContractRouter(t *testing.T) http.Handler {
 	}))
 	t.Cleanup(anthropicUpstream.Close)
 
-	memoryRepo := sql.NewInMemoryMemoryRepository()
-	conversations := sql.NewInMemoryConversationRepository()
-	mediaRepo := sql.NewInMemoryMediaRepository()
-	outbox := sql.NewInMemoryOutboxRepository()
+	memoryRepo := memorystore.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	mediaRepo := mediastore.NewInMemoryMediaRepository()
+	outbox := conversationstore.NewInMemoryOutboxRepository()
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 	audit := auditsvc.NewService(nil)
 	engine := memoryservice.NewEngine(memoryRepo, vector.NewPGVectorStore(nil))
-	admin := adminservice.NewService(conversations, mediaRepo, memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""))
+	admin := adminservice.NewService(conversations, mediaRepo, memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAICompatible, "", "", "", ""))
 	session := security.NewAdminSessionManager(contractTestAdminToken, time.Hour)
 	gateway := gatewayservice.NewService(
 		provider.NewRegistry(
@@ -324,10 +329,10 @@ func newContractRouter(t *testing.T) http.Handler {
 	return httptransport.NewRouter(httptransport.Dependencies{
 		Config:      bootstrap.Config{Version: "0.1.0", SessionCookieSecure: false},
 		Health:      observability.NewRegistry(),
-		Auth:        security.Authenticator{AdminToken: contractTestAdminToken, DevAPIKey: "ms-local-dev", SessionManager: session},
+		Auth:        security.Authenticator{AdminToken: contractTestAdminToken, LookupPrincipal: authfixture.LookupPrincipal, SessionManager: session},
 		RateLimiter: security.NewRateLimiter(1000, 1000),
 		Session:     session,
-		Models:      modelcap.NewRegistry(domain.ProviderOpenAI, "", "", "", ""),
+		Models:      modelcap.NewRegistry(domain.ProviderOpenAICompatible, "", "", "", ""),
 		Gateway:     gateway,
 		Memory:      memoryservice.NewService(engine, memoryRepo),
 		Admin:       admin,
@@ -344,7 +349,7 @@ func performJSONRequest(t *testing.T, router http.Handler, method, path string, 
 	}
 	request := httptest.NewRequest(method, path, bytes.NewReader(raw))
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer ms-local-dev")
+	request.Header.Set("Authorization", "Bearer "+authfixture.Token)
 	for key, value := range headers {
 		request.Header.Set(key, value)
 	}

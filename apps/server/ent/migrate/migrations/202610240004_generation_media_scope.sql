@@ -6,14 +6,6 @@ ALTER TABLE memory_generation_sources ADD COLUMN workspace_id TEXT;
 ALTER TABLE blob_objects ADD COLUMN workspace_id TEXT;
 ALTER TABLE message_parts ADD COLUMN workspace_id TEXT;
 ALTER TABLE message_part_artifacts ADD COLUMN workspace_id TEXT;
-
-INSERT INTO workspaces(id,user_id,name,capabilities)
-SELECT DISTINCT 'personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex'),user_id,'Personal',
- '["gateway.invoke","memory.read","memory.edit","files.read","files.write"]'::jsonb
-FROM (SELECT user_id FROM memory_generations UNION SELECT user_id FROM memory_source_snapshots UNION SELECT user_id FROM memory_source_messages UNION SELECT user_id FROM memory_generation_sources UNION SELECT user_id FROM blob_objects UNION SELECT user_id FROM message_parts UNION SELECT user_id FROM message_part_artifacts) owners ON CONFLICT DO NOTHING;
-UPDATE memory_generations SET workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex');
-UPDATE memory_source_snapshots SET workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex');
-UPDATE blob_objects SET workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex');
 -- Retained snapshots may outlive live conversation rows. An existing parent
 -- must agree with the snapshot owner; otherwise require explicit repair.
 DO $$ BEGIN
@@ -21,10 +13,6 @@ DO $$ BEGIN
   RAISE EXCEPTION 'source scope backfill requires review of conversation ownership';
  END IF;
 END $$;
-UPDATE memory_source_messages m SET workspace_id=s.workspace_id FROM memory_source_snapshots s WHERE s.snapshot_id=m.snapshot_id AND s.user_id=m.user_id AND s.conversation_id=m.conversation_id AND s.snapshot_version=m.snapshot_version;
-UPDATE memory_generation_sources source SET workspace_id=g.workspace_id FROM memory_generations g,memory_source_snapshots s WHERE g.generation_id=source.generation_id AND g.user_id=source.user_id AND s.snapshot_id=source.snapshot_id AND s.user_id=source.user_id AND s.workspace_id=g.workspace_id AND s.conversation_id=source.conversation_id;
-UPDATE message_parts p SET workspace_id=c.workspace_id FROM conversations c WHERE c.id=p.conversation_id AND c.user_id=p.user_id;
-UPDATE message_part_artifacts a SET workspace_id=p.workspace_id FROM message_parts p WHERE p.part_id=a.part_id AND p.user_id=a.user_id AND p.conversation_id=a.conversation_id;
 DO $$ BEGIN
  IF EXISTS (SELECT 1 FROM memory_source_messages WHERE workspace_id IS NULL)
  OR EXISTS (SELECT 1 FROM memory_generation_sources WHERE workspace_id IS NULL)

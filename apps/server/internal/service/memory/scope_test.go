@@ -6,11 +6,12 @@ import (
 	"testing"
 	"time"
 
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
 	"memstation/apps/server/internal/cache"
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/ports"
 	"memstation/apps/server/internal/security"
-	sqlstore "memstation/apps/server/internal/store/sql"
 )
 
 func TestKeyMemoryCacheValidatesScopeBeforeHit(t *testing.T) {
@@ -20,7 +21,7 @@ func TestKeyMemoryCacheValidatesScopeBeforeHit(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close(ctx) })
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	service := NewService(nil, repo)
 	service.SetKeyMemoryCache(store)
 	if err := repo.UpsertKeyMemory(ctx, domain.KeyMemory{UserID: "owner", Key: "focus", Value: "visible"}); err != nil {
@@ -80,7 +81,7 @@ func (v *deniedScopeVectors) Search(ctx context.Context, input domain.VectorSear
 
 func TestEngineDoesNotFallbackAfterScopeDenial(t *testing.T) {
 	ctx := context.Background()
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	if err := repo.StoreDocument(ctx, domain.MemoryDocument{ID: "fact", UserID: "owner", Type: domain.MemoryTypeFact, Content: "visible fallback fact"}); err != nil {
 		t.Fatal(err)
 	}

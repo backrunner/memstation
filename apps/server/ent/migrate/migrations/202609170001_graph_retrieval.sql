@@ -29,10 +29,6 @@ BEGIN
  RETURN NEW;
 END $$;
 CREATE TRIGGER fact_snapshot_after_write AFTER INSERT OR UPDATE ON facts FOR EACH ROW EXECUTE FUNCTION memstation_fact_snapshot();
-INSERT INTO memory_fact_history(user_id,generation_id,node_id,valid_from,valid_to,document)
-SELECT f.user_id,f.generation_id,f.node_id,COALESCE(f.valid_from,n.activity_at,f.created_at),f.valid_to,
- jsonb_build_object('id',f.id,'node_id',f.node_id,'user_id',f.user_id,'generation_id',f.generation_id,'conversation_id',f.conversation_id,'type','fact','content',f.content,'importance',n.importance,'decay_factor',n.decay_factor,'activity_at',COALESCE(n.activity_at,f.created_at),'created_at',f.created_at,'updated_at',f.updated_at,'metadata',(to_jsonb(f)-'content') || jsonb_build_object('valid_from',COALESCE(f.valid_from,n.activity_at,f.created_at)))
-FROM facts f JOIN memory_nodes n ON n.user_id=f.user_id AND n.id=f.node_id;
 
 CREATE TABLE entity_aliases (
  id TEXT PRIMARY KEY,

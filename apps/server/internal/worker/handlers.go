@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -379,7 +380,7 @@ func handleSummaryGenerate(logger *slog.Logger, services Services) func(context.
 				"extraction_method":            "llm",
 				"_llm_summary_checkpoint":      newSummaryCheckpoint(conversation, generated),
 				"segment_count":                len(segments),
-				"segment_strategy":             "dialogue_window_v1",
+				"segment_strategy":             conversationservice.SegmentStrategy,
 				"segment_overlap_messages":     conversationservice.DefaultSegmentOptions().Overlap,
 				"summary_chunk_count":          chunkCount,
 				"summary_chunk_max_bytes":      16000,
@@ -389,6 +390,9 @@ func handleSummaryGenerate(logger *slog.Logger, services Services) func(context.
 				"source_part_count":            len(parts),
 				"has_source_blob":              hasSourceBlob(parts),
 			},
+		}
+		if date := strings.TrimSpace(stringValue(conversation.Metadata, "source_session_time")); date != "" && len(date) <= 240 {
+			doc.Metadata["source_session_time"] = date
 		}
 		doc = applyGenerationToDocument(payload.UserID, payload.GenerationID, doc)
 		if err := applyDocumentScore(ctx, services.Scorer, &doc, conversation.UpdatedAt); err != nil {
@@ -404,7 +408,7 @@ func handleSummaryGenerate(logger *slog.Logger, services Services) func(context.
 			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, true)
 			return err
 		}
-		segmentDocs, err := storeSegmentDocuments(ctx, services, segments, doc, conversation.UpdatedAt, parts, artifacts)
+		segmentDocs, err := storeSegmentDocuments(ctx, services, segments, doc, conversation.UpdatedAt, parts, artifacts, conversation.Messages)
 		if err != nil {
 			markConversationFailed(ctx, services, payload.UserID, payload.ConversationID, true)
 			return err
@@ -419,7 +423,7 @@ func handleSummaryGenerate(logger *slog.Logger, services Services) func(context.
 			Metadata: map[string]any{
 				"summary_document_id":  doc.ID,
 				"segment_count":        len(segments),
-				"segment_strategy":     "dialogue_window_v1",
+				"segment_strategy":     conversationservice.SegmentStrategy,
 				"memory_generation_id": payload.GenerationID,
 			},
 		}); err != nil {
@@ -539,7 +543,10 @@ func handleEmbeddingDelete(_ *slog.Logger, services Services) func(context.Conte
 		if services.Vectors == nil {
 			return fmt.Errorf("vector store is not configured")
 		}
-		return services.Vectors.DeleteByNode(ctx, payload.UserID, payload.NodeID)
+		if payload.EmbeddingRevision <= 0 {
+			return errors.Join(domain.ErrAccessDenied, asynq.SkipRetry)
+		}
+		return services.Vectors.DeleteByNode(ctx, domain.VectorDeleteRequest{UserID: payload.UserID, NodeID: payload.NodeID, EmbeddingRevision: payload.EmbeddingRevision})
 	}
 }
 

@@ -55,7 +55,7 @@ func TestMemoryDataCapabilitiesAndAudienceAreEnforced(t *testing.T) {
 	if _, err = keys.Identities().UpdateWorkspace(ctx, workspace); err != nil {
 		t.Fatal(err)
 	}
-	_, token, err := keys.CreateWithOptions(ctx, "owner", apikey.CreateOptions{Name: "Observer", AgentID: agent.ID})
+	_, token, err := keys.CreateWithOptions(ctx, "owner", apikey.CreateOptions{WorkspaceID: domain.PersonalWorkspaceID("owner"), Name: "Observer", AgentID: agent.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

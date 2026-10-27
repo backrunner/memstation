@@ -5,11 +5,12 @@ import (
 	"testing"
 	"time"
 
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
 	"github.com/google/uuid"
 
 	"memstation/apps/server/internal/domain"
 	memoryservice "memstation/apps/server/internal/service/memory"
-	"memstation/apps/server/internal/store/sql"
 	"memstation/apps/server/internal/store/vector"
 )
 
@@ -26,7 +27,7 @@ func (s *scriptedReranker) Rerank(_ context.Context, input domain.RerankInput) (
 func TestMemoryEngineVectorSearchExpandsRelations(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	repo := sql.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	vectors := vector.NewPGVectorStore(nil)
 	engine := memoryservice.NewEngine(repo, vectors)
 	service := memoryservice.NewService(engine, repo)
@@ -115,7 +116,7 @@ func TestMemoryEngineKeywordSearchExpandsGraphWithoutVectors(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sql.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	engine := memoryservice.NewEngine(repo, nil)
 	service := memoryservice.NewService(engine, repo)
 
@@ -210,7 +211,7 @@ func TestMemoryEngineRerankerCanPromoteLowerRankedCandidate(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sql.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	vectors := vector.NewPGVectorStore(nil)
 	engine := memoryservice.NewEngine(repo, vectors)
 	reranker := &scriptedReranker{}
@@ -262,7 +263,6 @@ func TestMemoryEngineRerankerCanPromoteLowerRankedCandidate(t *testing.T) {
 		CandidateMultiplier: 4,
 		MinCandidates:       2,
 		MaxCandidates:       10,
-		BlendWeight:         1,
 	})
 
 	result, err := engine.Search(ctx, domain.SearchInput{
@@ -294,7 +294,7 @@ func TestMemoryEngineUsesSegmentGraphForTwoHopExpansion(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sql.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	vectors := vector.NewPGVectorStore(nil)
 	engine := memoryservice.NewEngine(repo, vectors)
 
@@ -402,7 +402,7 @@ func TestMemoryEngineIncludesSegmentsWhenRequested(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sql.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	vectors := vector.NewPGVectorStore(nil)
 	engine := memoryservice.NewEngine(repo, vectors)
 
@@ -452,7 +452,7 @@ func TestMemoryEngineIncludeConversationExpandsCompanionMemories(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sql.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	vectors := vector.NewPGVectorStore(nil)
 	engine := memoryservice.NewEngine(repo, vectors)
 
@@ -572,7 +572,7 @@ func TestMemoryEngineFallbackIncludeConversationExpandsCompanionMemories(t *test
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sql.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	engine := memoryservice.NewEngine(repo, nil)
 
 	summary := domain.MemoryDocument{
@@ -640,7 +640,7 @@ func TestMemoryEngineCanonicalizesSupersededFactMatches(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sql.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	engine := memoryservice.NewEngine(repo, nil)
 
 	older := domain.MemoryDocument{
@@ -704,7 +704,7 @@ func TestMemoryEngineGraphExpansionCanonicalizesSupersededFacts(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sql.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	vectors := vector.NewPGVectorStore(nil)
 	engine := memoryservice.NewEngine(repo, vectors)
 
@@ -806,7 +806,7 @@ func TestMemoryEngineSearchWithoutVectorsResortsByVariantScore(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sql.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	engine := memoryservice.NewEngine(repo, nil)
 	now := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
 
@@ -867,9 +867,10 @@ func TestMemoryEngineSearchWithoutVectorsAppliesEffectiveMinScore(t *testing.T) 
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sql.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	engine := memoryservice.NewEngine(repo, nil)
 	now := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
+	engine.SetClock(func() time.Time { return now })
 
 	if err := repo.StoreDocument(ctx, domain.MemoryDocument{
 		ID:          "summary:weak-effective-score",
@@ -889,7 +890,7 @@ func TestMemoryEngineSearchWithoutVectorsAppliesEffectiveMinScore(t *testing.T) 
 		UserID:   "user-1",
 		Query:    "incident runbook",
 		TopN:     5,
-		MinScore: 0.5,
+		MinScore: 0.7,
 	}, memoryservice.SearchVariantFull)
 	if err != nil {
 		t.Fatalf("search with effective min score: %v", err)
@@ -903,7 +904,7 @@ func TestMemoryEngineSearchWithoutVectorsHonorsRequestedTypesWithoutSegmentBackf
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sql.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	engine := memoryservice.NewEngine(repo, nil)
 	now := time.Date(2026, 4, 9, 12, 0, 0, 0, time.UTC)
 
@@ -955,7 +956,7 @@ func TestMemoryEngineSearchPenalizesDistantRelationHops(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sql.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	vectors := vector.NewPGVectorStore(nil)
 	engine := memoryservice.NewEngine(repo, vectors)
 	engine.SetRelationRecallConfig(memoryservice.RelationRecallConfig{
@@ -1056,7 +1057,7 @@ func TestMemoryEngineSearchIncludesGenerationlessKeyMemoriesAlongsideScopedDocs(
 	t.Parallel()
 
 	ctx := context.Background()
-	repo := sql.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	vectors := vector.NewPGVectorStore(nil)
 	engine := memoryservice.NewEngine(repo, vectors)
 	service := memoryservice.NewService(engine, repo)
@@ -1065,7 +1066,7 @@ func TestMemoryEngineSearchIncludesGenerationlessKeyMemoriesAlongsideScopedDocs(
 	summary := domain.MemoryDocument{
 		ID:           "summary:key-memory-mixed:v1",
 		NodeID:       "node:summary:key-memory-mixed:v1",
-		GenerationID: "gen:current:user-1",
+		GenerationID: ("gen:current:" + domain.PersonalWorkspaceID("user-1")),
 		UserID:       "user-1",
 		Type:         domain.MemoryTypeSummary,
 		Content:      "Preferred code style is explicit Go naming and small interfaces.",

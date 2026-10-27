@@ -21,6 +21,7 @@ type SourceSpeaker struct {
 	Kind        string `json:"kind"`
 }
 type SourcePart struct {
+	Media   *ContentBlock  `json:"media,omitempty"`
 	Type    string         `json:"type"`
 	Text    string         `json:"text,omitempty"`
 	ActorID string         `json:"actor_id,omitempty"`

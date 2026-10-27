@@ -5,11 +5,12 @@ import (
 	"errors"
 	"testing"
 
+	conversationstore "memstation/apps/server/internal/store/sql/conversation"
+
 	miniredis "github.com/alicebob/miniredis/v2"
 	"github.com/hibiken/asynq"
 
 	"memstation/apps/server/internal/domain"
-	"memstation/apps/server/internal/store/sql"
 )
 
 func TestRelayRetryAfterEnqueueKeepsOneScopedTask(t *testing.T) {
@@ -22,10 +23,10 @@ func TestRelayRetryAfterEnqueueKeepsOneScopedTask(t *testing.T) {
 	inspector := asynq.NewInspector(options)
 	t.Cleanup(func() { _ = inspector.Close() })
 	publisher := NewPublisher(nilLogger(), client)
-	outbox := sql.NewInMemoryOutboxRepository()
+	outbox := conversationstore.NewInMemoryOutboxRepository()
 	event := domain.OutboxEvent{
 		ID: "conversation.finalize:retry", UserID: "owner", EventType: TypeConversationFinalize, AggregateID: "retry",
-		Payload: map[string]any{"user_id": "owner", "conversation_id": "retry"},
+		Payload: map[string]any{"schema_version": 2, "workspace_id": domain.PersonalWorkspaceID("owner"), "user_id": "owner", "conversation_id": "retry"},
 	}
 	if err := outbox.Enqueue(ctx, event); err != nil {
 		t.Fatal(err)
@@ -35,7 +36,7 @@ func TestRelayRetryAfterEnqueueKeepsOneScopedTask(t *testing.T) {
 	if err := publisher.Publish(ctx, mapOutboxToTask(event)); err != nil {
 		t.Fatal(err)
 	}
-	if err := NewRelay(nilLogger(), outbox, publisher).Flush(ctx); err != nil {
+	if err := fixtureRelay(nilLogger(), outbox, publisher).Flush(ctx); err != nil {
 		t.Fatal(err)
 	}
 	pending, err := outbox.Pending(ctx, 10)
@@ -75,21 +76,21 @@ func TestRelayKeepsOutboxPendingWhenPublishFails(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	outbox := sql.NewInMemoryOutboxRepository()
+	outbox := conversationstore.NewInMemoryOutboxRepository()
 	if err := outbox.Enqueue(ctx, domain.OutboxEvent{
 		ID:          "conversation.finalize:conv-1",
 		UserID:      "user-1",
 		EventType:   TypeConversationFinalize,
 		AggregateID: "conv-1",
 		Payload: map[string]any{
-			"user_id":         "user-1",
+			"schema_version": 2, "workspace_id": domain.PersonalWorkspaceID("user-1"), "user_id": "user-1",
 			"conversation_id": "conv-1",
 		},
 	}); err != nil {
 		t.Fatalf("enqueue outbox event: %v", err)
 	}
 
-	relay := NewRelay(nilLogger(), outbox, NewPublisher(nilLogger(), nil))
+	relay := fixtureRelay(nilLogger(), outbox, NewPublisher(nilLogger(), nil))
 	if err := relay.Flush(ctx); !errors.Is(err, ErrQueueUnavailable) {
 		t.Fatalf("expected ErrQueueUnavailable from relay flush, got %v", err)
 	}

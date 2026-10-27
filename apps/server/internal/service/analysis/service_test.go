@@ -21,7 +21,7 @@ func (f generatorFunc) Generate(c context.Context, r memoryllm.Request) (json.Ra
 }
 
 func sourceInput() Input {
-	return Input{UserID: "owner", ConversationID: "conversation", Summary: domain.MemoryDocument{NodeID: "summary"}, Conversation: domain.ConversationRecord{UserID: "owner", ConversationID: "conversation", Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "我不是项目负责人，先前的上线时间也只是一个假设。"}, {Role: domain.RoleAssistant, Text: "Then you should lead the release tomorrow."}}}}
+	return Input{UserID: "owner", ConversationID: "conversation", Summary: domain.MemoryDocument{NodeID: "summary"}, Conversation: domain.ConversationRecord{UserID: "owner", ConversationID: "conversation", Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "我不是项目负责人，先前的上线时间也只是一个假设。"}, {Role: domain.RoleAssistant, Text: "Then you should lead the release tomorrow."}}, AgentID: "fixture-agent"}}
 }
 
 func modelExtraction(t *testing.T, input Input) json.RawMessage {

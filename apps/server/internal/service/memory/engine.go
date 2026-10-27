@@ -20,12 +20,14 @@ import (
 )
 
 type Engine struct {
+	sources     ports.SourceContextReader
 	repo        ports.MemoryRepository
 	vectors     ports.VectorStore
 	reranker    ports.Reranker
 	generations *memorygenservice.Service
 
 	configMu       sync.RWMutex
+	evidence       EvidenceConfig
 	relationRecall RelationRecallConfig
 	rerank         RerankConfig
 	clock          func() time.Time
@@ -43,18 +45,36 @@ type RelationRecallConfig struct {
 }
 
 type RerankConfig struct {
-	Model               string
+	Model string
+
+	CandidateSelection  string
 	CandidateMultiplier int
 	MinCandidates       int
 	MaxCandidates       int
-	BlendWeight         float64
 }
 
 type DebugSearchResult struct {
+	Timings *SearchTimings `json:"timings,omitempty"`
+	// Candidates is the authorized, scored pool before the final page cutoff.
+	// It is bounded independently and never enlarges the public Search result.
+	Candidates []domain.MemoryDocument    `json:"candidates,omitempty"`
 	Result     domain.SearchResult        `json:"result"`
 	Variant    SearchVariant              `json:"variant"`
 	Components map[string]ScoreComponents `json:"components"`
 	BaseScores map[string]float64         `json:"base_scores"`
+	Rerank     RerankDiagnostics          `json:"rerank"`
+}
+
+// Timings include provider and queue time, and exclude answer generation.
+type SearchTimings struct {
+	TotalMillis     float64 `json:"total_millis"`
+	ScopeMillis     float64 `json:"scope_millis"`
+	KeywordMillis   float64 `json:"keyword_millis"`
+	VectorMillis    float64 `json:"vector_millis"`
+	GraphMillis     float64 `json:"graph_millis"`
+	HydrationMillis float64 `json:"hydration_millis"`
+	RerankMillis    float64 `json:"rerank_millis"`
+	RankingMillis   float64 `json:"ranking_millis"`
 }
 
 type searchCandidate struct {
@@ -109,10 +129,10 @@ func DefaultRelationRecallConfig() RelationRecallConfig {
 
 func DefaultRerankConfig() RerankConfig {
 	return RerankConfig{
+		CandidateSelection:  "balanced",
 		CandidateMultiplier: 6,
 		MinCandidates:       20,
 		MaxCandidates:       50,
-		BlendWeight:         0.35,
 	}
 }
 
@@ -166,7 +186,7 @@ func (e *Engine) Inject(ctx context.Context, req domain.UnifiedRequest) (domain.
 	}
 
 	query := lastUserMessage(req.Messages)
-	generalResult, err := e.Search(ctx, domain.SearchInput{
+	generalSearch, err := e.SearchWithVariant(ctx, domain.SearchInput{
 		WorkspaceID:         req.WorkspaceID,
 		UserID:              req.UserID,
 		Query:               query,
@@ -174,10 +194,11 @@ func (e *Engine) Inject(ctx context.Context, req domain.UnifiedRequest) (domain.
 		IncludeConversation: false,
 		IncludeSegments:     true,
 		MinScore:            0.0,
-	})
+	}, SearchVariantFull)
 	if err != nil {
 		return req, domain.InjectionResult{}, err
 	}
+	generalResult := generalSearch.Result
 	keyMemoryResult, err := e.Search(ctx, domain.SearchInput{
 		WorkspaceID:         req.WorkspaceID,
 		UserID:              req.UserID,
@@ -191,7 +212,46 @@ func (e *Engine) Inject(ctx context.Context, req domain.UnifiedRequest) (domain.
 	if err != nil {
 		return req, domain.InjectionResult{}, err
 	}
-	injectedMemories := packInjectionMemories(mergeInjectionMemories(generalResult.Memories, keyMemoryResult.Memories), req.MaxInjectionTokens)
+	eligible := []domain.MemoryDocument{}
+	for _, doc := range mergeInjectionMemories(generalResult.Memories, keyMemoryResult.Memories) {
+		if injectionEligible(doc) {
+			eligible = append(eligible, doc)
+		}
+	}
+	tokenBudget := req.MaxInjectionTokens
+	if tokenBudget <= 0 {
+		tokenBudget = 2048
+	}
+	injectedMemories := packInjectionMemories(eligible, tokenBudget)
+	systemPrompt := buildInjectionSystemPrompt(injectedMemories)
+	config := e.evidenceConfig()
+	if config.Enabled {
+		options := EvidenceOptions{MaxBytes: min(tokenBudget, 64000) * 4, MaxEstimatedTokens: tokenBudget, NeighborTurns: config.NeighborTurns}
+		baseline, err := e.PrepareEvidence(ctx, domain.SearchInput{UserID: req.UserID, WorkspaceID: req.WorkspaceID}, eligible, EvidenceOptions{MaxBytes: options.MaxBytes, MaxEstimatedTokens: options.MaxEstimatedTokens})
+		if err != nil {
+			return req, domain.InjectionResult{}, err
+		}
+		// Search pagination and model context have different budgets. Already
+		// scored candidates can use spare context without another model/search
+		// call or evicting the original fitted evidence and curated key memory.
+		pool := append([]domain.MemoryDocument{}, baseline.Memories...)
+		seen := map[string]bool{}
+		for _, doc := range baseline.Memories {
+			seen[doc.ID] = true
+			options.RequiredIDs = append(options.RequiredIDs, doc.ID)
+		}
+		for _, doc := range generalSearch.Candidates {
+			if !seen[doc.ID] && injectionEligible(doc) {
+				pool = append(pool, doc)
+				seen[doc.ID] = true
+			}
+		}
+		packet, err := e.PrepareEvidence(ctx, domain.SearchInput{UserID: req.UserID, WorkspaceID: req.WorkspaceID}, pool, options)
+		if err != nil {
+			return req, domain.InjectionResult{}, err
+		}
+		injectedMemories, systemPrompt = packet.Memories, packet.Text
+	}
 	result := domain.SearchResult{
 		Memories:             injectedMemories,
 		Total:                len(injectedMemories),
@@ -199,7 +259,6 @@ func (e *Engine) Inject(ctx context.Context, req domain.UnifiedRequest) (domain.
 	}
 
 	if req.InjectContext && len(result.Memories) > 0 {
-		systemPrompt := buildInjectionSystemPrompt(result.Memories)
 		req.Messages = append([]domain.UnifiedMessage{{
 			Role: domain.RoleSystem,
 			Text: systemPrompt,
@@ -345,6 +404,9 @@ func (e *Engine) SearchWithVariant(ctx context.Context, input domain.SearchInput
 }
 
 func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant SearchVariant) (DebugSearchResult, error) {
+	started := time.Now()
+	timings := &SearchTimings{}
+	defer func() { timings.TotalMillis = float64(time.Since(started).Microseconds()) / 1000 }()
 	workspace, err := security.DataScope(ctx, input.UserID, input.WorkspaceID)
 	if err != nil {
 		return DebugSearchResult{}, err
@@ -385,7 +447,7 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 		}
 		embeddingModel = generation.EmbeddingModel
 	} else if strings.TrimSpace(input.GenerationID) == "" && strings.TrimSpace(input.UserID) != "" {
-		input.GenerationID = memorygenservice.CurrentGenerationID(input.UserID)
+		input.GenerationID = memorygenservice.CurrentGenerationID(security.WorkspaceID(ctx, input.UserID))
 	}
 	if input.AsOf != nil || input.KnownAt != nil {
 		return e.searchHistoricalFacts(ctx, input, variant, embeddingVersion, embeddingModel)
@@ -398,7 +460,8 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 	semanticScores := map[string]float64{}
 	keywordScores := map[string]float64{}
 	keywordMatches := map[string]domain.KeywordMatch{}
-	keywordResults, err := e.repo.SearchKeywordMatches(ctx, input.UserID, input.GenerationID, query, max(input.TopN*4, 10))
+	timings.ScopeMillis = float64(time.Since(started).Microseconds()) / 1000
+	keywordResults, vectorResults, err := e.recallDirect(ctx, input, embeddingVersion, embeddingModel, timings)
 	if err != nil {
 		return DebugSearchResult{}, err
 	}
@@ -408,29 +471,12 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 			keywordMatches[item.NodeID] = item
 		}
 	}
-
-	if e.vectors != nil {
-		vectorResults, vectorErr := e.vectors.Search(ctx, domain.VectorSearchInput{
-			WorkspaceID:      input.WorkspaceID,
-			UserID:           input.UserID,
-			GenerationID:     input.GenerationID,
-			Query:            query,
-			TopK:             max(input.TopN*4, 10),
-			AllowedTypes:     vectorAllowedTypes(input),
-			EmbeddingVersion: embeddingVersion,
-			EmbeddingModel:   embeddingModel,
-		})
-		if errors.Is(vectorErr, domain.ErrAccessDenied) {
-			return DebugSearchResult{}, vectorErr
-		}
-		if vectorErr == nil {
-			for _, item := range vectorResults {
-				if item.Score > semanticScores[item.NodeID] {
-					semanticScores[item.NodeID] = item.Score
-				}
-			}
+	for _, item := range vectorResults {
+		if item.Score > semanticScores[item.NodeID] {
+			semanticScores[item.NodeID] = item.Score
 		}
 	}
+	phase := time.Now()
 	seedScores := make(map[string]float64, len(semanticScores)+len(keywordScores))
 	for nodeID, score := range semanticScores {
 		seedScores[nodeID] = combineDirectSignal(score, keywordScores[nodeID])
@@ -500,6 +546,8 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 	for nodeID := range scoreMap {
 		candidateNodeIDs = append(candidateNodeIDs, nodeID)
 	}
+	timings.GraphMillis = float64(time.Since(phase).Microseconds()) / 1000
+	phase = time.Now()
 	docs, err := e.repo.ListDocumentsByNodeIDsInGeneration(ctx, input.UserID, input.GenerationID, candidateNodeIDs)
 	if err != nil {
 		return DebugSearchResult{}, err
@@ -537,7 +585,7 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 		relationExpansion := maxFloat(relationScores[doc.NodeID]-baseScore, 0)
 		supersessionBoost := supersessionBoosts[doc.NodeID]
 		conversationBoost := conversationBoosts[doc.NodeID]
-		components := scoreDocumentAt(doc, semanticScores[doc.NodeID], keywordScores[doc.NodeID], relationExpansion, supersessionBoost, conversationBoost, 0, 0, now, cfg)
+		components := scoreDocumentAt(doc, semanticScores[doc.NodeID], keywordScores[doc.NodeID], relationExpansion, supersessionBoost, conversationBoost, 0, false, now, cfg)
 		candidates = append(candidates, searchCandidate{
 			Document:          doc,
 			PreliminaryScore:  components.EffectiveScore,
@@ -548,13 +596,22 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 			ConversationBoost: conversationBoost,
 		})
 	}
-	rerankScores, rerankRanks := e.rerankCandidates(ctx, input, candidates)
+	timings.HydrationMillis = float64(time.Since(phase).Microseconds()) / 1000
+	phase = time.Now()
+	rerankScores, rerankRanks, rerankDiagnostics := e.rerankCandidates(ctx, input, candidates)
+	timings.RerankMillis = float64(time.Since(phase).Microseconds()) / 1000
+	phase = time.Now()
+	if err := ctx.Err(); err != nil {
+		return DebugSearchResult{}, err
+	}
 
 	memories := make([]domain.MemoryDocument, 0, len(candidates))
 	componentsByID := map[string]ScoreComponents{}
-	rerankConfig := e.RerankConfig()
 	for _, candidate := range candidates {
 		doc := candidate.Document
+		if !rerankEligible(doc.NodeID, rerankRanks, rerankDiagnostics) {
+			continue
+		}
 		if path, ok := paths[doc.NodeID]; ok {
 			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{"recall_path": path})
 		}
@@ -565,11 +622,11 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{"conflict_query": true})
 		}
 		rerankScore := rerankScores[doc.NodeID]
-		rerankWeight := 0.0
+		rerankApplied := false
 		if _, ok := rerankRanks[doc.NodeID]; ok {
-			rerankWeight = rerankConfig.BlendWeight
+			rerankApplied = true
 		}
-		components := scoreDocumentAt(doc, candidate.BaseSemanticScore, candidate.KeywordScore, candidate.RelationExpansion, candidate.SupersessionBoost, candidate.ConversationBoost, rerankScore, rerankWeight, now, cfg)
+		components := scoreDocumentAt(doc, candidate.BaseSemanticScore, candidate.KeywordScore, candidate.RelationExpansion, candidate.SupersessionBoost, candidate.ConversationBoost, rerankScore, rerankApplied, now, cfg)
 		if match, ok := keywordMatches[doc.NodeID]; ok {
 			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
 				"matched_keywords": match.Keywords,
@@ -612,10 +669,14 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 		}
 		return memories[i].EffectiveScore > memories[j].EffectiveScore
 	})
+	pool := append([]domain.MemoryDocument(nil), memories[:min(len(memories), 50)]...)
 	if len(memories) > input.TopN {
 		memories = memories[:input.TopN]
 	}
+	timings.RankingMillis = float64(time.Since(phase).Microseconds()) / 1000
 	return DebugSearchResult{
+		Timings:    timings,
+		Candidates: pool,
 		Result: domain.SearchResult{
 			Memories:             memories,
 			Total:                len(memories),
@@ -624,6 +685,7 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 		Variant:    variant,
 		Components: componentsByID,
 		BaseScores: seedScores,
+		Rerank:     rerankDiagnostics,
 	}, nil
 }
 
@@ -632,7 +694,7 @@ func (e *Engine) searchWithoutVectors(ctx context.Context, input domain.SearchIn
 	repoInput.MemoryTypes = repoSearchTypes(input)
 	repoInput.MinScore = 0
 	if repoInput.TopN > 0 {
-		repoInput.TopN = max(repoInput.TopN*4, 20)
+		repoInput.TopN = e.candidateRecallLimit(repoInput.TopN)
 	} else {
 		repoInput.TopN = 200
 	}
@@ -684,7 +746,7 @@ func (e *Engine) searchWithoutVectors(ctx context.Context, input domain.SearchIn
 		if doc.ID == "" || !matchesTemporalSearchInput(doc, input) || !matchesSearchDocument(ctx, doc, input) {
 			continue
 		}
-		components := scoreDocumentAt(doc, baseScores[doc.NodeID], 0, 0, supersessionBoosts[doc.NodeID], conversationBoosts[doc.NodeID], 0, 0, now, cfg)
+		components := scoreDocumentAt(doc, baseScores[doc.NodeID], 0, 0, supersessionBoosts[doc.NodeID], conversationBoosts[doc.NodeID], 0, false, now, cfg)
 		candidates = append(candidates, searchCandidate{
 			Document:          doc,
 			PreliminaryScore:  components.EffectiveScore,
@@ -694,19 +756,24 @@ func (e *Engine) searchWithoutVectors(ctx context.Context, input domain.SearchIn
 		})
 		componentBaseScores[doc.NodeID] = components.BaseSemanticScore
 	}
-	rerankScores, rerankRanks := e.rerankCandidates(ctx, input, candidates)
+	rerankScores, rerankRanks, rerankDiagnostics := e.rerankCandidates(ctx, input, candidates)
+	if err := ctx.Err(); err != nil {
+		return DebugSearchResult{}, err
+	}
 
 	componentsByID := make(map[string]ScoreComponents, len(candidates))
 	filtered := make([]domain.MemoryDocument, 0, len(candidates))
-	rerankConfig := e.RerankConfig()
 	for _, candidate := range candidates {
 		doc := candidate.Document
-		rerankScore := rerankScores[doc.NodeID]
-		rerankWeight := 0.0
-		if _, ok := rerankRanks[doc.NodeID]; ok {
-			rerankWeight = rerankConfig.BlendWeight
+		if !rerankEligible(doc.NodeID, rerankRanks, rerankDiagnostics) {
+			continue
 		}
-		components := scoreDocumentAt(doc, candidate.BaseSemanticScore, 0, 0, candidate.SupersessionBoost, candidate.ConversationBoost, rerankScore, rerankWeight, now, cfg)
+		rerankScore := rerankScores[doc.NodeID]
+		rerankApplied := false
+		if _, ok := rerankRanks[doc.NodeID]; ok {
+			rerankApplied = true
+		}
+		components := scoreDocumentAt(doc, candidate.BaseSemanticScore, 0, 0, candidate.SupersessionBoost, candidate.ConversationBoost, rerankScore, rerankApplied, now, cfg)
 		if meta, ok := supersessionLineage[doc.NodeID]; ok {
 			doc = mergeLineageSearchMetadata(doc, meta)
 		}
@@ -741,16 +808,19 @@ func (e *Engine) searchWithoutVectors(ctx context.Context, input domain.SearchIn
 		}
 		return filtered[i].EffectiveScore > filtered[j].EffectiveScore
 	})
+	pool := append([]domain.MemoryDocument(nil), filtered[:min(len(filtered), 50)]...)
 	if input.TopN > 0 && len(filtered) > input.TopN {
 		filtered = filtered[:input.TopN]
 	}
 	result.Memories = filtered
 	result.Total = len(filtered)
 	return DebugSearchResult{
+		Candidates: pool,
 		Result:     result,
 		Variant:    variant,
 		Components: componentsByID,
 		BaseScores: componentBaseScores,
+		Rerank:     rerankDiagnostics,
 	}, nil
 }
 
@@ -955,6 +1025,9 @@ func (cfg RelationRecallConfig) normalized() RelationRecallConfig {
 func (cfg RerankConfig) normalized() RerankConfig {
 	defaults := DefaultRerankConfig()
 	cfg.Model = strings.TrimSpace(cfg.Model)
+	if cfg.CandidateSelection != "preliminary" {
+		cfg.CandidateSelection = "balanced"
+	}
 	if cfg.CandidateMultiplier <= 0 {
 		cfg.CandidateMultiplier = defaults.CandidateMultiplier
 	}
@@ -970,18 +1043,14 @@ func (cfg RerankConfig) normalized() RerankConfig {
 	if cfg.MaxCandidates < cfg.MinCandidates {
 		cfg.MaxCandidates = cfg.MinCandidates
 	}
-	if cfg.BlendWeight < 0 {
-		cfg.BlendWeight = defaults.BlendWeight
-	}
-	if cfg.BlendWeight > 1 {
-		cfg.BlendWeight = 1
-	}
+	cfg.MinCandidates = min(cfg.MinCandidates, 200)
+	cfg.MaxCandidates = min(cfg.MaxCandidates, 200)
 	return cfg
 }
 
 func (cfg RerankConfig) enabled() bool {
 	cfg = cfg.normalized()
-	return cfg.Model != "" && cfg.BlendWeight > 0
+	return cfg.Model != ""
 }
 
 func (cfg RelationRecallConfig) hopPenalty(hop int) float64 {
@@ -1137,71 +1206,6 @@ func (e *Engine) expandConversationCandidates(ctx context.Context, input domain.
 	return expandedScores, conversationBoosts, append(docs, extraDocs...), nil
 }
 
-func (e *Engine) rerankCandidates(ctx context.Context, input domain.SearchInput, candidates []searchCandidate) (map[string]float64, map[string]int) {
-	scores := map[string]float64{}
-	ranks := map[string]int{}
-	if e == nil || e.reranker == nil || len(candidates) < 2 {
-		return scores, ranks
-	}
-	cfg := e.RerankConfig()
-	if !cfg.enabled() || strings.TrimSpace(input.Query) == "" {
-		return scores, ranks
-	}
-
-	ordered := append([]searchCandidate{}, candidates...)
-	sort.Slice(ordered, func(i, j int) bool {
-		if ordered[i].PreliminaryScore == ordered[j].PreliminaryScore {
-			return ordered[i].Document.UpdatedAt.After(ordered[j].Document.UpdatedAt)
-		}
-		return ordered[i].PreliminaryScore > ordered[j].PreliminaryScore
-	})
-
-	limit := max(input.TopN*cfg.CandidateMultiplier, cfg.MinCandidates)
-	if cfg.MaxCandidates > 0 && limit > cfg.MaxCandidates {
-		limit = cfg.MaxCandidates
-	}
-	if limit > len(ordered) {
-		limit = len(ordered)
-	}
-	if limit < 2 {
-		return scores, ranks
-	}
-
-	documents := make([]domain.RerankDocument, 0, limit)
-	for _, candidate := range ordered[:limit] {
-		text := rerankDocumentText(candidate.Document)
-		if text == "" {
-			continue
-		}
-		documents = append(documents, domain.RerankDocument{
-			ID:   candidate.Document.NodeID,
-			Text: text,
-		})
-	}
-	if len(documents) < 2 {
-		return scores, ranks
-	}
-
-	results, err := e.reranker.Rerank(ctx, domain.RerankInput{
-		UserID:    input.UserID,
-		Query:     input.Query,
-		Model:     cfg.Model,
-		TopN:      len(documents),
-		Documents: documents,
-	})
-	if err != nil {
-		return scores, ranks
-	}
-	for idx, item := range results {
-		if item.DocumentID == "" {
-			continue
-		}
-		scores[item.DocumentID] = item.Score
-		ranks[item.DocumentID] = idx + 1
-	}
-	return scores, ranks
-}
-
 func rerankDocumentText(doc domain.MemoryDocument) string {
 	content := strings.TrimSpace(doc.Content)
 	if content == "" {
@@ -1334,7 +1338,7 @@ func injectionPriority(doc domain.MemoryDocument) int {
 		return 2
 	case domain.MemoryTypeFact:
 		return 3
-	case domain.MemoryTypeEvent, domain.MemoryTypeAgentAction:
+	case domain.MemoryTypeEpisode, domain.MemoryTypeEvent, domain.MemoryTypeAgentAction:
 		return 4
 	case domain.MemoryTypeArtifact, domain.MemoryTypeEntity:
 		return 5
@@ -1424,6 +1428,40 @@ func isTemporalRelationType(relationType string) bool {
 // profile bullet list, summaries/facts/impressions render as labelled sections.
 // Only non-empty sections are emitted so the prompt stays tight.
 func buildInjectionSystemPrompt(memories []domain.MemoryDocument) string {
+	return buildMemoryPrompt(memories, func(d domain.MemoryDocument) string { return strings.TrimSpace(d.Content) })
+}
+
+func buildEvidenceSystemPrompt(memories []domain.MemoryDocument) string {
+	// Context budgets cover what the model actually receives. Internal storage
+	// identifiers carry no semantic evidence and can be both long and revealing.
+	views := make([]domain.MemoryDocument, len(memories))
+	conversations := map[string]string{}
+	for i, doc := range memories {
+		view := doc
+		view.ID = fmt.Sprintf("memory-%d", i+1)
+		// Storage coordinates and raw source parts are for trusted diagnostics,
+		// not semantic input. Parts may contain native media or signed URLs.
+		view.SourceRefs = nil
+		if doc.Metadata != nil {
+			view.Metadata = make(map[string]any, len(doc.Metadata))
+			for key, value := range doc.Metadata {
+				if key != "ref" && key != "source_parts" {
+					view.Metadata[key] = value
+				}
+			}
+		}
+		if doc.ConversationID != "" {
+			if conversations[doc.ConversationID] == "" {
+				conversations[doc.ConversationID] = fmt.Sprintf("conversation-%d", len(conversations)+1)
+			}
+			view.ConversationID = conversations[doc.ConversationID]
+		}
+		views[i] = view
+	}
+	return buildMemoryPrompt(views, FormatEvidenceDocument)
+}
+
+func buildMemoryPrompt(memories []domain.MemoryDocument, render func(domain.MemoryDocument) string) string {
 	var (
 		keyMemories  []domain.MemoryDocument
 		tasks        []domain.MemoryDocument
@@ -1471,7 +1509,7 @@ func buildInjectionSystemPrompt(memories []domain.MemoryDocument) string {
 		b.WriteString("User Profile:\n")
 		for _, item := range keyMemories {
 			key := keyMemoryLabel(item)
-			value := strings.TrimSpace(item.Content)
+			value := render(item)
 			if key != "" {
 				b.WriteString("- ")
 				b.WriteString(key)
@@ -1498,7 +1536,7 @@ func buildInjectionSystemPrompt(memories []domain.MemoryDocument) string {
 				b.WriteString(label)
 				b.WriteString(": ")
 			}
-			b.WriteString(strings.TrimSpace(item.Content))
+			b.WriteString(render(item))
 			b.WriteString("\n")
 		}
 	}
@@ -1514,7 +1552,7 @@ func buildInjectionSystemPrompt(memories []domain.MemoryDocument) string {
 	if len(summaries) > 0 {
 		b.WriteString("\nRelevant Memories:\n")
 		for i, item := range summaries {
-			fmt.Fprintf(&b, "%d. %s\n", i+1, strings.TrimSpace(item.Content))
+			fmt.Fprintf(&b, "%d. %s\n", i+1, render(item))
 		}
 	}
 
@@ -1522,7 +1560,7 @@ func buildInjectionSystemPrompt(memories []domain.MemoryDocument) string {
 		b.WriteString("\nRelevant Impressions:\n")
 		for _, item := range impressions {
 			b.WriteString("- ")
-			b.WriteString(strings.TrimSpace(item.Content))
+			b.WriteString(render(item))
 			b.WriteString("\n")
 		}
 	}
@@ -1531,7 +1569,7 @@ func buildInjectionSystemPrompt(memories []domain.MemoryDocument) string {
 		b.WriteString("\nAdditional Context:\n")
 		for _, item := range other {
 			b.WriteString("- ")
-			b.WriteString(strings.TrimSpace(item.Content))
+			b.WriteString(render(item))
 			b.WriteString("\n")
 		}
 	}

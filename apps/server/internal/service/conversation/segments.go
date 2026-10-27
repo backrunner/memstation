@@ -3,6 +3,7 @@ package conversation
 import (
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -12,18 +13,20 @@ import (
 )
 
 const (
-	defaultSegmentMaxMessages   = 6
-	defaultSegmentOverlap       = 2
-	defaultSegmentMaxCharacters = 1200
+	SegmentStrategy           = "dialogue_window_v2_lossless"
+	defaultSegmentMaxMessages = 6
+	defaultSegmentOverlap     = 2
+	defaultSegmentMaxBytes    = 1200
 )
 
 type SegmentOptions struct {
-	MaxMessages   int
-	Overlap       int
-	MaxCharacters int
+	MaxMessages int
+	Overlap     int
+	MaxBytes    int // Complete rendered UTF-8 byte budget, clamped to 16..65536.
 }
 
 type dialogueMessage struct {
+	Source        domain.SegmentSourceSlice
 	Sequence      int
 	Role          domain.MessageRole
 	Text          string
@@ -38,9 +41,9 @@ type dialogueMessage struct {
 
 func DefaultSegmentOptions() SegmentOptions {
 	return SegmentOptions{
-		MaxMessages:   defaultSegmentMaxMessages,
-		Overlap:       defaultSegmentOverlap,
-		MaxCharacters: defaultSegmentMaxCharacters,
+		MaxMessages: defaultSegmentMaxMessages,
+		Overlap:     defaultSegmentOverlap,
+		MaxBytes:    defaultSegmentMaxBytes,
 	}
 }
 
@@ -58,17 +61,19 @@ func BuildSegmentsFromTimeline(userID, conversationID string, messages []domain.
 	if options.Overlap < 0 {
 		options.Overlap = 0
 	}
-	if options.MaxCharacters <= 0 {
-		options.MaxCharacters = defaultSegmentMaxCharacters
+	if options.MaxBytes <= 0 {
+		options.MaxBytes = defaultSegmentMaxBytes
 	}
+	options.MaxBytes = min(65536, max(16, options.MaxBytes))
 
-	dialogue := collectDialogueMessages(messages, parts, artifacts)
+	dialogue := splitDialogueSources(collectDialogueMessages(messages, parts, artifacts), options.MaxBytes)
 	if len(dialogue) == 0 {
 		return nil
 	}
 
 	segments := make([]domain.ConversationSegment, 0, max(1, len(dialogue)/max(1, options.MaxMessages)))
 	start := 0
+	previousEnd := 0
 	for segmentIndex := 0; start < len(dialogue); segmentIndex++ {
 		end := segmentEnd(dialogue, start, options)
 		if end <= start {
@@ -80,7 +85,7 @@ func BuildSegmentsFromTimeline(userID, conversationID string, messages []domain.
 		overlapCount := 0
 		overlapFrom := 0
 		if segmentIndex > 0 {
-			overlapCount = min(options.Overlap, len(items)-1)
+			overlapCount = countDialogueMessages(dialogue[start:min(end, max(start, previousEnd))])
 			if overlapCount > 0 {
 				overlapFrom = items[0].Sequence
 			}
@@ -92,19 +97,21 @@ func BuildSegmentsFromTimeline(userID, conversationID string, messages []domain.
 			SegmentIndex:        segmentIndex,
 			StartSequence:       items[0].Sequence,
 			EndSequence:         items[len(items)-1].Sequence,
-			MessageCount:        len(items),
+			MessageCount:        countDialogueMessages(items),
 			OverlapFromSequence: overlapFrom,
 			OverlapMessageCount: overlapCount,
 			Content:             content,
 			ContentHash:         hash,
 			Metadata: map[string]any{
-				"strategy":             "dialogue_window_v1",
+				"strategy":             SegmentStrategy,
+				"source_slices":        segmentSourceSlices(items),
+				"source_slice_count":   len(items),
 				"max_messages":         options.MaxMessages,
-				"max_characters":       options.MaxCharacters,
+				"max_bytes":            options.MaxBytes,
 				"overlap_messages":     options.Overlap,
 				"start_role":           items[0].Role,
 				"end_role":             items[len(items)-1].Role,
-				"excluded_roles":       []string{string(domain.RoleSystem), string(domain.RoleTool)},
+				"excluded_roles":       []string{string(domain.RoleSystem)},
 				"sequence_span":        items[len(items)-1].Sequence - items[0].Sequence + 1,
 				"dialogue_message_ids": nil,
 				"source_part_ids":      collectSegmentPartIDs(items),
@@ -124,6 +131,7 @@ func BuildSegmentsFromTimeline(userID, conversationID string, messages []domain.
 			break
 		}
 		overlap := min(options.Overlap, max(0, end-start-1))
+		previousEnd = end
 		start = end - overlap
 	}
 	return segments
@@ -141,18 +149,35 @@ func collectDialogueMessages(messages []domain.UnifiedMessage, parts []domain.Me
 		if !timelineRole(message.Role) {
 			continue
 		}
-		text := strings.TrimSpace(message.Text)
-		if text == "" && len(message.Blocks) > 0 {
-			text = strings.TrimSpace(message.Blocks[0].Text)
+		appendSource := func(text, field string, index int) {
+			if strings.TrimSpace(text) == "" {
+				return
+			}
+			dialogue = append(dialogue, dialogueMessage{Sequence: idx, Role: message.Role, Text: text, Source: domain.SegmentSourceSlice{SequenceNum: idx, Field: field, Index: index}})
 		}
-		if text == "" {
-			continue
+		if len(message.Blocks) == 0 {
+			appendSource(message.Text, "message.text", 0)
+		} else {
+			for i, block := range message.Blocks {
+				if (block.Type == domain.ContentBlockImage || block.Type == domain.ContentBlockAudio || block.Type == domain.ContentBlockVideo || block.Type == domain.ContentBlockFile) && strings.TrimSpace(block.Text) == "" {
+					continue
+				}
+				if strings.TrimSpace(block.Text) != "" {
+					appendSource(block.Text, "message.blocks.text", i)
+				} else if strings.TrimSpace(block.Raw) != "" {
+					appendSource(block.Raw, "message.blocks.raw", i)
+				} else {
+					appendSource(block.TextProxy(), "message.blocks.text_proxy", i)
+				}
+			}
 		}
-		dialogue = append(dialogue, dialogueMessage{
-			Sequence: idx,
-			Role:     message.Role,
-			Text:     text,
-		})
+		for i, result := range message.ToolResults {
+			raw, err := json.Marshal(result.Output)
+			if err == nil {
+				appendSource(string(raw), "message.tool_results.output_json", i)
+			}
+		}
+
 	}
 	return dialogue
 }
@@ -170,34 +195,36 @@ func collectDialogueFromParts(parts []domain.MessagePart, artifacts []domain.Mes
 		if !timelineRole(part.Role) {
 			continue
 		}
-		textParts := make([]string, 0, 1+len(artifactIndex[part.PartID]))
-		artifactIDs := make([]string, 0, len(artifactIndex[part.PartID]))
+		base := dialogueMessage{
+			Sequence: part.SequenceNum, Role: part.Role, PartIDs: []string{part.PartID},
+			Modalities: compactStrings(partModality(part)), HasSourceBlob: strings.TrimSpace(part.BlobID) != "",
+			PageIndexes: compactInts(part.PageIndex), StartMS: part.StartMS, EndMS: maxInt64(part.EndMS, part.StartMS+part.DurationMS),
+		}
+		appendSource := func(text, field, artifactID string, page int, startMS, endMS int64) {
+			if strings.TrimSpace(text) == "" {
+				return
+			}
+			item := base
+			item.Text = text
+			item.Source = domain.SegmentSourceSlice{SequenceNum: part.SequenceNum, PartID: part.PartID, ArtifactID: artifactID, Field: field, Index: part.PartIndex}
+			if artifactID != "" {
+				item.ArtifactIDs = []string{artifactID}
+				item.PageIndexes = compactInts(page)
+				item.StartMS, item.EndMS = startMS, endMS
+			}
+			dialogue = append(dialogue, item)
+		}
+		// Preserve original text as well as independent extracted observations.
+		// Artifact summaries must never replace the full source text.
+		before := len(dialogue)
+		appendSource(part.TextContent, "part.text_content", "", part.PageIndex, part.StartMS, part.EndMS)
 		for _, artifact := range artifactIndex[part.PartID] {
-			if text := strings.TrimSpace(artifact.TextContent); text != "" {
-				textParts = append(textParts, text)
-				artifactIDs = append(artifactIDs, artifact.ArtifactID)
-			}
+			appendSource(artifact.TextContent, "artifact.text_content", artifact.ArtifactID, artifact.PageIndex, artifact.StartMS, artifact.EndMS)
 		}
-		if len(textParts) == 0 {
-			if text := strings.TrimSpace(firstNonEmptyString(part.TextContent, part.RawPayload)); text != "" {
-				textParts = append(textParts, text)
-			}
+		if len(dialogue) == before && part.PartType != domain.ContentBlockImage && part.PartType != domain.ContentBlockAudio && part.PartType != domain.ContentBlockVideo && part.PartType != domain.ContentBlockFile {
+			appendSource(part.RawPayload, "part.raw_payload", "", part.PageIndex, part.StartMS, part.EndMS)
 		}
-		if len(textParts) == 0 {
-			continue
-		}
-		dialogue = append(dialogue, dialogueMessage{
-			Sequence:      part.SequenceNum,
-			Role:          part.Role,
-			Text:          truncateSummary(strings.Join(textParts, " | "), 400),
-			PartIDs:       []string{part.PartID},
-			ArtifactIDs:   artifactIDs,
-			Modalities:    compactStrings(partModality(part)),
-			HasSourceBlob: strings.TrimSpace(part.BlobID) != "",
-			PageIndexes:   compactInts(part.PageIndex),
-			StartMS:       part.StartMS,
-			EndMS:         maxInt64(part.EndMS, part.StartMS+part.DurationMS),
-		})
+
 	}
 	return dialogue
 }
@@ -215,7 +242,7 @@ func segmentEnd(messages []dialogueMessage, start int, options SegmentOptions) i
 		if end > start {
 			nextChars += 3
 		}
-		if totalChars > 0 && totalChars+nextChars > options.MaxCharacters {
+		if totalChars > 0 && totalChars+nextChars > options.MaxBytes {
 			break
 		}
 		totalChars += nextChars

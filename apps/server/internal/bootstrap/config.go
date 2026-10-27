@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -9,28 +10,31 @@ import (
 	"github.com/spf13/viper"
 
 	"memstation/apps/server/internal/domain"
+	"memstation/apps/server/internal/modelcap"
 )
 
 const (
 	DefaultDevAdminToken = "memstation-local-admin-token"
 	DefaultDevMasterKey  = "memstation-local-master-key"
-	DefaultDevAPIKey     = "ms-local-dev"
 )
 
 type Config struct {
-	IngestionWindowBudget            int
-	DeletionJournalKey               string
-	DeletionJournalPath              string
-	MemoryAIBackend                  string
-	MemoryBrokerBaseURL              string
-	MemoryBrokerCredential           string
-	MemoryBrokerSummaryAlias         string
-	MemoryBrokerAnalysisAlias        string
-	MemoryBrokerEmbeddingAlias       string
-	MemoryBrokerRerankAlias          string
-	MemoryBrokerEmbeddingModel       string
-	MemoryBrokerEmbeddingFingerprint string
+	ModelInputModalities             modelcap.InputPolicy
+	SemanticEpisodesEnabled          bool
+	MemoryReasoningEffort            string
+	MemoryMinOutputTokens            int
+	MemoryMaxOutputTokens            int
+	MemoryLLMTimeout                 time.Duration
 	MemoryBrokerEmbeddingDimensions  int
+	MemoryBrokerEmbeddingFingerprint string
+	MemoryBrokerEmbeddingModel       string
+	MemoryBrokerRerankAlias          string
+	MemoryBrokerEmbeddingAlias       string
+	MemoryBrokerAnalysisAlias        string
+	MemoryBrokerSummaryAlias         string
+	MemoryBrokerCredential           string
+	MemoryBrokerBaseURL              string
+	MemoryAIBackend                  string
 	AppName                          string
 	Version                          string
 	Port                             int
@@ -61,7 +65,9 @@ type Config struct {
 	ShutdownTimeout                  time.Duration
 	AdminToken                       string
 	MasterKey                        string
-	DevAPIKey                        string
+	DeletionJournalPath              string
+	DeletionJournalKey               string
+	IngestionWindowBudget            int
 	OpenAIAPIKey                     string
 	AnthropicAPIKey                  string
 	GeminiAPIKey                     string
@@ -74,11 +80,14 @@ type Config struct {
 	JinaBaseURL                      string
 	EmbeddingAPIKey                  string
 	EmbeddingBaseURL                 string
+	OpenRouterAPIKey                 string
+	OpenRouterBaseURL                string
+	RerankAPIKey                     string
+	RerankBaseURL                    string
 	RerankModel                      string
 	RerankCandidateMultiplier        int
 	RerankMinCandidates              int
 	RerankMaxCandidates              int
-	RerankBlendWeight                float64
 	ProviderTimeout                  time.Duration
 	KeyMemoryWriteKeys               []string
 	KeyMemoryAutoKeys                []string
@@ -109,6 +118,15 @@ type MultimodalConfig struct {
 }
 
 func LoadConfig() (Config, error) {
+	if _, ok := os.LookupEnv("MEMSTATION_DEV_API_KEY"); ok {
+		return Config{}, errors.New("MEMSTATION_DEV_API_KEY is unsupported; issue a credential for a registered agent")
+	}
+	for _, key := range []string{"MEMSTATION_RERANK_SCORE_POLICY", "MEMSTATION_RERANK_BLEND_WEIGHT"} {
+		if _, ok := os.LookupEnv(key); ok {
+			return Config{}, fmt.Errorf("unsupported environment variable: %s; configure RERANK_MODEL and candidate limits", key)
+		}
+	}
+
 	v := viper.New()
 	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 	v.AutomaticEnv()
@@ -119,6 +137,12 @@ func LoadConfig() (Config, error) {
 		_ = v.BindEnv(args...)
 	}
 
+	bind("semantic_episodes_enabled", "MEMSTATION_SEMANTIC_EPISODES_ENABLED")
+	bind("model_input_modalities", "MEMSTATION_MODEL_INPUT_MODALITIES")
+	bind("memory_reasoning_effort", "MEMSTATION_MEMORY_REASONING_EFFORT")
+	bind("memory_min_output_tokens", "MEMSTATION_MEMORY_MIN_OUTPUT_TOKENS")
+	bind("memory_max_output_tokens", "MEMSTATION_MEMORY_MAX_OUTPUT_TOKENS")
+	bind("memory_llm_timeout_seconds", "MEMSTATION_MEMORY_LLM_TIMEOUT_SECONDS")
 	bind("app_name", "MEMSTATION_APP_NAME")
 	bind("version", "MEMSTATION_VERSION")
 	bind("port", "MEMSTATION_PORT")
@@ -162,7 +186,6 @@ func LoadConfig() (Config, error) {
 	bind("ingestion_window_budget", "MEMSTATION_INGESTION_WINDOW_BUDGET")
 	bind("deletion_journal_path", "MEMSTATION_DELETION_JOURNAL_PATH")
 	bind("deletion_journal_key", "MEMSTATION_DELETION_JOURNAL_KEY")
-	bind("dev_api_key", "MEMSTATION_DEV_API_KEY")
 	bind("openai_api_key", "OPENAI_API_KEY")
 	bind("anthropic_api_key", "ANTHROPIC_API_KEY")
 	bind("gemini_api_key", "GEMINI_API_KEY")
@@ -175,11 +198,14 @@ func LoadConfig() (Config, error) {
 	bind("jina_base_url", "JINA_BASE_URL")
 	bind("embedding_api_key", "EMBEDDING_API_KEY")
 	bind("embedding_base_url", "EMBEDDING_BASE_URL")
+	bind("openrouter_api_key", "OPENROUTER_API_KEY")
+	bind("openrouter_base_url", "OPENROUTER_BASE_URL")
+	bind("rerank_api_key", "MEMSTATION_RERANK_API_KEY")
+	bind("rerank_base_url", "MEMSTATION_RERANK_BASE_URL")
 	bind("rerank_model", "MEMSTATION_RERANK_MODEL")
 	bind("rerank_candidate_multiplier", "MEMSTATION_RERANK_CANDIDATE_MULTIPLIER")
 	bind("rerank_min_candidates", "MEMSTATION_RERANK_MIN_CANDIDATES")
 	bind("rerank_max_candidates", "MEMSTATION_RERANK_MAX_CANDIDATES")
-	bind("rerank_blend_weight", "MEMSTATION_RERANK_BLEND_WEIGHT")
 	bind("provider_timeout_seconds", "MEMSTATION_PROVIDER_TIMEOUT_SECONDS")
 	bind("key_memory_write_keys", "MEMSTATION_KEY_MEMORY_WRITE_KEYS")
 	bind("key_memory_auto_keys", "MEMSTATION_KEY_MEMORY_AUTO_KEYS")
@@ -204,6 +230,9 @@ func LoadConfig() (Config, error) {
 	bind("multimodal_max_asset_bytes", "MEMSTATION_MULTIMODAL_MAX_ASSET_BYTES")
 	bind("multimodal_allowed_mime_types", "MEMSTATION_MULTIMODAL_ALLOWED_MIME_TYPES")
 
+	setDefault("memory_min_output_tokens", 16384)
+	setDefault("memory_max_output_tokens", 65536)
+	setDefault("memory_llm_timeout_seconds", 300)
 	setDefault("app_name", "memstation")
 	setDefault("version", "0.1.0")
 	setDefault("port", 8080)
@@ -238,17 +267,16 @@ func LoadConfig() (Config, error) {
 	setDefault("memory_ai_backend", "direct")
 	setDefault("ingestion_window_budget", 8192)
 	setDefault("deletion_journal_path", "./data/deletion-journal/history.jsonl")
-	setDefault("dev_api_key", DefaultDevAPIKey)
 	setDefault("openai_base_url", "https://api.openai.com/v1")
 	setDefault("anthropic_base_url", "https://api.anthropic.com/v1")
 	setDefault("gemini_base_url", "https://generativelanguage.googleapis.com/v1beta")
 	setDefault("cohere_base_url", "https://api.cohere.com/v2")
+	setDefault("openrouter_base_url", "https://openrouter.ai/api/v1")
 	setDefault("jina_base_url", "https://api.jina.ai/v1")
 	setDefault("embedding_base_url", "https://api.openai.com/v1")
 	setDefault("rerank_candidate_multiplier", 6)
 	setDefault("rerank_min_candidates", 20)
 	setDefault("rerank_max_candidates", 50)
-	setDefault("rerank_blend_weight", 0.35)
 	setDefault("provider_timeout_seconds", 60)
 	setDefault("key_memory_write_keys", "recent_conversation")
 	setDefault("key_memory_auto_keys", "identity,preferences,projects")
@@ -284,19 +312,6 @@ func LoadConfig() (Config, error) {
 		v.Set("key_memory_auto_keys", value)
 	}
 	cfg := Config{
-		IngestionWindowBudget:            v.GetInt("ingestion_window_budget"),
-		DeletionJournalKey:               v.GetString("deletion_journal_key"),
-		DeletionJournalPath:              v.GetString("deletion_journal_path"),
-		MemoryAIBackend:                  v.GetString("memory_ai_backend"),
-		MemoryBrokerBaseURL:              v.GetString("memory_broker_base_url"),
-		MemoryBrokerCredential:           v.GetString("memory_broker_credential"),
-		MemoryBrokerSummaryAlias:         v.GetString("memory_broker_summary_alias"),
-		MemoryBrokerAnalysisAlias:        v.GetString("memory_broker_analysis_alias"),
-		MemoryBrokerEmbeddingAlias:       v.GetString("memory_broker_embedding_alias"),
-		MemoryBrokerRerankAlias:          v.GetString("memory_broker_rerank_alias"),
-		MemoryBrokerEmbeddingModel:       v.GetString("memory_broker_embedding_model"),
-		MemoryBrokerEmbeddingFingerprint: v.GetString("memory_broker_embedding_fingerprint"),
-		MemoryBrokerEmbeddingDimensions:  v.GetInt("memory_broker_embedding_dimensions"),
 		AppName:                          v.GetString("app_name"),
 		Version:                          v.GetString("version"),
 		Port:                             v.GetInt("port"),
@@ -327,7 +342,19 @@ func LoadConfig() (Config, error) {
 		ShutdownTimeout:                  time.Duration(v.GetInt("shutdown_timeout_seconds")) * time.Second,
 		AdminToken:                       v.GetString("admin_token"),
 		MasterKey:                        v.GetString("master_key"),
-		DevAPIKey:                        v.GetString("dev_api_key"),
+		MemoryBrokerEmbeddingDimensions:  v.GetInt("memory_broker_embedding_dimensions"),
+		MemoryBrokerEmbeddingFingerprint: v.GetString("memory_broker_embedding_fingerprint"),
+		MemoryBrokerEmbeddingModel:       v.GetString("memory_broker_embedding_model"),
+		MemoryBrokerRerankAlias:          v.GetString("memory_broker_rerank_alias"),
+		MemoryBrokerEmbeddingAlias:       v.GetString("memory_broker_embedding_alias"),
+		MemoryBrokerAnalysisAlias:        v.GetString("memory_broker_analysis_alias"),
+		MemoryBrokerSummaryAlias:         v.GetString("memory_broker_summary_alias"),
+		MemoryBrokerCredential:           v.GetString("memory_broker_credential"),
+		MemoryBrokerBaseURL:              v.GetString("memory_broker_base_url"),
+		MemoryAIBackend:                  v.GetString("memory_ai_backend"),
+		DeletionJournalPath:              v.GetString("deletion_journal_path"),
+		DeletionJournalKey:               v.GetString("deletion_journal_key"),
+		IngestionWindowBudget:            v.GetInt("ingestion_window_budget"),
 		OpenAIAPIKey:                     v.GetString("openai_api_key"),
 		AnthropicAPIKey:                  v.GetString("anthropic_api_key"),
 		GeminiAPIKey:                     v.GetString("gemini_api_key"),
@@ -340,13 +367,21 @@ func LoadConfig() (Config, error) {
 		JinaBaseURL:                      v.GetString("jina_base_url"),
 		EmbeddingAPIKey:                  firstNonEmpty(v.GetString("embedding_api_key"), v.GetString("openai_api_key")),
 		EmbeddingBaseURL:                 firstNonEmpty(v.GetString("embedding_base_url"), v.GetString("openai_base_url")),
+		OpenRouterAPIKey:                 v.GetString("openrouter_api_key"),
+		OpenRouterBaseURL:                v.GetString("openrouter_base_url"),
+		RerankAPIKey:                     v.GetString("rerank_api_key"),
+		RerankBaseURL:                    v.GetString("rerank_base_url"),
 		RerankModel:                      strings.TrimSpace(v.GetString("rerank_model")),
 		RerankCandidateMultiplier:        v.GetInt("rerank_candidate_multiplier"),
 		RerankMinCandidates:              v.GetInt("rerank_min_candidates"),
 		RerankMaxCandidates:              v.GetInt("rerank_max_candidates"),
-		RerankBlendWeight:                v.GetFloat64("rerank_blend_weight"),
 		ProviderTimeout:                  time.Duration(v.GetInt("provider_timeout_seconds")) * time.Second,
 		KeyMemoryWriteKeys:               csvList(v.GetString("key_memory_write_keys")),
+		SemanticEpisodesEnabled:          v.GetBool("semantic_episodes_enabled"),
+		MemoryReasoningEffort:            strings.TrimSpace(v.GetString("memory_reasoning_effort")),
+		MemoryMinOutputTokens:            v.GetInt("memory_min_output_tokens"),
+		MemoryMaxOutputTokens:            v.GetInt("memory_max_output_tokens"),
+		MemoryLLMTimeout:                 time.Duration(v.GetInt("memory_llm_timeout_seconds")) * time.Second,
 		KeyMemoryAutoKeys:                csvList(v.GetString("key_memory_auto_keys")),
 		RateLimitRPS:                     v.GetInt("rate_limit_rps"),
 		RateLimitBurst:                   v.GetInt("rate_limit_burst"),
@@ -371,6 +406,14 @@ func LoadConfig() (Config, error) {
 			AllowedMIMETypes:          csvList(v.GetString("multimodal_allowed_mime_types")),
 		},
 	}
+	if cfg.MemoryMinOutputTokens < 1 || cfg.MemoryMaxOutputTokens < cfg.MemoryMinOutputTokens || cfg.MemoryMaxOutputTokens > 262144 || cfg.MemoryLLMTimeout <= 0 || cfg.MemoryLLMTimeout > time.Hour {
+		return Config{}, errors.New("invalid memory LLM token limits or timeout")
+	}
+	inputPolicy, err := modelcap.ParseInputPolicy(v.GetString("model_input_modalities"))
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.ModelInputModalities = inputPolicy
 	if err := validateCredentialedCORSOrigins(cfg.CORSAllowedOrigins); err != nil {
 		return Config{}, err
 	}

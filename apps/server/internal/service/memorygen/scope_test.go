@@ -9,10 +9,14 @@ import (
 	"sync/atomic"
 	"testing"
 
+	conversationstore "memstation/apps/server/internal/store/sql/conversation"
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
+	"memstation/apps/server/internal/service/apikey"
+
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/runtimeconfig"
 	"memstation/apps/server/internal/security"
-	sqlstore "memstation/apps/server/internal/store/sql"
 
 	"github.com/google/uuid"
 )
@@ -30,7 +34,7 @@ func TestGenerationOperationsRejectForeignScope(t *testing.T) {
 			"sources": func() error { _, e := s.ListGenerationSources(ctx, "owner", "gen"); return e },
 			"current": func() error { _, e := s.IsCurrentGenerationSource(ctx, "owner", "gen", "snap"); return e },
 			"capture": func() error {
-				_, _, e := s.CaptureSourceSnapshot(ctx, domain.ConversationRecord{UserID: "owner", ConversationID: "conv"})
+				_, _, e := s.CaptureSourceSnapshot(ctx, domain.ConversationRecord{UserID: "owner", ConversationID: "conv", AgentID: "fixture-agent"})
 				return e
 			},
 			"snapshot":  func() error { _, _, e := s.GetSourceSnapshot(ctx, "owner", "snap"); return e },
@@ -61,7 +65,7 @@ func TestSourceOwnerIdentityDoesNotUsePrefixMatching(t *testing.T) {
 	s := NewService(nil, "fixture")
 	ctx := context.Background()
 	for _, owner := range []string{"owner", "owner::nested"} {
-		if _, _, err := s.CaptureSourceSnapshot(ctx, domain.ConversationRecord{UserID: owner, ConversationID: "conv", Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: owner}}}); err != nil {
+		if _, _, err := s.CaptureSourceSnapshot(ctx, domain.ConversationRecord{UserID: owner, ConversationID: "conv", Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: owner}}, AgentID: "fixture-agent"}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -69,7 +73,7 @@ func TestSourceOwnerIdentityDoesNotUsePrefixMatching(t *testing.T) {
 	if err != nil || len(sources) != 1 || g.SourceCount != 1 {
 		t.Fatalf("owner prefix leaked sources: %+v %v", sources, err)
 	}
-	if _, _, err = s.CaptureSourceSnapshot(ctx, domain.ConversationRecord{UserID: "owner", ConversationID: "forged", Parts: []domain.MessagePart{{UserID: "other"}}}); !errors.Is(err, domain.ErrAccessDenied) {
+	if _, _, err = s.CaptureSourceSnapshot(ctx, domain.ConversationRecord{UserID: "owner", ConversationID: "forged", Parts: []domain.MessagePart{{UserID: "other"}}, AgentID: "fixture-agent"}); !errors.Is(err, domain.ErrAccessDenied) {
 		t.Fatal("forged nested source accepted", err)
 	}
 }
@@ -89,7 +93,11 @@ func TestPostgresScopedGenerationLifecycle(t *testing.T) {
 	group := owner + "-group"
 	hiddenGen := owner + "-hidden-gen"
 	hiddenSnap := owner + "-hidden-snap"
-	ctx := security.WithAccess(context.Background(), domain.AccessContext{UserID: owner, WorkspaceID: workspace})
+	agent, agentErr := apikey.NewService(runtimeconfig.NewStaticDBHandle(db)).Identities().Create(context.Background(), owner, "Generation fixture", nil)
+	if agentErr != nil {
+		t.Fatal(agentErr)
+	}
+	ctx := security.WithAccess(context.Background(), domain.AccessContext{UserID: owner, AgentID: agent.ID, WorkspaceID: workspace, ScopeVersion: 2, PartitionIDs: []string{""}})
 	s := NewService(runtimeconfig.NewStaticDBHandle(db), "fixture")
 	active, err := s.EnsureActiveGeneration(ctx, owner)
 	if err != nil {
@@ -117,8 +125,8 @@ func TestPostgresScopedGenerationLifecycle(t *testing.T) {
 	if _, ok, err := s.GetSourceSnapshot(ctx, owner, hiddenSnap); err != nil || ok {
 		t.Fatal("hidden snapshot directly readable", err)
 	}
-	conversation := domain.ConversationRecord{UserID: owner, WorkspaceID: workspace, ConversationID: owner + "-conv", Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "a retained source"}}}
-	conversations := sqlstore.NewPostgresConversationRepository(db)
+	conversation := domain.ConversationRecord{UserID: owner, WorkspaceID: workspace, ConversationID: owner + "-conv", Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "a retained source"}}, AgentID: agent.ID}
+	conversations := conversationstore.NewPostgresConversationRepository(db)
 	if err = conversations.PersistExchange(ctx, conversation); err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +224,7 @@ func TestPostgresScopedGenerationLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	repo := sqlstore.NewPostgresMemoryRepository(db)
+	repo := memorystore.NewPostgresMemoryRepository(db)
 	doc := domain.MemoryDocument{UserID: owner, WorkspaceID: workspace, GenerationID: next.GenerationID, ID: owner + "-doc", NodeID: owner + "-node", Type: domain.MemoryTypeFact, Content: "candidate"}
 	if err = repo.StoreDocument(ctx, doc); err != nil {
 		t.Fatal(err)
@@ -253,9 +261,8 @@ func TestPostgresScopedGenerationLifecycle(t *testing.T) {
 	if _, err = db.ExecContext(ctx, `UPDATE memory_source_snapshots SET message_parts='[{"part_id":"legacy-part"}]' WHERE snapshot_id=$1`, snap.SnapshotID); err != nil {
 		t.Fatal(err)
 	}
-	legacy, _, err := s.GetSourceSnapshot(ctx, owner, snap.SnapshotID)
-	if err != nil || len(legacy.Parts) != 1 || legacy.Parts[0].WorkspaceID != workspace || legacy.Parts[0].UserID != owner {
-		t.Fatal("legacy nested source scope not restored", legacy, err)
+	if _, _, err = s.GetSourceSnapshot(ctx, owner, snap.SnapshotID); !errors.Is(err, domain.ErrAccessDenied) {
+		t.Fatal("unscoped stored snapshot accepted", err)
 	}
 	if _, err = db.ExecContext(ctx, `UPDATE memory_source_snapshots SET message_parts='[{"part_id":"foreign","user_id":"other"}]' WHERE snapshot_id=$1`, snap.SnapshotID); err != nil {
 		t.Fatal(err)

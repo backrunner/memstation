@@ -34,8 +34,8 @@ ms_compose up -d memstation worker scheduler manager
 Open **http://127.0.0.1:4173**, select **Local**, and use the admin token stored in
 `.env.memstation-dev`. Configure providers and chat, summary, analysis and embedding
 models in Manager before testing automatic memory generation. An empty model
-configuration does not generate substitute memories. The seeded development gateway
-key is `ms-local-dev`; create a separate API key for actual client use.
+configuration does not generate substitute memories. `seed` creates a Bootstrap agent and displays its newly issued credential once.
+Use that credential, or create an Agent in Manager and issue a workspace-bound key.
 
 Use `ms_compose logs -f memstation worker scheduler` to inspect processing and
 `ms_compose down` to stop without removing data. Do not add `--volumes` when data

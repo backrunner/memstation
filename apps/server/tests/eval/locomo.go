@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 
 type LOCOMOOptions struct {
 	SkipCategoryFive bool `json:"skip_category_five"`
+	IncludeCaptions  bool `json:"include_captions"`
 }
 
 type locomoSample struct {
@@ -51,14 +53,19 @@ func LoadLOCOMODataset(path string, options LOCOMOOptions) (Dataset, error) {
 
 func buildLOCOMODataset(samples []locomoSample, options LOCOMOOptions) (Dataset, error) {
 	dataset := Dataset{
+		Coverage:    &DatasetCoverage{},
 		Name:        "locomo-external",
 		Description: "External LOCOMO-shaped retrieval benchmark adapted for MemStation retrieval/ranking evaluation.",
 		Documents:   make([]DatasetDocument, 0),
 		Queries:     make([]QueryCase, 0),
 	}
+	if options.IncludeCaptions {
+		dataset.Name = "locomo-external-with-captions"
+		dataset.Description += " Includes explicitly marked machine-generated image captions."
+	}
 	docByRef := map[string]DatasetDocument{}
 	for _, sample := range samples {
-		docs := collectLOCOMODocuments(sample)
+		docs := collectLOCOMODocumentsWithOptions(sample, options)
 		for _, item := range docs {
 			if item.Ref == "" || strings.TrimSpace(item.Document.Content) == "" {
 				continue
@@ -68,7 +75,7 @@ func buildLOCOMODataset(samples []locomoSample, options LOCOMOOptions) (Dataset,
 			}
 			docByRef[item.Ref] = item.Document
 		}
-		queries, err := buildLOCOMOQueries(sample, docByRef, options)
+		queries, err := buildLOCOMOQueries(sample, docByRef, options, dataset.Coverage)
 		if err != nil {
 			return Dataset{}, err
 		}
@@ -87,6 +94,10 @@ func buildLOCOMODataset(samples []locomoSample, options LOCOMOOptions) (Dataset,
 }
 
 func collectLOCOMODocuments(sample locomoSample) []locomoDoc {
+	return collectLOCOMODocumentsWithOptions(sample, LOCOMOOptions{})
+}
+
+func collectLOCOMODocumentsWithOptions(sample locomoSample, options LOCOMOOptions) []locomoDoc {
 	// This track indexes raw dialogue only. event_summary is annotated gold;
 	// mixing it or upstream-generated memories into the corpus leaks evaluation
 	// material and changes the meaning of evidence-turn retrieval scores.
@@ -104,10 +115,26 @@ func collectLOCOMODocuments(sample locomoSample) []locomoDoc {
 			if !ok {
 				continue
 			}
+			if options.IncludeCaptions {
+				turns = locomoTurnsWithCaptions(turns)
+			}
 			items := flattenLOCOMOSection(sample.SampleID, fmt.Sprintf("D%d", index), "conversation", turns, domain.MemoryTypeFact)
 			date := firstNonEmptyString(sessions, key+"_date_time")
+			positions := map[string]int{}
+			for i, raw := range turns {
+				if turn, ok := raw.(map[string]any); ok {
+					positions[firstNonEmptyString(turn, "dia_id")] = i
+				}
+			}
 			for i := range items {
 				items[i].Document.Metadata["session_date"] = date
+				if seq, ok := positions[fmt.Sprint(items[i].Document.Metadata["ref"])]; ok {
+					items[i].Document.ConversationID = locomoUserID(sample.SampleID, "") + "-" + key
+					items[i].Document.Metadata["source_turn"] = true
+					items[i].Document.Metadata["source_conversation_revision"] = int64(1)
+					items[i].Document.Metadata["start_sequence"] = seq
+					items[i].Document.Metadata["end_sequence"] = seq
+				}
 				if date != "" {
 					items[i].Document.Content = date + "\n" + items[i].Document.Content
 				}
@@ -116,27 +143,60 @@ func collectLOCOMODocuments(sample locomoSample) []locomoDoc {
 		}
 		return docs
 	}
-	return flattenLOCOMOSection(sample.SampleID, conversationRefPrefix(sample.Conversation), "conversation", sample.Conversation, domain.MemoryTypeFact)
+	conversation := sample.Conversation
+	if turns, ok := conversation.([]any); ok && options.IncludeCaptions {
+		conversation = locomoTurnsWithCaptions(turns)
+	}
+	return flattenLOCOMOSection(sample.SampleID, conversationRefPrefix(sample.Conversation), "conversation", conversation, domain.MemoryTypeFact)
 }
 
-func buildLOCOMOQueries(sample locomoSample, docByRef map[string]DatasetDocument, options LOCOMOOptions) ([]QueryCase, error) {
+func locomoTurnsWithCaptions(turns []any) []any {
+	out := make([]any, len(turns))
+	for i, turn := range turns {
+		out[i] = turn
+		mapped, ok := turn.(map[string]any)
+		if !ok {
+			continue
+		}
+		caption := firstNonEmptyString(mapped, "blip_caption")
+		text := firstNonEmptyString(mapped, "text")
+		if caption == "" || text == "" {
+			continue
+		}
+		copy := make(map[string]any, len(mapped))
+		for k, v := range mapped {
+			copy[k] = v
+		}
+		copy["text"] = text + "\nImage caption (machine generated, may be inaccurate): " + caption
+		out[i] = copy
+	}
+	return out
+}
+
+func buildLOCOMOQueries(sample locomoSample, docByRef map[string]DatasetDocument, options LOCOMOOptions, coverage *DatasetCoverage) ([]QueryCase, error) {
 	queries := make([]QueryCase, 0, len(sample.QA))
 	for idx, item := range sample.QA {
+		coverage.SourceQuestions++
 		question := firstNonEmptyString(item, "question", "query", "prompt")
 		if question == "" {
+			coverage.ExcludedEmptyQuestions++
 			continue
 		}
 		category := intValue(item["category"])
 		if options.SkipCategoryFive && category == 5 {
+			coverage.ExcludedCategoryQuestions++
 			continue
 		}
+		coverage.EligibleQuestions++
 		evidenceRefs := collectEvidenceRefs(item)
 		positives := make([]string, 0, len(evidenceRefs))
 		graded := map[string]float64{}
 		userID := ""
+		unresolved := []string{}
 		for _, ref := range evidenceRefs {
 			doc, ok := docByRef[sample.SampleID+"::"+ref]
 			if !ok {
+				unresolved = append(unresolved, ref)
 				continue
 			}
 			positives = append(positives, doc.ID)
@@ -146,7 +206,18 @@ func buildLOCOMOQueries(sample locomoSample, docByRef map[string]DatasetDocument
 			}
 		}
 		if len(positives) == 0 {
+			if len(evidenceRefs) == 0 {
+				coverage.NoEvidenceQuestions++
+			} else {
+				coverage.UnresolvedOnlyQuestions++
+			}
+			coverage.UnresolvedReferenceCount += len(unresolved)
 			continue
+		}
+		coverage.ScoredQuestions++
+		if len(unresolved) > 0 {
+			coverage.PartiallyUnresolvedQuestions++
+			coverage.UnresolvedReferenceCount += len(unresolved)
 		}
 		if userID == "" {
 			userID = locomoUserID(sample.SampleID, "")
@@ -159,9 +230,10 @@ func buildLOCOMOQueries(sample locomoSample, docByRef map[string]DatasetDocument
 			Positives:       uniqueStrings(positives),
 			GradedRelevance: graded,
 			Metadata: map[string]any{
-				"sample_id": sample.SampleID,
-				"category":  category,
-				"answer":    firstNonEmptyString(item, "answer", "target_answer"),
+				"sample_id":                sample.SampleID,
+				"category":                 category,
+				"answer":                   firstNonEmptyString(item, "answer", "target_answer"),
+				"unresolved_evidence_refs": unresolved,
 			},
 			Notes: fmt.Sprintf("LOCOMO sample %s category %d", sample.SampleID, category),
 		})
@@ -278,7 +350,33 @@ func collectEvidenceRefs(item map[string]any) []string {
 	for _, key := range []string{"evidence", "evidence_refs", "supporting_facts", "references"} {
 		values = append(values, collectStringValues(item[key])...)
 	}
-	return uniqueStrings(values)
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		out = append(out, normalizeLOCOMOEvidenceRefs(value)...)
+	}
+	return uniqueStrings(out)
+}
+
+var locomoEvidencePattern = regexp.MustCompile(`(?i)\bD:?([0-9]+):([0-9]+)\b`)
+
+func normalizeLOCOMOEvidenceRefs(value string) []string {
+	value = strings.TrimSpace(value)
+	matches := locomoEvidencePattern.FindAllStringSubmatch(value, -1)
+	// Normalize only unambiguous reference syntax. Never infer missing evidence
+	// from an answer, adjacent turns, or arbitrary text that merely mentions IDs.
+	if len(matches) == 0 || strings.Trim(locomoEvidencePattern.ReplaceAllString(value, ""), " ,;\t\r\n") != "" {
+		return []string{value}
+	}
+	out := make([]string, 0, len(matches))
+	for _, match := range matches {
+		session, e1 := strconv.Atoi(match[1])
+		turn, e2 := strconv.Atoi(match[2])
+		if e1 != nil || e2 != nil {
+			return []string{value}
+		}
+		out = append(out, fmt.Sprintf("D%d:%d", session, turn))
+	}
+	return out
 }
 
 func collectStringValues(value any) []string {

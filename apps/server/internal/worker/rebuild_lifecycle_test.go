@@ -12,7 +12,7 @@ import (
 func TestRebuildCompletionRetryAndLateActivation(t *testing.T) {
 	ctx := context.Background()
 	generations := memorygenservice.NewService(nil, "fixture")
-	if _, _, err := generations.CaptureSourceSnapshot(ctx, domain.ConversationRecord{UserID: "owner", ConversationID: "retained", Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "retained source"}}}); err != nil {
+	if _, _, err := generations.CaptureSourceSnapshot(ctx, domain.ConversationRecord{UserID: "owner", ConversationID: "retained", Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "retained source"}}, AgentID: "fixture-agent"}); err != nil {
 		t.Fatal(err)
 	}
 	g, sources, err := generations.CreateRebuildGeneration(ctx, memorygenservice.CreateRebuildInput{UserID: "owner", ActivateOnSuccess: true})
@@ -20,7 +20,7 @@ func TestRebuildCompletionRetryAndLateActivation(t *testing.T) {
 		t.Fatal(err)
 	}
 	publisher := &failFirstPublisher{}
-	services := Services{Generations: generations, Publisher: publisher}
+	services := Services{Generations: generations, Publisher: publisher, TaskAuthority: fixtureTaskAuthority{}}
 	payload := MemoryRebuildConversationPayload{UserID: "owner", GenerationID: g.GenerationID, SnapshotID: sources[0].SnapshotID}
 	if err := completeRebuildSource(ctx, services, payload, 3); !errors.Is(err, ErrQueueUnavailable) {
 		t.Fatal("expected activation publication failure", err)

@@ -3,15 +3,6 @@
 ALTER TABLE memory_nodes ADD COLUMN workspace_id TEXT;
 ALTER TABLE memory_embeddings ADD COLUMN workspace_id TEXT;
 
-INSERT INTO workspaces (id,user_id,name,capabilities)
-SELECT DISTINCT 'personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex'),user_id,'Personal',
- '["gateway.invoke","memory.read","memory.edit","files.read","files.write"]'::jsonb
-FROM memory_nodes ON CONFLICT DO NOTHING;
-
-UPDATE memory_nodes SET workspace_id='personal-' || encode(sha256(convert_to(user_id,'UTF8')),'hex');
-UPDATE memory_embeddings e SET workspace_id=n.workspace_id
-FROM memory_nodes n WHERE n.user_id=e.user_id AND n.id=e.node_id;
-
 DO $$ BEGIN
  IF EXISTS (SELECT 1 FROM memory_embeddings WHERE workspace_id IS NULL) THEN
   RAISE EXCEPTION 'memory scope backfill requires review of orphan or cross-owner embeddings';

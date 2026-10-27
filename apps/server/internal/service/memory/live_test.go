@@ -5,10 +5,11 @@ import (
 	"testing"
 	"time"
 
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
 	"memstation/apps/server/internal/aicall"
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/ports"
-	sqlstore "memstation/apps/server/internal/store/sql"
 )
 
 type projectedSearchEngine struct {
@@ -52,7 +53,7 @@ func TestHistoricalRecallPreservesProjectionButRequiresLiveIdentity(t *testing.T
 		{name: "unchanged_current", live: []domain.MemoryDocument{old}, want: 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			service := NewService(projectedSearchEngine{document: old}, liveIdentityRepository{MemoryRepository: sqlstore.NewInMemoryMemoryRepository(), documents: test.live})
+			service := NewService(projectedSearchEngine{document: old}, liveIdentityRepository{MemoryRepository: memorystore.NewInMemoryMemoryRepository(), documents: test.live})
 			got, err := service.Search(context.Background(), domain.SearchInput{UserID: "owner", Query: "where", AsOf: test.asOf, KnownAt: test.knownAt})
 			if err != nil || len(got.Memories) != test.want {
 				t.Fatalf("recall=%+v err=%v", got, err)
@@ -63,7 +64,7 @@ func TestHistoricalRecallPreservesProjectionButRequiresLiveIdentity(t *testing.T
 		})
 	}
 	current.Content = old.Content
-	service := NewService(projectedSearchEngine{document: old}, liveIdentityRepository{MemoryRepository: sqlstore.NewInMemoryMemoryRepository(), documents: []domain.MemoryDocument{current}})
+	service := NewService(projectedSearchEngine{document: old}, liveIdentityRepository{MemoryRepository: memorystore.NewInMemoryMemoryRepository(), documents: []domain.MemoryDocument{current}})
 	got, err := service.Search(context.Background(), domain.SearchInput{UserID: "owner", Query: "where"})
 	if err != nil || len(got.Memories) != 0 {
 		t.Fatalf("revision changed during current recall: %+v %v", got, err)
@@ -72,7 +73,7 @@ func TestHistoricalRecallPreservesProjectionButRequiresLiveIdentity(t *testing.T
 
 func TestRecallExposesDegradedBrokerResultWithoutDiscardingFallback(t *testing.T) {
 	doc := domain.MemoryDocument{ID: "fact", NodeID: "node", UserID: "owner", Type: domain.MemoryTypeFact, Content: "retained fallback", Revision: 1}
-	service := NewService(projectedSearchEngine{document: doc, failureCode: "broker_rerank_failed"}, liveIdentityRepository{MemoryRepository: sqlstore.NewInMemoryMemoryRepository(), documents: []domain.MemoryDocument{doc}})
+	service := NewService(projectedSearchEngine{document: doc, failureCode: "broker_rerank_failed"}, liveIdentityRepository{MemoryRepository: memorystore.NewInMemoryMemoryRepository(), documents: []domain.MemoryDocument{doc}})
 	result, err := service.Search(context.Background(), domain.SearchInput{UserID: "owner", Query: "fact"})
 	if err != nil || len(result.Memories) != 1 || result.Trace == nil || !result.Trace.Degraded || result.Trace.FailureCode != "broker_rerank_failed" {
 		t.Fatalf("degraded result lost: %+v %v", result, err)

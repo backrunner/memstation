@@ -1,5 +1,5 @@
--- Access partitions are server-managed. Empty partition preserves the existing
--- workspace-wide visibility of legacy data; it never means all partitions.
+-- Access partitions are server-managed. Empty partition means workspace-wide
+-- visibility; it never means all partitions.
 CREATE TABLE memory_partitions (
  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, workspace_id TEXT NOT NULL,
  agent_id TEXT NOT NULL, audience_actor_ids JSONB NOT NULL DEFAULT '[]',
@@ -22,24 +22,18 @@ ALTER TABLE conversations ADD COLUMN partition_id TEXT NOT NULL DEFAULT '',
  ADD COLUMN context_mode TEXT NOT NULL DEFAULT 'client_history';
 ALTER TABLE key_memories ADD COLUMN workspace_id TEXT,
  ADD COLUMN partition_id TEXT NOT NULL DEFAULT '';
-UPDATE key_memories k SET workspace_id=n.workspace_id, partition_id=n.partition_id
- FROM memory_nodes n WHERE n.user_id=k.user_id AND n.id=k.node_id;
 ALTER TABLE key_memories ALTER COLUMN workspace_id SET NOT NULL;
 ALTER TABLE key_memories DROP CONSTRAINT IF EXISTS key_memories_user_id_key_key;
 CREATE UNIQUE INDEX key_memories_scoped_key ON key_memories(user_id,workspace_id,partition_id,key);
 
--- Legacy SQL inserts inherit node scope, including migration/backup fixtures.
+-- Persisted child scope must exactly match its authoritative node.
 CREATE FUNCTION memstation_key_scope() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE parent memory_nodes%ROWTYPE;
 BEGIN
  SELECT * INTO STRICT parent FROM memory_nodes WHERE id=NEW.node_id AND user_id=NEW.user_id;
- IF NEW.workspace_id IS NOT NULL AND NEW.workspace_id<>parent.workspace_id THEN
-  RAISE EXCEPTION 'key memory workspace mismatch';
+ IF NEW.workspace_id IS DISTINCT FROM parent.workspace_id OR NEW.partition_id IS DISTINCT FROM parent.partition_id THEN
+  RAISE EXCEPTION 'key memory scope mismatch';
  END IF;
- IF NEW.partition_id<>'' AND NEW.partition_id<>parent.partition_id THEN
-  RAISE EXCEPTION 'key memory partition mismatch';
- END IF;
- NEW.workspace_id:=parent.workspace_id; NEW.partition_id:=parent.partition_id;
  RETURN NEW;
 END $$;
 CREATE TRIGGER key_memory_scope BEFORE INSERT OR UPDATE ON key_memories

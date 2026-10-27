@@ -6,11 +6,12 @@ import (
 	"maps"
 	"testing"
 
+	conversationstore "memstation/apps/server/internal/store/sql/conversation"
+
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/security"
 	conversationservice "memstation/apps/server/internal/service/conversation"
 	settingsservice "memstation/apps/server/internal/service/settings"
-	sqlstore "memstation/apps/server/internal/store/sql"
 )
 
 func TestRequestDefaultsUseAuthenticatedOwner(t *testing.T) {
@@ -21,9 +22,9 @@ func TestRequestDefaultsUseAuthenticatedOwner(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	service := NewService(nil, nil, nil, settings, domain.ProviderOpenAI)
-	access := domain.AccessContext{UserID: "owner", AgentID: "agent", WorkspaceID: domain.PersonalWorkspaceID("owner")}
-	request, err := service.ResolveRequestDefaults(security.WithAccess(ctx, access), domain.UnifiedRequest{UserID: "foreign"})
+	service := NewService(nil, nil, nil, settings, domain.ProviderOpenAICompatible)
+	access := domain.AccessContext{UserID: "owner", AgentID: "agent", WorkspaceID: domain.PersonalWorkspaceID("owner"), ScopeVersion: 2, PartitionIDs: []string{""}}
+	request, err := service.ResolveRequestDefaults(security.WithAccess(ctx, access), domain.UnifiedRequest{UserID: "foreign", AgentID: "fixture-agent"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,11 +34,11 @@ func TestRequestDefaultsUseAuthenticatedOwner(t *testing.T) {
 }
 
 func TestPrepareRequestDoesNotMutateCallerMetadata(t *testing.T) {
-	service := NewService(nil, nil, nil, nil, domain.ProviderOpenAI)
+	service := NewService(nil, nil, nil, nil, domain.ProviderOpenAICompatible)
 	metadata := map[string]any{"agent_id": "untrusted", "caller": "original"}
 	original := maps.Clone(metadata)
 	request := domain.UnifiedRequest{Mode: domain.ModeTransparent, RequestMetadata: metadata}
-	access := domain.AccessContext{UserID: "owner", AgentID: "agent-a", CredentialID: "key", WorkspaceID: domain.PersonalWorkspaceID("owner"), Capabilities: domain.PersonalCapabilities(), Legacy: true}
+	access := domain.AccessContext{UserID: "owner", AgentID: "agent-a", CredentialID: "key", WorkspaceID: domain.PersonalWorkspaceID("owner"), Capabilities: domain.PersonalCapabilities(), ScopeVersion: 2, PartitionIDs: []string{""}}
 	first, _, err := service.prepareRequest(security.WithAccess(context.Background(), access), request)
 	if err != nil {
 		t.Fatal(err)
@@ -53,11 +54,11 @@ func TestPrepareRequestDoesNotMutateCallerMetadata(t *testing.T) {
 
 func TestAgentSessionsAndRevisionAcrossProtocols(t *testing.T) {
 	ctx := context.Background()
-	repo := sqlstore.NewInMemoryConversationRepository()
-	conversations := conversationservice.NewService(repo, sqlstore.NewInMemoryOutboxRepository(), 100, 10000)
-	service := NewService(nil, nil, conversations, nil, domain.ProviderOpenAI)
-	access := domain.AccessContext{UserID: "owner", AgentID: "agent-a", CredentialID: "key-a", WorkspaceID: domain.PersonalWorkspaceID("owner"), Capabilities: domain.PersonalCapabilities()}
-	request := domain.UnifiedRequest{UserID: "owner", SessionID: "main", Protocol: domain.ProtocolOpenAIChat, Mode: domain.ModeTransparent, Model: "test-model", Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "hello"}}}
+	repo := conversationstore.NewInMemoryConversationRepository()
+	conversations := conversationservice.NewService(repo, conversationstore.NewInMemoryOutboxRepository(), 100, 10000)
+	service := NewService(nil, nil, conversations, nil, domain.ProviderOpenAICompatible)
+	access := domain.AccessContext{UserID: "owner", AgentID: "agent-a", CredentialID: "key-a", WorkspaceID: domain.PersonalWorkspaceID("owner"), Capabilities: domain.PersonalCapabilities(), ScopeVersion: 2, PartitionIDs: []string{""}}
+	request := domain.UnifiedRequest{UserID: "owner", SessionID: "main", Protocol: domain.ProtocolOpenAIChat, Mode: domain.ModeTransparent, Model: "test-model", Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "hello"}}, AgentID: "fixture-agent"}
 	first, _, err := service.prepareRequest(security.WithAccess(ctx, access), request)
 	if err != nil {
 		t.Fatal(err)
@@ -98,23 +99,13 @@ func TestAgentSessionsAndRevisionAcrossProtocols(t *testing.T) {
 	if fresh.ExpectedConversationRevision == nil || *fresh.ExpectedConversationRevision != 1 {
 		t.Fatal("new request did not read committed revision")
 	}
-	access.Legacy = true
-	request.ConversationID = "legacy-session"
-	request.SessionID = "legacy-session"
-	legacy, _, err := service.prepareRequest(security.WithAccess(ctx, access), request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if legacy.ConversationID != "legacy-session" {
-		t.Fatal("legacy session compatibility changed")
-	}
 }
 
 func TestToolRuntimeCannotBypassCredentialCeiling(t *testing.T) {
-	access := domain.AccessContext{UserID: "owner", Capabilities: []string{domain.CapabilityGateway}}
+	access := domain.AccessContext{UserID: "owner", Capabilities: []string{domain.CapabilityGateway}, ScopeVersion: 2, PartitionIDs: []string{""}}
 	runtime := NewToolRuntime(nil, nil, nil, 3)
 	for _, tool := range []string{"recall_memory", "get_key_memory", "write_key_memory"} {
-		_, err := runtime.executeCall(security.WithAccess(context.Background(), access), domain.UnifiedRequest{UserID: "owner", ToolWriteEnabled: true}, domain.ToolCall{Name: tool})
+		_, err := runtime.executeCall(security.WithAccess(context.Background(), access), domain.UnifiedRequest{UserID: "owner", ToolWriteEnabled: true, AgentID: "fixture-agent"}, domain.ToolCall{Name: tool})
 		if !errors.Is(err, domain.ErrAccessDenied) {
 			t.Fatalf("tool bypassed authority: %s %v", tool, err)
 		}

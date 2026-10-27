@@ -14,7 +14,7 @@ func TestScopeRejectedBeforeStorageOrExtraction(t *testing.T) {
 	s := &Service{}
 	for _, access := range []domain.AccessContext{{UserID: "other", WorkspaceID: domain.PersonalWorkspaceID("other")}, {UserID: "owner", WorkspaceID: "group"}} {
 		ctx := security.WithAccess(context.Background(), access)
-		conversation := domain.ConversationRecord{UserID: "owner", ConversationID: "conv"}
+		conversation := domain.ConversationRecord{UserID: "owner", ConversationID: "conv", AgentID: "fixture-agent"}
 		calls := map[string]func() error{
 			"upload":      func() error { _, err := s.SaveUpload(ctx, "owner", "file", "text/plain", nil, nil); return err },
 			"get":         func() error { _, err := s.GetBlob(ctx, "owner", "blob"); return err },
@@ -32,7 +32,7 @@ func TestScopeRejectedBeforeStorageOrExtraction(t *testing.T) {
 			}
 		}
 	}
-	if _, err := s.ExtractConversation(context.Background(), domain.ConversationRecord{UserID: "owner", ConversationID: "conv"}, []domain.MessagePart{{UserID: "other"}}); !errors.Is(err, domain.ErrAccessDenied) {
+	if _, err := s.ExtractConversation(context.Background(), domain.ConversationRecord{UserID: "owner", ConversationID: "conv", AgentID: "fixture-agent"}, []domain.MessagePart{{UserID: "other"}}); !errors.Is(err, domain.ErrAccessDenied) {
 		t.Fatal("foreign nested part accepted", err)
 	}
 }

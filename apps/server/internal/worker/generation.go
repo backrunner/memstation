@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"memstation/apps/server/internal/security"
+
 	"memstation/apps/server/internal/domain"
 )
 
@@ -12,7 +14,7 @@ func resolveProcessingGeneration(ctx context.Context, services Services, userID,
 	if services.Generations == nil {
 		generationID := strings.TrimSpace(explicitGenerationID)
 		if generationID == "" {
-			generationID = currentGenerationID(userID)
+			generationID = currentGenerationID(security.WorkspaceID(ctx, userID))
 		}
 		return domain.MemoryGeneration{
 			GenerationID:      generationID,
@@ -136,6 +138,6 @@ func mergeMetadata(parts ...map[string]any) map[string]any {
 	return out
 }
 
-func currentGenerationID(userID string) string {
-	return "gen:current:" + userID
+func currentGenerationID(workspaceID string) string {
+	return "gen:current:" + workspaceID
 }

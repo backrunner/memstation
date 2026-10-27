@@ -13,7 +13,7 @@ func TestBoundWorkspaceScopeNeverWidens(t *testing.T) {
 	if _, err := DataScope(base, "owner", "group"); !errors.Is(err, domain.ErrAccessDenied) {
 		t.Fatal("unbound workspace accepted", err)
 	}
-	unverified := WithAccess(base, domain.AccessContext{UserID: "owner", WorkspaceID: "group"})
+	unverified := WithAccess(base, domain.AccessContext{UserID: "owner", WorkspaceID: "group", ScopeVersion: 0, PartitionIDs: []string{""}})
 	if _, err := DataScope(unverified, "owner", ""); !errors.Is(err, domain.ErrAccessDenied) {
 		t.Fatal("unverified scope accepted", err)
 	}
@@ -39,10 +39,10 @@ func TestBoundWorkspaceScopeNeverWidens(t *testing.T) {
 	}
 }
 
-func TestScopedIdentityKeepsLegacyAndSeparatesWorkspaces(t *testing.T) {
+func TestScopedIdentitySeparatesEveryWorkspaceAndPartition(t *testing.T) {
 	base := context.Background()
-	if ScopedIdentity(base, "owner") != "owner" {
-		t.Fatal("legacy identity changed")
+	if ScopedIdentity(base, "owner") == "owner" {
+		t.Fatal("workspace missing from identity")
 	}
 	a, _ := WithDataScope(base, "owner", "group-a")
 	b, _ := WithDataScope(base, "owner", "group-b")

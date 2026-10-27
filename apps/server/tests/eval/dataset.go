@@ -26,6 +26,7 @@ type DatasetLoadOptions struct {
 }
 
 type Dataset struct {
+	Coverage          *DatasetCoverage     `json:"coverage,omitempty"`
 	Aliases           []domain.EntityAlias `json:"aliases,omitempty"`
 	Name              string               `json:"name"`
 	Description       string               `json:"description,omitempty"`
@@ -33,6 +34,20 @@ type Dataset struct {
 	Documents         []DatasetDocument    `json:"documents"`
 	Relations         []DatasetRelation    `json:"relations,omitempty"`
 	Queries           []QueryCase          `json:"queries"`
+}
+
+// DatasetCoverage accounts for source questions excluded before scoring, so a
+// smaller evaluable subset cannot be mistaken for complete benchmark coverage.
+type DatasetCoverage struct {
+	SourceQuestions              int `json:"source_questions"`
+	ExcludedCategoryQuestions    int `json:"excluded_category_questions"`
+	ExcludedEmptyQuestions       int `json:"excluded_empty_questions"`
+	EligibleQuestions            int `json:"eligible_questions"`
+	ScoredQuestions              int `json:"scored_questions"`
+	NoEvidenceQuestions          int `json:"no_evidence_questions"`
+	UnresolvedOnlyQuestions      int `json:"unresolved_only_questions"`
+	PartiallyUnresolvedQuestions int `json:"partially_unresolved_questions"`
+	UnresolvedReferenceCount     int `json:"unresolved_reference_count"`
 }
 
 type SmokeExpectations struct {

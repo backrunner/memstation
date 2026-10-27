@@ -125,20 +125,6 @@ func (_u *AgentUpdate) AddRevision(v int64) *AgentUpdate {
 	return _u
 }
 
-// SetLegacy sets the "legacy" field.
-func (_u *AgentUpdate) SetLegacy(v bool) *AgentUpdate {
-	_u.mutation.SetLegacy(v)
-	return _u
-}
-
-// SetNillableLegacy sets the "legacy" field if the given value is not nil.
-func (_u *AgentUpdate) SetNillableLegacy(v *bool) *AgentUpdate {
-	if v != nil {
-		_u.SetLegacy(*v)
-	}
-	return _u
-}
-
 // Mutation returns the AgentMutation object of the builder.
 func (_u *AgentUpdate) Mutation() *AgentMutation {
 	return _u.mutation
@@ -212,9 +198,6 @@ func (_u *AgentUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedRevision(); ok {
 		_spec.AddField(agent.FieldRevision, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.Legacy(); ok {
-		_spec.SetField(agent.FieldLegacy, field.TypeBool, value)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -333,20 +316,6 @@ func (_u *AgentUpdateOne) AddRevision(v int64) *AgentUpdateOne {
 	return _u
 }
 
-// SetLegacy sets the "legacy" field.
-func (_u *AgentUpdateOne) SetLegacy(v bool) *AgentUpdateOne {
-	_u.mutation.SetLegacy(v)
-	return _u
-}
-
-// SetNillableLegacy sets the "legacy" field if the given value is not nil.
-func (_u *AgentUpdateOne) SetNillableLegacy(v *bool) *AgentUpdateOne {
-	if v != nil {
-		_u.SetLegacy(*v)
-	}
-	return _u
-}
-
 // Mutation returns the AgentMutation object of the builder.
 func (_u *AgentUpdateOne) Mutation() *AgentMutation {
 	return _u.mutation
@@ -450,9 +419,6 @@ func (_u *AgentUpdateOne) sqlSave(ctx context.Context) (_node *Agent, err error)
 	}
 	if value, ok := _u.mutation.AddedRevision(); ok {
 		_spec.AddField(agent.FieldRevision, field.TypeInt64, value)
-	}
-	if value, ok := _u.mutation.Legacy(); ok {
-		_spec.SetField(agent.FieldLegacy, field.TypeBool, value)
 	}
 	_node = &Agent{config: _u.config}
 	_spec.Assign = _node.assignValues

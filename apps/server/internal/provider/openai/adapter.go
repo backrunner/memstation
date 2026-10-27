@@ -24,10 +24,6 @@ type Adapter struct {
 	timeout      *runtimeconfig.DurationValue
 }
 
-func NewAdapter(resolver provider.ConfigResolver, timeout time.Duration) *Adapter {
-	return NewCompatibleAdapter(resolver, timeout)
-}
-
 func NewCompatibleAdapter(resolver provider.ConfigResolver, timeout time.Duration) *Adapter {
 	if timeout <= 0 {
 		timeout = 60 * time.Second
@@ -129,11 +125,17 @@ func (a *Adapter) completeChat(ctx context.Context, req domain.UnifiedRequest, c
 		"messages": buildMessages(req.Messages),
 		"stream":   false,
 	}
+	if req.Temperature != nil {
+		payload["temperature"] = *req.Temperature
+	}
 	if req.MaxOutputTokens > 0 {
 		payload["max_tokens"] = req.MaxOutputTokens
 	}
 	if req.JSONOutput {
 		payload["response_format"] = map[string]any{"type": "json_object"}
+	}
+	if req.ReasoningEffort != "" {
+		payload["reasoning_effort"] = req.ReasoningEffort
 	}
 	if len(req.Tools) > 0 {
 		payload["tools"] = buildTools(req.Tools)
@@ -216,11 +218,17 @@ func (a *Adapter) completeResponses(ctx context.Context, req domain.UnifiedReque
 		"input":  buildResponsesInput(req.Messages),
 		"stream": false,
 	}
+	if req.Temperature != nil {
+		payload["temperature"] = *req.Temperature
+	}
 	if req.MaxOutputTokens > 0 {
 		payload["max_output_tokens"] = req.MaxOutputTokens
 	}
 	if req.JSONOutput {
 		payload["text"] = map[string]any{"format": map[string]any{"type": "json_object"}}
+	}
+	if req.ReasoningEffort != "" {
+		payload["reasoning"] = map[string]any{"effort": req.ReasoningEffort}
 	}
 	if len(req.Tools) > 0 {
 		payload["tools"] = buildResponsesTools(req.Tools)
@@ -277,6 +285,9 @@ func (a *Adapter) streamChat(ctx context.Context, req domain.UnifiedRequest, con
 		"stream_options": map[string]any{
 			"include_usage": true,
 		},
+	}
+	if req.Temperature != nil {
+		payload["temperature"] = *req.Temperature
 	}
 	if len(req.Tools) > 0 {
 		payload["tools"] = buildTools(req.Tools)
@@ -419,6 +430,9 @@ func (a *Adapter) streamResponses(ctx context.Context, req domain.UnifiedRequest
 		"model":  req.Model,
 		"input":  buildResponsesInput(req.Messages),
 		"stream": true,
+	}
+	if req.Temperature != nil {
+		payload["temperature"] = *req.Temperature
 	}
 	if len(req.Tools) > 0 {
 		payload["tools"] = buildResponsesTools(req.Tools)
@@ -590,14 +604,14 @@ func buildMessages(messages []domain.UnifiedMessage) []map[string]any {
 				"role":       message.Role,
 				"tool_calls": buildChatToolCalls(message.ToolCalls),
 			}
-			if content := buildOpenAIChatContent(message); content != nil {
+			if content := ChatContent(message); content != nil {
 				item["content"] = content
 			} else {
 				item["content"] = nil
 			}
 			out = append(out, item)
 		default:
-			content := buildOpenAIChatContent(message)
+			content := ChatContent(message)
 			if content == nil {
 				content = provider.MessageText(message)
 			}
@@ -823,7 +837,7 @@ func blockFromMap(item map[string]any) domain.ContentBlock {
 			SourceURL:      sourceURL,
 			ProviderFileID: fileID,
 			MIMEType:       mimeType,
-			Filename:       firstNonEmpty(stringValue(item, "filename"), stringValue(metadata, "filename")),
+			Filename:       firstNonEmpty(stringValue(item, "filename"), stringValue(metadata, "filename"), provider.NativeSourceFilename(item)),
 			Text:           firstNonEmpty(stringValue(item, "text"), stringValue(metadata, "caption"), stringValue(metadata, "ocr_text")),
 			Raw:            rawJSONText(item),
 			Metadata:       metadata,
@@ -836,7 +850,7 @@ func blockFromMap(item map[string]any) domain.ContentBlock {
 			SourceURL:      sourceURL,
 			ProviderFileID: fileID,
 			MIMEType:       mimeType,
-			Filename:       firstNonEmpty(stringValue(item, "filename"), stringValue(metadata, "filename")),
+			Filename:       firstNonEmpty(stringValue(item, "filename"), stringValue(metadata, "filename"), provider.NativeSourceFilename(item)),
 			Text:           firstNonEmpty(stringValue(item, "text"), stringValue(metadata, "transcript"), stringValue(metadata, "summary")),
 			Raw:            rawJSONText(item),
 			StartMS:        int64Value(item["start_ms"]),
@@ -852,7 +866,7 @@ func blockFromMap(item map[string]any) domain.ContentBlock {
 			SourceURL:      sourceURL,
 			ProviderFileID: fileID,
 			MIMEType:       mimeType,
-			Filename:       firstNonEmpty(stringValue(item, "filename"), stringValue(metadata, "filename")),
+			Filename:       firstNonEmpty(stringValue(item, "filename"), stringValue(metadata, "filename"), provider.NativeSourceFilename(item)),
 			Text:           firstNonEmpty(stringValue(item, "text"), stringValue(metadata, "transcript"), stringValue(metadata, "summary"), stringValue(metadata, "keyframe_summary")),
 			Raw:            rawJSONText(item),
 			StartMS:        int64Value(item["start_ms"]),
@@ -868,7 +882,7 @@ func blockFromMap(item map[string]any) domain.ContentBlock {
 			SourceURL:      sourceURL,
 			ProviderFileID: fileID,
 			MIMEType:       mimeType,
-			Filename:       firstNonEmpty(stringValue(item, "filename"), stringValue(metadata, "filename")),
+			Filename:       firstNonEmpty(stringValue(item, "filename"), stringValue(metadata, "filename"), provider.NativeSourceFilename(item)),
 			Text:           firstNonEmpty(stringValue(item, "text"), stringValue(metadata, "document_text"), stringValue(metadata, "parsed_text")),
 			Raw:            rawJSONText(item),
 			PageIndex:      intValue(item["page_index"]),
@@ -897,6 +911,9 @@ func blocksText(blocks []domain.ContentBlock) string {
 }
 
 func imageSourceFields(item map[string]any) (string, string, string, map[string]any) {
+	if u, id, mimeType, ok := provider.NativeSourceFields(item, "image"); ok {
+		return u, id, mimeType, nil
+	}
 	metadata := metadataWithout(item, "type", "text", "image_url", "file_id", "mime_type")
 	if raw := item["image_url"]; raw != nil {
 		switch typed := raw.(type) {
@@ -911,6 +928,9 @@ func imageSourceFields(item map[string]any) (string, string, string, map[string]
 }
 
 func mediaSourceFields(item map[string]any, key string) (string, string, string, map[string]any) {
+	if u, id, mimeType, ok := provider.NativeSourceFields(item, key); ok {
+		return u, id, mimeType, nil
+	}
 	metadata := metadataWithout(item, "type", "text", key, "mime_type", "file_id", "source_url")
 	if raw := item[key]; raw != nil {
 		switch typed := raw.(type) {
@@ -966,7 +986,7 @@ func rawJSONText(value any) string {
 	return string(raw)
 }
 
-func buildOpenAIChatContent(message domain.UnifiedMessage) any {
+func ChatContent(message domain.UnifiedMessage) any {
 	blocks := canonicalBlocks(message)
 	if len(blocks) == 0 {
 		return nil
@@ -976,7 +996,7 @@ func buildOpenAIChatContent(message domain.UnifiedMessage) any {
 	}
 	items := make([]map[string]any, 0, len(blocks))
 	for _, block := range blocks {
-		if item := openAIContentBlock(block, false); len(item) > 0 {
+		if item := chatContentBlock(block); len(item) > 0 {
 			items = append(items, item)
 		}
 	}
@@ -1010,95 +1030,77 @@ func canonicalBlocks(message domain.UnifiedMessage) []domain.ContentBlock {
 	return []domain.ContentBlock{{Type: domain.ContentBlockText, Text: message.Text}}
 }
 
+func chatContentBlock(block domain.ContentBlock) map[string]any {
+	switch block.Type {
+	case domain.ContentBlockText:
+		return map[string]any{"type": "text", "text": block.TextProxy()}
+	case domain.ContentBlockImage:
+		if block.SourceURL != "" {
+			return map[string]any{"type": "image_url", "image_url": map[string]any{"url": block.SourceURL}}
+		}
+	case domain.ContentBlockAudio:
+		mimeType, data, ok := provider.InlineData(block.SourceURL)
+		if ok && (mimeType == "audio/wav" || mimeType == "audio/mpeg" || mimeType == "audio/mp3") {
+			format := "wav"
+			if mimeType != "audio/wav" {
+				format = "mp3"
+			}
+			return map[string]any{"type": "input_audio", "input_audio": map[string]any{"data": data, "format": format}}
+		}
+	case domain.ContentBlockFile:
+		file := map[string]any{}
+		if block.ProviderFileID != "" {
+			file["file_id"] = block.ProviderFileID
+		} else if _, _, ok := provider.InlineData(block.SourceURL); ok {
+			file["file_data"] = block.SourceURL
+			file["filename"] = block.Filename
+		}
+		if len(file) > 0 {
+			return map[string]any{"type": "file", "file": file}
+		}
+	default:
+		return map[string]any{"type": "text", "text": block.TextProxy()}
+	}
+	return map[string]any{"type": "text", "text": fmt.Sprintf("[%s omitted: unsupported source format]", block.Type)}
+}
+
 func openAIContentBlock(block domain.ContentBlock, output bool) map[string]any {
 	switch block.Type {
 	case domain.ContentBlockText:
-		itemType := "input_text"
+		kind := "input_text"
 		if output {
-			itemType = "output_text"
+			kind = "output_text"
 		}
-		return map[string]any{"type": itemType, "text": block.TextProxy()}
+		return map[string]any{"type": kind, "text": block.TextProxy()}
 	case domain.ContentBlockImage:
 		item := map[string]any{"type": "input_image"}
-		if block.SourceURL != "" {
-			item["image_url"] = block.SourceURL
-		}
 		if block.ProviderFileID != "" {
 			item["file_id"] = block.ProviderFileID
-		}
-		if block.BlobID != "" {
-			item["blob_id"] = block.BlobID
-		}
-		if block.MIMEType != "" {
-			item["mime_type"] = block.MIMEType
-		}
-		return item
-	case domain.ContentBlockAudio:
-		item := map[string]any{"type": "input_audio"}
-		audio := map[string]any{}
-		if block.SourceURL != "" {
-			audio["url"] = block.SourceURL
-		}
-		if block.ProviderFileID != "" {
-			audio["file_id"] = block.ProviderFileID
-		}
-		if block.MIMEType != "" {
-			audio["mime_type"] = block.MIMEType
-		}
-		if len(audio) > 0 {
-			item["audio"] = audio
-		}
-		if block.BlobID != "" {
-			item["blob_id"] = block.BlobID
-		}
-		return item
-	case domain.ContentBlockVideo:
-		item := map[string]any{"type": "input_video"}
-		video := map[string]any{}
-		if block.SourceURL != "" {
-			video["url"] = block.SourceURL
-		}
-		if block.ProviderFileID != "" {
-			video["file_id"] = block.ProviderFileID
-		}
-		if block.MIMEType != "" {
-			video["mime_type"] = block.MIMEType
-		}
-		if len(video) > 0 {
-			item["video"] = video
-		}
-		if block.BlobID != "" {
-			item["blob_id"] = block.BlobID
+		} else if block.SourceURL != "" {
+			item["image_url"] = block.SourceURL
+		} else {
+			break
 		}
 		return item
 	case domain.ContentBlockFile:
-		item := map[string]any{"type": "file"}
-		if block.SourceURL != "" {
-			item["source_url"] = block.SourceURL
-		}
+		item := map[string]any{"type": "input_file"}
 		if block.ProviderFileID != "" {
 			item["file_id"] = block.ProviderFileID
-		}
-		if block.BlobID != "" {
-			item["blob_id"] = block.BlobID
-		}
-		if block.Filename != "" {
+		} else if _, _, ok := provider.InlineData(block.SourceURL); ok {
+			item["file_data"] = block.SourceURL
 			item["filename"] = block.Filename
-		}
-		if block.MIMEType != "" {
-			item["mime_type"] = block.MIMEType
+		} else if block.SourceURL != "" {
+			item["file_url"] = block.SourceURL
+		} else {
+			break
 		}
 		return item
 	default:
-		if text := block.TextProxy(); text != "" {
-			itemType := "input_text"
-			if output {
-				itemType = "output_text"
-			}
-			return map[string]any{"type": itemType, "text": text}
+		if block.Type != domain.ContentBlockAudio && block.Type != domain.ContentBlockVideo {
+			return map[string]any{"type": "input_text", "text": block.TextProxy()}
 		}
-		return nil
 	}
+	return map[string]any{"type": "input_text", "text": fmt.Sprintf("[%s omitted: unsupported source format]", block.Type)}
 }
 
 func parseChatToolCalls(items []struct {

@@ -160,24 +160,26 @@ func (s *Service) prepareRequest(ctx context.Context, req domain.UnifiedRequest)
 		if !access.Allows(domain.CapabilityMemoryEdit) {
 			req.ToolWriteEnabled = false
 		}
-		if !access.Legacy {
-			session := req.SessionID
-			if session == "" {
-				session = req.ConversationID
-			}
-			if session == "" {
-				session = uuid.NewString()
-			}
-			req.SessionID = session
-			scope, _ := json.Marshal([]string{access.UserID, access.WorkspaceID, access.AgentID, session})
-			req.ConversationID = domain.AccessID("conversation", string(scope))
-			current, err := s.conversations.GetConversation(ctx, req.UserID, req.ConversationID)
-			if err != nil && !errors.Is(err, domain.ErrConversationNotFound) {
-				return domain.UnifiedRequest{}, domain.InjectionResult{}, err
-			}
-			revision := current.Revision
-			req.ExpectedConversationRevision = &revision
+		session := req.SessionID
+		if session == "" {
+			session = req.ConversationID
 		}
+		if session == "" {
+			session = uuid.NewString()
+		}
+		req.SessionID = session
+		scope, _ := json.Marshal([]string{access.UserID, access.WorkspaceID, access.AgentID, session})
+		req.ConversationID = domain.AccessID("conversation", string(scope))
+		var current domain.ConversationRecord
+		var err error
+		if s.conversations != nil {
+			current, err = s.conversations.GetConversation(ctx, req.UserID, req.ConversationID)
+		}
+		if err != nil && !errors.Is(err, domain.ErrConversationNotFound) {
+			return domain.UnifiedRequest{}, domain.InjectionResult{}, err
+		}
+		revision := current.Revision
+		req.ExpectedConversationRevision = &revision
 		if req.RequestMetadata == nil {
 			req.RequestMetadata = map[string]any{}
 		}
@@ -476,13 +478,9 @@ func parseModelReference(value string) (domain.Provider, string) {
 	if value == "" {
 		return "", ""
 	}
-	for _, separator := range []string{":", "/"} {
-		parts := strings.SplitN(value, separator, 2)
-		if len(parts) != 2 {
-			continue
-		}
-		if providerName, ok := domain.ParseProvider(parts[0]); ok {
-			return providerName, strings.TrimSpace(parts[1])
+	if prefix, model, ok := strings.Cut(value, ":"); ok {
+		if providerName, ok := domain.ParseProvider(prefix); ok {
+			return providerName, strings.TrimSpace(model)
 		}
 	}
 	return "", value

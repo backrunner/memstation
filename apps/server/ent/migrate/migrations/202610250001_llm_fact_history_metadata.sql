@@ -11,10 +11,3 @@ BEGIN
  jsonb_build_object('id',NEW.id,'node_id',NEW.node_id,'user_id',NEW.user_id,'generation_id',NEW.generation_id,'conversation_id',NEW.conversation_id,'type','fact','content',NEW.content,'importance',node.importance,'decay_factor',node.decay_factor,'activity_at',COALESCE(node.activity_at,NEW.created_at),'created_at',NEW.created_at,'updated_at',NEW.updated_at,'metadata',COALESCE(NEW.metadata, '{}'::jsonb) || (to_jsonb(NEW)-'content'-'metadata') || jsonb_build_object('valid_from',effective_from)));
  RETURN NEW;
 END $$;
-
--- Normalize snapshots written after the facts metadata column was introduced.
--- Keep historical timestamps, content and authoritative relational fields.
-UPDATE memory_fact_history
-SET document = jsonb_set(document, '{metadata}',
- (document #> '{metadata,metadata}') || ((document -> 'metadata') - 'metadata'))
-WHERE jsonb_typeof(document #> '{metadata,metadata}') = 'object';

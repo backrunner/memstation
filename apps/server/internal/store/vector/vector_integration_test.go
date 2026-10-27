@@ -27,6 +27,9 @@ func TestPGVectorStoreEmbeddingRevisionCAS(t *testing.T) {
 	if _, err = db.ExecContext(ctx, `INSERT INTO workspaces(id,user_id,name,capabilities) VALUES ('personal-' || encode(sha256(convert_to($1,'UTF8')),'hex'),$1,'Fixture','[]') ON CONFLICT DO NOTHING`, userID); err != nil {
 		t.Fatal(err)
 	}
+	if _, err = db.ExecContext(ctx, `INSERT INTO memory_generations(generation_id,user_id,workspace_id,status) VALUES('gen-cas',$1,$2,'processing') ON CONFLICT DO NOTHING`, userID, domain.PersonalWorkspaceID(userID)); err != nil {
+		t.Fatal(err)
+	}
 	const nodeID = "vector-cas-node"
 	if _, err = db.ExecContext(ctx, `DELETE FROM memory_nodes WHERE user_id = $1 AND id = $2`, userID, nodeID); err != nil {
 		t.Fatalf("clean node: %v", err)

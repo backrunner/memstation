@@ -7,5 +7,5 @@ OUT_DIR=${MEMSTATION_INTEGRATION_ARTIFACT_DIR:-"$ROOT_DIR/.artifacts/independent
 mkdir -p "$OUT_DIR"
 OUT_DIR=$(cd "$OUT_DIR" && pwd)
 cd "$ROOT_DIR/apps/server"
-go test -json ./internal/security ./internal/service/ingestion ./internal/service/lifecycle ./internal/service/aibroker ./internal/store/deletionjournal ./internal/store/sql ./internal/transport/http ./internal/transport/grpc ./tests/integration -count=1 >"$OUT_DIR/contracts.jsonl"
+go test -json ./internal/security ./internal/service/ingestion ./internal/service/lifecycle ./internal/service/aibroker ./internal/store/deletionjournal ./internal/store/sql/... ./internal/transport/http ./internal/transport/grpc ./tests/integration -count=1 >"$OUT_DIR/contracts.jsonl"
 printf '{"status":"passed","broker":"deterministic fixture","mimic_joint_acceptance":false,"evidence":"contracts.jsonl"}\n' >"$OUT_DIR/report.json"

@@ -299,7 +299,6 @@ type ComplexityRoot struct {
 		ActivateWorkspaceGeneration func(childComplexity int, scope WorkspaceScope, id string) int
 		ConfigureIntegration        func(childComplexity int, input domain.IntegrationConfig) int
 		ConfigurePartition          func(childComplexity int, input domain.MemoryPartition) int
-		CreateAPIKey                func(childComplexity int, name string) int
 		CreateKeyMemory             func(childComplexity int, key string, value string, category *string) int
 		CreateWorkspace             func(childComplexity int, input domain.Workspace) int
 		CreateWorkspaceAgent        func(childComplexity int, scope WorkspaceScope, name string, capabilities []string) int
@@ -316,7 +315,6 @@ type ComplexityRoot struct {
 		RetractMemoryPublication    func(childComplexity int, scope WorkspaceScope, id string, expectedRevision int64) int
 		RetractSources              func(childComplexity int, scope WorkspaceScope, selector domain.ForgetSelector, idempotencyKey string) int
 		ReviewMemoryCandidate       func(childComplexity int, scope WorkspaceScope, id string, expectedRevision int64, decision string, confirmedKind *string) int
-		RevokeAPIKey                func(childComplexity int, id string) int
 		SetWorkspaceAgentGrant      func(childComplexity int, input domain.WorkspaceGrant) int
 		UpdateFact                  func(childComplexity int, id string, content string) int
 		UpdateImpression            func(childComplexity int, id string, description string) int
@@ -480,7 +478,6 @@ type ComplexityRoot struct {
 		CreatedAt          func(childComplexity int) int
 		DefaultWorkspaceID func(childComplexity int) int
 		ID                 func(childComplexity int) int
-		Legacy             func(childComplexity int) int
 		Name               func(childComplexity int) int
 		Revision           func(childComplexity int) int
 		Status             func(childComplexity int) int
@@ -528,8 +525,6 @@ type MemoryRuntimeInfoResolver interface {
 	RoleAliases(ctx context.Context, obj *domain.MemoryRuntime) (any, error)
 }
 type MutationResolver interface {
-	CreateAPIKey(ctx context.Context, name string) (*APIKey, error)
-	RevokeAPIKey(ctx context.Context, id string) (bool, error)
 	UpdateUserSetting(ctx context.Context, chatModel *string, summaryModel *string, analysisModel *string, embeddingModel *string, toolWriteEnabled *bool, maxInjectionTokens *int) (*UserSetting, error)
 	CreateKeyMemory(ctx context.Context, key string, value string, category *string) (*KeyMemory, error)
 	UpdateKeyMemory(ctx context.Context, id string, value string) (*KeyMemory, error)
@@ -1774,17 +1769,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ConfigurePartition(childComplexity, args["input"].(domain.MemoryPartition)), true
-	case "Mutation.createAPIKey":
-		if e.ComplexityRoot.Mutation.CreateAPIKey == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_createAPIKey_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Mutation.CreateAPIKey(childComplexity, args["name"].(string)), true
 	case "Mutation.createKeyMemory":
 		if e.ComplexityRoot.Mutation.CreateKeyMemory == nil {
 			break
@@ -1961,17 +1945,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ReviewMemoryCandidate(childComplexity, args["scope"].(WorkspaceScope), args["id"].(string), args["expected_revision"].(int64), args["decision"].(string), args["confirmed_kind"].(*string)), true
-	case "Mutation.revokeAPIKey":
-		if e.ComplexityRoot.Mutation.RevokeAPIKey == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_revokeAPIKey_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Mutation.RevokeAPIKey(childComplexity, args["id"].(string)), true
 	case "Mutation.setWorkspaceAgentGrant":
 		if e.ComplexityRoot.Mutation.SetWorkspaceAgentGrant == nil {
 			break
@@ -2777,12 +2750,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WorkspaceAgent.ID(childComplexity), true
-	case "WorkspaceAgent.legacy":
-		if e.ComplexityRoot.WorkspaceAgent.Legacy == nil {
-			break
-		}
-
-		return e.ComplexityRoot.WorkspaceAgent.Legacy(childComplexity), true
 	case "WorkspaceAgent.name":
 		if e.ComplexityRoot.WorkspaceAgent.Name == nil {
 			break
@@ -3063,7 +3030,7 @@ extend type Mutation {
  replayMemoryJob(scope: WorkspaceScope!, id: ID!): Boolean!
 }
 
-type WorkspaceAgent { id: ID!, user_id: ID!, actor_id: ID!, name: String!, status: String!, default_workspace_id: ID!, revision: Long!, legacy: Boolean!, created_at: Time!, updated_at: Time! }
+type WorkspaceAgent { id: ID!, user_id: ID!, actor_id: ID!, name: String!, status: String!, default_workspace_id: ID!, revision: Long!, created_at: Time!, updated_at: Time! }
 type WorkspaceAgentDetail {agent: WorkspaceAgent!, grant: GrantInfo!, workspace: WorkspaceInfo!, effective_capabilities: [String!]!}
 extend type Mutation {createWorkspaceAgent(scope: WorkspaceScope!, name: String!, capabilities: [String!]!): WorkspaceAgent!}
 extend type Query {workspaceAgentDetail(scope: WorkspaceScope!, agent: ID!): WorkspaceAgentDetail!}
@@ -3095,8 +3062,6 @@ type Query {
 }
 
 type Mutation {
-  createAPIKey(name: String!): APIKey!
-  revokeAPIKey(id: ID!): Boolean!
   updateUserSetting(chatModel: String, summaryModel: String, analysisModel: String, embeddingModel: String, toolWriteEnabled: Boolean, maxInjectionTokens: Int): UserSetting!
   createKeyMemory(key: String!, value: String!, category: String): KeyMemory!
   updateKeyMemory(id: ID!, value: String!): KeyMemory!
@@ -3153,16 +3118,6 @@ var parsedSchema = gqlparser.MustLoadSchema(sources...)
 // childFields_* functions provide shared child field context lookups.
 // Each function is generated once per unique object type, deduplicating the
 // switch statements that were previously inlined in every fieldContext_* function.
-
-func (ec *executionContext) childFields_APIKey(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-	switch field.Name {
-	case "id":
-		return ec.fieldContext_APIKey_id(ctx, field)
-	case "prefix":
-		return ec.fieldContext_APIKey_prefix(ctx, field)
-	}
-	return nil, fmt.Errorf("no field named %q was found under type APIKey", field.Name)
-}
 
 func (ec *executionContext) childFields_AcceptanceRecord(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
@@ -3918,8 +3873,6 @@ func (ec *executionContext) childFields_WorkspaceAgent(ctx context.Context, fiel
 		return ec.fieldContext_WorkspaceAgent_default_workspace_id(ctx, field)
 	case "revision":
 		return ec.fieldContext_WorkspaceAgent_revision(ctx, field)
-	case "legacy":
-		return ec.fieldContext_WorkspaceAgent_legacy(ctx, field)
 	case "created_at":
 		return ec.fieldContext_WorkspaceAgent_created_at(ctx, field)
 	case "updated_at":
@@ -4137,20 +4090,6 @@ func (ec *executionContext) field_Mutation_configurePartition_args(ctx context.C
 		return nil, err
 	}
 	args["input"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Mutation_createAPIKey_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "name",
-		func(ctx context.Context, v any) (string, error) {
-			return ec.unmarshalNString2string(ctx, v)
-		})
-	if err != nil {
-		return nil, err
-	}
-	args["name"] = arg0
 	return args, nil
 }
 
@@ -4551,20 +4490,6 @@ func (ec *executionContext) field_Mutation_reviewMemoryCandidate_args(ctx contex
 		return nil, err
 	}
 	args["confirmed_kind"] = arg4
-	return args, nil
-}
-
-func (ec *executionContext) field_Mutation_revokeAPIKey_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
-		func(ctx context.Context, v any) (string, error) {
-			return ec.unmarshalNID2string(ctx, v)
-		})
-	if err != nil {
-		return nil, err
-	}
-	args["id"] = arg0
 	return args, nil
 }
 
@@ -9572,94 +9497,6 @@ func (ec *executionContext) fieldContext_MemorySummary_topicLabel(_ context.Cont
 	return graphql.NewScalarFieldContext("MemorySummary", field, false, false, "String")
 }
 
-func (ec *executionContext) _Mutation_createAPIKey(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_Mutation_createAPIKey(ctx, field)
-		},
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().CreateAPIKey(ctx, fc.Args["name"].(string))
-		},
-		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v *APIKey) graphql.Marshaler {
-			return ec.marshalNAPIKey2ᚖmemstationᚋappsᚋserverᚋgraphᚋgeneratedᚐAPIKey(ctx, selections, v)
-		},
-		true,
-		true,
-	)
-}
-func (ec *executionContext) fieldContext_Mutation_createAPIKey(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.childFields_APIKey(ctx, field)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_createAPIKey_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Mutation_revokeAPIKey(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_Mutation_revokeAPIKey(ctx, field)
-		},
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().RevokeAPIKey(ctx, fc.Args["id"].(string))
-		},
-		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
-			return ec.marshalNBoolean2bool(ctx, selections, v)
-		},
-		true,
-		true,
-	)
-}
-func (ec *executionContext) fieldContext_Mutation_revokeAPIKey(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_revokeAPIKey_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Mutation_updateUserSetting(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13862,29 +13699,6 @@ func (ec *executionContext) fieldContext_WorkspaceAgent_revision(_ context.Conte
 	return graphql.NewScalarFieldContext("WorkspaceAgent", field, false, false, "Long")
 }
 
-func (ec *executionContext) _WorkspaceAgent_legacy(ctx context.Context, field graphql.CollectedField, obj *domain.Agent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return ec.fieldContext_WorkspaceAgent_legacy(ctx, field)
-		},
-		func(ctx context.Context) (any, error) {
-			return obj.Legacy, nil
-		},
-		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
-			return ec.marshalNBoolean2bool(ctx, selections, v)
-		},
-		true,
-		true,
-	)
-}
-func (ec *executionContext) fieldContext_WorkspaceAgent_legacy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("WorkspaceAgent", field, false, false, "Boolean")
-}
-
 func (ec *executionContext) _WorkspaceAgent_created_at(ctx context.Context, field graphql.CollectedField, obj *domain.Agent) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -17797,20 +17611,6 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("Mutation")
-		case "createAPIKey":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_createAPIKey(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "revokeAPIKey":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_revokeAPIKey(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "updateUserSetting":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateUserSetting(ctx, field)
@@ -19057,11 +18857,6 @@ func (ec *executionContext) _WorkspaceAgent(ctx context.Context, sel ast.Selecti
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "legacy":
-			out.Values[i] = ec._WorkspaceAgent_legacy(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "created_at":
 			out.Values[i] = ec._WorkspaceAgent_created_at(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -19604,14 +19399,6 @@ func (ec *executionContext) ___Type(ctx context.Context, sel ast.SelectionSet, o
 // endregion **************************** object.gotpl ****************************
 
 // region    ***************************** type.gotpl *****************************
-
-func (ec *executionContext) marshalNAPIKey2ᚖmemstationᚋappsᚋserverᚋgraphᚋgeneratedᚐAPIKey(ctx context.Context, sel ast.SelectionSet, v *APIKey) graphql.Marshaler {
-	if v == nil {
-		graphql.AddInvalidNullError(ctx, "APIKey!")
-		return graphql.Null
-	}
-	return ec._APIKey(ctx, sel, v)
-}
 
 func (ec *executionContext) marshalNAcceptanceRecord2memstationᚋappsᚋserverᚋinternalᚋdomainᚐEventAcceptance(ctx context.Context, sel ast.SelectionSet, v domain.EventAcceptance) graphql.Marshaler {
 	return ec._AcceptanceRecord(ctx, sel, &v)

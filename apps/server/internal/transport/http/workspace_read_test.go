@@ -8,25 +8,27 @@ import (
 	"testing"
 	"time"
 
+	conversationstore "memstation/apps/server/internal/store/sql/conversation"
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/security"
 	"memstation/apps/server/internal/service/admin"
 	"memstation/apps/server/internal/service/apikey"
 	"memstation/apps/server/internal/service/memory"
 	"memstation/apps/server/internal/service/memorygen"
-	sqlstore "memstation/apps/server/internal/store/sql"
 )
 
 func TestWorkspaceReadContract(t *testing.T) {
 	ctx := context.Background()
 	keys := apikey.NewService(nil)
-	conversations := sqlstore.NewInMemoryConversationRepository()
-	memories := sqlstore.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	for _, user := range []string{"alice", "bob"} {
 		if _, err := keys.Identities().Personal(ctx, user); err != nil {
 			t.Fatal(err)
 		}
-		if err := conversations.PersistExchange(ctx, domain.ConversationRecord{UserID: user, ConversationID: user + "-thread", CreatedAt: time.Now(), UpdatedAt: time.Now()}); err != nil {
+		if err := conversations.PersistExchange(ctx, domain.ConversationRecord{UserID: user, ConversationID: user + "-thread", CreatedAt: time.Now(), UpdatedAt: time.Now(), AgentID: "fixture-agent"}); err != nil {
 			t.Fatal(err)
 		}
 		if err := memories.StoreDocument(ctx, domain.MemoryDocument{ID: user + "-fact", NodeID: user + "-node", UserID: user, Type: domain.MemoryTypeFact, Content: user + " private content", ConversationID: user + "-thread", CreatedAt: time.Now(), UpdatedAt: time.Now()}); err != nil {

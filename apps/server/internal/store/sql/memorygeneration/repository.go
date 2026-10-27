@@ -60,8 +60,8 @@ func (s *Repository) currentDB() *sqlpkg.DB {
 	return s.db.Current()
 }
 
-func CurrentGenerationID(userID string) string {
-	return "gen:current:" + userID
+func CurrentGenerationID(workspaceID string) string {
+	return "gen:current:" + workspaceID
 }
 
 func (s *Repository) DurableTasks() bool { return s.currentDB() != nil }
@@ -82,7 +82,7 @@ func (s *Repository) EnsureActiveGeneration(ctx context.Context, userID string) 
 		}
 		now := time.Now().UTC()
 		generation := domain.MemoryGeneration{
-			GenerationID:      CurrentGenerationID(security.WorkspaceIdentity(ctx, userID)),
+			GenerationID:      CurrentGenerationID(security.WorkspaceID(ctx, userID)),
 			UserID:            userID,
 			WorkspaceID:       security.WorkspaceID(ctx, userID),
 			Status:            domain.MemoryGenerationStatusActivated,
@@ -134,7 +134,7 @@ func (s *Repository) EnsureActiveGeneration(ctx context.Context, userID string) 
         , workspace_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,0,0,0,$11,$12,$12,$12, `+storeaccess.WorkspaceSQL(ctx, "$2::text")+`)
         ON CONFLICT (generation_id) DO NOTHING
     `,
-		CurrentGenerationID(security.WorkspaceIdentity(ctx, userID)),
+		CurrentGenerationID(security.WorkspaceID(ctx, userID)),
 		userID,
 		string(domain.MemoryGenerationStatusActivated),
 		"current",
@@ -995,7 +995,7 @@ func (s *Repository) activateGeneration(ctx context.Context, userID, generationI
 		return domain.MemoryGeneration{}, err
 	}
 	conversationMetadata := string(marshalJSON(map[string]any{"memory_generation_id": generationID}))
-	if generation.GenerationID == CurrentGenerationID(security.WorkspaceIdentity(ctx, userID)) || generation.SourceCount == 0 {
+	if generation.GenerationID == CurrentGenerationID(security.WorkspaceID(ctx, userID)) || generation.SourceCount == 0 {
 		if _, err = tx.ExecContext(ctx, `
         UPDATE conversations
         SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb,
@@ -1037,7 +1037,7 @@ func (s *Repository) DiscardGeneration(ctx context.Context, userID, generationID
 	if userID == "" || generationID == "" {
 		return domain.MemoryGeneration{}, errors.New("user id and generation id are required")
 	}
-	if generationID == CurrentGenerationID(security.WorkspaceIdentity(ctx, userID)) {
+	if generationID == CurrentGenerationID(security.WorkspaceID(ctx, userID)) {
 		return domain.MemoryGeneration{}, errors.New("the bootstrap generation cannot be discarded")
 	}
 	generation, err := s.GetGeneration(ctx, userID, generationID)
@@ -1508,13 +1508,15 @@ func scanSnapshot(ctx context.Context, scanner interface{ Scan(dest ...any) erro
 		return domain.MemorySourceSnapshot{}, err
 	}
 	snapshot.WorkspaceID = security.WorkspaceID(ctx, snapshot.UserID)
-	snapshot.Parts, err = domain.NormalizeMessageParts(snapshot.UserID, snapshot.WorkspaceID, snapshot.ConversationID, snapshot.Parts)
-	if err != nil {
-		return domain.MemorySourceSnapshot{}, err
+	for _, part := range snapshot.Parts {
+		if part.UserID != snapshot.UserID || part.WorkspaceID != snapshot.WorkspaceID || part.ConversationID != snapshot.ConversationID {
+			return domain.MemorySourceSnapshot{}, domain.ErrAccessDenied
+		}
 	}
-	snapshot.Artifacts, err = domain.NormalizePartArtifacts(snapshot.UserID, snapshot.WorkspaceID, snapshot.ConversationID, snapshot.Artifacts)
-	if err != nil {
-		return domain.MemorySourceSnapshot{}, err
+	for _, part := range snapshot.Artifacts {
+		if part.UserID != snapshot.UserID || part.WorkspaceID != snapshot.WorkspaceID || part.ConversationID != snapshot.ConversationID {
+			return domain.MemorySourceSnapshot{}, domain.ErrAccessDenied
+		}
 	}
 	return snapshot, nil
 }

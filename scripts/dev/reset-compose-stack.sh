@@ -57,7 +57,6 @@ ensure_env_file() {
   cat >"$ENV_FILE" <<EOF
 MEMSTATION_ADMIN_TOKEN=ms-admin-$(random_hex 12)
 MEMSTATION_MASTER_KEY=ms-master-$(random_hex 24)
-MEMSTATION_DEV_API_KEY=ms-local-dev
 MEMSTATION_MANAGER_SESSION_KEY=$(random_hex 32)
 EOF
   echo "Created local development env file at $ENV_FILE"
@@ -194,6 +193,5 @@ if [[ $START_SERVICES -eq 1 ]]; then
     echo "- Manager URL: http://127.0.0.1:4173"
   fi
 fi
-echo "- Dev gateway API key: ${MEMSTATION_DEV_API_KEY:-ms-local-dev}"
 echo
 echo "Admin token and master key are stored in $ENV_FILE."

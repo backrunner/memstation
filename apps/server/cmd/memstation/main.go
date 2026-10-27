@@ -84,7 +84,7 @@ func newMigrateCommand() *cobra.Command {
 }
 
 func newSeedCommand() *cobra.Command {
-	var initializeDeletionJournal, verifyRecovery bool
+	var verifyRecovery bool
 	cmd := &cobra.Command{
 		Use:   "seed",
 		Short: "Seed default admin and model capability registry metadata",
@@ -94,11 +94,9 @@ func newSeedCommand() *cobra.Command {
 			if verifyRecovery {
 				return app.RunRecoveryCheck(ctx)
 			}
-			return app.RunSeed(ctx, initializeDeletionJournal)
+			return app.RunSeed(ctx)
 		},
 	}
 	cmd.Flags().BoolVar(&verifyRecovery, "verify-recovery", false, "Verify and replay the latest independent deletion journal without creating seed data")
-	cmd.Flags().BoolVar(&initializeDeletionJournal, "initialize-deletion-journal", false, "Initialize independent deletion history for a first-time legacy upgrade (never use during backup restore)")
-	cmd.MarkFlagsMutuallyExclusive("initialize-deletion-journal", "verify-recovery")
 	return cmd
 }

@@ -106,3 +106,26 @@ func TestServiceRerankJina(t *testing.T) {
 		t.Fatalf("expected doc-1 to win, got %+v", results[0])
 	}
 }
+
+func TestServiceRejectsMalformedRerankResults(t *testing.T) {
+	for _, response := range []string{
+		`{"results":[{"index":0}]}`,
+		`{"results":[{"relevance_score":0.5}]}`,
+		`{"results":[{"index":null,"relevance_score":0.5}]}`,
+		`{"results":[{"index":0,"relevance_score":null}]}`,
+		`{"results":[{"index":0,"relevance_score":-0.1}]}`,
+		`{"results":[{"index":0,"relevance_score":1.1}]}`,
+		`{"results":[{"index":2,"relevance_score":0.5}]}`,
+		`{"results":[{"index":0,"relevance_score":0.5},{"index":0,"relevance_score":0.6}]}`,
+	} {
+		t.Run(response, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(response)) }))
+			defer server.Close()
+			service := NewService(provider.StaticConfigResolver{domain.ProviderCohere: {APIKey: "test", BaseURL: server.URL}}, "cohere:test", 0)
+			results, err := service.Rerank(context.Background(), domain.RerankInput{Query: "question", Documents: []domain.RerankDocument{{ID: "a", Text: "a"}, {ID: "b", Text: "b"}}})
+			if err == nil || len(results) != 0 {
+				t.Fatalf("accepted malformed response: %+v %v", results, err)
+			}
+		})
+	}
+}

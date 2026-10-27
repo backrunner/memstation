@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 
@@ -62,9 +62,7 @@ func (s *Service) Rerank(ctx context.Context, input domain.RerankInput) ([]domai
 		runtime.Provider,
 		http.MethodPost,
 		endpoint,
-		map[string]string{
-			"Authorization": "Bearer " + runtime.APIKey,
-		},
+		rerankHeaders(runtime.APIKey),
 		map[string]any{
 			"model":     runtime.Model,
 			"query":     strings.TrimSpace(input.Query),
@@ -77,8 +75,8 @@ func (s *Service) Rerank(ctx context.Context, input domain.RerankInput) ([]domai
 	}
 
 	type rerankItem struct {
-		Index          int     `json:"index"`
-		RelevanceScore float64 `json:"relevance_score"`
+		Index          *int     `json:"index"`
+		RelevanceScore *float64 `json:"relevance_score"`
 	}
 	type rerankResponse struct {
 		Results []rerankItem `json:"results"`
@@ -96,14 +94,20 @@ func (s *Service) Rerank(ctx context.Context, input domain.RerankInput) ([]domai
 	}
 
 	out := make([]domain.RerankResult, 0, len(results))
+	seen := map[int]bool{}
 	for _, item := range results {
-		if item.Index < 0 || item.Index >= len(input.Documents) {
-			continue
+		if item.Index == nil || item.RelevanceScore == nil {
+			return nil, errors.New("rerank response is missing index or relevance_score")
 		}
+		index, score := *item.Index, *item.RelevanceScore
+		if index < 0 || index >= len(input.Documents) || seen[index] || math.IsNaN(score) || math.IsInf(score, 0) || score < 0 || score > 1 {
+			return nil, errors.New("rerank response contains invalid index or relevance_score")
+		}
+		seen[index] = true
 		out = append(out, domain.RerankResult{
-			DocumentID: input.Documents[item.Index].ID,
-			Index:      item.Index,
-			Score:      item.RelevanceScore,
+			DocumentID: input.Documents[index].ID,
+			Index:      index,
+			Score:      score,
 		})
 	}
 	return out, nil
@@ -140,7 +144,7 @@ func (s *Service) resolveRuntime(ctx context.Context, overrideModel string) (run
 		return runtime{}, errors.New("rerank model is not configured")
 	case result.BaseURL == "":
 		return runtime{}, errors.New("rerank endpoint is not configured")
-	case result.APIKey == "":
+	case result.APIKey == "" && !domain.RerankAPIKeyOptional(result.Provider):
 		return runtime{}, errors.New("rerank api key is not configured")
 	default:
 		return result, nil
@@ -148,26 +152,7 @@ func (s *Service) resolveRuntime(ctx context.Context, overrideModel string) (run
 }
 
 func parseModelReference(value string) (domain.Provider, string, error) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return "", "", errors.New("rerank model is not configured")
-	}
-	for _, separator := range []string{":", "/"} {
-		parts := strings.SplitN(value, separator, 2)
-		if len(parts) != 2 {
-			continue
-		}
-		providerName := domain.NormalizeProvider(parts[0])
-		if !slices.Contains(domain.RerankProviders(), providerName) {
-			continue
-		}
-		modelName := strings.TrimSpace(parts[1])
-		if modelName == "" {
-			return "", "", errors.New("rerank model name is required")
-		}
-		return providerName, modelName, nil
-	}
-	return "", "", errors.New("rerank model must include a provider prefix like cohere:model or jina:model")
+	return domain.ParseRerankModel(value)
 }
 
 func firstNonEmpty(values ...string) string {
@@ -204,3 +189,11 @@ func (s *Service) withTimeout(ctx context.Context) (context.Context, context.Can
 }
 
 var _ ports.Reranker = (*Service)(nil)
+
+func rerankHeaders(key string) map[string]string {
+	headers := map[string]string{}
+	if key != "" {
+		headers["Authorization"] = "Bearer " + key
+	}
+	return headers
+}

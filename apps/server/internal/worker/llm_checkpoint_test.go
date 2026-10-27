@@ -10,10 +10,11 @@ import (
 	"testing"
 	"time"
 
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
 	"memstation/apps/server/internal/domain"
 	analysisservice "memstation/apps/server/internal/service/analysis"
 	"memstation/apps/server/internal/service/memoryllm"
-	"memstation/apps/server/internal/store/sql"
 	"memstation/apps/server/internal/testutil/memoryllmfixture"
 )
 
@@ -43,7 +44,7 @@ func TestAnalysisWorkerHandlesEmptyResultAndFailureWithoutFabricatedMemories(t *
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			repo := sql.NewInMemoryMemoryRepository()
+			repo := memorystore.NewInMemoryMemoryRepository()
 			conversations := conversationsFromRecords(t, "owner", "conversation")
 			record, err := conversations.GetConversation(ctx, "owner", "conversation")
 			if err != nil {
@@ -57,7 +58,7 @@ func TestAnalysisWorkerHandlesEmptyResultAndFailureWithoutFabricatedMemories(t *
 			if err := repo.StoreDocument(ctx, domain.MemoryDocument{ID: "summary", NodeID: "summary-node", Type: domain.MemoryTypeSummary, UserID: "owner", ConversationID: "conversation", Content: "summary"}); err != nil {
 				t.Fatal(err)
 			}
-			services := Services{Conversations: conversations, Memories: repo, Publisher: publisher, Analysis: analysisservice.NewService(fixedGenerator{tc.raw, tc.err})}
+			services := Services{Conversations: conversations, Memories: repo, Publisher: publisher, Analysis: analysisservice.NewService(fixedGenerator{tc.raw, tc.err}), TaskAuthority: fixtureTaskAuthority{}}
 			err = handleAnalysisExtract(nilLogger(), services)(ctx, newTask(t, TypeAnalysisExtract, AnalysisPayload{UserID: "owner", ConversationID: "conversation", SummaryIDs: []string{"summary"}}))
 			if (err != nil) != (tc.err != nil) {
 				t.Fatal(err)
@@ -88,14 +89,14 @@ func TestAnalysisWorkerHandlesEmptyResultAndFailureWithoutFabricatedMemories(t *
 
 func TestValidatedAnalysisCheckpointSurvivesStorageRetry(t *testing.T) {
 	ctx := context.Background()
-	repo := sql.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	generator := &countingGenerator{}
-	conversation := domain.ConversationRecord{UserID: "owner", ConversationID: "conversation", Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "这是确认过的项目事实，不是助手的建议。"}}}
+	conversation := domain.ConversationRecord{UserID: "owner", ConversationID: "conversation", Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "这是确认过的项目事实，不是助手的建议。"}}, AgentID: "fixture-agent"}
 	summary := domain.MemoryDocument{ID: "summary", NodeID: "node-summary", UserID: "owner", ConversationID: "conversation", Type: domain.MemoryTypeSummary, Content: "已确认的项目事实", Metadata: map[string]any{"_llm_summary_checkpoint": newSummaryCheckpoint(conversation, analysisservice.Summary{Summary: "已确认的项目事实", TopicLabel: "项目", Keywords: []string{"项目"}, Importance: 1, DecayFactor: 1, ChunkCount: 1})}}
 	if err := repo.StoreDocument(ctx, summary); err != nil {
 		t.Fatal(err)
 	}
-	services := Services{Memories: repo, Analysis: analysisservice.NewService(generator)}
+	services := Services{Memories: repo, Analysis: analysisservice.NewService(generator), TaskAuthority: fixtureTaskAuthority{}}
 	input := analysisservice.Input{UserID: "owner", ConversationID: "conversation", Conversation: conversation, Summary: summary}
 	first, err := analyzeWithCheckpoint(ctx, services, input)
 	if err != nil {
@@ -131,7 +132,7 @@ func TestValidatedAnalysisCheckpointSurvivesStorageRetry(t *testing.T) {
 
 func TestKeyMemoryRetryReusesOutputAndPreservesConcurrentEdits(t *testing.T) {
 	ctx := context.Background()
-	repo := sql.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	generator := &countingGenerator{}
 	docs := []domain.MemoryDocument{
 		{ID: "summary", NodeID: "summary-node", Type: domain.MemoryTypeSummary, UserID: "owner", ConversationID: "conversation", Content: "summary"},
@@ -142,7 +143,7 @@ func TestKeyMemoryRetryReusesOutputAndPreservesConcurrentEdits(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	services := Services{Memories: repo, Conversations: conversationsFromRecords(t, "owner", "conversation"), Analysis: analysisservice.NewService(generator), AllowedKeyMemoryKeys: map[string]struct{}{"preferences": {}}}
+	services := Services{Memories: repo, Conversations: conversationsFromRecords(t, "owner", "conversation"), Analysis: analysisservice.NewService(generator), AllowedKeyMemoryKeys: map[string]struct{}{"preferences": {}}, TaskAuthority: fixtureTaskAuthority{}}
 	task := newTask(t, TypeKeyMemoryReconcile, KeyMemoryReconcilePayload{UserID: "owner", ConversationID: "conversation"})
 	handler := handleKeyMemoryReconcile(nilLogger(), services)
 	if err := handler(ctx, task); err != nil {
@@ -201,8 +202,8 @@ func (g *competingAnalysisGenerator) Generate(ctx context.Context, r memoryllm.R
 func TestConcurrentAnalysisAdoptsOnePersistedResult(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	repo := sql.NewInMemoryMemoryRepository()
-	conversation := domain.ConversationRecord{UserID: "owner", ConversationID: "conversation", Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "This is the source assertion."}}}
+	repo := memorystore.NewInMemoryMemoryRepository()
+	conversation := domain.ConversationRecord{UserID: "owner", ConversationID: "conversation", Messages: []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "This is the source assertion."}}, AgentID: "fixture-agent"}
 	summary := domain.MemoryDocument{ID: "summary", UserID: "owner", ConversationID: "conversation", Type: domain.MemoryTypeSummary, Content: "summary"}
 	if err := repo.StoreDocument(ctx, summary); err != nil {
 		t.Fatal(err)
@@ -212,7 +213,7 @@ func TestConcurrentAnalysisAdoptsOnePersistedResult(t *testing.T) {
 		t.Fatal(err)
 	}
 	generator := &competingAnalysisGenerator{arrived: make(chan struct{}, 2), release: make(chan struct{})}
-	services := Services{Memories: repo, Analysis: analysisservice.NewService(generator)}
+	services := Services{Memories: repo, Analysis: analysisservice.NewService(generator), TaskAuthority: fixtureTaskAuthority{}}
 	type output struct {
 		result analysisservice.Result
 		err    error

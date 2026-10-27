@@ -5,6 +5,9 @@ import (
 	"testing"
 	"time"
 
+	conversationstore "memstation/apps/server/internal/store/sql/conversation"
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/provider"
 	auditsvc "memstation/apps/server/internal/service/audit"
@@ -12,7 +15,6 @@ import (
 	gatewayservice "memstation/apps/server/internal/service/gateway"
 	memoryservice "memstation/apps/server/internal/service/memory"
 	settingsservice "memstation/apps/server/internal/service/settings"
-	"memstation/apps/server/internal/store/sql"
 	"memstation/apps/server/internal/store/vector"
 	"memstation/apps/server/tests/testutil/mockprovider"
 )
@@ -21,9 +23,9 @@ func TestGatewayUsesUserSettingProviderAndModel(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	conversations := sql.NewInMemoryConversationRepository()
-	outbox := sql.NewInMemoryOutboxRepository()
-	memories := sql.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	outbox := conversationstore.NewInMemoryOutboxRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 	_, err := settings.UpdateForUser(ctx, "user-1", map[string]any{
 		"chat_model": "anthropic:claude-3-7-sonnet",
@@ -34,14 +36,14 @@ func TestGatewayUsesUserSettingProviderAndModel(t *testing.T) {
 
 	service := gatewayservice.NewService(
 		provider.NewRegistry(
-			domain.ProviderOpenAI,
-			mockprovider.New(domain.ProviderOpenAI),
+			domain.ProviderOpenAICompatible,
+			mockprovider.New(domain.ProviderOpenAICompatible),
 			mockprovider.New(domain.ProviderAnthropic),
 		),
 		memoryservice.NewEngine(memories, vector.NewPGVectorStore(nil)),
 		conversationservice.NewService(conversations, outbox, 100, 100000),
 		settings,
-		domain.ProviderOpenAI,
+		domain.ProviderOpenAICompatible,
 	)
 
 	response, _, err := service.Proxy(ctx, domain.UnifiedRequest{
@@ -50,7 +52,7 @@ func TestGatewayUsesUserSettingProviderAndModel(t *testing.T) {
 		Messages: []domain.UnifiedMessage{{
 			Role: domain.RoleUser,
 			Text: "hello",
-		}},
+		}}, AgentID: "fixture-agent",
 	})
 	if err != nil {
 		t.Fatalf("proxy: %v", err)
@@ -67,9 +69,9 @@ func TestGatewayExplicitProviderOverridesUserSetting(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	conversations := sql.NewInMemoryConversationRepository()
-	outbox := sql.NewInMemoryOutboxRepository()
-	memories := sql.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	outbox := conversationstore.NewInMemoryOutboxRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 	_, err := settings.UpdateForUser(ctx, "user-1", map[string]any{
 		"chat_model": "anthropic:claude-3-7-sonnet",
@@ -80,30 +82,30 @@ func TestGatewayExplicitProviderOverridesUserSetting(t *testing.T) {
 
 	service := gatewayservice.NewService(
 		provider.NewRegistry(
-			domain.ProviderOpenAI,
-			mockprovider.New(domain.ProviderOpenAI),
+			domain.ProviderOpenAICompatible,
+			mockprovider.New(domain.ProviderOpenAICompatible),
 			mockprovider.New(domain.ProviderAnthropic),
 		),
 		memoryservice.NewEngine(memories, vector.NewPGVectorStore(nil)),
 		conversationservice.NewService(conversations, outbox, 100, 100000),
 		settings,
-		domain.ProviderOpenAI,
+		domain.ProviderOpenAICompatible,
 	)
 
 	response, _, err := service.Proxy(ctx, domain.UnifiedRequest{
 		UserID:   "user-1",
 		Protocol: domain.ProtocolOpenAIChat,
-		Provider: domain.ProviderOpenAI,
+		Provider: domain.ProviderOpenAICompatible,
 		Model:    "gpt-4.1-mini",
 		Messages: []domain.UnifiedMessage{{
 			Role: domain.RoleUser,
 			Text: "hello",
-		}},
+		}}, AgentID: "fixture-agent",
 	})
 	if err != nil {
 		t.Fatalf("proxy: %v", err)
 	}
-	if response.Provider != domain.ProviderOpenAI {
+	if response.Provider != domain.ProviderOpenAICompatible {
 		t.Fatalf("expected openai provider, got %s", response.Provider)
 	}
 	if response.Model != "gpt-4.1-mini" {
@@ -115,20 +117,20 @@ func TestGatewayProxyStreamPersistsAndFinalizesConversation(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	conversations := sql.NewInMemoryConversationRepository()
-	outbox := sql.NewInMemoryOutboxRepository()
-	memories := sql.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	outbox := conversationstore.NewInMemoryOutboxRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 
 	service := gatewayservice.NewService(
 		provider.NewRegistry(
-			domain.ProviderOpenAI,
-			mockprovider.New(domain.ProviderOpenAI),
+			domain.ProviderOpenAICompatible,
+			mockprovider.New(domain.ProviderOpenAICompatible),
 		),
 		memoryservice.NewEngine(memories, vector.NewPGVectorStore(nil)),
 		conversationservice.NewService(conversations, outbox, 100, 100000),
 		settings,
-		domain.ProviderOpenAI,
+		domain.ProviderOpenAICompatible,
 	)
 
 	events := make([]domain.StreamEvent, 0, 3)
@@ -141,7 +143,7 @@ func TestGatewayProxyStreamPersistsAndFinalizesConversation(t *testing.T) {
 		Messages: []domain.UnifiedMessage{{
 			Role: domain.RoleUser,
 			Text: "hello",
-		}},
+		}}, AgentID: "fixture-agent",
 	}, func(event domain.StreamEvent) error {
 		events = append(events, event)
 		return nil
@@ -178,9 +180,9 @@ func TestGatewayExecutesInjectedMemoryToolCalls(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	conversations := sql.NewInMemoryConversationRepository()
-	outbox := sql.NewInMemoryOutboxRepository()
-	memories := sql.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	outbox := conversationstore.NewInMemoryOutboxRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	if err := memories.StoreDocument(ctx, domain.MemoryDocument{
 		ID:      "summary-1",
 		NodeID:  "node-summary-1",
@@ -196,7 +198,7 @@ func TestGatewayExecutesInjectedMemoryToolCalls(t *testing.T) {
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 	audit := auditsvc.NewService(nil)
 	adapter := &sequenceAdapter{
-		provider: domain.ProviderOpenAI,
+		provider: domain.ProviderOpenAICompatible,
 		steps: []func(domain.UnifiedRequest) *domain.UnifiedResponse{
 			func(req domain.UnifiedRequest) *domain.UnifiedResponse {
 				if len(req.Tools) == 0 {
@@ -205,7 +207,7 @@ func TestGatewayExecutesInjectedMemoryToolCalls(t *testing.T) {
 				return &domain.UnifiedResponse{
 					ResponseID: "resp-tool-1",
 					Protocol:   req.Protocol,
-					Provider:   domain.ProviderOpenAI,
+					Provider:   domain.ProviderOpenAICompatible,
 					Model:      "gpt-4.1-mini",
 					Message: domain.UnifiedMessage{
 						Role: domain.RoleAssistant,
@@ -234,7 +236,7 @@ func TestGatewayExecutesInjectedMemoryToolCalls(t *testing.T) {
 				return &domain.UnifiedResponse{
 					ResponseID: "resp-tool-2",
 					Protocol:   req.Protocol,
-					Provider:   domain.ProviderOpenAI,
+					Provider:   domain.ProviderOpenAICompatible,
 					Model:      "gpt-4.1-mini",
 					Message: domain.UnifiedMessage{
 						Role: domain.RoleAssistant,
@@ -247,11 +249,11 @@ func TestGatewayExecutesInjectedMemoryToolCalls(t *testing.T) {
 	}
 
 	service := gatewayservice.NewService(
-		provider.NewRegistry(domain.ProviderOpenAI, adapter),
+		provider.NewRegistry(domain.ProviderOpenAICompatible, adapter),
 		engine,
 		conversationservice.NewService(conversations, outbox, 100, 100000),
 		settings,
-		domain.ProviderOpenAI,
+		domain.ProviderOpenAICompatible,
 	)
 	service.SetToolRuntime(gatewayservice.NewToolRuntime(memorySvc, audit, map[string]struct{}{
 		"recent_conversation": {},
@@ -264,7 +266,7 @@ func TestGatewayExecutesInjectedMemoryToolCalls(t *testing.T) {
 		Mode:        domain.ModeInject,
 		InjectTools: true,
 		Messages:    []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "What do you remember about the alpha roadmap?"}},
-		ReceivedAt:  now(),
+		ReceivedAt:  now(), AgentID: "fixture-agent",
 	})
 	if err != nil {
 		t.Fatalf("proxy with tools: %v", err)
@@ -298,21 +300,21 @@ func TestGatewayExecutesWhitelistedWriteKeyMemoryTool(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	conversations := sql.NewInMemoryConversationRepository()
-	outbox := sql.NewInMemoryOutboxRepository()
-	memories := sql.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	outbox := conversationstore.NewInMemoryOutboxRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	engine := memoryservice.NewEngine(memories, vector.NewPGVectorStore(nil))
 	memorySvc := memoryservice.NewService(engine, memories)
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 	audit := auditsvc.NewService(nil)
 	adapter := &sequenceAdapter{
-		provider: domain.ProviderOpenAI,
+		provider: domain.ProviderOpenAICompatible,
 		steps: []func(domain.UnifiedRequest) *domain.UnifiedResponse{
 			func(req domain.UnifiedRequest) *domain.UnifiedResponse {
 				return &domain.UnifiedResponse{
 					ResponseID: "resp-write-1",
 					Protocol:   req.Protocol,
-					Provider:   domain.ProviderOpenAI,
+					Provider:   domain.ProviderOpenAICompatible,
 					Model:      "gpt-4.1-mini",
 					Message: domain.UnifiedMessage{
 						Role: domain.RoleAssistant,
@@ -332,7 +334,7 @@ func TestGatewayExecutesWhitelistedWriteKeyMemoryTool(t *testing.T) {
 				return &domain.UnifiedResponse{
 					ResponseID: "resp-write-2",
 					Protocol:   req.Protocol,
-					Provider:   domain.ProviderOpenAI,
+					Provider:   domain.ProviderOpenAICompatible,
 					Model:      "gpt-4.1-mini",
 					Message: domain.UnifiedMessage{
 						Role: domain.RoleAssistant,
@@ -345,11 +347,11 @@ func TestGatewayExecutesWhitelistedWriteKeyMemoryTool(t *testing.T) {
 	}
 
 	service := gatewayservice.NewService(
-		provider.NewRegistry(domain.ProviderOpenAI, adapter),
+		provider.NewRegistry(domain.ProviderOpenAICompatible, adapter),
 		engine,
 		conversationservice.NewService(conversations, outbox, 100, 100000),
 		settings,
-		domain.ProviderOpenAI,
+		domain.ProviderOpenAICompatible,
 	)
 	service.SetToolRuntime(gatewayservice.NewToolRuntime(memorySvc, audit, map[string]struct{}{
 		"recent_conversation": {},
@@ -363,7 +365,7 @@ func TestGatewayExecutesWhitelistedWriteKeyMemoryTool(t *testing.T) {
 		InjectTools:      true,
 		ToolWriteEnabled: true,
 		Messages:         []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "Remember the latest conversation id."}},
-		ReceivedAt:       now(),
+		ReceivedAt:       now(), AgentID: "fixture-agent",
 	})
 	if err != nil {
 		t.Fatalf("proxy with write tool: %v", err)
@@ -388,21 +390,21 @@ func TestGatewayDisablesMemoryPersistenceAndToolWritesPerRequest(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	conversations := sql.NewInMemoryConversationRepository()
-	outbox := sql.NewInMemoryOutboxRepository()
-	memories := sql.NewInMemoryMemoryRepository()
+	conversations := conversationstore.NewInMemoryConversationRepository()
+	outbox := conversationstore.NewInMemoryOutboxRepository()
+	memories := memorystore.NewInMemoryMemoryRepository()
 	engine := memoryservice.NewEngine(memories, vector.NewPGVectorStore(nil))
 	memorySvc := memoryservice.NewService(engine, memories)
 	settings := settingsservice.NewService(nil, nil, "", "", "", "", 2048)
 	audit := auditsvc.NewService(nil)
 	adapter := &sequenceAdapter{
-		provider: domain.ProviderOpenAI,
+		provider: domain.ProviderOpenAICompatible,
 		steps: []func(domain.UnifiedRequest) *domain.UnifiedResponse{
 			func(req domain.UnifiedRequest) *domain.UnifiedResponse {
 				return &domain.UnifiedResponse{
 					ResponseID: "resp-persist-1",
 					Protocol:   req.Protocol,
-					Provider:   domain.ProviderOpenAI,
+					Provider:   domain.ProviderOpenAICompatible,
 					Model:      "gpt-4.1-mini",
 					Message: domain.UnifiedMessage{
 						Role: domain.RoleAssistant,
@@ -438,7 +440,7 @@ func TestGatewayDisablesMemoryPersistenceAndToolWritesPerRequest(t *testing.T) {
 				return &domain.UnifiedResponse{
 					ResponseID: "resp-persist-2",
 					Protocol:   req.Protocol,
-					Provider:   domain.ProviderOpenAI,
+					Provider:   domain.ProviderOpenAICompatible,
 					Model:      "gpt-4.1-mini",
 					Message: domain.UnifiedMessage{
 						Role: domain.RoleAssistant,
@@ -451,11 +453,11 @@ func TestGatewayDisablesMemoryPersistenceAndToolWritesPerRequest(t *testing.T) {
 	}
 
 	service := gatewayservice.NewService(
-		provider.NewRegistry(domain.ProviderOpenAI, adapter),
+		provider.NewRegistry(domain.ProviderOpenAICompatible, adapter),
 		engine,
 		conversationservice.NewService(conversations, outbox, 100, 100000),
 		settings,
-		domain.ProviderOpenAI,
+		domain.ProviderOpenAICompatible,
 	)
 	service.SetToolRuntime(gatewayservice.NewToolRuntime(memorySvc, audit, map[string]struct{}{
 		"recent_conversation": {},
@@ -472,7 +474,7 @@ func TestGatewayDisablesMemoryPersistenceAndToolWritesPerRequest(t *testing.T) {
 		SourceRetain:     boolRef(false),
 		EndConversation:  true,
 		Messages:         []domain.UnifiedMessage{{Role: domain.RoleUser, Text: "Remember this conversation."}},
-		ReceivedAt:       now(),
+		ReceivedAt:       now(), AgentID: "fixture-agent",
 	})
 	if err != nil {
 		t.Fatalf("proxy with disabled persistence: %v", err)

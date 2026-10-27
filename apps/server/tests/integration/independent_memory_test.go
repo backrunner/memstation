@@ -20,6 +20,12 @@ import (
 	"testing"
 	"time"
 
+	aicallstore "memstation/apps/server/internal/store/sql/aicall"
+	conversationstore "memstation/apps/server/internal/store/sql/conversation"
+	ingestionstore "memstation/apps/server/internal/store/sql/ingestion"
+	lifecyclestore "memstation/apps/server/internal/store/sql/lifecycle"
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -45,7 +51,6 @@ import (
 	"memstation/apps/server/internal/service/memorygen"
 	"memstation/apps/server/internal/service/memoryllm"
 	"memstation/apps/server/internal/store/deletionjournal"
-	sqlstore "memstation/apps/server/internal/store/sql"
 	vectorstore "memstation/apps/server/internal/store/vector"
 	grpctransport "memstation/apps/server/internal/transport/grpc"
 	httptransport "memstation/apps/server/internal/transport/http"
@@ -117,6 +122,14 @@ func (p isolatedQueue) Publish(ctx context.Context, m domain.TaskMessage) error 
 // Exercises real PostgreSQL/outbox/Redis/workers and both data transports. The
 // broker is deliberately deterministic: this test makes no quality claim.
 func TestIndependentMemoryPipelinePostgresRedisBroker(t *testing.T) {
+	testIndependentMemoryPipeline(t, false)
+}
+
+func TestIndependentMemorySemanticEpisodesPostgresRedisBroker(t *testing.T) {
+	testIndependentMemoryPipeline(t, true)
+}
+
+func testIndependentMemoryPipeline(t *testing.T, episodes bool) {
 	redisURL := os.Getenv("MEMSTATION_TEST_REDIS_URL")
 	if redisURL == "" {
 		t.Skip("Redis required")
@@ -129,27 +142,27 @@ func TestIndependentMemoryPipelinePostgresRedisBroker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lifeRepo := sqlstore.NewMemoryLifecycleRepository(handle)
+	lifeRepo := lifecyclestore.NewMemoryLifecycleRepository(handle)
 	lifeRepo.SetDeletionJournal(journal)
 	if err = lifeRepo.EnsureDeletionJournal(ctx); err != nil {
 		t.Fatal(err)
 	}
-	gate := sqlstore.NewMemoryGate(lifeRepo)
-	ingestRepo := sqlstore.NewDurableIngestionRepository(handle)
+	gate := lifecyclestore.NewMemoryGate(lifeRepo)
+	ingestRepo := ingestionstore.NewDurableIngestionRepository(handle)
 	ingestRepo.SetDeletionJournal(journal)
 	ingest := ingestion.NewService(ingestRepo, 8192)
 	life := lifecycle.NewService(lifeRepo)
 	life.SetReady(gate.Check)
 	brokerHTTP := httptest.NewServer(&mockbroker.Handler{Credential: "fixture-broker", FailNext: true})
 	defer brokerHTTP.Close()
-	broker, err := aibroker.New(aibroker.Config{BaseURL: brokerHTTP.URL + "/v1", Credential: "fixture-broker", Roles: map[string]string{"summary": "memory.summary", "analysis": "memory.analysis", "embedding": "memory.embedding", "rerank": "memory.rerank"}, Embedding: domain.EmbeddingIdentity{ModelVersion: "fixture-embedding-v1", Dimensions: 3, Fingerprint: "fixture-embedding-v1:3"}, Timeout: time.Second}, sqlstore.NewAICallRepository(handle))
+	broker, err := aibroker.New(aibroker.Config{BaseURL: brokerHTTP.URL + "/v1", Credential: "fixture-broker", Roles: map[string]string{"summary": "memory.summary", "analysis": "memory.analysis", "embedding": "memory.embedding", "rerank": "memory.rerank"}, Embedding: domain.EmbeddingIdentity{ModelVersion: "fixture-embedding-v1", Dimensions: 3, Fingerprint: "fixture-embedding-v1:3"}, Timeout: time.Second}, aicallstore.NewAICallRepository(handle))
 	if err != nil {
 		t.Fatal(err)
 	}
 	llm := memoryllm.NewClient(nil, nil, time.Second)
 	llm.SetRuntime(broker)
-	memories := sqlstore.NewPostgresMemoryRepository(db)
-	conversations := sqlstore.NewPostgresConversationRepository(db)
+	memories := memorystore.NewPostgresMemoryRepository(db)
+	conversations := conversationstore.NewPostgresConversationRepository(db)
 	vectors := vectorstore.NewPGVectorStore(handle)
 	vectors.SetEmbedder(broker)
 	gens := memorygen.NewService(handle, "memory.embedding")
@@ -171,7 +184,7 @@ func TestIndependentMemoryPipelinePostgresRedisBroker(t *testing.T) {
 	defer inspector.Close()
 	queue := "contract-" + uuid.NewString()
 	publisher := isolatedQueue{worker.NewPublisher(logger, client), queue}
-	relay := worker.NewRelay(logger, sqlstore.NewPostgresOutboxRepository(db), publisher)
+	relay := worker.NewRelay(logger, conversationstore.NewPostgresOutboxRepository(db), publisher)
 	relay.SetTaskAuthority(ingestRepo)
 	var failCleanup atomic.Bool
 	processOperation := func(c context.Context, id string) error {
@@ -180,7 +193,7 @@ func TestIndependentMemoryPipelinePostgresRedisBroker(t *testing.T) {
 		}
 		return lifeRepo.ProcessOperation(c, id)
 	}
-	mux := worker.NewServeMux(logger, worker.Services{Scorer: scorer, DataReady: gate.Check, TaskAuthority: ingestRepo, Jobs: ingestRepo, AcknowledgeReceipt: ingestRepo.AcknowledgeReceipt, ProcessOperation: processOperation, Conversations: conversations, Memories: memories, MemoryService: memory, Generations: gens, Vectors: vectors, Publisher: publisher, Analysis: analysis.NewService(llm), AllowedKeyMemoryKeys: map[string]struct{}{}})
+	mux := worker.NewServeMux(logger, worker.Services{Scorer: scorer, DataReady: gate.Check, TaskAuthority: ingestRepo, Jobs: ingestRepo, AcknowledgeReceipt: ingestRepo.AcknowledgeReceipt, ProcessOperation: processOperation, Conversations: conversations, Memories: memories, MemoryService: memory, Generations: gens, Vectors: vectors, Publisher: publisher, Analysis: analysis.NewServiceWithOptions(llm, analysis.Options{SemanticEpisodes: episodes}), AllowedKeyMemoryKeys: map[string]struct{}{}})
 	server := asynq.NewServer(opt, asynq.Config{Concurrency: 4, Queues: map[string]int{queue: 1}, RetryDelayFunc: worker.MemoryRetryDelay, ShutdownTimeout: time.Second, TaskCheckInterval: 100 * time.Millisecond, ErrorHandler: asynq.ErrorHandlerFunc(func(_ context.Context, task *asynq.Task, err error) { t.Log(task.Type(), err) })})
 	if err = server.Start(mux); err != nil {
 		t.Fatal(err)
@@ -203,7 +216,7 @@ func TestIndependentMemoryPipelinePostgresRedisBroker(t *testing.T) {
 	}
 	sessions := security.NewAdminSessionManager("fixture-session", time.Hour)
 	auth := security.Authenticator{AdminToken: "fixture-admin", SessionManager: sessions, LookupPrincipal: keys.LookupPrincipalByHash, ResolveAccess: keys.ResolveAccess}
-	usage := aibroker.NewUsageService(sqlstore.NewAICallRepository(handle), broker)
+	usage := aibroker.NewUsageService(aicallstore.NewAICallRepository(handle), broker)
 	control := memorycontrol.NewService(lifeRepo, inspector.RunTask)
 	graph := &graphresolver.Resolver{Identity: identity, Ingestion: ingest, Lifecycle: life, MemoryControlService: control, AIUsage: usage, Generations: gens}
 	httpServer := httptest.NewServer(httptransport.NewRouter(httptransport.Dependencies{GraphQL: graph, Generations: gens, MemoryControl: control, Logger: logger, Auth: auth, APIKeys: keys, Ingestion: ingest, Lifecycle: life, Memory: memory, AIUsage: usage, DataReady: gate.Check}))
@@ -351,6 +364,17 @@ func TestIndependentMemoryPipelinePostgresRedisBroker(t *testing.T) {
 				t.Fatalf("unbound actor/source %+v", doc)
 			}
 		}
+		if episodes {
+			units, e := memories.ListDocuments(scope, owner, []domain.MemoryType{domain.MemoryTypeEpisode}, 20)
+			if e != nil || len(units) == 0 {
+				t.Fatal("episodes were not stored through worker", e)
+			}
+			for _, unit := range units {
+				if len(unit.SourceRefs) == 0 || unit.WorkspaceID != receipts[i].WorkspaceID || unit.Metadata["semantic_unit_version"] != "episode_v1" {
+					t.Fatal("episode lost scoped provenance")
+				}
+			}
+		}
 		var recalled domain.SearchResult
 		if code := request(tokens[i], "POST", "/api/v1/memory/search", "", map[string]any{"query": "同名的人在哪里工作？", "top_n": 10}, &recalled); code != 200 {
 			t.Fatalf("recall %d", code)
@@ -358,10 +382,17 @@ func TestIndependentMemoryPipelinePostgresRedisBroker(t *testing.T) {
 		if len(recalled.Memories) == 0 {
 			t.Fatal("indexed facts not recalled")
 		}
+		recalledEpisode := false
 		for _, doc := range recalled.Memories {
+			if doc.Type == domain.MemoryTypeEpisode {
+				recalledEpisode = true
+			}
 			if doc.WorkspaceID != receipts[i].WorkspaceID {
 				t.Fatal("foreign recall", doc.NodeID)
 			}
+		}
+		if episodes && !recalledEpisode {
+			t.Fatal("default retrieval omitted stored episode")
 		}
 	}
 
@@ -451,6 +482,12 @@ func TestIndependentMemoryPipelinePostgresRedisBroker(t *testing.T) {
 		if err != nil || progress.Status != "complete" || progress.GenerationID != rebuilt.GenerationID {
 			t.Fatalf("rebuilt watermark %+v %v", progress, err)
 		}
+		if episodes {
+			carried, e := memories.ListDocuments(scopes[rebuildIndex], owner, []domain.MemoryType{domain.MemoryTypeEpisode}, 20)
+			if e != nil || len(carried) == 0 {
+				t.Fatal("generation switch lost episodes", e)
+			}
+		}
 		if rebuildIndex == 0 {
 			preserved, e := life.Inspect(privateAdmin, approved.ResultNodeID)
 			if e != nil || preserved.Content != candidate.Content || preserved.GenerationID != rebuilt.GenerationID {
@@ -484,7 +521,7 @@ func TestIndependentMemoryPipelinePostgresRedisBroker(t *testing.T) {
 		t.Fatal("broker ledger incomplete", calls, err)
 	}
 	var operation domain.MemoryOperation
-	engine.SetRerankConfig(memoryservice.RerankConfig{Model: "memory.rerank", BlendWeight: .35})
+	engine.SetRerankConfig(memoryservice.RerankConfig{Model: "memory.rerank"})
 	invoked := false
 	engine.SetReranker(contractReranker(func(callCtx context.Context, in domain.RerankInput) ([]domain.RerankResult, error) {
 		invoked = true

@@ -27,12 +27,13 @@ const (
 
 const (
 	ProviderOpenAICompatible Provider = "openai_compatible"
-	ProviderOpenAI           Provider = ProviderOpenAICompatible
 	ProviderOpenAIResponses  Provider = "openai_responses"
 	ProviderAnthropic        Provider = "anthropic"
 	ProviderGemini           Provider = "gemini"
 	ProviderCohere           Provider = "cohere"
 	ProviderJina             Provider = "jina"
+	ProviderOpenRouter       Provider = "openrouter"
+	ProviderRerankCompatible Provider = "rerank_compatible"
 )
 
 const (
@@ -66,6 +67,7 @@ const (
 	MemoryTypeFact        MemoryType = "fact"
 	MemoryTypeKeyMemory   MemoryType = "key_memory"
 	MemoryTypeEvent       MemoryType = "event"
+	MemoryTypeEpisode     MemoryType = "episode"
 	MemoryTypeTask        MemoryType = "task"
 	MemoryTypeProcedure   MemoryType = "procedure"
 	MemoryTypeArtifact    MemoryType = "artifact"
@@ -88,7 +90,7 @@ const (
 
 func IsGenericMemoryType(value MemoryType) bool {
 	switch value {
-	case MemoryTypeEvent,
+	case MemoryTypeEpisode, MemoryTypeEvent,
 		MemoryTypeTask,
 		MemoryTypeProcedure,
 		MemoryTypeArtifact,
@@ -120,6 +122,7 @@ func DefaultSearchMemoryTypes(includeSegments bool) []MemoryType {
 		MemoryTypeFact,
 		MemoryTypeKeyMemory,
 		MemoryTypeEvent,
+		MemoryTypeEpisode,
 		MemoryTypeTask,
 		MemoryTypeProcedure,
 		MemoryTypeArtifact,
@@ -138,6 +141,7 @@ func DefaultAdminMemoryTypes() []MemoryType {
 		MemoryTypeImpression,
 		MemoryTypeFact,
 		MemoryTypeEvent,
+		MemoryTypeEpisode,
 		MemoryTypeTask,
 		MemoryTypeProcedure,
 		MemoryTypeArtifact,
@@ -218,6 +222,8 @@ type UnifiedRequest struct {
 	Mode                         Mode             `json:"mode"`
 	Model                        string           `json:"model,omitempty"`
 	MaxOutputTokens              int              `json:"max_output_tokens,omitempty"`
+	ReasoningEffort              string           `json:"-"`
+	Temperature                  *float64         `json:"-"`
 	JSONOutput                   bool             `json:"-"`
 	Stream                       bool             `json:"stream"`
 	EndConversation              bool             `json:"end_conversation"`
@@ -270,34 +276,16 @@ type StreamEvent struct {
 }
 
 type ModelCapability struct {
-	ID             string   `json:"id"`
-	Provider       Provider `json:"provider"`
-	Role           string   `json:"role"`
-	SupportsTools  bool     `json:"supports_tools"`
-	SupportsStream bool     `json:"supports_stream"`
+	InputModalities []string `json:"input_modalities"`
+	ID              string   `json:"id"`
+	Provider        Provider `json:"provider"`
+	Role            string   `json:"role"`
+	SupportsTools   bool     `json:"supports_tools"`
+	SupportsStream  bool     `json:"supports_stream"`
 }
 
 func NormalizeProvider(value string) Provider {
-	normalized := strings.ToLower(strings.TrimSpace(value))
-	normalized = strings.ReplaceAll(normalized, "-", "_")
-	switch normalized {
-	case "", "default":
-		return ""
-	case "openai", "openai_compatible":
-		return ProviderOpenAICompatible
-	case "openai_responses", "responses", "response":
-		return ProviderOpenAIResponses
-	case "anthropic", "anthropic_messages", "messages":
-		return ProviderAnthropic
-	case "gemini", "google", "google_genai":
-		return ProviderGemini
-	case "cohere":
-		return ProviderCohere
-	case "jina", "jina_ai":
-		return ProviderJina
-	default:
-		return Provider(normalized)
-	}
+	return Provider(strings.ToLower(strings.TrimSpace(value)))
 }
 
 func ParseProvider(value string) (Provider, bool) {
@@ -329,7 +317,14 @@ func RerankProviders() []Provider {
 	return []Provider{
 		ProviderCohere,
 		ProviderJina,
+		ProviderOpenRouter,
+		ProviderRerankCompatible,
 	}
+}
+
+// RerankAPIKeyOptional describes protocol authentication, not model capability.
+func RerankAPIKeyOptional(provider Provider) bool {
+	return provider == ProviderRerankCompatible
 }
 
 func (b ContentBlock) TextProxy() string {
@@ -337,6 +332,13 @@ func (b ContentBlock) TextProxy() string {
 		return strings.TrimSpace(b.Text)
 	}
 	switch b.Type {
+	case ContentBlockImage, ContentBlockAudio, ContentBlockVideo, ContentBlockFile:
+		for _, key := range []string{"text", "ocr_text", "caption", "transcript", "summary", "excerpt"} {
+			if value, ok := b.Metadata[key].(string); ok && strings.TrimSpace(value) != "" {
+				return strings.TrimSpace(value)
+			}
+		}
+		return ""
 	case ContentBlockToolUse, ContentBlockToolResult, ContentBlockJSON, ContentBlockUnknown:
 		return strings.TrimSpace(b.Raw)
 	default:

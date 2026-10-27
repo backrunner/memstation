@@ -24,9 +24,9 @@ func TestBuildSegmentsCreatesOrderedOverlappingDialogueWindows(t *testing.T) {
 	}
 
 	segments := BuildSegments("user-1", "conv-1", messages, time.Date(2026, 3, 22, 12, 0, 0, 0, time.UTC), SegmentOptions{
-		MaxMessages:   4,
-		Overlap:       1,
-		MaxCharacters: 1024,
+		MaxMessages: 4,
+		Overlap:     1,
+		MaxBytes:    1024,
 	})
 	if len(segments) != 3 {
 		t.Fatalf("expected 3 segments, got %d", len(segments))

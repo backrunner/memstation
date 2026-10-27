@@ -37,7 +37,7 @@ func segmentDocument(segment domain.ConversationSegment) domain.MemoryDocument {
 	}
 }
 
-func storeSegmentDocuments(ctx context.Context, services Services, segments []domain.ConversationSegment, summaryDoc domain.MemoryDocument, referenceTime time.Time, parts []domain.MessagePart, artifacts []domain.MessagePartArtifact) ([]domain.MemoryDocument, error) {
+func storeSegmentDocuments(ctx context.Context, services Services, segments []domain.ConversationSegment, summaryDoc domain.MemoryDocument, referenceTime time.Time, parts []domain.MessagePart, artifacts []domain.MessagePartArtifact, messages []domain.UnifiedMessage) ([]domain.MemoryDocument, error) {
 	if services.Memories == nil || len(segments) == 0 {
 		return nil, nil
 	}
@@ -45,13 +45,17 @@ func storeSegmentDocuments(ctx context.Context, services Services, segments []do
 	stored := make([]domain.MemoryDocument, 0, len(segments))
 	for idx, segment := range segments {
 		doc := segmentDocument(segment)
+		doc.Metadata["source_conversation_revision"] = summaryDoc.Metadata["source_conversation_revision"]
+		evidences, err := segmentNodeEvidences(doc, parts, artifacts, messages)
+		if err != nil {
+			return nil, err
+		}
 		if err := applyDocumentScore(ctx, services.Scorer, &doc, referenceTime); err != nil {
 			return nil, err
 		}
 		if err := services.Memories.StoreDocument(ctx, doc); err != nil {
 			return nil, err
 		}
-		evidences := buildNodeEvidences(doc.UserID, doc.GenerationID, doc.NodeID, doc.ConversationID, parts, artifacts, stringSliceValue(doc.Metadata, "source_part_ids"), stringSliceValue(doc.Metadata, "source_artifact_ids"))
 		if err := storeDocumentEvidences(ctx, services, doc.UserID, doc.GenerationID, doc.NodeID, doc.ConversationID, evidences); err != nil {
 			return nil, err
 		}
@@ -124,7 +128,7 @@ func cleanupStaleSegments(ctx context.Context, services Services, userID, genera
 		return nil
 	}
 	for _, nodeID := range deletedNodeIDs {
-		if err := services.Vectors.DeleteByNode(ctx, userID, nodeID); err != nil {
+		if err := services.Vectors.DeleteByNode(ctx, domain.VectorDeleteRequest{UserID: userID, NodeID: nodeID, RequireMissingNode: true}); err != nil {
 			return err
 		}
 	}
@@ -151,7 +155,7 @@ func applyGenerationToSegments(userID, generationID string, segments []domain.Co
 func scopeStableID(userID, generationID, baseID string) string {
 	baseID = strings.TrimSpace(baseID)
 	generationID = strings.TrimSpace(generationID)
-	if baseID == "" || generationID == "" || generationID == currentGenerationID(userID) || strings.HasPrefix(baseID, generationID+":") {
+	if baseID == "" || generationID == "" || strings.HasPrefix(baseID, generationID+":") {
 		return baseID
 	}
 	return generationID + ":" + baseID

@@ -16,10 +16,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
 	"memstation/apps/server/internal/bootstrap"
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/runtimeconfig"
-	sqlstore "memstation/apps/server/internal/store/sql"
 	vectorstore "memstation/apps/server/internal/store/vector"
 )
 
@@ -162,7 +163,7 @@ func RunStoreLoad(ctx context.Context, dataset Dataset, options StoreLoadOptions
 		}
 	}
 	report.UniqueTexts = len(unique)
-	repo := sqlstore.NewPostgresMemoryRepository(options.Database)
+	repo := memorystore.NewPostgresMemoryRepository(options.Database)
 	vectors := vectorstore.NewPGVectorStore(runtimeconfig.NewStaticDBHandle(options.Database))
 	var wg sync.WaitGroup
 	var firstErr error

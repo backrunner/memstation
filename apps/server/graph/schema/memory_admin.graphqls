@@ -64,7 +64,7 @@ extend type Mutation {
  replayMemoryJob(scope: WorkspaceScope!, id: ID!): Boolean!
 }
 
-type WorkspaceAgent { id: ID!, user_id: ID!, actor_id: ID!, name: String!, status: String!, default_workspace_id: ID!, revision: Long!, legacy: Boolean!, created_at: Time!, updated_at: Time! }
+type WorkspaceAgent { id: ID!, user_id: ID!, actor_id: ID!, name: String!, status: String!, default_workspace_id: ID!, revision: Long!, created_at: Time!, updated_at: Time! }
 type WorkspaceAgentDetail {agent: WorkspaceAgent!, grant: GrantInfo!, workspace: WorkspaceInfo!, effective_capabilities: [String!]!}
 extend type Mutation {createWorkspaceAgent(scope: WorkspaceScope!, name: String!, capabilities: [String!]!): WorkspaceAgent!}
 extend type Query {workspaceAgentDetail(scope: WorkspaceScope!, agent: ID!): WorkspaceAgentDetail!}

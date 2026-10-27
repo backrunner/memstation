@@ -217,6 +217,15 @@ type RerankResult struct {
 	Score      float64 `json:"score"`
 }
 
+// VectorDeleteRequest deletes a confirmed tombstone revision or an absent node.
+// Exactly one condition must be supplied; cleanup cannot erase a recreated node.
+type VectorDeleteRequest struct {
+	UserID             string
+	NodeID             string
+	EmbeddingRevision  int64
+	RequireMissingNode bool
+}
+
 type VectorUpsertRequest struct {
 	PartitionID       string    `json:"partition_id,omitempty"`
 	WorkspaceID       string    `json:"workspace_id,omitempty"`

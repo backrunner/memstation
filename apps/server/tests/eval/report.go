@@ -17,6 +17,7 @@ func WriteArtifacts(report BenchmarkReport, outDir string) error {
 	}
 
 	aggregate := struct {
+		Coverage     *DatasetCoverage    `json:"coverage,omitempty"`
 		Dataset      string              `json:"dataset"`
 		GeneratedAt  string              `json:"generated_at"`
 		Embedding    EmbeddingRunInfo    `json:"embedding"`
@@ -24,6 +25,7 @@ func WriteArtifacts(report BenchmarkReport, outDir string) error {
 		Comparisons  []VariantComparison `json:"comparisons,omitempty"`
 		Expectations SmokeExpectations   `json:"expectations,omitempty"`
 	}{
+		Coverage:     report.Coverage,
 		Dataset:      report.Dataset,
 		GeneratedAt:  report.GeneratedAt.Format("2006-01-02T15:04:05Z07:00"),
 		Embedding:    report.Embedding,
@@ -84,6 +86,9 @@ func markdownReport(report BenchmarkReport) string {
 	}
 	if report.Description != "" {
 		fmt.Fprintf(&builder, "- Description: %s\n", report.Description)
+	}
+	if c := report.Coverage; c != nil {
+		fmt.Fprintf(&builder, "- Coverage: %d scored / %d eligible / %d source questions; %d category-excluded, %d empty, %d without evidence, %d unresolved-only, %d partially unresolved (%d unresolved references)\n", c.ScoredQuestions, c.EligibleQuestions, c.SourceQuestions, c.ExcludedCategoryQuestions, c.ExcludedEmptyQuestions, c.NoEvidenceQuestions, c.UnresolvedOnlyQuestions, c.PartiallyUnresolvedQuestions, c.UnresolvedReferenceCount)
 	}
 	builder.WriteString("\n## Aggregate Metrics\n\n")
 	builder.WriteString("| Variant | Recall@3 | MRR | nDCG@5 | Negative leakage | Wrong-user leakage | Stale top3 | Relation hit |\n")

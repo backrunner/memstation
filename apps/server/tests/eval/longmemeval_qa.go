@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,19 +16,26 @@ import (
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/provider"
+	"memstation/apps/server/internal/service/memoryllm"
 )
 
 type LongMemEvalQAJudgeOptions struct {
-	Model   string        `json:"model,omitempty"`
-	BaseURL string        `json:"base_url,omitempty"`
-	APIKey  string        `json:"-"`
-	Timeout time.Duration `json:"-"`
+	MaxOutputTokens int           `json:"max_output_tokens,omitempty"`
+	Temperature     *float64      `json:"temperature,omitempty"`
+	ReasoningEffort string        `json:"reasoning_effort,omitempty"`
+	Model           string        `json:"model,omitempty"`
+	BaseURL         string        `json:"base_url,omitempty"`
+	APIKey          string        `json:"-"`
+	Timeout         time.Duration `json:"-"`
 }
 
 type LongMemEvalQAJudgeRunInfo struct {
-	Provider string `json:"provider"`
-	Model    string `json:"model"`
-	BaseURL  string `json:"base_url,omitempty"`
+	MaxOutputTokens int      `json:"max_output_tokens"`
+	Temperature     *float64 `json:"temperature,omitempty"`
+	ReasoningEffort string   `json:"reasoning_effort,omitempty"`
+	Provider        string   `json:"provider"`
+	Model           string   `json:"model"`
+	BaseURL         string   `json:"base_url,omitempty"`
 }
 
 type LongMemEvalQAHypothesis struct {
@@ -82,9 +90,19 @@ type longMemEvalQAJudgeClient struct {
 }
 
 func normalizeLongMemEvalQAJudgeOptions(options LongMemEvalQAJudgeOptions) (LongMemEvalQAJudgeOptions, error) {
+	if options.MaxOutputTokens == 0 {
+		options.MaxOutputTokens = memoryllm.DefaultMaxOutputTokens
+	}
+	if options.MaxOutputTokens < 1 || options.MaxOutputTokens > memoryllm.MaxConfiguredOutputTokens {
+		return options, fmt.Errorf("invalid output token ceiling")
+	}
 	options.Model = strings.TrimSpace(options.Model)
 	options.BaseURL = strings.TrimSpace(options.BaseURL)
 	options.APIKey = strings.TrimSpace(options.APIKey)
+	options.ReasoningEffort = strings.TrimSpace(options.ReasoningEffort)
+	if options.Temperature != nil && (math.IsNaN(*options.Temperature) || math.IsInf(*options.Temperature, 0) || *options.Temperature < 0 || *options.Temperature > 2) {
+		return options, fmt.Errorf("invalid sampling temperature")
+	}
 	if options.Timeout <= 0 {
 		options.Timeout = 60 * time.Second
 	}
@@ -100,15 +118,25 @@ func normalizeLongMemEvalQAJudgeOptions(options LongMemEvalQAJudgeOptions) (Long
 	}
 }
 
+func (o LongMemEvalQAJudgeOptions) outputTokenLimit() int {
+	if o.MaxOutputTokens == 0 {
+		return memoryllm.DefaultMaxOutputTokens
+	}
+	return o.MaxOutputTokens
+}
+
 func (o LongMemEvalQAJudgeOptions) runInfo() LongMemEvalQAJudgeRunInfo {
 	baseURL := strings.TrimSpace(o.BaseURL)
 	if parsed, err := url.Parse(baseURL); err == nil && parsed.Scheme != "" && parsed.Host != "" {
 		baseURL = parsed.Scheme + "://" + parsed.Host
 	}
 	return LongMemEvalQAJudgeRunInfo{
-		Provider: string(domain.ProviderOpenAI),
-		Model:    o.Model,
-		BaseURL:  baseURL,
+		MaxOutputTokens: o.outputTokenLimit(),
+		Temperature:     o.Temperature,
+		ReasoningEffort: o.ReasoningEffort,
+		Provider:        string(domain.ProviderOpenAICompatible),
+		Model:           o.Model,
+		BaseURL:         baseURL,
 	}
 }
 
@@ -222,27 +250,27 @@ func newLongMemEvalQAJudgeClient(options LongMemEvalQAJudgeOptions) (*longMemEva
 }
 
 func (c *longMemEvalQAJudgeClient) Evaluate(ctx context.Context, prompt string) (string, bool, error) {
+	payload := map[string]any{
+		"model":    c.options.Model,
+		"messages": []map[string]string{{"role": "user", "content": prompt}},
+		"n":        1, "temperature": 0, "max_tokens": 10,
+	}
+	if c.options.ReasoningEffort != "" {
+		payload["reasoning_effort"] = c.options.ReasoningEffort
+	}
+	if c.options.Temperature != nil {
+		payload["temperature"] = *c.options.Temperature
+	}
 	raw, _, err := provider.DoJSONRequest(
 		ctx,
 		c.client,
-		domain.ProviderOpenAI,
+		domain.ProviderOpenAICompatible,
 		http.MethodPost,
 		strings.TrimRight(c.options.BaseURL, "/")+"/chat/completions",
 		map[string]string{
 			"Authorization": "Bearer " + c.options.APIKey,
 		},
-		map[string]any{
-			"model": c.options.Model,
-			"messages": []map[string]string{
-				{
-					"role":    "user",
-					"content": prompt,
-				},
-			},
-			"n":           1,
-			"temperature": 0,
-			"max_tokens":  10,
-		},
+		payload,
 	)
 	if err != nil {
 		return "", false, err

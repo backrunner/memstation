@@ -17,7 +17,7 @@ import (
 
 func TestVectorScopeRejectsOwnerSubstitutionAndExactDeletes(t *testing.T) {
 	s := NewPGVectorStore(nil)
-	ctx := security.WithAccess(context.Background(), domain.AccessContext{UserID: "owner", WorkspaceID: domain.PersonalWorkspaceID("owner")})
+	ctx := security.WithAccess(context.Background(), domain.AccessContext{UserID: "owner", WorkspaceID: domain.PersonalWorkspaceID("owner"), ScopeVersion: 2, PartitionIDs: []string{""}})
 	for _, input := range []domain.VectorSearchInput{{UserID: "other"}, {UserID: "owner", WorkspaceID: "group"}} {
 		if _, err := s.Search(ctx, input); !errors.Is(err, domain.ErrAccessDenied) {
 			t.Fatalf("search ignored scope: %v", err)
@@ -26,7 +26,7 @@ func TestVectorScopeRejectsOwnerSubstitutionAndExactDeletes(t *testing.T) {
 	if err := s.Upsert(ctx, domain.VectorUpsertRequest{UserID: "owner", WorkspaceID: "group"}); !errors.Is(err, domain.ErrAccessDenied) {
 		t.Fatalf("write ignored scope: %v", err)
 	}
-	if err := s.DeleteByNode(ctx, "other", "node"); !errors.Is(err, domain.ErrAccessDenied) {
+	if err := s.DeleteByNode(ctx, domain.VectorDeleteRequest{UserID: "other", NodeID: "node", RequireMissingNode: true}); !errors.Is(err, domain.ErrAccessDenied) {
 		t.Fatalf("delete ignored scope: %v", err)
 	}
 	for _, node := range []string{"node", "prefix::node::suffix"} {
@@ -34,7 +34,7 @@ func TestVectorScopeRejectsOwnerSubstitutionAndExactDeletes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := s.DeleteByNode(ctx, "owner", "node"); err != nil {
+	if err := s.DeleteByNode(ctx, domain.VectorDeleteRequest{UserID: "owner", NodeID: "node", RequireMissingNode: true}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.Search(ctx, domain.VectorSearchInput{UserID: "owner", Query: "test"})
@@ -56,7 +56,7 @@ func TestPostgresVectorScopeAndTypeFilterBeforeCandidateLimit(t *testing.T) {
 	owner := "vector-scope-" + uuid.NewString()
 	workspace := domain.PersonalWorkspaceID(owner)
 	group := owner + "-group"
-	ctx := security.WithAccess(context.Background(), domain.AccessContext{UserID: owner, WorkspaceID: workspace})
+	ctx := security.WithAccess(context.Background(), domain.AccessContext{UserID: owner, WorkspaceID: workspace, ScopeVersion: 2, PartitionIDs: []string{""}})
 	if _, err = db.ExecContext(ctx, `INSERT INTO workspaces(id,user_id,name,kind,capabilities) VALUES ($1,$2,'Personal','personal','[]'),($3,$2,'Group','group','[]')`, workspace, owner, group); err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,14 @@ func TestPostgresVectorScopeAndTypeFilterBeforeCandidateLimit(t *testing.T) {
 	if err = store.Upsert(ctx, domain.VectorUpsertRequest{UserID: owner, NodeID: owner + "-1", NodeType: "fact", Vector: []float32{1, 0, 0}}); !errors.Is(err, domain.ErrAccessDenied) {
 		t.Fatalf("cross-scope parent accepted: %v", err)
 	}
-	if err = store.DeleteByNode(ctx, owner, owner+"-1"); err != nil {
+	if _, err = db.ExecContext(ctx, `UPDATE memory_nodes SET embedding_status='deleted',embedding_revision=embedding_revision+1 WHERE user_id=$1 AND id=$2`, owner, owner+"-1"); err != nil {
+		t.Fatal(err)
+	}
+	var deletionRevision int64
+	if err = db.QueryRowContext(ctx, `SELECT embedding_revision FROM memory_nodes WHERE user_id=$1 AND id=$2`, owner, owner+"-1").Scan(&deletionRevision); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.DeleteByNode(ctx, domain.VectorDeleteRequest{UserID: owner, NodeID: owner + "-1", EmbeddingRevision: deletionRevision}); err != nil {
 		t.Fatal(err)
 	}
 	var count int

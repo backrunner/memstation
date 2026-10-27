@@ -155,7 +155,7 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 			"extraction_method":           "llm",
 			"_llm_summary_checkpoint":     newSummaryCheckpoint(conversation, generated),
 			"segment_count":               len(segments),
-			"segment_strategy":            "dialogue_window_v1",
+			"segment_strategy":            conversationservice.SegmentStrategy,
 			"segment_overlap_messages":    conversationservice.DefaultSegmentOptions().Overlap,
 			"summary_chunk_count":         chunkCount,
 			"summary_chunk_max_bytes":     16000,
@@ -179,7 +179,7 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 	if err := storeDocumentEvidences(ctx, services, snapshot.UserID, generation.GenerationID, summaryDoc.NodeID, snapshot.ConversationID, summaryEvidences); err != nil {
 		return 0, err
 	}
-	segmentDocs, err := storeSegmentDocuments(ctx, services, segments, summaryDoc, conversation.UpdatedAt, snapshot.Parts, snapshot.Artifacts)
+	segmentDocs, err := storeSegmentDocuments(ctx, services, segments, summaryDoc, conversation.UpdatedAt, snapshot.Parts, snapshot.Artifacts, snapshot.Messages)
 	if err != nil {
 		return 0, fmt.Errorf("store rebuilt segments: %w", err)
 	}

@@ -6,4 +6,3 @@ CREATE TABLE source_links (
 );
 CREATE INDEX source_links_parent_idx ON source_links(user_id,workspace_id,parent_message_id);
 ALTER TABLE source_events ADD COLUMN processing_conversation_id text NOT NULL DEFAULT '';
-UPDATE source_events SET processing_conversation_id=conversation_id;

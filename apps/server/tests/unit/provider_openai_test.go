@@ -46,8 +46,8 @@ func TestOpenAIAdapterComplete(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := openaiprovider.NewAdapter(provider.StaticConfigResolver{
-		domain.ProviderOpenAI: {
+	adapter := openaiprovider.NewCompatibleAdapter(provider.StaticConfigResolver{
+		domain.ProviderOpenAICompatible: {
 			APIKey:  "sk-test",
 			BaseURL: server.URL,
 		},
@@ -63,7 +63,7 @@ func TestOpenAIAdapterComplete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("complete: %v", err)
 	}
-	if response.Provider != domain.ProviderOpenAI {
+	if response.Provider != domain.ProviderOpenAICompatible {
 		t.Fatalf("unexpected provider: %s", response.Provider)
 	}
 	if response.Message.Text != "hello from upstream" {
@@ -99,8 +99,8 @@ func TestOpenAIAdapterStreamChatCompletions(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := openaiprovider.NewAdapter(provider.StaticConfigResolver{
-		domain.ProviderOpenAI: {
+	adapter := openaiprovider.NewCompatibleAdapter(provider.StaticConfigResolver{
+		domain.ProviderOpenAICompatible: {
 			APIKey:  "sk-test",
 			BaseURL: server.URL,
 		},
@@ -173,8 +173,8 @@ func TestOpenAIAdapterCompleteParsesToolCalls(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := openaiprovider.NewAdapter(provider.StaticConfigResolver{
-		domain.ProviderOpenAI: {APIKey: "sk-test", BaseURL: server.URL},
+	adapter := openaiprovider.NewCompatibleAdapter(provider.StaticConfigResolver{
+		domain.ProviderOpenAICompatible: {APIKey: "sk-test", BaseURL: server.URL},
 	}, 5*time.Second)
 
 	response, err := adapter.Complete(context.Background(), domain.UnifiedRequest{
@@ -219,8 +219,8 @@ func TestOpenAIAdapterStreamChatCompletionsParsesToolCalls(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := openaiprovider.NewAdapter(provider.StaticConfigResolver{
-		domain.ProviderOpenAI: {APIKey: "sk-test", BaseURL: server.URL},
+	adapter := openaiprovider.NewCompatibleAdapter(provider.StaticConfigResolver{
+		domain.ProviderOpenAICompatible: {APIKey: "sk-test", BaseURL: server.URL},
 	}, 5*time.Second)
 
 	response, err := adapter.Stream(context.Background(), domain.UnifiedRequest{
@@ -419,8 +419,8 @@ func TestOpenAIAdapterCompleteRetriesTransientStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := openaiprovider.NewAdapter(provider.StaticConfigResolver{
-		domain.ProviderOpenAI: {
+	adapter := openaiprovider.NewCompatibleAdapter(provider.StaticConfigResolver{
+		domain.ProviderOpenAICompatible: {
 			APIKey:  "sk-test",
 			BaseURL: server.URL,
 		},
@@ -471,8 +471,8 @@ func TestOpenAIAdapterStreamRetriesTransientStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := openaiprovider.NewAdapter(provider.StaticConfigResolver{
-		domain.ProviderOpenAI: {
+	adapter := openaiprovider.NewCompatibleAdapter(provider.StaticConfigResolver{
+		domain.ProviderOpenAICompatible: {
 			APIKey:  "sk-test",
 			BaseURL: server.URL,
 		},

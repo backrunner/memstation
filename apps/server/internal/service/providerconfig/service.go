@@ -288,8 +288,8 @@ func (s *Service) diagnosticForProvider(ctx context.Context, scope Scope, provid
 		HasAPIKey:             summary.HasAPIKey,
 		Source:                summary.Source,
 		UpdatedAt:             summary.UpdatedAt,
-		IsDesiredDefault:      scope != ScopeEmbedding && scope != ScopeRerank && providerName == desiredDefault,
-		IsLiveDefault:         scope != ScopeEmbedding && scope != ScopeRerank && providerName == liveDefault,
+		IsDesiredDefault:      scope != ScopeEmbedding && providerName == desiredDefault,
+		IsLiveDefault:         scope != ScopeEmbedding && providerName == liveDefault,
 		DesiredTimeoutSeconds: desiredTimeoutSeconds,
 		LiveTimeoutSeconds:    liveTimeoutSeconds,
 		RestartRequired:       desiredTimeoutSeconds != liveTimeoutSeconds,
@@ -312,10 +312,11 @@ func (s *Service) diagnosticForProvider(ctx context.Context, scope Scope, provid
 			}
 		}
 	}
-	if !summary.HasAPIKey {
+	missingCredential := !summary.HasAPIKey && (scope != ScopeRerank || !domain.RerankAPIKeyOptional(providerName))
+	if missingCredential {
 		item.Issues = append(item.Issues, "API key is not configured.")
 	}
-	if item.IsDesiredDefault && !summary.HasAPIKey {
+	if item.IsDesiredDefault && missingCredential {
 		item.Issues = append(item.Issues, "Desired default provider cannot serve traffic without credentials.")
 	}
 	if item.IsDesiredDefault && trimmedURL == "" {
@@ -326,7 +327,7 @@ func (s *Service) diagnosticForProvider(ctx context.Context, scope Scope, provid
 	}
 
 	switch {
-	case item.IsDesiredDefault && (!summary.HasAPIKey || trimmedURL == "" || item.Host == "" || item.Scheme == ""):
+	case item.IsDesiredDefault && (missingCredential || trimmedURL == "" || item.Host == "" || item.Scheme == ""):
 		item.Status = "degraded"
 	case len(item.Issues) > 0:
 		item.Status = "warning"

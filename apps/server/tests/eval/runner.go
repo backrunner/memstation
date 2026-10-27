@@ -7,10 +7,11 @@ import (
 	"sync"
 	"time"
 
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/ports"
 	memoryservice "memstation/apps/server/internal/service/memory"
-	sqlstore "memstation/apps/server/internal/store/sql"
 	vectorstore "memstation/apps/server/internal/store/vector"
 )
 
@@ -21,6 +22,7 @@ type RunOptions struct {
 }
 
 type BenchmarkReport struct {
+	Coverage     *DatasetCoverage    `json:"coverage,omitempty"`
 	Dataset      string              `json:"dataset"`
 	Description  string              `json:"description,omitempty"`
 	GeneratedAt  time.Time           `json:"generated_at"`
@@ -39,16 +41,17 @@ type VariantReport struct {
 }
 
 type CaseReport struct {
-	CaseID       string                      `json:"case_id"`
-	UserID       string                      `json:"user_id"`
-	GenerationID string                      `json:"generation_id,omitempty"`
-	Query        string                      `json:"query"`
-	Variant      memoryservice.SearchVariant `json:"variant"`
-	TopN         int                         `json:"top_n"`
-	Metrics      CaseMetrics                 `json:"metrics"`
-	Results      []RankedResult              `json:"results"`
-	Notes        string                      `json:"notes,omitempty"`
-	Metadata     map[string]any              `json:"metadata,omitempty"`
+	Rerank       memoryservice.RerankDiagnostics `json:"rerank"`
+	CaseID       string                          `json:"case_id"`
+	UserID       string                          `json:"user_id"`
+	GenerationID string                          `json:"generation_id,omitempty"`
+	Query        string                          `json:"query"`
+	Variant      memoryservice.SearchVariant     `json:"variant"`
+	TopN         int                             `json:"top_n"`
+	Metrics      CaseMetrics                     `json:"metrics"`
+	Results      []RankedResult                  `json:"results"`
+	Notes        string                          `json:"notes,omitempty"`
+	Metadata     map[string]any                  `json:"metadata,omitempty"`
 }
 
 type RankedResult struct {
@@ -68,6 +71,8 @@ type FailureSample struct {
 
 type harness struct {
 	engine    *memoryservice.Engine
+	vectors   *vectorstore.PGVectorStore
+	repo      *memorystore.InMemoryMemoryRepository
 	embedding EmbeddingRunInfo
 	observed  *observedEmbeddingClient
 }
@@ -121,6 +126,7 @@ func RunBenchmark(ctx context.Context, dataset Dataset, options RunOptions) (Ben
 	}
 
 	report := BenchmarkReport{
+		Coverage:     dataset.Coverage,
 		Dataset:      dataset.Name,
 		Description:  dataset.Description,
 		GeneratedAt:  time.Now().UTC(),
@@ -145,13 +151,17 @@ func newHarness(ctx context.Context, dataset Dataset, embeddingOptions Embedding
 	if err != nil {
 		return nil, err
 	}
-	referenceTime := datasetReferenceTime(dataset)
-	repo := sqlstore.NewInMemoryMemoryRepository()
-	vectors := vectorstore.NewPGVectorStore(nil)
 	embedder, err := newEvalEmbeddingClient(normalizedEmbedding)
 	if err != nil {
 		return nil, err
 	}
+	return newHarnessWithClient(ctx, dataset, normalizedEmbedding, embedder)
+}
+
+func newHarnessWithClient(ctx context.Context, dataset Dataset, normalizedEmbedding EmbeddingOptions, embedder ports.EmbeddingClient) (*harness, error) {
+	referenceTime := datasetReferenceTime(dataset)
+	repo := memorystore.NewInMemoryMemoryRepository()
+	vectors := vectorstore.NewPGVectorStore(nil)
 	var observed *observedEmbeddingClient
 	if embedder != nil {
 		observed = &observedEmbeddingClient{EmbeddingClient: embedder}
@@ -203,6 +213,8 @@ func newHarness(ctx context.Context, dataset Dataset, embeddingOptions Embedding
 	})
 	return &harness{
 		engine:    engine,
+		vectors:   vectors,
+		repo:      repo,
 		embedding: normalizedEmbedding.runInfo(),
 		observed:  observed,
 	}, nil
@@ -222,7 +234,7 @@ func datasetReferenceTime(dataset Dataset) time.Time {
 }
 
 func memorygenCurrentGenerationID(userID string) string {
-	return "gen:current:" + userID
+	return "gen:current:" + domain.PersonalWorkspaceID(userID)
 }
 
 func runVariant(ctx context.Context, bench *harness, dataset Dataset, variant memoryservice.SearchVariant, topN int) (VariantReport, []FailureSample, error) {
@@ -249,6 +261,7 @@ func runVariant(ctx context.Context, bench *harness, dataset Dataset, variant me
 		}
 		results := rankResults(query, debug)
 		caseReport := CaseReport{
+			Rerank:       debug.Rerank,
 			CaseID:       query.CaseID,
 			UserID:       query.UserID,
 			GenerationID: query.GenerationID,

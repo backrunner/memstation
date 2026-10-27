@@ -5,14 +5,15 @@ import (
 	"testing"
 	"time"
 
+	memorystore "memstation/apps/server/internal/store/sql/memory"
+
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/ports"
-	sqlstore "memstation/apps/server/internal/store/sql"
 )
 
 func TestHistoricalSearchDoesNotHydrateCurrentFact(t *testing.T) {
 	ctx := context.Background()
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	for _, item := range []struct{ id, from, content string }{{"old", "2025-01-01T00:00:00Z", "Home: Hangzhou"}, {"new", "2026-03-01T00:00:00Z", "Home: Shanghai"}} {
 		if err := repo.StoreDocument(ctx, domain.MemoryDocument{ID: item.id, NodeID: item.id, UserID: "u", Type: domain.MemoryTypeFact, Content: item.content, Metadata: map[string]any{"fact_key": "home", "valid_from": item.from}}); err != nil {
 			t.Fatal(err)
@@ -38,16 +39,16 @@ func (r timeoutGraphRepository) RecallRelations(context.Context, domain.Relation
 
 func TestAliasReviewAndGraphTimeoutPreserveDirectRecall(t *testing.T) {
 	ctx := context.Background()
-	repo := sqlstore.NewInMemoryMemoryRepository()
+	repo := memorystore.NewInMemoryMemoryRepository()
 	if err := repo.StoreDocument(ctx, domain.MemoryDocument{ID: "project", NodeID: "project", UserID: "u", Type: domain.MemoryTypeEntity, Content: "MemStation"}); err != nil {
 		t.Fatal(err)
 	}
-	alias := domain.EntityAlias{UserID: "u", GenerationID: "gen:current:u", Alias: "记忆站", Scope: "work", TargetNodeID: "project", Status: "candidate", Reason: "Explicit alternative name"}
+	alias := domain.EntityAlias{UserID: "u", GenerationID: ("gen:current:" + domain.PersonalWorkspaceID("u")), Alias: "记忆站", Scope: "work", TargetNodeID: "project", Status: "candidate", Reason: "Explicit alternative name"}
 	if _, err := repo.PutEntityAlias(ctx, alias); err != nil {
 		t.Fatal(err)
 	}
 	engine := NewEngine(timeoutGraphRepository{repo}, nil)
-	input := domain.SearchInput{UserID: "u", GenerationID: "gen:current:u", Query: "记忆站", EntityScope: "work", TopN: 1}
+	input := domain.SearchInput{UserID: "u", GenerationID: ("gen:current:" + domain.PersonalWorkspaceID("u")), Query: "记忆站", EntityScope: "work", TopN: 1}
 	seeds := map[string]float64{}
 	if err := engine.addEntitySeeds(ctx, input, seeds); err != nil || len(seeds) != 0 {
 		t.Fatal("unreviewed alias affected retrieval", err)

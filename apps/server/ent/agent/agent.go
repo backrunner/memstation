@@ -29,8 +29,6 @@ const (
 	FieldDefaultWorkspaceID = "default_workspace_id"
 	// FieldRevision holds the string denoting the revision field in the database.
 	FieldRevision = "revision"
-	// FieldLegacy holds the string denoting the legacy field in the database.
-	FieldLegacy = "legacy"
 	// Table holds the table name of the agent in the database.
 	Table = "agents"
 )
@@ -46,7 +44,6 @@ var Columns = []string{
 	FieldStatus,
 	FieldDefaultWorkspaceID,
 	FieldRevision,
-	FieldLegacy,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -70,8 +67,6 @@ var (
 	DefaultStatus string
 	// DefaultRevision holds the default value on creation for the "revision" field.
 	DefaultRevision int64
-	// DefaultLegacy holds the default value on creation for the "legacy" field.
-	DefaultLegacy bool
 )
 
 // OrderOption defines the ordering options for the Agent queries.
@@ -120,9 +115,4 @@ func ByDefaultWorkspaceID(opts ...sql.OrderTermOption) OrderOption {
 // ByRevision orders the results by the revision field.
 func ByRevision(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRevision, opts...).ToFunc()
-}
-
-// ByLegacy orders the results by the legacy field.
-func ByLegacy(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldLegacy, opts...).ToFunc()
 }
