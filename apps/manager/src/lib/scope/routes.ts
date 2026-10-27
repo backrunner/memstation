@@ -21,7 +21,7 @@ export function workspaceDraftKey(scope: ScopeContext): string {
   return JSON.stringify(['workspace-settings', scope.target.id, scope.target.baseUrl, scope.workspace.user_id, scope.workspace.id]);
 }
 
-export const workspaceDocumentKinds = ['summary', 'segment', 'fact', 'impression', 'event', 'task', 'procedure', 'artifact', 'entity', 'agent_action'] as const;
+export const workspaceDocumentKinds = ['summary', 'segment', 'fact', 'impression', 'episode', 'event', 'task', 'procedure', 'artifact', 'entity', 'agent_action'] as const;
 
 // Record IDs, generations, cursors and owners never transfer between workspaces.
 export function switchWorkspaceURL(current: { pathname: string; searchParams: Pick<URLSearchParams, 'get'> }, targetId: string, workspaceId: string): string {

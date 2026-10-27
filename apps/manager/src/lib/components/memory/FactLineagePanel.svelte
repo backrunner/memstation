@@ -2,7 +2,7 @@
 
 <script lang="ts">
   import { selectedTarget } from '#lib/stores/targets.ts';
-  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import StatusBadge from '#lib/components/ui/StatusBadge.svelte';
   import { memoryDetailHref } from '#lib/memory/routes.ts';
   import type { MemoryLineage } from '#lib/types.ts';
 

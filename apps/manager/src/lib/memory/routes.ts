@@ -1,4 +1,4 @@
-import { workspaceEntryURL } from '#lib/scope/navigation.ts';
+import { workspaceLink } from '#lib/scope/navigation.ts';
 import type { GenericMemoryDocumentKind, MemoryDocumentKind } from '#lib/types.ts';
 
 export type MemoryRouteKind =
@@ -7,6 +7,7 @@ export type MemoryRouteKind =
   | 'facts'
   | 'keys'
   | 'items'
+  | 'episodes'
   | 'events'
   | 'tasks'
   | 'procedures'
@@ -15,6 +16,7 @@ export type MemoryRouteKind =
   | 'agent-actions';
 
 const genericRouteKinds: Record<string, GenericMemoryDocumentKind> = {
+  episodes: 'episode',
   events: 'event',
   tasks: 'task',
   procedures: 'procedure',
@@ -23,17 +25,6 @@ const genericRouteKinds: Record<string, GenericMemoryDocumentKind> = {
   'agent-actions': 'agent_action'
 };
 
-function querySuffix(params: Record<string, string | undefined>): string {
-  const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value?.trim()) {
-      query.set(key, value.trim());
-    }
-  }
-  const raw = query.toString();
-  return raw ? `?${raw}` : '';
-}
-
 export function normalizeMemoryRouteKind(value: string): MemoryRouteKind | null {
   switch (value) {
     case 'summaries':
@@ -41,6 +32,7 @@ export function normalizeMemoryRouteKind(value: string): MemoryRouteKind | null 
     case 'facts':
     case 'keys':
     case 'items':
+    case 'episodes':
     case 'events':
     case 'tasks':
     case 'procedures':
@@ -48,8 +40,6 @@ export function normalizeMemoryRouteKind(value: string): MemoryRouteKind | null 
     case 'entities':
     case 'agent-actions':
       return value;
-    case 'agent_actions':
-      return 'agent-actions';
     default:
       return null;
   }
@@ -81,6 +71,8 @@ export function memoryRouteKindFromDocumentType(value: string): MemoryRouteKind 
       return 'facts';
     case 'key_memory':
       return 'keys';
+    case 'episode':
+      return 'episodes';
     case 'event':
       return 'events';
     case 'task':
@@ -99,15 +91,8 @@ export function memoryRouteKindFromDocumentType(value: string): MemoryRouteKind 
 }
 
 export function memoryCollectionHref(kind: MemoryRouteKind, userId?: string, targetId?: string): string {
-  const documentKind = documentKindFromRoute(kind);
-  if (documentKind && kind in genericRouteKinds) {
-    return workspaceEntryURL(targetId, `/memory/items${querySuffix({ type: documentKind, user_id: userId })}`);
-  }
-  const suffix = querySuffix({ user_id: userId });
-  return workspaceEntryURL(targetId, `/memory/${kind}${suffix}`);
+  return workspaceLink(targetId, kind === 'keys' ? 'keys' : 'memory', {owner:userId,kind:documentKindFromRoute(kind) || undefined});
 }
-
 export function memoryDetailHref(kind: MemoryRouteKind, id: string, userId?: string, targetId?: string): string {
-  const suffix = querySuffix({ user_id: userId });
-  return workspaceEntryURL(targetId, `/memory/${kind}/${encodeURIComponent(id)}${suffix}`);
+  return workspaceLink(targetId,kind === 'keys' ? 'keys' : 'memory', {owner:userId,record:id,kind:documentKindFromRoute(kind) || undefined});
 }

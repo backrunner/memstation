@@ -1,16 +1,17 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import Button from '#lib/components/Button.svelte';
+  import { parseRerankModel, providerLabel, rerankKeyOptional } from '#lib/forms/rerank.ts';
+  import Button from '#lib/components/ui/Button.svelte';
   import { onMount } from 'svelte';
   import { Dialog } from 'bits-ui';
   import { PencilLine, Plus, TriangleAlert } from '@lucide/svelte';
 
   import { fetchConfig, fetchProviderDiagnostics, saveConfig } from '#lib/api/client.ts';
-  import PageHeader from '#lib/components/PageHeader.svelte';
-  import SelectField from '#lib/components/SelectField.svelte';
-  import StatusBadge from '#lib/components/StatusBadge.svelte';
-  import TextInputField from '#lib/components/TextInputField.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
+  import StatusBadge from '#lib/components/ui/StatusBadge.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
   import { isHTTPURL } from '#lib/forms/validation.ts';
   import {
     buildSessionDraftKey,
@@ -306,18 +307,22 @@
   function providerItemsForScope(scope: ProviderScope): Array<{ value: string; label: string }> {
     return formsForScope(scope).map((form) => ({
       value: form.provider,
-      label: form.provider
+      label: providerLabel(form.provider)
     }));
   }
 
   function availableProviderItems(scope: ProviderScope): Array<{ value: string; label: string }> {
     return hiddenFormsForScope(scope).map((form) => ({
       value: form.provider,
-      label: form.provider
+      label: providerLabel(form.provider)
     }));
   }
 
   function inferredProviderFromModel(modelName: string, scope: ProviderScope, scopeForms: ProviderForm[] = formsForScope(scope)): string {
+    if (scope === 'rerank') {
+      const parsed = parseRerankModel(modelName);
+      return parsed.provider === 'disabled' || parsed.provider === 'unknown' ? '' : parsed.provider;
+    }
     const normalized = modelName.trim().toLowerCase();
     if (!normalized) {
       return '';
@@ -326,9 +331,6 @@
     const directPrefix = normalized.split(':')[0] ?? '';
     if (supportedProviders.has(directPrefix)) {
       return directPrefix;
-    }
-    if (directPrefix === 'openai' && supportedProviders.has('openai_compatible')) {
-      return 'openai_compatible';
     }
     if (scope === 'embedding' && normalized.includes('embedding') && supportedProviders.has('openai_compatible')) {
       return 'openai_compatible';
@@ -719,13 +721,13 @@
               <div class="provider-list-item data-list-row" class:is-active={isActive}>
                 <div class="provider-list-main">
                   <div class="provider-list-heading">
-                    <strong>{form.provider}</strong>
+                    <strong>{providerLabel(form.provider)}</strong>
                     {#if isActive}
                       <StatusBadge tone="brand" label="Active route" />
                     {/if}
                     <StatusBadge
-                      tone={form.hasAPIKey ? 'success' : 'warning'}
-                      label={form.hasAPIKey ? 'Key set' : 'No key'}
+                      tone={form.hasAPIKey || (form.scope === 'rerank' && rerankKeyOptional(form.provider)) ? 'success' : 'warning'}
+                      label={form.hasAPIKey ? 'Key set' : form.scope === 'rerank' && rerankKeyOptional(form.provider) ? 'Key optional' : 'No key'}
                     />
                     {#if form.source === 'override'}
                       <StatusBadge tone="muted" label="Override" />
@@ -778,6 +780,7 @@
           <div class="form-grid two-up">
             <TextInputField
               label="Base URL"
+              help={editingForm.scope === 'rerank' ? 'Provider API root, without the /rerank endpoint. Local services can leave the API key empty.' : ''}
               bind:value={draftBaseUrl}
               placeholder="https://api.example.com/v1"
               error={fieldErrors[formKey(editingForm.scope, editingForm.provider)]}

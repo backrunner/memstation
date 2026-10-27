@@ -1,7 +1,7 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import CodeBlock from '#lib/components/CodeBlock.svelte';
+  import CodeBlock from '#lib/components/content/CodeBlock.svelte';
 
   export let value: unknown = {};
   export let emptyLabel = 'No data';

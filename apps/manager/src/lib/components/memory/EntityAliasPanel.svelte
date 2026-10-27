@@ -1,13 +1,13 @@
 <svelte:options runes={false} />
 <script lang="ts">
-  import MetadataRow from '#lib/components/MetadataRow.svelte';
-  import Button from '#lib/components/Button.svelte';
+  import MetadataRow from '#lib/components/ui/MetadataRow.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
   import { onMount } from 'svelte';
   import { fetchAdminMemoryDocuments, fetchEntityAliases, putEntityAlias, type EntityAlias } from '#lib/api/client.ts';
   import type { MemStationTarget, MemoryDocument } from '#lib/types.ts';
-  import TextInputField from './TextInputField.svelte';
-  import SelectField from './SelectField.svelte';
-  import ConfirmActionDialog from './ConfirmActionDialog.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
+  import ConfirmActionDialog from '#lib/components/ui/ConfirmActionDialog.svelte';
 
   export let target: MemStationTarget;
   export let document: MemoryDocument;

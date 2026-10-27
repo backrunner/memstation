@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { SlidersHorizontal } from '@lucide/svelte';
-  import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
+  import CollapsibleSection from '#lib/components/ui/CollapsibleSection.svelte';
 
   let {
     children,

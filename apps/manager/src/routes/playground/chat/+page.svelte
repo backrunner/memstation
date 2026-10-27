@@ -1,10 +1,10 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import MetadataRow from '#lib/components/MetadataRow.svelte';
-  import Button from '#lib/components/Button.svelte';
-  import TextareaField from '#lib/components/TextareaField.svelte';
-  import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
+  import MetadataRow from '#lib/components/ui/MetadataRow.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
+  import TextareaField from '#lib/components/ui/TextareaField.svelte';
+  import CollapsibleSection from '#lib/components/ui/CollapsibleSection.svelte';
   import { onMount, tick } from 'svelte';
   import { ScrollArea, Tabs } from 'bits-ui';
 
@@ -14,15 +14,15 @@
     fetchMemoryPreview,
     requestGatewayExchange
   } from '#lib/api/client.ts';
-  import ChatMessageCard from '#lib/components/ChatMessageCard.svelte';
-  import JsonView from '#lib/components/JsonView.svelte';
-  import MemoryKeywordSignals from '#lib/components/MemoryKeywordSignals.svelte';
-  import PageHeader from '#lib/components/PageHeader.svelte';
-  import SegmentedField from '#lib/components/SegmentedField.svelte';
-  import SelectField from '#lib/components/SelectField.svelte';
-  import StatusBadge from '#lib/components/StatusBadge.svelte';
-  import SwitchField from '#lib/components/SwitchField.svelte';
-  import TextInputField from '#lib/components/TextInputField.svelte';
+  import ChatMessageCard from '#lib/components/chat/ChatMessageCard.svelte';
+  import JsonView from '#lib/components/content/JsonView.svelte';
+  import MemoryKeywordSignals from '#lib/components/memory/MemoryKeywordSignals.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import SegmentedField from '#lib/components/ui/SegmentedField.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
+  import StatusBadge from '#lib/components/ui/StatusBadge.svelte';
+  import SwitchField from '#lib/components/ui/SwitchField.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
   import { matchedKeywordsFromMetadata, recordList, sourceKeywordsFromMetadata, stringList } from '#lib/memory/keyword-signals.ts';
   import { buildMemoryTurnDiff, type MemoryTurnChange, type MemoryTurnDiffResult, type MemoryTurnKind } from '#lib/playground/memory-diff.ts';
   import {
@@ -52,7 +52,7 @@
 
   const providerItems = [
     { value: '', label: 'Auto select' },
-    { value: 'openai', label: 'OpenAI' },
+    { value: 'openai_compatible', label: 'OpenAI' },
     { value: 'anthropic', label: 'Anthropic' },
     { value: 'gemini', label: 'Gemini' }
   ];

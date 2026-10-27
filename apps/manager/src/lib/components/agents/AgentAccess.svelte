@@ -1,18 +1,18 @@
 <svelte:options runes={false} />
 <script lang="ts">
-  import MetadataRow from '#lib/components/MetadataRow.svelte';
+  import MetadataRow from '#lib/components/ui/MetadataRow.svelte';
   import { onMount, onDestroy } from 'svelte';
   import { beforeNavigate } from '$app/navigation';
   import { Dialog } from 'bits-ui';
   import { APIError, createUserAPIKey, fetchAgentCredentials, fetchAgentDetail, revokeUserAPIKey, updateAgent, updateAgentGrant } from '#lib/api/client.ts';
   import type { AgentCredential, AgentDetail, MemStationTarget } from '#lib/types.ts';
-  import Button from '../Button.svelte';
-  import CollapsibleSection from '../CollapsibleSection.svelte';
-  import CodeBlock from '../CodeBlock.svelte';
-  import ConfirmActionDialog from '../ConfirmActionDialog.svelte';
-  import PageHeader from '../PageHeader.svelte';
-  import SelectField from '../SelectField.svelte';
-  import TextInputField from '../TextInputField.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
+  import CollapsibleSection from '#lib/components/ui/CollapsibleSection.svelte';
+  import CodeBlock from '#lib/components/content/CodeBlock.svelte';
+  import ConfirmActionDialog from '#lib/components/ui/ConfirmActionDialog.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
   import CapabilityFields from './CapabilityFields.svelte';
   import { capabilitySummary } from './capabilities.ts';
   import { useSessionDraftUnloadWarning } from '#lib/stores/session-drafts.ts';
@@ -138,7 +138,7 @@
     if (!detail || busy || !keyName.trim()) return;
     busy = true; keyError = ''; success = '';
     try {
-      const result = await createUserAPIKey(target, userId, keyName.trim(), { agent_id: agentId, ...(workspaceId?{workspace_id:workspaceId}:{}), capabilities: keyCaps, ...(keyLifetime !== 'never' ? { expires_at: new Date(Date.now() + Number(keyLifetime) * 86400000).toISOString() } : {}) });
+      const result = await createUserAPIKey(target, userId, keyName.trim(), { agent_id: agentId, workspace_id:detail.workspace.id, capabilities: keyCaps, ...(keyLifetime !== 'never' ? { expires_at: new Date(Date.now() + Number(keyLifetime) * 86400000).toISOString() } : {}) });
       if (!alive) return;
       createdKey = result.api_key;
       keyOpen = false;
@@ -178,7 +178,7 @@
   {#if createdKey}<section class="card page-stack" aria-label="New API key"><div class="page-header"><h2 class="section-title">New API key</h2><Button class="btn-secondary" onclick={() => { createdKey = ''; success = 'Credential created.'; }}>Hide key</Button></div><p class="panel-meta">Shown once. Copy and store it now.</p><CodeBlock code={createdKey} language="text" /></section>{/if}
   {#if loading}<p class="panel-meta" role="status">Loading agent access…</p>{/if}
   {#if detail}
-    <p class="panel-meta">Workspace {detail.workspace.name}. {detail.agent.status === 'active' ? 'Active' : 'Disabled'}{detail.agent.legacy ? ' (legacy agent)' : ''}. Each workspace has its own memory.</p>
+    <p class="panel-meta">Workspace {detail.workspace.name}. {detail.agent.status === 'active' ? 'Active' : 'Disabled'}. Each workspace has its own memory.</p>
     <div class="access-columns">
       <section class="card page-stack">
         <h2 class="section-title">Agent identity</h2>

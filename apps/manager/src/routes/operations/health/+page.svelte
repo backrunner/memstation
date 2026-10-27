@@ -1,13 +1,13 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import MetadataRow from '#lib/components/MetadataRow.svelte';
-  import Button from '#lib/components/Button.svelte';
+  import MetadataRow from '#lib/components/ui/MetadataRow.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
   import { onMount } from 'svelte';
 
   import { fetchConfig, fetchHealth, fetchProviderDiagnostics, fetchQueues } from '#lib/api/client.ts';
-  import PageHeader from '#lib/components/PageHeader.svelte';
-  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import StatusBadge from '#lib/components/ui/StatusBadge.svelte';
   import { selectedTarget, targetState } from '#lib/stores/targets.ts';
   import type { AdminConfigPayload, HealthPayload, ProviderDiagnostic, QueueInfo } from '#lib/types.ts';
 

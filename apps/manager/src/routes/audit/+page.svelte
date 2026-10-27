@@ -1,18 +1,18 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import MetadataRow from '#lib/components/MetadataRow.svelte';
-  import Button from '#lib/components/Button.svelte';
+  import MetadataRow from '#lib/components/ui/MetadataRow.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
   import { onDestroy, onMount } from 'svelte';
   import { createPageStore } from '#lib/stores/page.ts';
 
   const page = createPageStore();
 
   import { fetchAudit } from '#lib/api/client.ts';
-  import FilterToolbar from '#lib/components/FilterToolbar.svelte';
-  import JsonView from '#lib/components/JsonView.svelte';
-  import PageHeader from '#lib/components/PageHeader.svelte';
-  import TextInputField from '#lib/components/TextInputField.svelte';
+  import FilterToolbar from '#lib/components/layout/FilterToolbar.svelte';
+  import JsonView from '#lib/components/content/JsonView.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
   import { selectedTarget, targetState } from '#lib/stores/targets.ts';
   import type { AuditEventRecord } from '#lib/types.ts';
 

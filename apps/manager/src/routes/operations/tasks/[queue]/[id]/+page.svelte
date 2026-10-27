@@ -1,19 +1,19 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import MetadataRow from '#lib/components/MetadataRow.svelte';
-  import { workspaceEntryURL } from '#lib/scope/navigation.ts';
-  import Button from '#lib/components/Button.svelte';
+  import MetadataRow from '#lib/components/ui/MetadataRow.svelte';
+  import { workspaceLink } from '#lib/scope/navigation.ts';
+  import Button from '#lib/components/ui/Button.svelte';
   import { onMount } from 'svelte';
   import { createPageStore } from '#lib/stores/page.ts';
 
   const page = createPageStore();
 
   import { fetchAudit, fetchTaskDetail, requeueTask } from '#lib/api/client.ts';
-  import ConfirmActionDialog from '#lib/components/ConfirmActionDialog.svelte';
-  import JsonView from '#lib/components/JsonView.svelte';
-  import StatusBadge from '#lib/components/StatusBadge.svelte';
-  import PageHeader from '#lib/components/PageHeader.svelte';
+  import ConfirmActionDialog from '#lib/components/ui/ConfirmActionDialog.svelte';
+  import JsonView from '#lib/components/content/JsonView.svelte';
+  import StatusBadge from '#lib/components/ui/StatusBadge.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
   import { selectedTarget, targetState } from '#lib/stores/targets.ts';
   import type { AuditEventRecord, QueueTaskDetailPayload } from '#lib/types.ts';
 
@@ -159,7 +159,7 @@
           <div class="debug-block">
             <div class="sidebar-label">Conversation</div>
             {#if detail.item.conversation_id}
-              <a href={workspaceEntryURL($selectedTarget?.id, `/conversations/${encodeURIComponent(detail.item.conversation_id)}${detail.item.user_id ? `?user_id=${encodeURIComponent(detail.item.user_id)}` : ''}`)}>{detail.item.conversation_id}</a>
+              <a href={workspaceLink($selectedTarget?.id, 'conversations', {owner:detail.item.user_id,record:detail.item.conversation_id})}>{detail.item.conversation_id}</a>
             {:else}
               <div>n/a</div>
             {/if}

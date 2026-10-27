@@ -1,10 +1,11 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import MetadataRow from '#lib/components/MetadataRow.svelte';
-  import { workspaceEntryURL } from '#lib/scope/navigation.ts';
-  import Button from '#lib/components/Button.svelte';
-  import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
+  import SemanticEpisodeDetails from '#lib/components/memory/SemanticEpisodeDetails.svelte';
+  import MetadataRow from '#lib/components/ui/MetadataRow.svelte';
+  import { workspaceLink } from '#lib/scope/navigation.ts';
+  import Button from '#lib/components/ui/Button.svelte';
+  import CollapsibleSection from '#lib/components/ui/CollapsibleSection.svelte';
   import { goto } from '$app/navigation';
   import { createPageStore } from '#lib/stores/page.ts';
 
@@ -20,18 +21,18 @@
     updateAdminKeyMemory,
     updateAdminMemoryDocument
   } from '#lib/api/client.ts';
-  import ChatMessageCard from '#lib/components/ChatMessageCard.svelte';
-  import ConfirmActionDialog from '#lib/components/ConfirmActionDialog.svelte';
-  import FactLineagePanel from '#lib/components/FactLineagePanel.svelte';
-  import JsonView from '#lib/components/JsonView.svelte';
-  import MemoryKeywordSignals from '#lib/components/MemoryKeywordSignals.svelte';
-  import EntityAliasPanel from '#lib/components/EntityAliasPanel.svelte';
-  import MemoryRelationGraph from '#lib/components/MemoryRelationGraph.svelte';
-  import PageHeader from '#lib/components/PageHeader.svelte';
-  import SelectField from '#lib/components/SelectField.svelte';
-  import StatusBadge from '#lib/components/StatusBadge.svelte';
-  import TextInputField from '#lib/components/TextInputField.svelte';
-  import TextareaField from '#lib/components/TextareaField.svelte';
+  import ChatMessageCard from '#lib/components/chat/ChatMessageCard.svelte';
+  import ConfirmActionDialog from '#lib/components/ui/ConfirmActionDialog.svelte';
+  import FactLineagePanel from '#lib/components/memory/FactLineagePanel.svelte';
+  import JsonView from '#lib/components/content/JsonView.svelte';
+  import MemoryKeywordSignals from '#lib/components/memory/MemoryKeywordSignals.svelte';
+  import EntityAliasPanel from '#lib/components/memory/EntityAliasPanel.svelte';
+  import MemoryRelationGraph from '#lib/components/memory/MemoryRelationGraph.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
+  import StatusBadge from '#lib/components/ui/StatusBadge.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
+  import TextareaField from '#lib/components/ui/TextareaField.svelte';
   import { matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '#lib/memory/keyword-signals.ts';
   import {
     documentKindFromRoute,
@@ -475,9 +476,9 @@
     <div class="inline-group" style="justify-content: space-between; flex-wrap: wrap;">
       <div class="inline-group" style="flex-wrap: wrap;">
         <a class="btn-ghost" href={currentCollectionHref}>Back to collection</a>
-        <a class="btn-ghost" href={workspaceEntryURL($selectedTarget?.id, `/memory?user_id=${encodeURIComponent((documentItem?.user_id ?? keyMemoryItem?.user_id) ?? '')}`)}>Memory workspace</a>
+        <a class="btn-ghost" href={workspaceLink($selectedTarget?.id, 'memory', {owner:documentItem?.user_id ?? keyMemoryItem?.user_id})}>Memory workspace</a>
         {#if documentItem?.conversation_id}
-          <a class="btn-ghost" href={workspaceEntryURL($selectedTarget?.id, `/conversations/${encodeURIComponent(documentItem.conversation_id)}?user_id=${encodeURIComponent(documentItem.user_id)}`)}>Open source conversation</a>
+          <a class="btn-ghost" href={workspaceLink($selectedTarget?.id, 'conversations', {owner:documentItem.user_id, record:documentItem.conversation_id})}>Open source conversation</a>
         {/if}
         {#if documentItem || keyMemoryItem}
           <a class="btn-ghost" href={`/users/${encodeURIComponent((documentItem?.user_id ?? keyMemoryItem?.user_id) ?? 'admin')}`}>Open user</a>
@@ -516,6 +517,7 @@
           {#if documentItem.type === 'entity' && $selectedTarget}<EntityAliasPanel target={$selectedTarget} document={documentItem} />{/if}
           <div class="toolbar">
             <TextareaField label="Content" bind:value={draftContent} rows={10} />
+          {#if documentItem.type === 'episode'}<SemanticEpisodeDetails metadata={documentItem.metadata} />{/if}
             <CollapsibleSection title="Record details">
               <div class="detail-metadata">
               <div class="debug-block">
@@ -654,7 +656,7 @@
               <div class="sidebar-label">Source conversation</div>
               {#if documentItem.conversation_id}
                 <div class="toolbar">
-                  <a href={workspaceEntryURL($selectedTarget?.id, `/conversations/${encodeURIComponent(documentItem.conversation_id)}?user_id=${encodeURIComponent(documentItem.user_id)}`)}>{documentItem.conversation_id}</a>
+                  <a href={workspaceLink($selectedTarget?.id, 'conversations', {owner:documentItem.user_id, record:documentItem.conversation_id})}>{documentItem.conversation_id}</a>
                   {#if sourceConversation}
                     <div class="helper-text">
                       <MetadataRow items={[`${sourceConversation.messages.length} messages`, `Updated ${new Date(sourceConversation.updated_at).toLocaleString()}`]} />
@@ -746,7 +748,7 @@
                           <StatusBadge tone="brand" label={`artifact ${artifact.artifact_id}`} />
                         {/if}
                         {#if documentItem.conversation_id}
-                          <a class="btn-ghost" href={workspaceEntryURL($selectedTarget?.id, `/conversations/${encodeURIComponent(documentItem.conversation_id)}?user_id=${encodeURIComponent(documentItem.user_id)}`)}>Open conversation timeline</a>
+                          <a class="btn-ghost" href={workspaceLink($selectedTarget?.id, 'conversations', {owner:documentItem.user_id, record:documentItem.conversation_id})}>Open conversation timeline</a>
                         {/if}
                       </div>
                     </div>

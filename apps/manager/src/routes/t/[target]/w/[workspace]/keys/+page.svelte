@@ -1,9 +1,9 @@
 <script lang="ts">
-  import MetadataRow from '#lib/components/MetadataRow.svelte';
+  import MetadataRow from '#lib/components/ui/MetadataRow.svelte';
   import { page } from '$app/state';
-  import PageHeader from '#lib/components/PageHeader.svelte';
-  import Button from '#lib/components/Button.svelte';
-  import TextInputField from '#lib/components/TextInputField.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
   import WorkspacePagination from '#lib/components/workspaces/WorkspacePagination.svelte';
   import WorkspaceReadStatus from '#lib/components/workspaces/WorkspaceReadStatus.svelte';
   import { workspaceBaseURL } from '#lib/scope/routes.ts';

@@ -36,13 +36,13 @@ export default tseslint.config(
     }
   },
   {
-    files: ['src/lib/components/ChatMessageCard.svelte'],
+    files: ['src/lib/components/chat/ChatMessageCard.svelte'],
     rules: {
       'svelte/no-at-html-tags': 'off'
     }
   },
   {
-    files: ['src/lib/components/EChart.svelte'],
+    files: ['src/lib/components/charts/EChart.svelte'],
     rules: {
       'svelte/infinite-reactive-loop': 'off'
     }

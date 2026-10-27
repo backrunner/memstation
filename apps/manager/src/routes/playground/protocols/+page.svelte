@@ -1,19 +1,19 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import Button from '#lib/components/Button.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
   import { onMount } from 'svelte';
   import { Tabs } from 'bits-ui';
 
   import { requestGatewayRaw } from '#lib/api/client.ts';
-  import JsonView from '#lib/components/JsonView.svelte';
-  import PageHeader from '#lib/components/PageHeader.svelte';
-  import SegmentedField from '#lib/components/SegmentedField.svelte';
-  import SelectField from '#lib/components/SelectField.svelte';
-  import StatusBadge from '#lib/components/StatusBadge.svelte';
-  import SwitchField from '#lib/components/SwitchField.svelte';
-  import TextInputField from '#lib/components/TextInputField.svelte';
-  import TextareaField from '#lib/components/TextareaField.svelte';
+  import JsonView from '#lib/components/content/JsonView.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import SegmentedField from '#lib/components/ui/SegmentedField.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
+  import StatusBadge from '#lib/components/ui/StatusBadge.svelte';
+  import SwitchField from '#lib/components/ui/SwitchField.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
+  import TextareaField from '#lib/components/ui/TextareaField.svelte';
   import {
     buildSessionDraftKey,
     readSessionDraft,

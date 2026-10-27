@@ -1,22 +1,22 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import MetadataRow from '#lib/components/MetadataRow.svelte';
-  import Button from '#lib/components/Button.svelte';
-  import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
+  import MetadataRow from '#lib/components/ui/MetadataRow.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
+  import CollapsibleSection from '#lib/components/ui/CollapsibleSection.svelte';
   import { onMount } from 'svelte';
   import { createPageStore } from '#lib/stores/page.ts';
 
   const page = createPageStore();
 
 	import { activateMemoryRebuild, discardMemoryRebuild, fetchMemoryRebuilds, fetchQueues, fetchTasks, requeueTask } from '#lib/api/client.ts';
-  import CodeBlock from '#lib/components/CodeBlock.svelte';
-  import ConfirmActionDialog from '#lib/components/ConfirmActionDialog.svelte';
-  import FilterToolbar from '#lib/components/FilterToolbar.svelte';
-  import PageHeader from '#lib/components/PageHeader.svelte';
-  import SelectField from '#lib/components/SelectField.svelte';
-  import StatusBadge from '#lib/components/StatusBadge.svelte';
-  import TextInputField from '#lib/components/TextInputField.svelte';
+  import CodeBlock from '#lib/components/content/CodeBlock.svelte';
+  import ConfirmActionDialog from '#lib/components/ui/ConfirmActionDialog.svelte';
+  import FilterToolbar from '#lib/components/layout/FilterToolbar.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
+  import StatusBadge from '#lib/components/ui/StatusBadge.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
   import { selectedTarget, targetState } from '#lib/stores/targets.ts';
   import type { MemoryGeneration, QueueInfo, QueueTaskRecord } from '#lib/types.ts';
 

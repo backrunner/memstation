@@ -1,12 +1,11 @@
 <script lang="ts">
-  import MetadataRow from '#lib/components/MetadataRow.svelte';
-  import { legacyReviewURL } from '#lib/scope/navigation.ts';
-  import { memoryRouteKindFromDocumentType } from '#lib/memory/routes.ts';
+  import SemanticEpisodeDetails from '#lib/components/memory/SemanticEpisodeDetails.svelte';
+  import MetadataRow from '#lib/components/ui/MetadataRow.svelte';
   import { page } from '$app/state';
   import MemoryEditor from '#lib/components/workspaces/MemoryEditor.svelte';
-  import PageHeader from '#lib/components/PageHeader.svelte';
-  import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
-  import JsonView from '#lib/components/JsonView.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import CollapsibleSection from '#lib/components/ui/CollapsibleSection.svelte';
+  import JsonView from '#lib/components/content/JsonView.svelte';
   import WorkspaceReadStatus from '#lib/components/workspaces/WorkspaceReadStatus.svelte';
   import { workspaceBaseURL, workspaceConversationURL, workspaceMemoryURL } from '#lib/scope/routes.ts';
   import type { PageData } from './$types';
@@ -30,6 +29,7 @@
         <MemoryEditor scope={{ target: data.routeTarget, workspace: data.workspaceResult.value }} record={item} />
       {/key}
     {:else}<div class="memory-content">{item.content}</div>{/if}
+    {#if item.type === 'episode'}<SemanticEpisodeDetails metadata={item.metadata} />{/if}
     {#if item.conversation_id}<a class="text-link" href={workspaceConversationURL(base, item.conversation_id, generation)}>Open source conversation</a>{/if}
     {#if item.related?.length}
       <section class="page-stack"><h2 class="section-title">Related memories</h2>
@@ -47,7 +47,6 @@
         {/each}
       </section>
     {/if}
-    {#if memoryRouteKindFromDocumentType(item.type)}<a class="text-link" href={legacyReviewURL(data.routeTarget.id, `/memory/${memoryRouteKindFromDocumentType(item.type)}/${encodeURIComponent(item.id)}`, item.user_id, generation)}>Review history and metadata</a>{/if}
     <CollapsibleSection title="Record details"><JsonView value={{ node_id: item.node_id, generation_id: item.generation_id, importance: item.importance, decay_factor: item.decay_factor, lineage: item.lineage, metadata: item.metadata, evidences: item.evidences }} /></CollapsibleSection>
   {/if}
 </section>

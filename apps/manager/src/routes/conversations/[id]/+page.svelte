@@ -1,7 +1,7 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import Button from '#lib/components/Button.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { createPageStore } from '#lib/stores/page.ts';
@@ -9,12 +9,12 @@
   const page = createPageStore();
 
   import { createMemoryRebuild, fetchConversation, fetchConversationMemory, fetchConversationSources, requeueTask } from '#lib/api/client.ts';
-  import ChatMessageCard from '#lib/components/ChatMessageCard.svelte';
-  import ConfirmActionDialog from '#lib/components/ConfirmActionDialog.svelte';
-  import JsonView from '#lib/components/JsonView.svelte';
-  import PageHeader from '#lib/components/PageHeader.svelte';
+  import ChatMessageCard from '#lib/components/chat/ChatMessageCard.svelte';
+  import ConfirmActionDialog from '#lib/components/ui/ConfirmActionDialog.svelte';
+  import JsonView from '#lib/components/content/JsonView.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
   import { memoryCollectionHref, memoryDetailHref, memoryRouteKindFromDocumentType } from '#lib/memory/routes.ts';
-  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import StatusBadge from '#lib/components/ui/StatusBadge.svelte';
   import { selectedTarget, targetState } from '#lib/stores/targets.ts';
   import type { ConversationMemoryPayload, ConversationRecord, ConversationSourcesPayload } from '#lib/types.ts';
 

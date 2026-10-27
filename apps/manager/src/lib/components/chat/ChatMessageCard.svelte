@@ -1,11 +1,11 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
+  import CollapsibleSection from '#lib/components/ui/CollapsibleSection.svelte';
 
-  import JsonView from '#lib/components/JsonView.svelte';
-  import MarkdownContent from '#lib/components/MarkdownContent.svelte';
-  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import JsonView from '#lib/components/content/JsonView.svelte';
+  import MarkdownContent from '#lib/components/content/MarkdownContent.svelte';
+  import StatusBadge from '#lib/components/ui/StatusBadge.svelte';
   import type { ChatThreadMessage, ContentBlock, JSONValue } from '#lib/types.ts';
 
   export let message: ChatThreadMessage;

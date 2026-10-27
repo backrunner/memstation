@@ -1,15 +1,15 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import Button from '#lib/components/Button.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
   import { AlertDialog, ContextMenu, Dialog, DropdownMenu } from 'bits-ui';
   import { Ellipsis, Trash2 } from '@lucide/svelte';
 
-  import TextInputField from '#lib/components/TextInputField.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
   import { isHTTPURL } from '#lib/forms/validation.ts';
   import type { MemStationTarget } from '#lib/types.ts';
   import { availableTargets } from '#lib/stores/targets.ts';
-  import SelectField from '#lib/components/SelectField.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
   import { parseTargetLocator } from '#lib/targets/uri.ts';
 
   export let open = false;

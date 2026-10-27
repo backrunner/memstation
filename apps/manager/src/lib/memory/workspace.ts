@@ -17,7 +17,7 @@ export interface MemoryWorkspaceData {
   genericItems: MemoryDocument[];
 }
 
-export const genericMemoryKinds: GenericMemoryDocumentKind[] = ['event', 'task', 'procedure', 'artifact', 'entity', 'agent_action'];
+export const genericMemoryKinds: GenericMemoryDocumentKind[] = ['episode', 'event', 'task', 'procedure', 'artifact', 'entity', 'agent_action'];
 
 function toSummaryRecord(item: MemoryDocument): MemorySummaryRecord {
   return {

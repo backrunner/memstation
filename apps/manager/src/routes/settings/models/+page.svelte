@@ -1,13 +1,13 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import Button from '#lib/components/Button.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
   import { onMount } from 'svelte';
 
   import { fetchConfig, saveConfig } from '#lib/api/client.ts';
-  import PageHeader from '#lib/components/PageHeader.svelte';
-  import SwitchField from '#lib/components/SwitchField.svelte';
-  import TextInputField from '#lib/components/TextInputField.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import SwitchField from '#lib/components/ui/SwitchField.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
   import { isNonNegativeInteger } from '#lib/forms/validation.ts';
   import {
     buildSessionDraftKey,

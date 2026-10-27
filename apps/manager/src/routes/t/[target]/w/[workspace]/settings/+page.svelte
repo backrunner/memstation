@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invalidate } from '$app/navigation';
-  import Button from '#lib/components/Button.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
   import WorkspaceSettings from '#lib/components/workspaces/WorkspaceSettings.svelte';
   import { workspaceDirectoryURL } from '#lib/scope/routes.ts';
   import type { PageData } from './$types';

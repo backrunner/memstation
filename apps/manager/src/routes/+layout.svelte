@@ -1,6 +1,6 @@
 <script lang="ts">
-  import Button from '#lib/components/Button.svelte';
-  import SelectField from '#lib/components/SelectField.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
   import '#lib/styles/app.css';
 
   import { onMount } from 'svelte';
@@ -34,10 +34,10 @@
     X
   } from '@lucide/svelte';
 
-  import TargetManagerDialog from '#lib/components/TargetManagerDialog.svelte';
+  import TargetManagerDialog from '#lib/components/targets/TargetManagerDialog.svelte';
   import { fetchAdminSession, fetchHealth, loginAdmin, logoutAdmin } from '#lib/api/client.ts';
   import BrandMark from '#lib/components/BrandMark.svelte';
-  import { workspaceEntryURL } from '#lib/scope/navigation.ts';
+  import { workspaceLink } from '#lib/scope/navigation.ts';
   import { workspaceDirectoryURL } from '#lib/scope/routes.ts';
   import {
     beginTargetSessionCheck,
@@ -60,10 +60,22 @@
 
   interface Props {
     children?: Snippet | undefined;
-    data: { availableTargets: import('#lib/types.ts').MemStationTarget[]; legacyTargetId: string | null };
+    data: { availableTargets: import('#lib/types.ts').MemStationTarget[] };
   }
 
   let { children = undefined, data }: Props = $props();
+
+  function navigationEdges(node: HTMLElement) {
+    const update = () => {
+      node.dataset.scrollStart = String(node.scrollTop > 1);
+      node.dataset.scrollEnd = String(node.scrollTop + node.clientHeight < node.scrollHeight - 1);
+    };
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    node.addEventListener('scroll', update, { passive: true });
+    update();
+    return { destroy() { observer.disconnect(); node.removeEventListener('scroll', update); } };
+  }
 
   type NavSection = {
     label: string;
@@ -169,7 +181,7 @@
     media.addEventListener('change', syncViewport);
     mounted = true;
     initializeTargets(data.availableTargets);
-    const routeTarget = page.params.target || data.legacyTargetId;
+    const routeTarget = page.params.target;
     if (routeTarget && data.availableTargets.some((target) => target.id === routeTarget)) selectRouteTarget(routeTarget);
     void refreshSelectedTarget();
     return () => {
@@ -212,6 +224,11 @@
 
   function isActive(pathname: string, href: string): boolean {
     return pathname === href || pathname.startsWith(`${href}/`);
+  }
+
+  function navActive(href: string): boolean {
+    if (isActive(page.url.pathname, navHref(href))) return true;
+    return href === '/workspaces' && ['lifecycle', 'settings', 'access'].some(section => page.route.id?.startsWith(`/t/[target]/w/[workspace]/${section}`));
   }
 
   async function refreshSelectedSession(): Promise<void> {
@@ -318,7 +335,7 @@
       if (!session.authenticated) throw new Error(session.error ?? 'Enter an admin token to reconnect this service.');
     }
     const savedTarget = upsertTarget(input.target);
-    if ((page.params.target || data.legacyTargetId) && (page.params.target || data.legacyTargetId) !== savedTarget.id) await goto(workspaceDirectoryURL(savedTarget.id));
+    if ((page.params.target) && (page.params.target) !== savedTarget.id) await goto(workspaceDirectoryURL(savedTarget.id));
     lastTargetId = savedTarget.id;
     await refreshSelectedTarget(savedTarget);
     if (page.params.target) await Promise.all([invalidate('workspace:directory'), invalidate('workspace:detail'), invalidate('workspace:read')]);
@@ -344,23 +361,23 @@
     else upsertTarget(registered);
   }
   function navHref(href: string): string {
-    const target = page.params.target || data.legacyTargetId || $selectedTarget?.id;
+    const target = page.params.target || $selectedTarget?.id;
     if (!target) return href;
     if (href === '/workspaces') return workspaceDirectoryURL(target);
     if (href !== '/memory' && !href.startsWith('/memory/') && href !== '/conversations') return href;
     const owner = page.url.searchParams.get('user_id');
-    return workspaceEntryURL(target, owner && !page.params.workspace ? `${href}?user_id=${encodeURIComponent(owner)}` : href, page.params.workspace);
+    return workspaceLink(target, href === '/conversations' ? 'conversations' : href === '/memory/keys' ? 'keys' : href === '/memory/search' ? 'memory/search' : 'memory', {owner: owner || undefined, workspace:page.params.workspace});
   }
   async function switchTarget(id: string): Promise<void> {
-    if (page.params.target || data.legacyTargetId) { await goto(workspaceDirectoryURL(id)); return; }
+    if (page.params.target) { await goto(workspaceDirectoryURL(id)); return; }
     selectTarget(id);
   }
   $effect(() => {
-    const targetId = page.params.target || data.legacyTargetId;
+    const targetId = page.params.target;
     if (mounted && targetId && targetId !== $targetState.selectedId && data.availableTargets.some((target) => target.id === targetId)) selectRouteTarget(targetId);
   });
 
-  let pinnedTargetId = $derived(page.params.target || data.legacyTargetId);
+  let pinnedTargetId = $derived(page.params.target);
   let targetItems = $derived($targetState.targets.map((target) => ({
     value: target.id,
     label: target.label,
@@ -398,7 +415,7 @@
         {/if}
       </div>
 
-      <nav class="sidebar-nav" aria-label="Primary navigation">
+      <nav class="sidebar-nav" aria-label="Primary navigation" use:navigationEdges>
         {#each navSections as section}
           <div class="sidebar-section">
             <span class="sidebar-section-label">{section.label}</span>
@@ -407,8 +424,8 @@
                 <a
                   class="sidebar-nav-link"
                   tabindex="0"
-                  class:is-active={isActive(page.url.pathname, navHref(item.href))}
-                  aria-current={(isActive(page.url.pathname, navHref(item.href))) ? 'page' : undefined}
+                  class:is-active={navActive(item.href)}
+                  aria-current={(navActive(item.href)) ? 'page' : undefined}
                   href={navHref(item.href)}
                   onclick={closeMobileSidebar}
                 >

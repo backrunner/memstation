@@ -1,12 +1,12 @@
 <script lang="ts">
-  import MetadataRow from '#lib/components/MetadataRow.svelte';
-  import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
+  import MetadataRow from '#lib/components/ui/MetadataRow.svelte';
+  import CollapsibleSection from '#lib/components/ui/CollapsibleSection.svelte';
   import { SlidersHorizontal } from '@lucide/svelte';
   import { page } from '$app/state';
-  import PageHeader from '#lib/components/PageHeader.svelte';
-  import Button from '#lib/components/Button.svelte';
-  import TextInputField from '#lib/components/TextInputField.svelte';
-  import SelectField from '#lib/components/SelectField.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
   import WorkspaceReadStatus from '#lib/components/workspaces/WorkspaceReadStatus.svelte';
   import { workspaceBaseURL, workspaceMemoryURL, workspaceDocumentKinds } from '#lib/scope/routes.ts';
   import type { PageData } from './$types';

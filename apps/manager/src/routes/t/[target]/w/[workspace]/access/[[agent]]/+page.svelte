@@ -3,7 +3,7 @@
   import { invalidate } from '$app/navigation';
   import AgentDirectory from '#lib/components/agents/AgentDirectory.svelte';
   import AgentAccess from '#lib/components/agents/AgentAccess.svelte';
-  import Button from '#lib/components/Button.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
   import { workspaceDirectoryURL, workspaceURL } from '#lib/scope/routes.ts';
   import type { PageData } from './$types';
   let { data }: { data: PageData } = $props();

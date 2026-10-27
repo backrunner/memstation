@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import PageHeader from '#lib/components/PageHeader.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
   import MemoryEditor from '#lib/components/workspaces/MemoryEditor.svelte';
   import WorkspaceReadStatus from '#lib/components/workspaces/WorkspaceReadStatus.svelte';
   import { workspaceBaseURL } from '#lib/scope/routes.ts';

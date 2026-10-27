@@ -52,7 +52,7 @@
 <div class={`field ${fieldClass}`.trim()}>
   <Label.Root class={hideLabel ? 'sr-only' : 'field-label'} id={`${id}-label`} for={id}>{label}</Label.Root>
   <Select.Root type="single" bind:value {items} {disabled} {name} {required} {onValueChange} allowDeselect={false}>
-    <Select.Trigger id={id} {title} aria-invalid={Boolean(error)} aria-describedby={describedBy} class={`select-trigger ${triggerClass} ${error ? 'is-invalid' : ''}`.trim()} aria-labelledby={`${id}-label`}>
+    <Select.Trigger id={id} title={title ?? selected?.label} aria-invalid={Boolean(error)} aria-describedby={describedBy} class={`select-trigger ${triggerClass} ${error ? 'is-invalid' : ''}`.trim()} aria-labelledby={`${id}-label`}>
       {#if selection}{@render selection(selected)}{:else}<span class="select-value">{selected?.label ?? placeholder}</span>{/if}
       <ChevronDown class="select-chevron" size={14} strokeWidth={1.75} aria-hidden="true" />
     </Select.Trigger>

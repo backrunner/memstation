@@ -1,15 +1,15 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import { workspaceEntryURL } from '#lib/scope/navigation.ts';
-  import Button from '#lib/components/Button.svelte';
+  import { workspaceLink } from '#lib/scope/navigation.ts';
+  import Button from '#lib/components/ui/Button.svelte';
   import { onMount } from 'svelte';
 
   import { fetchAudit, fetchConversations, fetchOverview, fetchQueues, fetchTasks, fetchUsers } from '#lib/api/client.ts';
-  import EChart from '#lib/components/EChart.svelte';
-  import KpiCard from '#lib/components/KpiCard.svelte';
-  import PageHeader from '#lib/components/PageHeader.svelte';
-  import StatusBadge from '#lib/components/StatusBadge.svelte';
+  import EChart from '#lib/components/charts/EChart.svelte';
+  import KpiCard from '#lib/components/charts/KpiCard.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import StatusBadge from '#lib/components/ui/StatusBadge.svelte';
   import { selectedTarget, targetState } from '#lib/stores/targets.ts';
   import type {
     AuditEventRecord,
@@ -145,17 +145,17 @@
       <KpiCard
         label="Active Conversations"
         value={String(overview?.active_conversations ?? 0)}
-        href={workspaceEntryURL($selectedTarget?.id, '/conversations')}
+        href={workspaceLink($selectedTarget?.id, 'conversations')}
       />
       <KpiCard
         label="Stored Memories"
         value={String(overview?.memory_count ?? 0)}
-        href={workspaceEntryURL($selectedTarget?.id, '/memory')}
+        href={workspaceLink($selectedTarget?.id, 'memory')}
       />
       <KpiCard
         label="Key Memories"
         value={String(overview?.key_memory_count ?? 0)}
-        href={workspaceEntryURL($selectedTarget?.id, '/memory/keys')}
+        href={workspaceLink($selectedTarget?.id, 'keys')}
       />
       <KpiCard
         label="Queue Backlog"
@@ -220,7 +220,7 @@
             </tbody>
           </table>
         </div>
-        <a class="link-inline" href={workspaceEntryURL($selectedTarget?.id, '/memory/keys')}>Browse key memories →</a>
+        <a class="link-inline" href={workspaceLink($selectedTarget?.id, 'keys')}>Browse key memories →</a>
       </section>
     </div>
 

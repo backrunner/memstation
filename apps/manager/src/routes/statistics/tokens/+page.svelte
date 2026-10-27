@@ -1,15 +1,15 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import MetadataRow from '#lib/components/MetadataRow.svelte';
-  import { workspaceEntryURL } from '#lib/scope/navigation.ts';
-  import SelectField from '#lib/components/SelectField.svelte';
+  import MetadataRow from '#lib/components/ui/MetadataRow.svelte';
+  import { workspaceLink } from '#lib/scope/navigation.ts';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
   import { onMount } from 'svelte';
 
   import { fetchConversations, fetchUsers } from '#lib/api/client.ts';
-  import EChart from '#lib/components/EChart.svelte';
-  import KpiCard from '#lib/components/KpiCard.svelte';
-  import PageHeader from '#lib/components/PageHeader.svelte';
+  import EChart from '#lib/components/charts/EChart.svelte';
+  import KpiCard from '#lib/components/charts/KpiCard.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
   import { selectedTarget, targetState } from '#lib/stores/targets.ts';
   import type { ConversationListItem, UserSummary } from '#lib/types.ts';
 
@@ -251,7 +251,7 @@
             {#each topConversations as item}
               <tr>
                 <td>
-                  <a href={workspaceEntryURL($selectedTarget?.id, `/conversations/${encodeURIComponent(item.conversation_id)}?user_id=${encodeURIComponent(item.user_id)}`)}>
+                  <a href={workspaceLink($selectedTarget?.id, 'conversations', {owner:item.user_id, record:item.conversation_id})}>
                     <strong class="mono">{item.conversation_id}</strong>
                   </a>
                   <MetadataRow items={[item.protocol, item.mode]} />

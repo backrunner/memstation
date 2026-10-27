@@ -5,10 +5,10 @@
   import { APIError, updateWorkspace } from '#lib/api/client.ts';
   import { workspaceDirectoryURL, workspaceDraftKey, type ScopeContext } from '#lib/scope/routes.ts';
   import { useSessionDraftUnloadWarning } from '#lib/stores/session-drafts.ts';
-  import Button from '../Button.svelte';
-  import CollapsibleSection from '../CollapsibleSection.svelte';
-  import PageHeader from '../PageHeader.svelte';
-  import TextInputField from '../TextInputField.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
+  import CollapsibleSection from '#lib/components/ui/CollapsibleSection.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
   import CapabilityFields from '../agents/CapabilityFields.svelte';
   import { capabilityOptions, capabilitySummary } from '../agents/capabilities.ts';
 

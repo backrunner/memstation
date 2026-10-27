@@ -202,7 +202,7 @@ export interface ConversationListItem {
   metadata?: Record<string, unknown>;
 }
 
-export type GenericMemoryDocumentKind = 'event' | 'task' | 'procedure' | 'artifact' | 'entity' | 'agent_action';
+export type GenericMemoryDocumentKind = 'episode' | 'event' | 'task' | 'procedure' | 'artifact' | 'entity' | 'agent_action';
 export type CoreMemoryDocumentKind = 'summary' | 'segment' | 'impression' | 'fact';
 export type MemoryDocumentKind = CoreMemoryDocumentKind | GenericMemoryDocumentKind;
 export type SearchMemoryType = MemoryDocumentKind | 'key_memory';
@@ -519,7 +519,6 @@ export interface SystemRuntimeConfig {
   rerank_candidate_multiplier: number;
   rerank_min_candidates: number;
   rerank_max_candidates: number;
-  rerank_blend_weight: number;
   memory_relation_max_hops: number;
   memory_relation_hop_decay_lambda: number;
   memory_relation_hop_decay_exponent: number;
@@ -569,8 +568,7 @@ export interface UserSummary {
 }
 
 export interface UserDetailPayload {
-  identity_mode?: "personal_only";
-  agents?: { id: string; name: string; status: string; legacy: boolean }[];
+  agents?: AgentRecord[];
   user: {
     id: string;
     name: string;
@@ -661,7 +659,6 @@ export interface AgentRecord {
   status: 'active' | 'disabled';
   default_workspace_id: string;
   revision: number;
-  legacy: boolean;
   created_at: string;
   updated_at: string;
 }

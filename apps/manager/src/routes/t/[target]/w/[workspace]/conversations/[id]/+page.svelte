@@ -1,11 +1,10 @@
 <script lang="ts">
-  import MetadataRow from '#lib/components/MetadataRow.svelte';
-  import { legacyReviewURL } from '#lib/scope/navigation.ts';
+  import MetadataRow from '#lib/components/ui/MetadataRow.svelte';
   import { page } from '$app/state';
-  import PageHeader from '#lib/components/PageHeader.svelte';
-  import ChatMessageCard from '#lib/components/ChatMessageCard.svelte';
-  import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
-  import JsonView from '#lib/components/JsonView.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import ChatMessageCard from '#lib/components/chat/ChatMessageCard.svelte';
+  import CollapsibleSection from '#lib/components/ui/CollapsibleSection.svelte';
+  import JsonView from '#lib/components/content/JsonView.svelte';
   import WorkspaceReadStatus from '#lib/components/workspaces/WorkspaceReadStatus.svelte';
   import { workspaceBaseURL, workspaceMemoryURL } from '#lib/scope/routes.ts';
   import type { PageData } from './$types';
@@ -35,11 +34,11 @@
         {#if !data.memories.value.documents?.length}<p class="helper-text">No memory documents linked in this generation.</p>{/if}
       {/if}
     </section>
-    <a class="text-link" href={legacyReviewURL(data.routeTarget.id, `/conversations/${encodeURIComponent(item.conversation_id)}`, item.user_id, data.generation)}>Processing and rebuild controls</a>
     <CollapsibleSection title="Processing and source details">
       <MetadataRow items={[`Summary: ${item.summary_status || 'unknown'}`, `Analysis: ${item.analysis_status || 'unknown'}`]} />
       <JsonView value={{ metadata: item.metadata, segments: item.segments, parts: item.parts, artifacts: item.artifacts }} />
     </CollapsibleSection>
+    <a class="text-link" href={`${base}/lifecycle`}>Workspace processing and rebuilds</a>
   {/if}
 </section>
 

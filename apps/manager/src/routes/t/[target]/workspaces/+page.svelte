@@ -1,17 +1,17 @@
 <script lang="ts">
   import { createWorkspace } from '#lib/api/client.ts';
-  import SelectField from '#lib/components/SelectField.svelte';
-  import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
+  import CollapsibleSection from '#lib/components/ui/CollapsibleSection.svelte';
   import { invalidate } from '$app/navigation';
-  import Button from '#lib/components/Button.svelte';
-  import PageHeader from '#lib/components/PageHeader.svelte';
-  import TextInputField from '#lib/components/TextInputField.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
   import { workspaceDirectoryURL, workspaceURL, workspaceBaseURL } from '#lib/scope/routes.ts';
   import { workspaceDestination } from '#lib/scope/navigation.ts';
   import type { PageData } from './$types';
   let { data }: { data: PageData } = $props();
   let base = $derived(workspaceDirectoryURL(data.routeTarget.id));
-  let nextURL = $derived(`${base}?${new URLSearchParams({ ...data.filters, ...(data.destination ? { open: data.destination } : {}), after: data.directory.value?.next_cursor ?? '' })}`);
+  let nextURL = $derived(`${base}?${new URLSearchParams({ ...data.filters, ...data.destinationFields, after: data.directory.value?.next_cursor ?? '' })}`);
 
   let newOwner = $state(''); let newName = $state(''); let newKind = $state('group'); let busy = $state(false); let createError = $state('');
   async function create(event: SubmitEvent) { event.preventDefault(); busy=true;createError='';try { await createWorkspace(data.routeTarget,newOwner.trim(),newName.trim(),newKind);newName='';await invalidate('workspace:directory'); } catch(cause) {createError=cause instanceof Error?cause.message:'Unable to create workspace.';} finally {busy=false;} }
@@ -32,7 +32,7 @@
     <form class="workspace-search" action={base} method="GET">
       <TextInputField label="Search workspaces" name="q" value={data.filters.q} maxlength={120} placeholder="Workspace name or owner" />
       <TextInputField label="Owner ID" name="user_id" value={data.filters.user_id} maxlength={256} placeholder="All owners" />
-      {#if data.destination}<input type="hidden" name="open" value={data.destination} />{/if}
+      {#each Object.entries(data.destinationFields) as [name,value]}<input type="hidden" {name} {value} />{/each}
       <Button type="submit" class="btn-secondary">Search</Button>
     </form>
   {/key}
@@ -41,16 +41,16 @@
   {:else if data.directory.value}
     <div>
       {#each data.directory.value.items as workspace (workspace.id)}
-        <a class="workspace-row" href={data.destination ? workspaceDestination(workspaceBaseURL(data.routeTarget.id, workspace.id), data.destination)! : workspaceURL(data.routeTarget.id, workspace.id)}>
+        <a class="workspace-row" href={data.destination ? workspaceDestination(workspaceBaseURL(data.routeTarget.id, workspace.id), data.destination) : workspaceURL(data.routeTarget.id, workspace.id)}>
           <div><strong>{workspace.name}</strong><span class="helper-text">Owner: {workspace.user_id}</span></div>
           <span class="panel-meta">{workspace.kind}{workspace.status !== 'active' ? `, ${workspace.status}` : ''}</span>
         </a>
       {:else}
-        <p class="panel-meta">No workspaces match these filters. A Personal workspace is provisioned when an owner first uses an agent or credential; existing data is migrated automatically.</p>
+        <p class="panel-meta">No workspaces match these filters. A Personal workspace is provisioned when an owner first uses an agent or credential; create agents explicitly and issue credentials for their workspace.</p>
       {/each}
     </div>
     <div class="pagination">
-      {#if data.filters.after}<a class="text-link" href={`${base}?${new URLSearchParams({ ...data.filters, ...(data.destination ? { open: data.destination } : {}), after: '' })}`}>First page</a>{/if}
+      {#if data.filters.after}<a class="text-link" href={`${base}?${new URLSearchParams({ ...data.filters, ...data.destinationFields, after: '' })}`}>First page</a>{/if}
       {#if data.directory.value.next_cursor}<a class="text-link" href={nextURL}>Next workspaces</a>{/if}
     </div>
   {/if}

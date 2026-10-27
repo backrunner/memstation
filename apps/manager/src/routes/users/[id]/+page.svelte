@@ -1,9 +1,9 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import MetadataRow from '#lib/components/MetadataRow.svelte';
-  import { workspaceEntryURL } from '#lib/scope/navigation.ts';
-  import Button from '#lib/components/Button.svelte';
+  import MetadataRow from '#lib/components/ui/MetadataRow.svelte';
+  import { workspaceLink } from '#lib/scope/navigation.ts';
+  import Button from '#lib/components/ui/Button.svelte';
   import { onDestroy, onMount } from 'svelte';
   import { createPageStore } from '#lib/stores/page.ts';
 
@@ -18,13 +18,13 @@
     revokeUserAPIKey,
     updateUserSettings
   } from '#lib/api/client.ts';
-  import CodeBlock from '#lib/components/CodeBlock.svelte';
-  import ConfirmActionDialog from '#lib/components/ConfirmActionDialog.svelte';
-  import PageHeader from '#lib/components/PageHeader.svelte';
-  import SelectField from '#lib/components/SelectField.svelte';
-  import StatusBadge from '#lib/components/StatusBadge.svelte';
-  import SwitchField from '#lib/components/SwitchField.svelte';
-  import TextInputField from '#lib/components/TextInputField.svelte';
+  import CodeBlock from '#lib/components/content/CodeBlock.svelte';
+  import ConfirmActionDialog from '#lib/components/ui/ConfirmActionDialog.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
+  import StatusBadge from '#lib/components/ui/StatusBadge.svelte';
+  import SwitchField from '#lib/components/ui/SwitchField.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
   import { isNonNegativeInteger } from '#lib/forms/validation.ts';
   import {
     buildSessionDraftKey,
@@ -353,11 +353,14 @@
     success = '';
     createdKey = '';
     try {
-      const options = detail?.identity_mode === 'personal_only' ? {
-        ...(keyAgent ? { agent_id: keyAgent } : {}),
+      const agent = detail?.agents?.find(item => item.id === keyAgent && item.status === 'active');
+      if (!agent) throw new Error('Choose an active agent before creating a credential.');
+      const options = {
+        agent_id: agent.id,
+        workspace_id: agent.default_workspace_id,
         ...(keyAccess === 'read' ? { capabilities: ['memory.read'] } : {}),
         ...(keyLifetime !== 'never' ? { expires_at: new Date(Date.now() + Number(keyLifetime) * 86400000).toISOString() } : {})
-      } : undefined;
+      };
       const payload = await createUserAPIKey($selectedTarget, $page.params.id, newKeyName.trim() || 'manager-created', options);
       if (scope !== routeKey) return;
       createdKey = payload.api_key;
@@ -496,7 +499,7 @@
     description="API keys, settings, and memory generation state for this user."
   >
     <svelte:fragment slot="actions">
-      {#if detail?.identity_mode === 'personal_only'}<a class="btn-secondary" href={`/users/${encodeURIComponent($page.params.id ?? '')}/agents`}>Manage agents</a>{/if}
+      {#if detail}<a class="btn-secondary" href={`/users/${encodeURIComponent($page.params.id ?? '')}/agents`}>Manage agents</a>{/if}
     </svelte:fragment>
   </PageHeader>
 
@@ -598,10 +601,10 @@
               <p class="panel-meta">Creation and revocation are audited. Agent permissions can further restrict each key.</p>
             </div>
           </div>
-          {#if detail.identity_mode === 'personal_only'}
-            <p class="helper-text">Agents share this account’s Personal memory. Separate workspaces and private memory are not available yet.</p>
+          {#if detail}
+            <p class="helper-text">Choose an active agent. Credentials use its workspace and current access grant.</p>
             <div class="form-grid two-up" style="margin-block: 12px;">
-              <SelectField label="Agent" bind:value={keyAgent} items={[{ value: '', label: 'Legacy agent' }, ...(detail.agents ?? []).filter((agent) => !agent.legacy && agent.status === 'active').map((agent) => ({ value: agent.id, label: agent.name }))]} />
+              <SelectField label="Agent" bind:value={keyAgent} placeholder="Choose an agent" items={(detail.agents ?? []).filter((agent) => agent.status === 'active').map((agent) => ({ value: agent.id, label: agent.name }))} />
               <SelectField label="Key permissions" bind:value={keyAccess} items={[{ value: 'agent', label: 'Current agent permissions' }, { value: 'read', label: 'Read memory only' }]} />
               <SelectField label="Expires after" bind:value={keyLifetime} items={[{ value: '7', label: '7 days' }, { value: '30', label: '30 days' }, { value: '90', label: '90 days' }, { value: 'never', label: 'Never' }]} />
             </div>
@@ -610,7 +613,7 @@
             <div style="flex: 1; min-width: 0;">
               <TextInputField label="New Key Label" bind:value={newKeyName} placeholder="build-bot or local playground" />
             </div>
-            <Button class="btn-primary" type="button" disabled={creatingKey} onclick={createKey}>{creatingKey ? 'Creating...' : 'Create API Key'}</Button>
+            <Button class="btn-primary" type="button" disabled={creatingKey || !keyAgent} onclick={createKey}>{creatingKey ? 'Creating...' : 'Create API Key'}</Button>
           </div>
 
           <div class="toolbar">
@@ -712,14 +715,14 @@
             <div>
               <h2 class="section-title">Recent Sessions</h2>
             </div>
-            <a class="btn-ghost" href={workspaceEntryURL($selectedTarget?.id, `/memory?user_id=${encodeURIComponent(detail.user.id)}`)}>Open memory workspace</a>
+            <a class="btn-ghost" href={workspaceLink($selectedTarget?.id, 'memory', {owner:detail.user.id})}>Open memory workspace</a>
           </div>
           {#if detail.conversations.length === 0}
             <div class="empty-state">No recent sessions are available for this user yet.</div>
           {:else}
             <div class="session-list">
               {#each detail.conversations as conversation}
-                <a class="session-row" href={workspaceEntryURL($selectedTarget?.id, `/conversations/${encodeURIComponent(conversation.conversation_id)}?user_id=${encodeURIComponent(detail.user.id)}`)}>
+                <a class="session-row" href={workspaceLink($selectedTarget?.id, 'conversations', {owner:detail.user.id,record:conversation.conversation_id})}>
                   <div class="session-row-main">
                     <strong>{conversation.conversation_id}</strong>
                     <MetadataRow items={[conversation.protocol, conversation.mode]} />
@@ -740,7 +743,7 @@
             <div>
               <h2 class="section-title">Stable Memory Slots</h2>
             </div>
-            <a class="btn-ghost" href={workspaceEntryURL($selectedTarget?.id, `/memory/keys?user_id=${encodeURIComponent(detail.user.id)}`)}>Manage key memories</a>
+            <a class="btn-ghost" href={workspaceLink($selectedTarget?.id, 'keys', {owner:detail.user.id})}>Manage key memories</a>
           </div>
           {#if detail.key_memories.length === 0}
             <div class="empty-state">This user does not have any key memories yet.</div>

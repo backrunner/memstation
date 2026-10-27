@@ -10,8 +10,6 @@ export const load: LayoutServerLoad = async ({ cookies, url, setHeaders }) => {
     availableTargets = targetRegistry(process.env).map(publicTarget);
     await ensureManagerSession(cookies, url);
   } catch { error(503, 'Manager connections are unavailable. Check the target and session-store configuration.'); }
-  const legacyTargetId = url.searchParams.get('manager_target');
-  if (url.searchParams.getAll('manager_target').length > 1) error(400, 'Choose one service for this record.');
-  if (legacyTargetId && !availableTargets.some(target => target.id === legacyTargetId)) error(404, 'This service is not registered in Manager.');
-  return { availableTargets, legacyTargetId };
+  if (url.searchParams.has('manager_target')) error(400, 'Unsupported navigation parameter. Choose a service and workspace.');
+  return { availableTargets };
 };

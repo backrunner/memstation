@@ -44,7 +44,7 @@ async function requestExchange(protocol: GatewayProtocol, messages: ChatThreadMe
     target,
     apiKey: 'memstation-test-key',
     protocol,
-    provider: 'openai',
+    provider: 'openai_compatible',
     model: 'test-model',
     stream: false,
     mode: 'transparent',

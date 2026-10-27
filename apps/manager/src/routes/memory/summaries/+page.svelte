@@ -1,18 +1,18 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import Button from '#lib/components/Button.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
   import { onMount } from 'svelte';
   import { createPageStore } from '#lib/stores/page.ts';
 
   const page = createPageStore();
 
   import { fetchAdminMemoryDocuments, updateAdminMemoryDocument } from '#lib/api/client.ts';
-  import MemoryWorkspaceNav from '#lib/components/MemoryWorkspaceNav.svelte';
-  import PageHeader from '#lib/components/PageHeader.svelte';
+  import MemoryWorkspaceNav from '#lib/components/layout/MemoryWorkspaceNav.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
   import { memoryDetailHref } from '#lib/memory/routes.ts';
-  import TextInputField from '#lib/components/TextInputField.svelte';
-  import TextareaField from '#lib/components/TextareaField.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
+  import TextareaField from '#lib/components/ui/TextareaField.svelte';
   import {
     buildSessionDraftKey,
     readSessionDraft,

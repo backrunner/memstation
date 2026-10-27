@@ -7,8 +7,8 @@
   import { browseWorkspaces } from '#lib/api/client.ts';
   import { switchWorkspaceURL, workspaceDirectoryURL, type ScopeContext } from '#lib/scope/routes.ts';
   import type { WorkspacePage } from '#lib/types.ts';
-  import Button from '../Button.svelte';
-  import TextInputField from '../TextInputField.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
 
   let { scope }: { scope: ScopeContext } = $props();
   const id = $props.id();

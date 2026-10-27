@@ -1,17 +1,19 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import Button from '#lib/components/Button.svelte';
+  import RerankModelField from '#lib/components/settings/RerankModelField.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
   import { onMount } from 'svelte';
 
   import { fetchConfig, fetchHealth, saveConfig } from '#lib/api/client.ts';
-  import ConfirmActionDialog from '#lib/components/ConfirmActionDialog.svelte';
-  import SettingsSection from '#lib/components/SettingsSection.svelte';
-  import PageHeader from '#lib/components/PageHeader.svelte';
-  import SelectField from '#lib/components/SelectField.svelte';
-  import SwitchField from '#lib/components/SwitchField.svelte';
-  import TextInputField from '#lib/components/TextInputField.svelte';
-  import TextareaField from '#lib/components/TextareaField.svelte';
+  import ConfirmActionDialog from '#lib/components/ui/ConfirmActionDialog.svelte';
+  import SettingsSection from '#lib/components/layout/SettingsSection.svelte';
+  import SettingsNavigation from '#lib/components/layout/SettingsNavigation.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
+  import SwitchField from '#lib/components/ui/SwitchField.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
+  import TextareaField from '#lib/components/ui/TextareaField.svelte';
   import { isMimeType, isNonNegativeInteger, isNumberInRange, isOriginValue, isPositiveInteger, isPostgresURL, parseLineList } from '#lib/forms/validation.ts';
   import {
     buildSessionDraftKey,
@@ -46,6 +48,36 @@
     { value: 'gemini', label: 'gemini' }
   ];
 
+  const sections = [
+    { id: 'system-traffic', label: 'Traffic' }, { id: 'system-recall', label: 'Recall' },
+    { id: 'system-rerank', label: 'Rerank' }, { id: 'system-relations', label: 'Relations' },
+    { id: 'system-web', label: 'Web' }, { id: 'system-multimodal', label: 'Multimodal' },
+    { id: 'system-database', label: 'Database connection' }, { id: 'system-overrides', label: 'Overrides & drift' }
+  ];
+
+  function observeSheetMask(sheet: HTMLElement) {
+    const mask = sheet.querySelector<HTMLElement>('.settings-scroll-mask')!;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const boundary = Number.parseFloat(getComputedStyle(mask).top);
+      sheet.dataset.scrolled = String(sheet.getBoundingClientRect().top + 1 < boundary);
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
+    const observer = new ResizeObserver(schedule);
+    observer.observe(sheet);
+    const header = sheet.closest('.page-stack')?.querySelector(':scope > .page-header');
+    if (header) observer.observe(header);
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule, { passive: true });
+    schedule();
+    return { destroy() {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+    } };
+  }
   const vectorStoreItems = [{ value: 'pgvector', label: 'pgvector' }];
   const storageBackendItems = [{ value: 'local', label: 'local' }];
   const systemDraftVersion = 1;
@@ -135,7 +167,6 @@
       rerank_candidate_multiplier: 6,
       rerank_min_candidates: 20,
       rerank_max_candidates: 50,
-      rerank_blend_weight: 0.35,
       memory_relation_max_hops: 2,
       memory_relation_hop_decay_lambda: 0.35,
       memory_relation_hop_decay_exponent: 1.25,
@@ -210,7 +241,6 @@
       'rerank_candidate_multiplier',
       'rerank_min_candidates',
       'rerank_max_candidates',
-      'rerank_blend_weight',
       'memory_relation_max_hops',
       'memory_relation_hop_decay_lambda',
       'memory_relation_hop_decay_exponent',
@@ -250,7 +280,6 @@
       rerank_candidate_multiplier: Number(runtimeValue.rerank_candidate_multiplier ?? 6),
       rerank_min_candidates: Number(runtimeValue.rerank_min_candidates ?? 20),
       rerank_max_candidates: Number(runtimeValue.rerank_max_candidates ?? 50),
-      rerank_blend_weight: Number(runtimeValue.rerank_blend_weight ?? 0.35),
       memory_relation_max_hops: Number(runtimeValue.memory_relation_max_hops ?? 2),
       memory_relation_hop_decay_lambda: Number(runtimeValue.memory_relation_hop_decay_lambda ?? 0.35),
       memory_relation_hop_decay_exponent: Number(runtimeValue.memory_relation_hop_decay_exponent ?? 1.25),
@@ -456,9 +485,6 @@
     if (runtime.rerank_max_candidates < runtime.rerank_min_candidates) {
       nextErrors['runtime.rerank_max_candidates'] = 'Max candidates must be greater than or equal to min candidates.';
     }
-    if (!isNumberInRange(runtime.rerank_blend_weight, 0, 1)) {
-      nextErrors['runtime.rerank_blend_weight'] = 'Use a value between 0 and 1.';
-    }
     if (!isPositiveInteger(runtime.memory_relation_max_hops)) {
       nextErrors['runtime.memory_relation_max_hops'] = 'Use a positive integer.';
     }
@@ -643,7 +669,6 @@
       rerank_candidate_multiplier: 'Candidate multiplier',
       rerank_min_candidates: 'Min rerank candidates',
       rerank_max_candidates: 'Max rerank candidates',
-      rerank_blend_weight: 'Blend weight',
       memory_relation_max_hops: 'Relation max hops',
       memory_relation_hop_decay_lambda: 'Hop decay lambda',
       memory_relation_hop_decay_exponent: 'Hop decay exponent',
@@ -783,17 +808,9 @@
     {/if}
 
     <div class="system-workspace">
-      <nav class="system-section-nav" aria-label="System sections">
-        <a href="#system-traffic">Traffic</a>
-        <a href="#system-recall">Recall</a>
-        <a href="#system-rerank">Rerank</a>
-        <a href="#system-relations">Relations</a>
-        <a href="#system-web">Web</a>
-        <a href="#system-multimodal">Multimodal</a>
-        <a href="#system-database">Database connection</a>
-        <a href="#system-overrides">Overrides &amp; drift</a>
-      </nav>
-      <div class="settings-sheet">
+      <SettingsNavigation items={sections} />
+      <div class="settings-sheet" data-scrolled="false" use:observeSheetMask>
+        <div class="settings-scroll-mask" aria-hidden="true"></div>
         <SettingsSection id="system-traffic" title="Traffic" description="Provider defaults and request thresholds.">
 <div class="form-grid two-up mobile-pairs">
             <SelectField
@@ -819,16 +836,15 @@
             <SelectField label="Vector store backend" items={vectorStoreItems} bind:value={runtime.vector_store_backend} />
             <TextInputField label="Max context tokens" bind:value={runtime.max_context_tokens} type="number" fieldClass="compact-field" min="0" error={runtimeFieldError('max_context_tokens')} />
             <TextInputField label="Max injection tokens" bind:value={runtime.max_injection_tokens} type="number" fieldClass="compact-field" min="0" error={runtimeFieldError('max_injection_tokens')} />
+            <TextInputField label="Cache TTL (s)" bind:value={runtime.cache_ttl_seconds} type="number" fieldClass="compact-field" min="0" error={runtimeFieldError('cache_ttl_seconds')} />
           </div>
         </SettingsSection>
-        <SettingsSection id="system-rerank" title="Rerank" description="Candidate shape and blending.">
+        <SettingsSection id="system-rerank" title="Rerank" description="Choose a relevance model, then set the candidate budget.">
 <div class="form-grid two-up mobile-pairs">
-            <TextInputField label="Cache TTL (s)" bind:value={runtime.cache_ttl_seconds} type="number" fieldClass="compact-field" min="0" error={runtimeFieldError('cache_ttl_seconds')} />
-            <TextInputField label="Rerank model" bind:value={runtime.rerank_model} placeholder="cohere:rerank-v3.5" />
+            <RerankModelField bind:value={runtime.rerank_model} error={runtimeFieldError('rerank_model')} />
             <TextInputField label="Candidate multiplier" bind:value={runtime.rerank_candidate_multiplier} type="number" fieldClass="compact-field" min="1" max="16" error={runtimeFieldError('rerank_candidate_multiplier')} />
             <TextInputField label="Min rerank candidates" bind:value={runtime.rerank_min_candidates} type="number" fieldClass="compact-field" min="1" error={runtimeFieldError('rerank_min_candidates')} />
             <TextInputField label="Max rerank candidates" bind:value={runtime.rerank_max_candidates} type="number" fieldClass="compact-field" min="1" error={runtimeFieldError('rerank_max_candidates')} />
-            <TextInputField label="Rerank blend weight" bind:value={runtime.rerank_blend_weight} type="number" fieldClass="compact-field" min="0" max="1" step="0.05" error={runtimeFieldError('rerank_blend_weight')} />
           </div>
         </SettingsSection>
         <SettingsSection id="system-relations" title="Relations" description="Hop graph decay settings.">
@@ -988,11 +1004,11 @@
 />
 
 <style>
+  :global(html:has(.system-workspace)) { scroll-behavior: smooth; }
   .system-workspace { display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 24px; align-items: start; }
-  .system-section-nav { display: grid; gap: 2px; position: sticky; top: 148px; }
-  .system-section-nav a { display: flex; align-items: center; min-height: 36px; padding: 6px 10px; border-radius: var(--radius-sm); color: var(--text-secondary); font-size: var(--font-size-md); }
-  .system-section-nav a:hover { color: var(--text); background: var(--surface-muted); }
-  .settings-sheet { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+  .settings-scroll-mask { position: sticky; top: calc(var(--page-anchor-offset) - 12px); height: 36px; margin-bottom: -36px; background: linear-gradient(to bottom, var(--surface), transparent); pointer-events: none; opacity: 0; z-index: 2; }
+  .settings-sheet:global([data-scrolled='true']) .settings-scroll-mask { opacity: 1; }
+  .settings-sheet { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); overflow: clip; }
 
   .system-subsection {
     display: grid;
@@ -1019,7 +1035,6 @@
 
   @media (max-width: 900px) {
     .system-workspace { grid-template-columns: 1fr; gap: 16px; }
-    .system-section-nav { display: flex; position: static; overflow-x: auto; min-width: 0; border-bottom: 1px solid var(--border); }
-    .system-section-nav a { flex-shrink: 0; min-height: 44px; }
   }
+  @media (max-width: 640px) { .settings-scroll-mask { top: calc(var(--topbar-height) + var(--shell-inset)); } }
 </style>

@@ -1,7 +1,7 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import Button from '#lib/components/Button.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
   import { createEventDispatcher } from 'svelte';
   import { AlertDialog } from 'bits-ui';
 

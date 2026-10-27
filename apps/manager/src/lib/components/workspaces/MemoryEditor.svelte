@@ -1,16 +1,16 @@
 <svelte:options runes={false} />
 <script lang="ts">
-  import MetadataRow from '#lib/components/MetadataRow.svelte';
+  import MetadataRow from '#lib/components/ui/MetadataRow.svelte';
   import { onMount, onDestroy } from 'svelte';
   import { beforeNavigate, goto, invalidate } from '$app/navigation';
   import { APIError, writeWorkspaceMemory } from '#lib/api/client.ts';
   import { workspaceBaseURL, type ScopeContext } from '#lib/scope/routes.ts';
   import { useSessionDraftUnloadWarning } from '#lib/stores/session-drafts.ts';
   import type { MemoryDocument, KeyMemoryRecord } from '#lib/types.ts';
-  import Button from '../Button.svelte';
-  import TextareaField from '../TextareaField.svelte';
-  import TextInputField from '../TextInputField.svelte';
-  import SelectField from '../SelectField.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
+  import TextareaField from '#lib/components/ui/TextareaField.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
 
   export let scope: ScopeContext;
   export let record: MemoryDocument | KeyMemoryRecord | null = null;

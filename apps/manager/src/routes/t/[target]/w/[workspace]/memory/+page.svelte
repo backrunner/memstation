@@ -1,16 +1,16 @@
 <script lang="ts">
-  import MetadataRow from '#lib/components/MetadataRow.svelte';
+  import MetadataRow from '#lib/components/ui/MetadataRow.svelte';
   import { page } from '$app/state';
-  import PageHeader from '#lib/components/PageHeader.svelte';
-  import Button from '#lib/components/Button.svelte';
-  import TextInputField from '#lib/components/TextInputField.svelte';
-  import SelectField from '#lib/components/SelectField.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
   import WorkspaceReadStatus from '#lib/components/workspaces/WorkspaceReadStatus.svelte';
   import { workspaceBaseURL, workspaceMemoryURL, workspaceDocumentKinds } from '#lib/scope/routes.ts';
   import type { PageData } from './$types';
   let { data }: { data: PageData } = $props();
   let query = $derived(data.query); let kind = $derived(data.kind);
-  const kinds = [{ value: '', label: 'All document types' }, ...workspaceDocumentKinds.map(value => ({ value, label: value.replaceAll('_', ' ') }))];
+  const kinds = [{ value: '', label: 'All document types' }, ...workspaceDocumentKinds.map(value => ({ value, label: value === 'episode' ? 'Semantic episodes' : value.replaceAll('_', ' ') }))];
   let base = $derived(workspaceBaseURL(data.routeTarget.id, page.params.workspace!));
   let records = $derived(data.records.value?.items ?? []);
   function pageURL(after = ''): string {

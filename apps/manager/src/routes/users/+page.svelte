@@ -1,15 +1,15 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import Button from '#lib/components/Button.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
   import { onMount } from 'svelte';
 
   import { fetchUsers } from '#lib/api/client.ts';
-  import FilterToolbar from '#lib/components/FilterToolbar.svelte';
-  import PageHeader from '#lib/components/PageHeader.svelte';
-  import SelectField from '#lib/components/SelectField.svelte';
-  import StatusBadge from '#lib/components/StatusBadge.svelte';
-  import TextInputField from '#lib/components/TextInputField.svelte';
+  import FilterToolbar from '#lib/components/layout/FilterToolbar.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
+  import StatusBadge from '#lib/components/ui/StatusBadge.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
   import { selectedTarget, targetState } from '#lib/stores/targets.ts';
   import type { UserSummary } from '#lib/types.ts';
 

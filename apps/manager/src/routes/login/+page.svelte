@@ -1,14 +1,14 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import Button from '#lib/components/Button.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import BrandMark from '#lib/components/BrandMark.svelte';
 
   import { fetchHealth, loginAdmin } from '#lib/api/client.ts';
-  import SelectField from '#lib/components/SelectField.svelte';
-  import TextInputField from '#lib/components/TextInputField.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
   import { parseTargetLocator } from '#lib/targets/uri.ts';
   import type { ParsedTargetLocator } from '#lib/targets/uri.ts';
   import { availableTargets, markTargetSessionConnected, updateSession, upsertTarget } from '#lib/stores/targets.ts';

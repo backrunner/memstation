@@ -25,7 +25,21 @@ const runtimeDefaults = Object.freeze({
   rerank_candidate_multiplier: 6,
   rerank_min_candidates: 20,
   rerank_max_candidates: 50,
-  rerank_blend_weight: 0.35,
+  memory_relation_max_hops: 2,
+  memory_relation_hop_decay_lambda: 0.35,
+  memory_relation_hop_decay_exponent: 1.25,
+  multimodal_enabled: true,
+  multimodal_storage_backend: 'local',
+  multimodal_storage_local_root: './data/blobs',
+  multimodal_storage_bucket: '',
+  multimodal_extract_image_model: '',
+  multimodal_extract_audio_model: '',
+  multimodal_extract_video_model: '',
+  multimodal_extract_file_model: '',
+  multimodal_audio_transcription_enabled: true,
+  multimodal_video_frame_sampling_enabled: true,
+  multimodal_max_asset_bytes: 26214400,
+  multimodal_allowed_mime_types: ['image/png','audio/mpeg'],
   rate_limit_rps: 20,
   rate_limit_burst: 40,
   cache_ttl_seconds: 120,
@@ -34,6 +48,7 @@ const runtimeDefaults = Object.freeze({
 });
 
 const runtimeMeta = Object.freeze({
+  ...Object.fromEntries(Object.keys(runtimeDefaults).map(key=>[key,{apply_mode:'live',source:'default',category:key.startsWith('multimodal_')?'multimodal':'memory',description:key.replaceAll('_',' ')}])),
   default_provider: { apply_mode: 'live', source: 'default', category: 'traffic', description: 'Default gateway provider for automatic routing.' },
   internal_default_provider: { apply_mode: 'live', source: 'default', category: 'traffic', description: 'Default internal provider for summary and analysis workloads.' },
   vector_store_backend: { apply_mode: 'live', source: 'default', category: 'memory', description: 'Vector store backend selection.' },
@@ -47,7 +62,6 @@ const runtimeMeta = Object.freeze({
   rerank_candidate_multiplier: { apply_mode: 'live', source: 'default', category: 'memory', description: 'Vector expansion factor before reranking.' },
   rerank_min_candidates: { apply_mode: 'live', source: 'default', category: 'memory', description: 'Minimum candidate pool sent into reranking.' },
   rerank_max_candidates: { apply_mode: 'live', source: 'default', category: 'memory', description: 'Maximum candidate pool sent into reranking.' },
-  rerank_blend_weight: { apply_mode: 'live', source: 'default', category: 'memory', description: 'Blend factor applied to rerank scores.' },
   rate_limit_rps: { apply_mode: 'live', source: 'default', category: 'web', description: 'Gateway rate limit per second.' },
   rate_limit_burst: { apply_mode: 'live', source: 'default', category: 'web', description: 'Gateway burst allowance.' },
   cache_ttl_seconds: { apply_mode: 'live', source: 'default', category: 'memory', description: 'Cache TTL in seconds.' },
@@ -135,6 +149,14 @@ const providerSetDefaults = Object.freeze({
     }
   ],
   rerank: [
+    {
+      provider: 'openrouter', base_url: 'https://openrouter.ai/api/v1',
+      host: 'openrouter.ai', scheme: 'https', has_api_key: false, source: 'fixture'
+    },
+    {
+      provider: 'rerank_compatible', base_url: 'http://127.0.0.1:18082',
+      host: '127.0.0.1:18082', scheme: 'http', has_api_key: false, source: 'fixture'
+    },
     {
       provider: 'cohere',
       base_url: 'https://api.cohere.com/v2',
@@ -1619,8 +1641,8 @@ function createState() {
     ),
     model_settings: clone(modelDefaults),
     workspaces: [{ id: 'personal-bob', user_id: 'bob', name: 'Bob notes', kind: 'personal', status: 'active', capabilities: ['memory.read'], policy_version: 1, created_at: now, updated_at: now }, { id: 'personal', user_id: 'admin', name: 'Personal', kind: 'personal', status: 'active', capabilities: ['gateway.invoke','memory.read','memory.edit','files.read','files.write'], policy_version: 1, created_at: now, updated_at: now }],
-    agents: ['coding-agent', 'legacy-agent'].map((id) => ({ id, user_id: 'admin', actor_id: `actor-${id}`, name: id === 'coding-agent' ? 'Coding agent' : 'Legacy agent', status: 'active', default_workspace_id: 'personal', revision: 1, legacy: id === 'legacy-agent', created_at: now, updated_at: now })),
-    grants: Object.fromEntries(['coding-agent', 'legacy-agent'].map((id) => [id, { user_id: 'admin', agent_id: id, workspace_id: 'personal', capabilities: ['gateway.invoke', 'memory.read', 'files.read'], revision: 1 }])),
+    agents: ['coding-agent','review-agent'].map((id) => ({ id, user_id: 'admin', actor_id: `actor-${id}`, name: id === 'coding-agent' ? 'Coding agent' : 'Review agent', status: 'active', default_workspace_id: 'personal', revision: 1, created_at: now, updated_at: now })),
+    grants: Object.fromEntries(['coding-agent','review-agent'].map((id) => [id, { user_id: 'admin', agent_id: id, workspace_id: 'personal', capabilities: ['gateway.invoke', 'memory.read', 'files.read'], revision: 1 }])),
     users: [
       {
         user_id: 'admin',
@@ -1774,6 +1796,11 @@ const server = http.createServer(async (req, res) => {
     state.conversations['old-archive'] = { ...clone(conversation), conversation_id: 'old-archive', updated_at: '2020-01-01T00:00:00.000Z' };
     state.key_memories.push({ ...clone(key), id: 'old-archive', key: 'old-archive', value: 'Unique old archive key', updated_at: '2020-01-01T00:00:00.000Z' });
     json(req,res,{ok:true}); return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/__test/episode-seed') {
+    state.memory_documents.episode = [{id:'episode-fixture',node_id:'node-episode-fixture',user_id:'admin',generation_id:'generation-admin-active',conversation_id:'conv-seed-1',type:'episode',content:'Alice cancelled the planned Friday visit because the venue was closed. The visit did not take place.',revision:1,metadata:{status:'cancelled',semantic_unit_version:'episode_v1',participants:['Alice'],time_anchor:{source_id:'source-fixture',text:'next Friday'},source_session_time:'9:00 am on 23 October, 2026',source_times:{'source-fixture':'2026-10-23T09:00:00Z'}},created_at:nowISO(),updated_at:nowISO(),evidences:[{id:'episode-evidence',evidence_kind:'exact_quote',excerpt_text:'Alice: I cancelled the Friday visit.'}]}];
+    json(req,res,{ok:true});return;
   }
 
   if (req.method === 'POST' && url.pathname === '/__test/browse-seed') {
@@ -1936,6 +1963,8 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (await memoryServiceFixture(req,res,url,state,{json,readJSON,nowISO})) return;
+
   // Mirror the real scoped GET contract; never reuse a fixture record from another owner.
   const scopedRead = url.pathname.match(/^\/api\/admin\/workspaces\/([^/]+)(\/(?:conversations|memory\/(?:documents|keys|search))(?:\/.*)?)$/);
   if (scopedRead) {
@@ -1968,7 +1997,6 @@ const server = http.createServer(async (req, res) => {
     json(req,res,{items:clone(pageItems),next_cursor:items.length>limit ? Buffer.from(JSON.stringify({scope,id:id(last),updated_at:last.updated_at})).toString('base64url') : ''}); return;
   }
 
-  if (await memoryServiceFixture(req,res,url,state,{json,readJSON,nowISO})) return;
 
   const workspaceMatch = url.pathname.match(/^\/api\/admin\/workspaces(?:\/([^/]+))?$/);
   if (workspaceMatch) {
@@ -2024,7 +2052,7 @@ const server = http.createServer(async (req, res) => {
     const body=await readJSON(req);
     if (req.method === 'POST' && !agentId) {
       const id=`agent-${randomUUID()}`;
-      const item={ id, user_id: userId, actor_id: `actor-${id}`, name: body.name, status: 'active', default_workspace_id: 'personal', revision: 1, legacy: false, created_at: nowISO(), updated_at: nowISO() };
+      const item={ id, user_id: userId, actor_id: `actor-${id}`, name: body.name, status: 'active', default_workspace_id: 'personal', revision: 1, created_at: nowISO(), updated_at: nowISO() };
       state.agents.push(item);
       state.grants[id]={ user_id: userId, agent_id: id, workspace_id: 'personal', capabilities: body.capabilities, revision: 1 };
       json(req,res,item,201); return;
@@ -2061,7 +2089,6 @@ const server = http.createServer(async (req, res) => {
       },
       settings: clone(state.user_settings[userId] || {}),
       api_keys: clone(state.api_keys[userId] || []),
-      identity_mode: 'personal_only',
       agents: clone(state.agents.filter((item) => item.user_id === userId)),
       conversations: conversationList(userId),
       key_memories: clone(state.key_memories.filter((item) => item.user_id === userId)),
@@ -2092,7 +2119,9 @@ const server = http.createServer(async (req, res) => {
     const userId = decodeURIComponent(userKeysMatch[1]);
     const body = await readJSON(req);
     const { record, plaintext } = nextAPIKey(userId, String(body.name || 'manager-created'));
-    Object.assign(record, { agent_id: body.agent_id || 'legacy-agent', agent_name: state.agents.find((item) => item.id === (body.agent_id || 'legacy-agent'))?.name || 'Legacy agent', default_workspace_id: 'personal', capabilities: body.capabilities || state.grants[body.agent_id || 'legacy-agent']?.capabilities || [], expires_at: body.expires_at });
+    const agent = state.agents.find(item => item.id === body.agent_id && item.status === 'active');
+    if (!agent || body.workspace_id !== agent.default_workspace_id) { json(req,res,{ error:{message:'Choose an active agent and its workspace.'}},400);return; }
+    Object.assign(record, { agent_id: agent.id, agent_name: agent.name, default_workspace_id: agent.default_workspace_id, capabilities: body.capabilities || state.grants[agent.id]?.capabilities || [], expires_at: body.expires_at });
     state.api_keys[userId] = [record, ...(state.api_keys[userId] || [])];
     addAudit('api_key_create', 'api_key', record.id, { user_id: userId, name: record.name, prefix: record.prefix });
     json(req, res, { record, api_key: plaintext });
@@ -2220,7 +2249,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  const memoryDocMatch = url.pathname.match(/^\/api\/admin\/memory\/documents\/(summary|segment|fact|impression|entity)\/([^/]+)$/);
+  const memoryDocMatch = url.pathname.match(/^\/api\/admin\/memory\/documents\/(summary|segment|fact|impression|entity|episode)\/([^/]+)$/);
   if (memoryDocMatch) {
     const kind = memoryDocMatch[1];
     const id = decodeURIComponent(memoryDocMatch[2]);
@@ -2368,6 +2397,8 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'PUT' && url.pathname === '/api/admin/config') {
     const body = await readJSON(req);
     const runtimePatch = body.runtime || {};
+    if (Object.keys(runtimePatch).some(key=>!(key in state.runtime))) {json(req,res,{error:{message:'Unsupported runtime field.'}},400);return;}
+
     const nextRuntime = { ...state.runtime };
     const nextRuntimeOverrideKeys = { ...state.runtime_override_keys };
     for (const [key, value] of Object.entries(runtimePatch)) {

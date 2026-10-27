@@ -1,8 +1,8 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
-  import Button from '#lib/components/Button.svelte';
-  import CollapsibleSection from '#lib/components/CollapsibleSection.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
+  import CollapsibleSection from '#lib/components/ui/CollapsibleSection.svelte';
   import { onMount } from 'svelte';
   import { Dialog } from 'bits-ui';
   import { Plus, X } from '@lucide/svelte';
@@ -16,16 +16,16 @@
     fetchAdminKeyMemories,
     updateAdminKeyMemory
   } from '#lib/api/client.ts';
-  import ConfirmActionDialog from '#lib/components/ConfirmActionDialog.svelte';
-  import JsonView from '#lib/components/JsonView.svelte';
-  import MemoryWorkspaceNav from '#lib/components/MemoryWorkspaceNav.svelte';
-  import FilterToolbar from '#lib/components/FilterToolbar.svelte';
-  import PageHeader from '#lib/components/PageHeader.svelte';
+  import ConfirmActionDialog from '#lib/components/ui/ConfirmActionDialog.svelte';
+  import JsonView from '#lib/components/content/JsonView.svelte';
+  import MemoryWorkspaceNav from '#lib/components/layout/MemoryWorkspaceNav.svelte';
+  import FilterToolbar from '#lib/components/layout/FilterToolbar.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
   import { memoryDetailHref } from '#lib/memory/routes.ts';
-  import SelectField from '#lib/components/SelectField.svelte';
-  import StatusBadge from '#lib/components/StatusBadge.svelte';
-  import TextInputField from '#lib/components/TextInputField.svelte';
-  import TextareaField from '#lib/components/TextareaField.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
+  import StatusBadge from '#lib/components/ui/StatusBadge.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
+  import TextareaField from '#lib/components/ui/TextareaField.svelte';
   import {
     buildSessionDraftKey,
     readSessionDraft,

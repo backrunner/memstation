@@ -574,7 +574,7 @@ export async function createUserAPIKey(
   target: MemStationTarget,
   userId: string,
   name: string,
-  options?: { agent_id?: string; workspace_id?: string; capabilities?: string[]; expires_at?: string }
+  options: { agent_id: string; workspace_id: string; capabilities?: string[]; expires_at?: string }
 ): Promise<{ record: APIKeyRecord; api_key: string }> {
   return adminRequest(target, `/api/admin/users/${encodeURIComponent(userId)}/api-keys`, {
     method: 'POST',

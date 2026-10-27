@@ -7,11 +7,11 @@
   const page = createPageStore();
 
   import { fetchAdminMemoryDocuments } from '#lib/api/client.ts';
-  import MemoryWorkspaceNav from '#lib/components/MemoryWorkspaceNav.svelte';
-  import PageHeader from '#lib/components/PageHeader.svelte';
-  import SelectField from '#lib/components/SelectField.svelte';
-  import StatusBadge from '#lib/components/StatusBadge.svelte';
-  import TextInputField from '#lib/components/TextInputField.svelte';
+  import MemoryWorkspaceNav from '#lib/components/layout/MemoryWorkspaceNav.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
+  import StatusBadge from '#lib/components/ui/StatusBadge.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
   import { genericMemoryKinds } from '#lib/memory/workspace.ts';
   import { memoryDetailHref, memoryRouteKindFromDocumentType } from '#lib/memory/routes.ts';
   import { selectedTarget, targetState } from '#lib/stores/targets.ts';
@@ -30,6 +30,7 @@
 
   const typeOptions = [
     { value: '', label: 'All agent memory' },
+    { value: 'episode', label: 'Semantic episodes' },
     { value: 'event', label: 'Events' },
     { value: 'task', label: 'Tasks' },
     { value: 'procedure', label: 'Procedures' },

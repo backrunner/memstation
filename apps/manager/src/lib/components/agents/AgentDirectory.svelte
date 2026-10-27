@@ -5,10 +5,10 @@
   import { Dialog } from 'bits-ui';
   import { createAgent, fetchAgents } from '#lib/api/client.ts';
   import type { AgentRecord, MemStationTarget } from '#lib/types.ts';
-  import Button from '../Button.svelte';
-  import PageHeader from '../PageHeader.svelte';
-  import TextInputField from '../TextInputField.svelte';
-  import SelectField from '../SelectField.svelte';
+  import Button from '#lib/components/ui/Button.svelte';
+  import PageHeader from '#lib/components/layout/PageHeader.svelte';
+  import TextInputField from '#lib/components/ui/TextInputField.svelte';
+  import SelectField from '#lib/components/ui/SelectField.svelte';
   import CapabilityFields from './CapabilityFields.svelte';
   import { defaultCapabilities } from './capabilities.ts';
 
@@ -88,7 +88,7 @@
     {#each items as item (item.id)}
       <a class="agent-row" href={`${base}/${encodeURIComponent(item.id)}`}>
         <div><strong>{item.name}</strong><span class="helper-text mono">{item.id}</span></div>
-        <span class="row-meta">{item.legacy ? 'Legacy, ' : ''}{item.status === 'active' ? 'Active' : 'Disabled'}</span>
+        <span class="row-meta">{item.status === 'active' ? 'Active' : 'Disabled'}</span>
       </a>
     {/each}
     {#if loading}<p class="panel-meta" role="status">Loading agents…</p>

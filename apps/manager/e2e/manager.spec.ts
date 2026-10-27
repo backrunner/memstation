@@ -1,3 +1,4 @@
+import { mkdir, writeFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 
 const fixtureBaseUrl = `http://127.0.0.1:${process.env.MEMSTATION_E2E_TARGET_PORT || '18080'}`;
@@ -25,6 +26,16 @@ async function configureTarget(page: Page): Promise<void> {
     window.localStorage.setItem('memstation.manager.targets', JSON.stringify([target]));
     window.localStorage.setItem('memstation.manager.selected-target', target.id);
   }, targetConfig);
+}
+
+async function expectSystemAnchor(page: Page, id: string): Promise<void> {
+  await expect(page.locator(`#${id}`)).toBeAttached();
+  await expect.poll(() => page.evaluate(id => {
+    const section = document.getElementById(id)!;
+    const target = Math.max(0, Math.min(scrollY + section.getBoundingClientRect().top - Number.parseFloat(getComputedStyle(section).scrollMarginTop), document.documentElement.scrollHeight - innerHeight));
+    return Math.abs(scrollY - target);
+  }, id)).toBeLessThanOrEqual(1);
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
 }
 
 async function login(page: Page): Promise<void> {
@@ -281,10 +292,8 @@ test('summary, impression, and fact corrections persist with audit history', asy
   await expect(page.getByRole('heading', { name: /^Summaries$/i })).toBeVisible();
 
   const summaryCard = page.locator('.summary-card').filter({ hasText: 'summary-1' }).first();
-  await summaryCard.getByRole('link', { name: 'Open' }).click();
-  await expect(page).toHaveURL(/\/w\/personal\/memory\/summary\/summary-1/);
-  await page.getByRole('link', { name: 'Review history and metadata', exact: true }).click();
-  await expect(page).toHaveURL(/manager_target=fixture-target/);
+  await expect(summaryCard.getByRole('link', { name: 'Open' })).toHaveAttribute('href', /section=memory/);
+  await page.goto('/memory/summaries/summary-1?user_id=admin');
 
   await expect(page.getByRole('heading', { name: /^summary-1$/i })).toBeVisible();
   const contentField = page.locator('textarea').first();
@@ -355,6 +364,7 @@ test('user API key lifecycle and task rerun flows are operable', async ({ page }
   await page.goto('/users/admin');
   await expect(page.getByRole('heading', { name: /^admin$/i })).toBeVisible();
 
+  await chooseBitsSelectOption(page, 'Agent', 'Coding agent');
   await page.getByPlaceholder('build-bot or local playground').fill('playwright-managed-key');
   await page.getByRole('button', { name: 'Create API key' }).click();
   await expect(page.getByText('API key created. The raw key is shown once below.')).toBeVisible();
@@ -594,8 +604,8 @@ test('system runtime settings persist direct target overrides and can reset to d
 
   await page.getByLabel('Provider timeout').fill('75');
   await page.getByLabel('Cache TTL').fill('333');
-  await page.getByLabel('Rerank model').fill('jina:jina-reranker-v2-base-multilingual');
-  await page.getByLabel('Rerank blend weight').fill('0.5');
+  await chooseBitsSelectOption(page, 'Rerank provider', 'Jina');
+  await page.getByLabel('Rerank model').fill('jina-reranker-v2-base-multilingual');
 
   await page.getByRole('button', { name: 'Save System Settings' }).click();
 
@@ -604,17 +614,16 @@ test('system runtime settings persist direct target overrides and can reset to d
   await page.reload();
   await expect(page.getByLabel('Provider timeout')).toHaveValue('75');
   await expect(page.getByLabel('Cache TTL')).toHaveValue('333');
-  await expect(page.getByLabel('Rerank model')).toHaveValue('jina:jina-reranker-v2-base-multilingual');
-  await expect(page.getByLabel('Rerank blend weight')).toHaveValue('0.5');
+  await expect(page.getByLabel('Rerank model')).toHaveValue('jina-reranker-v2-base-multilingual');
 
   await page.getByRole('button', { name: 'Reset All Overrides' }).click();
   await page.getByRole('alertdialog', { name: 'Reset all runtime overrides?' }).getByRole('button', { name: 'Reset all overrides' }).click();
   await expect(page.getByText('All system runtime overrides were cleared back to deployment defaults.')).toBeVisible();
   await expect(page.getByLabel('Provider timeout')).toHaveValue('60');
   await expect(page.getByLabel('Cache TTL')).toHaveValue('120');
-  await expect(page.getByLabel('Rerank model')).toHaveValue('cohere:rerank-v3.5');
-  await expect(page.getByLabel('Rerank blend weight')).toHaveValue('0.35');
+  await expect(page.getByLabel('Rerank model')).toHaveValue('rerank-v3.5');
 });
+
 
 test('database connection overrides can be applied and cleared from system settings', async ({ page }) => {
   await page.goto('/settings/system');
@@ -708,14 +717,13 @@ test('memory workspaces connect ranked recall, memory detail, and source convers
   await expect(summaryResult).toBeVisible();
   await expect(summaryResult.getByText('Matched keywords')).toBeVisible();
   await summaryResult.getByRole('link', { name: 'Open' }).click();
+  await page.getByRole('link', { name: /Personal Owner: admin/ }).click();
   await expect(page).toHaveURL(/\/w\/personal\/memory\/summary\/summary-1/);
-  await page.getByRole('link', { name: 'Review history and metadata', exact: true }).click();
-
-  await expect(page.getByRole('heading', { name: /^summary-1$/i })).toBeVisible();
-  await expect(page.getByText('memory_document_create').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Memory document', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Open source conversation' }).click();
   await expect(page).toHaveURL(/\/w\/personal\/conversations\/conv-seed-1/);
-  await page.getByRole('link', { name: 'Processing and rebuild controls', exact: true }).click();
+  await expect(page.getByRole('link', { name: 'Workspace processing and rebuilds', exact: true })).toHaveAttribute('href','/t/fixture-target/w/personal/lifecycle');
+  await page.goto('/conversations/conv-seed-1');
 
   await expect(page.getByRole('heading', { name: /^conv-seed-1$/i })).toBeVisible();
   await page.getByRole('button', { name: 'Requeue analysis' }).click();
@@ -900,20 +908,77 @@ test('pending task confirmation cannot be dismissed or submitted twice', async (
   await expect(dialog).toHaveCount(0);
 });
 
-for (const width of [1440, 1024, 768, 390, 320]) {
+interface LayoutBounds { left: number; right: number; width: number }
+interface PageLayoutMeasurement { route: string; width: number; toolbar: LayoutBounds; content: LayoutBounds; roots: LayoutBounds[]; overflow: boolean; overflowingFields: string[] }
+
+const layoutRoutes = [
+  '/dashboard', '/audit', '/settings/system', '/settings/models', '/settings/providers',
+  '/operations/tasks', '/operations/tasks/memory/task-2', '/operations/health',
+  '/operations/queues', '/operations/queues/default', '/operations/cache',
+  '/users', '/users/admin', '/users/admin/agents', '/users/admin/agents/coding-agent',
+  '/conversations', '/conversations/conv-seed-1', '/statistics/tokens',
+  '/playground/chat', '/playground/memory', '/playground/protocols',
+  '/memory', '/memory/summaries', '/memory/impressions', '/memory/facts', '/memory/items', '/memory/keys',
+  '/memory/summaries/summary-1?user_id=admin',
+  '/t/fixture-target/workspaces',
+  '/t/fixture-target/w/personal/memory', '/t/fixture-target/w/personal/memory/search',
+  '/t/fixture-target/w/personal/memory/summary/summary-1',
+  '/t/fixture-target/w/personal/memory/fact/fact-1',
+  '/t/fixture-target/w/personal/keys', '/t/fixture-target/w/personal/keys/new',
+  '/t/fixture-target/w/personal/keys/key-1',
+  '/t/fixture-target/w/personal/conversations', '/t/fixture-target/w/personal/conversations/conv-seed-1',
+  '/t/fixture-target/w/personal/settings', '/t/fixture-target/w/personal/access',
+  '/t/fixture-target/w/personal/access/coding-agent',
+  ...['activity', 'review', 'sharing', 'connections', 'data'].map(view => `/t/fixture-target/w/personal/lifecycle?view=${view}`)
+];
+
+for (const width of [2560, 1920, 1440, 1024, 768, 390, 320]) {
   test(`primary admin routes fit ${width}px screens without page overflow`, async ({ page }, testInfo) => {
-    const routes = ['/dashboard', '/audit', '/settings/system', '/settings/models', '/settings/providers', '/operations/tasks', '/operations/health', '/memory/keys', '/users', '/users/admin', '/conversations', '/statistics/tokens'];
+    // Each case now checks every page family, including the detail and editor routes.
+    test.setTimeout(120_000);
+    const measurements: PageLayoutMeasurement[] = [];
     await page.setViewportSize({ width, height: 1000 });
-    for (const route of routes) {
+    for (const route of layoutRoutes) {
       await test.step(`${route} at ${width}px`, async () => {
         await page.goto(route);
-        await expect(page.locator('.page-title')).toBeVisible();
+        await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+        await expect(page.locator('.loading-state')).toHaveCount(0);
         if (route === '/audit') await expect(page.getByRole('button', { name: 'memory_document_create', exact: true })).toBeVisible();
         await expect(page.locator('.error-state')).toHaveCount(0);
-        await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), { message: `${route} at ${width}px` }).toBe(true);
-        if (width === 1440 || width === 390) await page.screenshot({ path: testInfo.outputPath(`ui-${route.slice(1).replaceAll('/', '-')}-${width}.png`), fullPage: true, animations: 'disabled' });
+        const frame = await page.evaluate(() => {
+          const box = (element: Element) => { const rect = element.getBoundingClientRect(); return { left: rect.left, right: rect.right, width: rect.width }; };
+          const toolbar = box(document.querySelector('.app-topbar')!);
+          const content = document.querySelector('.app-content')!;
+          const roots = [...content.children].filter(element => element.getBoundingClientRect().width > 0).map(box);
+          const overflowingFields = [...content.querySelectorAll('.field')].flatMap(field => {
+            const boundary = box(field);
+            if (!boundary.width) return [];
+            const overflow = [...field.querySelectorAll(':scope > .input, :scope > .textarea, :scope > .select-trigger')].some(control => {
+              const rect = box(control);
+              return rect.width > 0 && (rect.left < boundary.left - 1 || rect.right > boundary.right + 1);
+            });
+            return overflow ? [field.querySelector('.field-label')?.textContent ?? 'Unlabelled field'] : [];
+          });
+          return { toolbar, content: box(content), roots, overflow: document.documentElement.scrollWidth > innerWidth, overflowingFields };
+        });
+        measurements.push({ route, width, ...frame });
+        expect(frame.overflow, `${route} at ${width}px`).toBe(false);
+        expect(frame.overflowingFields, `${route} controls within their fields`).toEqual([]);
+        for (const region of [frame.content, ...frame.roots]) {
+          expect(Math.abs(region.left - frame.toolbar.left), `${route} left edge`).toBeLessThanOrEqual(1);
+          expect(Math.abs(region.right - frame.toolbar.right), `${route} right edge`).toBeLessThanOrEqual(1);
+        }
+        expect(frame.content.width).toBeLessThanOrEqual(1600);
+        if ((width === 1440 || width === 390) && testInfo.project.name === 'chromium') {
+          const name = route.slice(1).replaceAll('/', '-').replaceAll('?', '-').replaceAll('=', '-');
+          await page.screenshot({ path: testInfo.outputPath(`ui-${name}-${width}.png`), fullPage: true, animations: 'disabled' });
+        }
       });
     }
+    await mkdir(testInfo.outputDir, { recursive: true });
+    const report = testInfo.outputPath('page-layout-measurements.json');
+    await writeFile(report, JSON.stringify(measurements, null, 2));
+    await testInfo.attach('page-layout-measurements', { path: report, contentType: 'application/json' });
   });
 }
 
@@ -1096,8 +1161,9 @@ test('memory detail prioritizes editing and relation links preserve user scope o
   await expect(details.getByText('Node', { exact: true })).toBeVisible();
   const related = page.locator('.relation-node-link').first();
   await expect(related).toHaveAttribute('href', /user_id=admin/);
-  await expect(related).toHaveAttribute('href', /\/t\/fixture-target\/open\/memory\//);
+  await expect(related).toHaveAttribute('href', /\/t\/fixture-target\/workspaces\?section=memory/);
   await related.click();
+  await page.getByRole('link', { name: /Personal Owner: admin/ }).click();
   await expect(page).toHaveURL(/\/t\/fixture-target\/w\/personal\/memory\//);
   await expect(page.locator('.error-state')).toHaveCount(0);
 });
@@ -1212,7 +1278,7 @@ test('shared controls preserve drafts, keyboard focus, and compact mobile layout
 
 test('agent credential permissions and mobile scope stay explicit', async ({ page }, testInfo) => {
   await page.goto('/users/admin');
-  await expect(page.getByText('Agents share this account’s Personal memory.', { exact: false })).toBeVisible();
+  await expect(page.getByText('Choose an active agent.', { exact: false })).toBeVisible();
   await chooseBitsSelectOption(page, 'Agent', 'Coding agent');
   await chooseBitsSelectOption(page, 'Key permissions', 'Read memory only');
   await chooseBitsSelectOption(page, 'Expires after', '7 days');
@@ -1303,7 +1369,7 @@ test('agent management preserves edits on revision conflict', async ({ page }) =
 });
 
 test('agent management search pagination and stale scope responses', async ({ page }) => {
-  const records = Array.from({ length: 105 }, (_, i) => ({ id: `agent-${String(i).padStart(3, '0')}`, name: `Worker ${i}`, status: 'active', legacy: false }));
+  const records = Array.from({ length: 105 }, (_, i) => ({ id: `agent-${String(i).padStart(3, '0')}`, name: `Worker ${i}`, status: 'active' }));
   await page.route('**/manager/api/targets/fixture-target/api/admin/users/admin/agents?*', async (route) => {
     const url = new URL(route.request().url());
     const query = url.searchParams.get('q') ?? '';
@@ -1332,11 +1398,11 @@ test('agent management search pagination and stale scope responses', async ({ pa
   });
   await page.goto('/users/admin/agents/coding-agent');
   await page.getByRole('link', { name: 'All agents', exact: true }).click();
-  await page.locator('.agent-row').filter({ hasText: 'Legacy agent' }).click();
-  await expect(page.getByRole('heading', { name: 'Legacy agent', exact: true })).toBeVisible();
+  await page.locator('.agent-row').filter({ hasText: 'Review agent' }).click();
+  await expect(page.getByRole('heading', { name: 'Review agent', exact: true })).toBeVisible();
   release();
   await expect(page.getByRole('heading', { name: 'Coding agent', exact: true })).toHaveCount(0);
-  await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Legacy agent');
+  await expect(page.getByLabel('Agent name', { exact: true })).toHaveValue('Review agent');
 });
 
 
@@ -1448,6 +1514,32 @@ test('workspace management ignores late scope responses', async ({ page }) => {
   release?.();
   await page.waitForLoadState('networkidle');
   await expect(page.getByLabel('Workspace name')).toHaveValue('Bob notes');
+});
+
+test('workspace management semantic episodes show state time wording and source links', async ({ page }, testInfo) => {
+  await page.request.post(`${fixtureBaseUrl}/__test/episode-seed`);
+  const base = '/t/fixture-target/w/personal';
+  await page.goto(`${base}/memory`);
+  await chooseBitsSelectOption(page, 'Document type', 'Semantic episodes');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(page).toHaveURL(/kind=episode/);
+  await page.getByRole('link', { name: /Alice cancelled.*episode-fixture/ }).click();
+  await expect(page).toHaveURL(/\/memory\/episode\/episode-fixture/);
+  const details = page.getByRole('region', { name: 'Semantic episode context' });
+  await expect(details.getByText('cancelled', { exact: true })).toBeVisible();
+  await expect(details.getByText('Alice', { exact: true })).toBeVisible();
+  await expect(details.getByText('next Friday', { exact: true })).toBeVisible();
+  await expect(details.getByText('2026-10-23T09:00:00Z', { exact: true })).toBeVisible();
+  await expect(details.getByText('9:00 am on 23 October, 2026', { exact: true })).toBeVisible();
+  await expect(page.getByText('Alice: I cancelled the Friday visit.', { exact: true })).toBeVisible();
+  for (const width of testInfo.project.name === 'mobile-webkit' ? [320, 390] : [1280]) {
+    await page.setViewportSize({ width, height: 850 });
+    await expect(details).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+    await page.screenshot({ path: testInfo.outputPath(`semantic-episode-${width}.png`), fullPage: true });
+  }
+  await page.getByRole('link', { name: 'Open source conversation', exact: true }).click();
+  await expect(page).toHaveURL(/\/conversations\/conv-seed-1/);
 });
 
 test('workspace management browses memory and conversations without leaving scope', async ({ page }, testInfo) => {
@@ -1814,46 +1906,35 @@ test('workspace management paginates conversations and key memories across the f
   }
 });
 
-test('workspace management navigation resolves owners and keeps service and section scope', async ({ page }) => {
-  await page.goto('/t/fixture-target/open/memory/keys');
-  await expect(page).toHaveURL(/workspaces\?open=/);
+test('workspace management navigation requires explicit scope and rejects retired inputs', async ({ page }) => {
+  await page.goto('/t/fixture-target/workspaces?section=keys');
   await expect(page.getByText('Choose the workspace to browse.', { exact: false })).toBeVisible();
   await page.getByRole('link', { name: /Personal Owner: admin/ }).click();
   await expect(page).toHaveURL('/t/fixture-target/w/personal/keys');
-  await expect(page.getByRole('heading', { name: 'Key memories', exact: true })).toBeVisible();
-  await page.goto('/t/fixture-target/open/conversations/conv-seed-1?user_id=admin');
+  await page.goto('/t/fixture-target/workspaces?section=conversations&record=conv-seed-1&user_id=admin');
+  await page.getByRole('link', { name: /Personal Owner: admin/ }).click();
   await expect(page).toHaveURL('/t/fixture-target/w/personal/conversations/conv-seed-1');
   await expect(page.getByRole('heading', { name: 'Conversation', exact: true })).toBeVisible();
-  await page.goto('/t/fixture-target/open/memory/facts/fact-1?user_id=admin&generation_id=generation-fixture');
+  await page.goto('/t/fixture-target/workspaces?section=memory&kind=fact&record=fact-1&generation=generation-fixture&user_id=admin');
+  await page.getByRole('link', { name: /Personal Owner: admin/ }).click();
   await expect(page).toHaveURL(/\/w\/personal\/memory\/fact\/fact-1\?generation_id=generation-fixture$/);
-  await expect(page.getByRole('heading', { name: 'Memory document', exact: true })).toBeVisible();
-  await page.goto('/t/fixture-target/open/memory/keys/key-1?user_id=bob');
-  await expect(page).toHaveURL('/t/fixture-target/w/personal-bob/keys/key-1');
-  await expect(page.getByRole('alert')).toBeVisible();
-  await expect(page.getByText('prefers concise status updates', { exact: true })).toHaveCount(0);
-  await page.goto('/t/fixture-target/open/memory?user_id=missing');
-  await expect(page.getByText('No Personal workspace is available for this owner.', { exact: true })).toBeVisible();
   await page.goto('/t/fixture-target/w/personal-bob/keys');
   await page.setViewportSize({ width: 1440, height: 900 });
   const nav = page.getByRole('navigation', { name: 'Primary navigation', exact: true });
   await expect(nav.getByRole('link', { name: 'Memory', exact: true })).toHaveAttribute('href', '/t/fixture-target/w/personal-bob/memory');
   await expect(nav.getByRole('link', { name: 'Conversations', exact: true })).toHaveAttribute('href', '/t/fixture-target/w/personal-bob/conversations');
-  await expect(nav.getByRole('link', { name: 'Key memories', exact: true })).toHaveAttribute('aria-current', 'page');
-  await expect(nav.getByRole('link', { name: 'Workspaces', exact: true })).not.toHaveAttribute('aria-current', 'page');
   await page.goto('/users/admin');
   await page.getByRole('link', { name: 'Manage key memories', exact: true }).click();
+  await expect(page).toHaveURL(/workspaces\?section=keys&user_id=admin$/);
+  await page.getByRole('link', { name: /Personal Owner: admin/ }).click();
   await expect(page).toHaveURL('/t/fixture-target/w/personal/keys');
-  const secondBase = `http://127.0.0.1:${process.env.MEMSTATION_E2E_SECOND_TARGET_PORT || String(Number(process.env.MEMSTATION_E2E_TARGET_PORT || '18080') + 1)}`;
-  await page.request.post(`${secondBase}/__test/reset`);
-  const connected = await page.request.post('/manager/session/second-target', { headers: { origin: new URL(page.url()).origin }, data: { token: adminToken } });
-  expect(connected.ok()).toBeTruthy();
-  const review = page.waitForResponse(response => response.url().includes('/manager/api/targets/second-target/api/admin/memory/keys/key-1'));
-  await page.goto('/memory/keys/key-1?user_id=admin&manager_target=second-target');
-  expect((await review).ok()).toBeTruthy();
-  await expect(page.getByRole('combobox', { name: 'Switch target' })).toContainText(new URL(secondBase).host);
-  await page.goto('/memory/keys/key-1?user_id=admin&manager_target=missing');
-  await expect(page.getByText('This service is not registered in Manager.')).toBeVisible();
+  const retired = await page.goto('/t/fixture-target/open/memory/keys');
+  expect(retired?.status()).toBe(404);
+  const obsolete = await page.goto('/memory/keys/key-1?user_id=admin&manager_target=fixture-target');
+  expect(obsolete?.status()).toBe(400);
+  await expect(page.getByText('Unsupported navigation parameter. Choose a service and workspace.')).toBeVisible();
 });
+
 
 
 test('workspace management picker anchors search, restores focus and preserves the current record', async ({ page }, testInfo) => {
@@ -1935,38 +2016,497 @@ test('workspace management related Key Memory opens its scoped editor without a 
 });
 
 
-test('workspace management memory service reviews evidence, publishes and erases with tracked progress', async ({page},testInfo)=>{
- await page.goto('/t/fixture-target/w/personal/lifecycle');
- await expect(page.getByRole('heading',{name:'Memory service',exact:true})).toBeVisible();
- await expect(page.locator('.error-state')).toHaveCount(0);
- await page.getByRole('button',{name:'AI runtime and index generations',exact:true}).click();
- await expect(page.getByText('AI: broker',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Rebuild workspace index',exact:true}).click();
- await expect(page.getByText('0/2 processed',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Discard generation',exact:true}).click();
- await expect(page.getByText('Inactive generation discarded.',{exact:true})).toBeVisible();
- await expect(page.getByText('Accepted 7',{exact:true})).toBeVisible();
- await expect(page.getByText('Indexed 4',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Replay task',exact:true}).click();
- await expect(page.getByText('Original task queued for replay.',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Approve revision 1',exact:true}).click();
- await expect(page.getByRole('button',{name:'Open approved memory',exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Open approved memory',exact:true}).click();
- await page.getByLabel('Target workspace ID',{exact:true}).fill('personal-bob');
- await page.getByRole('button',{name:'Preview publication',exact:true}).click();
- await expect(page.getByRole('heading',{name:'Approve this target copy'})).toBeVisible();
- await page.getByRole('button',{name:'Approve publication',exact:true}).click();
- await expect(page.getByText('Publication copy approved.',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Retract copy',exact:true}).click();
- await expect(page.getByText('revoked',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Deletion, export and retention',exact:true}).click();
- await page.getByLabel('Record ID',{exact:true}).fill('source-1');
- await page.getByLabel('Confirm workspace name',{exact:true}).fill('Personal');
- await page.getByRole('button',{name:'Request deletion',exact:true}).click();
- await expect(page.getByText('Reads blocked',{exact:true})).toBeVisible();
- await expect(page.getByText('Deletion history persisted',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Export this partition',exact:true}).click();
- await expect(page.getByRole('button',{name:'Download export',exact:true})).toBeVisible();
- await page.screenshot({path:testInfo.outputPath('memory-service.png'),fullPage:true});
- expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBeTruthy();
+test('mobile settings rerank provider preserves model namespaces and can disable ranking', async ({ page }) => {
+  await page.setViewportSize({width:320,height:568});
+  await page.goto('/settings/system');
+  await expect(page.getByLabel('Score policy',{exact:true})).toHaveCount(0);
+  await expect(page.getByLabel('Rerank blend weight',{exact:true})).toHaveCount(0);
+  await chooseBitsSelectOption(page, 'Rerank provider', 'OpenRouter');
+  await page.getByLabel('Rerank model').fill('vendor/model:tag');
+  await page.getByRole('button', { name: 'Save System Settings' }).click();
+  await expect(page.getByText('System settings applied to the target.')).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Rerank provider')).toContainText('OpenRouter');
+  await expect(page.getByLabel('Rerank model')).toHaveValue('vendor/model:tag');
+  await chooseBitsSelectOption(page, 'Rerank provider', 'Local / compatible rerank API');
+  await page.getByLabel('Rerank model').fill('local-ranker');
+  await page.getByRole('button', { name: 'Save System Settings' }).click();
+  await expect(page.getByText('System settings applied to the target.')).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Rerank provider')).toContainText('Local / compatible rerank API');
+  await expect(page.getByLabel('Rerank model')).toHaveValue('local-ranker');
+  await chooseBitsSelectOption(page, 'Rerank provider', 'Disabled');
+  await expect(page.getByLabel('Rerank model')).toBeDisabled();
+  await page.getByRole('button', { name: 'Save System Settings' }).click();
+  await expect(page.getByText('System settings applied to the target.')).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Rerank provider')).toContainText('Disabled');
+});
+
+
+test('workspace management memory service reviews evidence, publishes and erases with tracked progress', async ({ page }, testInfo) => {
+  const base = '/t/fixture-target/w/personal/lifecycle';
+  const created = await page.request.post('/manager/api/targets/fixture-target/api/admin/workspaces', {
+    headers: { origin: new URL(page.url()).origin }, data: { user_id: 'admin', name: 'Team notes', kind: 'group' }
+  });
+  expect(created.ok()).toBeTruthy();
+  await page.goto(base);
+  const sections = page.getByRole('navigation', { name: 'Memory service sections', exact: true });
+  await expect(page.getByRole('heading', { name: 'Message processing', exact: true })).toBeVisible();
+  await expect(page.getByRole('progressbar')).toHaveAttribute('value', '4');
+  await expect(page.getByRole('progressbar')).toHaveAttribute('max', '7');
+  await expect(page.getByRole('button', { name: 'Save connection', exact: true })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('memory-service-activity.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Retry task', exact: true }).click();
+  await expect(page.getByText('Task queued for retry.', { exact: true })).toBeVisible();
+  await sections.getByRole('link', { name: /^Review/ }).click();
+  await page.getByRole('button', { name: 'View evidence', exact: true }).click();
+  const source = page.getByRole('dialog', { name: 'Source message', exact: true });
+  await expect(source.getByText('我喜欢安静的工作环境。', { exact: true })).toBeVisible();
+  await expect(source.getByText('workspace-diagram.png', { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('source-media-metadata.png'), fullPage: true });
+  await source.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Approve', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Nothing waiting for review', exact: true })).toBeVisible();
+  await chooseBitsSelectOption(page, 'Show suggestions', 'Approved');
+  await page.getByRole('button', { name: 'Open memory', exact: true }).click();
+  const memory = page.getByRole('dialog');
+  await expect(memory.getByRole('button', { name: 'Suggest correction', exact: true })).toBeEnabled();
+  await memory.getByRole('button', { name: 'Share a copy', exact: true }).click();
+  await chooseBitsSelectOption(page, 'Target workspace', 'Team notes');
+  await memory.getByRole('button', { name: 'Preview copy', exact: true }).click();
+  await expect(memory.getByRole('heading', { name: 'Confirm shared copy', exact: true })).toBeVisible();
+  await memory.getByRole('button', { name: 'Publish copy', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Shared copies', exact: true })).toBeVisible();
+  await expect(page.getByText('Team notes', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Retract', exact: true }).click();
+  await expect(page.getByText('Retracted', { exact: true })).toBeVisible();
+  await sections.getByRole('link', { name: 'Data', exact: true }).click();
+  await page.getByRole('button', { name: 'Search index and AI settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Rebuild index', exact: true }).click();
+  await expect(page.getByText('0 of 2 processed', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Discard index', exact: true }).click();
+  await expect(page.getByText('Unused index discarded.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Delete data', exact: true }).click();
+  await page.getByLabel('Source message ID', { exact: true }).fill('source-1');
+  await page.getByLabel('Confirm workspace name', { exact: true }).fill('Personal');
+  await page.getByRole('button', { name: 'Delete selected data', exact: true }).click();
+  const deletion = page.getByRole('dialog', { name: 'Deletion status', exact: true });
+  await expect(deletion.getByText('Access blocked', { exact: true })).toBeVisible();
+  await expect(deletion.getByText('Deletion history saved', { exact: true })).toBeVisible();
+  await expect(deletion.getByText('Done', { exact: true })).toHaveCount(3);
+  await deletion.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Create export', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Download export', exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('memory-service-deletion-export.png'), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+});
+
+test('workspace management memory service preserves drafts across sections and revision conflicts', async ({ page }, testInfo) => {
+  await page.goto('/t/fixture-target/w/personal/lifecycle?view=review');
+  const sections = page.getByRole('navigation', { name: 'Memory service sections', exact: true });
+  await page.getByRole('button', { name: 'Find memory', exact: true }).click();
+  await page.getByLabel('Find memory', { exact: true }).fill('安静');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await page.getByRole('button', { name: 'Select memory', exact: true }).click();
+  await page.getByRole('button', { name: 'Suggest correction', exact: true }).click();
+  await page.getByLabel('Suggestion', { exact: true }).fill('小林现在喜欢协作办公。');
+  await page.getByRole('button', { name: 'Keep draft', exact: true }).click();
+  await sections.getByRole('link', { name: 'Connections', exact: true }).click();
+  await sections.getByRole('link', { name: /^Review/ }).click();
+  await page.getByRole('button', { name: 'Resume suggestion', exact: true }).click();
+  await expect(page.getByLabel('Suggestion', { exact: true })).toHaveValue('小林现在喜欢协作办公。');
+  const lifecycle = '/manager/api/targets/fixture-target/api/admin/workspaces/personal/lifecycle';
+  const headers = { origin: new URL(page.url()).origin };
+  const competing = await page.request.post(lifecycle + '/memory/candidates', { headers, data: { kind: 'preference', content: '小林最近在远程办公。', target_node_id: 'node-1', target_revision: 1, source_refs: [], subject_actor_ids: ['actor-lin'] } });
+  expect(competing.ok()).toBeTruthy();
+  const competingID = (await competing.json()).id;
+  const approved = await page.request.post(lifecycle + `/memory/candidates/${competingID}/decision`, { headers, data: { expected_revision: 1, decision: 'approve' } });
+  expect(approved.ok()).toBeTruthy();
+  await page.getByRole('button', { name: 'Submit suggestion', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('alert')).toContainText('Your draft is safe');
+  await expect(page.getByLabel('Suggestion', { exact: true })).toHaveValue('小林现在喜欢协作办公。');
+  await page.getByRole('button', { name: 'Load current memory', exact: true }).click();
+  await expect(page.getByRole('dialog').getByText('小林最近在远程办公。', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Use revision 2', exact: true }).click();
+  await expect(page.getByLabel('Suggestion', { exact: true })).toHaveValue('小林现在喜欢协作办公。');
+  await page.screenshot({ path: testInfo.outputPath('memory-service-correction-conflict.png'), fullPage: true });
+  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
+  page.once('dialog', dialog => dialog.dismiss());
+  await page.getByRole('navigation', { name: 'Workspace sections', exact: true }).getByRole('link', { name: 'Memory documents', exact: true }).click();
+  await expect(page).toHaveURL(/lifecycle/);
+  await page.getByRole('button', { name: 'Resume suggestion', exact: true }).click();
+  await page.getByRole('button', { name: 'Submit suggestion', exact: true }).click();
+  await expect(page.getByText('Suggestion sent for review.', { exact: true })).toBeVisible();
+  await expect(page.getByText('小林现在喜欢协作办公。', { exact: true })).toBeVisible();
+});
+
+test('workspace management memory service connections and private recipients fit short mobile dialogs', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 375, height: 480 });
+  await page.goto('/t/fixture-target/w/personal/lifecycle?view=connections');
+  await page.getByRole('button', { name: 'Connect source', exact: true }).click();
+  await page.getByLabel('Connection name', { exact: true }).fill('Design team');
+  await chooseBitsSelectOption(page, 'Observing Agent', 'Coding agent');
+  await page.getByLabel('Source space ID', { exact: true }).fill('chat-123');
+  const dialog = page.getByRole('dialog');
+  const footer = dialog.getByRole('button', { name: 'Save connection', exact: true });
+  const box = await footer.boundingBox();
+  expect(box && box.y >= 0 && box.y + box.height <= 480).toBeTruthy();
+  await page.screenshot({ path: testInfo.outputPath('memory-service-connection-375x480.png'), fullPage: true });
+  await footer.click();
+  await expect(page.getByText('Design team', { exact: true })).toBeVisible();
+  await expect(page.getByText('Coding agent', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Edit connection', exact: true }).click();
+  await page.getByRole('button', { name: 'Revoke ingestion', exact: true }).click();
+  await expect(page.getByText('Ingestion revoked', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Edit connection', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Receive message events', exact: true }).check();
+  await page.getByRole('button', { name: 'Save connection', exact: true }).click();
+  await expect(page.getByText('Receiving messages', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Create private audience', exact: true }).click();
+  await chooseBitsSelectOption(page, 'Authorized Agent', 'Coding agent');
+  await expect(page.getByRole('button', { name: 'Save audience', exact: true })).toBeDisabled();
+  await page.getByRole('checkbox', { name: '小林', exact: true }).check();
+  await page.getByRole('button', { name: 'Save audience', exact: true }).click();
+  await expect(page.getByText('Private', { exact: true })).toBeVisible();
+  await chooseBitsSelectOption(page, 'Audience', 'Private: 小林');
+  await page.getByRole('button', { name: 'Apply audience', exact: true }).click();
+  await expect(page).toHaveURL(/partition_id=partitions-0/);
+  await expect(page.getByText('Private view. Access is audited.', { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('memory-service-connections-private.png'), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+});
+
+
+test('workspace management modern navigation and activity stay usable across screen sizes', async ({ page }, testInfo) => {
+  const base = '/t/fixture-target/w/personal/lifecycle';
+  const currentSectionFits = async (name: string) => {
+    const nav = page.getByRole('navigation', { name, exact: true });
+    const current = nav.locator('[aria-current="page"]');
+    const [container, item] = await Promise.all([nav.boundingBox(), current.boundingBox()]);
+    return Boolean(container && item && item.x >= container.x - 1 && item.x + item.width <= container.x + container.width + 1);
+  };
+  for (const width of [1440, 1024, 768, 390, 320]) {
+    await page.setViewportSize({ width, height: width < 640 ? 740 : 960 });
+    if (width !== 1440) await expect.poll(() => currentSectionFits('Workspace sections')).toBeTruthy();
+    await page.goto(base);
+    await expect(page.getByRole('heading', { name: 'Message processing', exact: true })).toBeVisible();
+    const sections = page.getByRole('navigation', { name: 'Memory service sections', exact: true });
+    await expect(sections.getByRole('link', { name: 'Activity', exact: true })).toHaveAttribute('aria-current', 'page');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+    const topbar = await page.locator('.app-topbar').boundingBox();
+    expect(topbar && topbar.x > 0 && topbar.y > 0 && topbar.x + topbar.width < width).toBeTruthy();
+    await page.screenshot({ path: testInfo.outputPath(`memory-modern-${width}.png`), fullPage: true });
+    await page.getByRole('complementary', { name: 'Needs attention', exact: true }).getByRole('link', { name: /Failed tasks/ }).click();
+    const heading = await page.getByRole('heading', { name: 'Background tasks', exact: true }).boundingBox();
+    const toolbar = await page.locator('.app-topbar').boundingBox();
+    expect(heading && toolbar && heading.y >= toolbar.y + toolbar.height).toBeTruthy();
+    await expect(page.getByRole('button', { name: 'Retry task', exact: true })).toBeVisible();
+    await sections.getByRole('link', { name: /^Review/ }).click();
+    await expect(page.getByRole('button', { name: 'Approve', exact: true })).toBeVisible();
+  }
+  await page.setViewportSize({ width: 1440, height: 960 });
+  for (const [view, heading] of [['review', 'Review suggestions'], ['sharing', 'Shared copies'], ['connections', 'Message sources'], ['data', 'Data controls']]) {
+    await page.goto(base + '?view=' + view);
+    await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath(`memory-modern-${view}.png`), fullPage: true });
+  }
+  await page.setViewportSize({ width: 320, height: 740 });
+  await expect.poll(() => currentSectionFits('Memory service sections')).toBeTruthy();
+  await page.screenshot({ path: testInfo.outputPath('memory-modern-narrow-data.png'), fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 960 });
+  await page.goto('/dashboard');
+  await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('modern-dashboard.png'), fullPage: true });
+});
+
+
+test('system section navigation stays below sticky controls while scrolling and resizing', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/settings/system');
+  const navigation = page.getByRole('navigation', { name: 'System sections', exact: true });
+  await navigation.getByRole('link', { name: 'Multimodal', exact: true }).click();
+  await expectSystemAnchor(page, 'system-multimodal');
+  const stickyGeometry = () => page.evaluate(() => {
+    const toolbar = document.querySelector('.app-topbar')!.getBoundingClientRect();
+    const header = document.querySelector('.page-header.is-sticky')!.getBoundingClientRect();
+    const navigation = document.querySelector('.system-section-nav')!.getBoundingClientRect();
+    const point = document.elementFromPoint(header.right - 80, (toolbar.bottom + header.top) / 2);
+    return { toolbarTop: toolbar.top, toolbarBottom: toolbar.bottom, headerTop: header.top, headerBottom: header.bottom, navigationTop: navigation.top, navigationBottom: navigation.bottom, coveredGap: Boolean(point?.closest('.page-header.is-sticky')) };
+  });
+  const geometry = [{ phase: 'anchor', ...await stickyGeometry() }];
+  await page.screenshot({ path: testInfo.outputPath('system-scroll-anchor.png'), fullPage: false });
+  await expect.poll(async () => { const box = await stickyGeometry(); return box.navigationTop - box.headerBottom; }).toBeGreaterThanOrEqual(8);
+  expect((await stickyGeometry()).coveredGap).toBeTruthy();
+  const multimodal = page.getByRole('heading', { name: 'Multimodal', exact: true });
+  expect((await multimodal.boundingBox())!.y).toBeGreaterThanOrEqual((await stickyGeometry()).headerBottom + 8);
+  const targetScroll = await page.evaluate(() => Math.min(scrollY + 400, document.documentElement.scrollHeight - innerHeight));
+  if (testInfo.project.name === 'mobile-webkit') await page.evaluate(() => window.scrollBy(0, 400));
+  else { await page.mouse.move(1000, 450); await page.mouse.wheel(0, 400); }
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeCloseTo(targetScroll, 0);
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await expect.poll(async () => (await stickyGeometry()).toolbarTop).toBeCloseTo(12, 0);
+  await expect.poll(async () => { const box = await stickyGeometry(); return box.navigationTop - box.headerBottom; }).toBeGreaterThanOrEqual(8);
+  expect((await stickyGeometry()).coveredGap).toBeTruthy();
+  geometry.push({ phase: 'scroll', ...await stickyGeometry() });
+  await page.screenshot({ path: testInfo.outputPath('system-scroll-wheel.png'), fullPage: false });
+  // A taller title/status row must update both the sticky navigation and anchor offset.
+  await page.addStyleTag({ content: '.page-header.is-sticky .page-title { font-size: 42px; } .page-header.is-sticky .page-context { font-size: 22px; }' });
+  await expect.poll(async () => { const box = await stickyGeometry(); return box.navigationTop - box.headerBottom; }).toBeGreaterThanOrEqual(8);
+  await navigation.getByRole('link', { name: 'Web', exact: true }).click();
+  await expectSystemAnchor(page, 'system-web');
+  expect((await page.getByRole('heading', { name: 'Web', exact: true }).boundingBox())!.y).toBeGreaterThanOrEqual((await stickyGeometry()).headerBottom + 8);
+  geometry.push({ phase: 'larger text', ...await stickyGeometry() });
+  await page.setViewportSize({ width: 1100, height: 400 });
+  await expect.poll(async () => (await stickyGeometry()).navigationBottom).toBeLessThanOrEqual(390);
+  await navigation.getByRole('link', { name: 'Overrides & drift', exact: true }).click();
+  await expectSystemAnchor(page, 'system-overrides');
+  await expect(page.getByRole('heading', { name: 'Overrides & drift', exact: true })).toBeInViewport();
+  expect((await page.getByRole('heading', { name: 'Overrides & drift', exact: true }).boundingBox())!.y).toBeGreaterThanOrEqual((await stickyGeometry()).headerBottom);
+  await expect.poll(async () => { const box = await stickyGeometry(); return box.navigationTop - box.headerBottom; }).toBeGreaterThanOrEqual(8);
+  geometry.push({ phase: 'short screen', ...await stickyGeometry() });
+  await page.screenshot({ path: testInfo.outputPath('system-scroll-short-screen.png'), fullPage: false });
+  await mkdir(testInfo.outputDir, { recursive: true });
+  await writeFile(testInfo.outputPath('scroll-geometry.json'), JSON.stringify(geometry, null, 2));
+});
+
+
+test('system section navigation follows visible modules with aligned links and scroll masks', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/settings/system');
+  const navigation = page.getByRole('navigation', { name: 'System sections', exact: true });
+  const current = navigation.locator('[aria-current="location"]');
+  await expect(current).toHaveText('Traffic');
+  expect(await navigation.getByRole('link', { name: 'Database connection', exact: true }).evaluate(element => ({ align: getComputedStyle(element).textAlign, justify: getComputedStyle(element).justifyContent }))).toEqual({ align: 'left', justify: 'flex-start' });
+  await navigation.getByRole('link', { name: 'Relations', exact: true }).click();
+  await expect(current).toHaveText('Relations');
+  await expect(page).toHaveURL(/#system-relations$/);
+  // Move the document without selecting a link: the current module must follow the viewport, not the hash.
+  const target = await page.evaluate(() => {
+    const section = document.getElementById('system-web')!;
+    return scrollY + section.getBoundingClientRect().top - Number.parseFloat(getComputedStyle(section).scrollMarginTop) + 4;
+  });
+  if (testInfo.project.name === 'mobile-webkit') await page.evaluate(y => window.scrollTo(0, y), target);
+  else {
+    const delta = await page.evaluate(y => y - scrollY, target);
+    await page.mouse.move(1100, 500);
+    await page.mouse.wheel(0, delta);
+  }
+  await expect(current).toHaveText('Web');
+  await expect(page).toHaveURL(/#system-relations$/);
+  const mask = page.locator('.settings-scroll-mask');
+  await expect(mask).toHaveCSS('pointer-events', 'none');
+  expect(await mask.evaluate(element => getComputedStyle(element).backgroundImage)).toContain('linear-gradient');
+  const [maskBox, headerBox] = await Promise.all([mask.boundingBox(), page.locator('.page-header.is-sticky').boundingBox()]);
+  expect(maskBox && headerBox && Math.abs(maskBox.y - headerBox.y - headerBox.height) <= 1).toBeTruthy();
+  await page.screenshot({ path: testInfo.outputPath('system-toc-web.png'), fullPage: false });
+  await page.setViewportSize({ width: 1100, height: 400 });
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect(current).toHaveText('Overrides & drift');
+  const activeFits = () => current.evaluate(element => {
+    const selected = element.getBoundingClientRect();
+    const bounds = element.parentElement!.getBoundingClientRect();
+    return selected.left >= bounds.left - 1 && selected.right <= bounds.right + 1 && selected.top >= bounds.top - 1 && selected.bottom <= bounds.bottom + 1;
+  });
+  await expect.poll(activeFits).toBeTruthy();
+  await expect(navigation).toHaveAttribute('data-mask-start', 'true');
+  await expect(navigation).toHaveAttribute('data-mask-end', 'false');
+  const position = await page.evaluate(() => scrollY);
+  await navigation.evaluate(element => element.scrollTo({ top: 0 }));
+  await expect(navigation).toHaveAttribute('data-mask-start', 'false');
+  await expect(navigation).toHaveAttribute('data-mask-end', 'true');
+  expect(await page.evaluate(() => scrollY)).toBe(position);
+  await page.screenshot({ path: testInfo.outputPath('system-toc-short-mask.png'), fullPage: false });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/settings/system');
+  await expect(current).toHaveText('Traffic');
+  await navigation.getByRole('link', { name: 'Multimodal', exact: true }).click();
+  await expect(current).toHaveText('Multimodal');
+  await expect.poll(activeFits).toBeTruthy();
+  expect(await navigation.evaluate(element => getComputedStyle(element).maskImage)).toContain('to right');
+  await page.screenshot({ path: testInfo.outputPath('system-toc-mobile.png'), fullPage: false });
+});
+
+test('mobile navigation and desktop sidebar keep compact groups and a stable brand while scrolling', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  await page.goto('/settings/system');
+  const sidebar = page.locator('.app-sidebar');
+  const brand = sidebar.locator('.sidebar-brand');
+  const navigation = sidebar.getByRole('navigation', { name: 'Primary navigation', exact: true });
+  const brandHeight = (await brand.boundingBox())!.height;
+  const checkSpacing = async () => {
+    const measurements = await sidebar.evaluate(element => {
+      const nav = element.querySelector('.sidebar-nav')!;
+      const sections = Array.from(nav.querySelectorAll('.sidebar-section'));
+      const bounds = (element: Element) => element.getBoundingClientRect();
+      return {
+        groupGaps: sections.slice(1).map((section, index) => bounds(section).top - bounds(sections[index]).bottom),
+        topPadding: bounds(sections[0]).top - bounds(nav).top + nav.scrollTop,
+        brandGap: bounds(nav).top - bounds(element.querySelector('.sidebar-brand')!).bottom
+      };
+    });
+    for (const gap of measurements.groupGaps) { expect(gap).toBeGreaterThanOrEqual(8); expect(gap).toBeLessThanOrEqual(16); }
+    expect(measurements.topPadding).toBeLessThanOrEqual(12);
+    expect(measurements.brandGap).toBe(0);
+    return measurements;
+  };
+  const geometry = [{ phase: 'desktop', ...await checkSpacing() }];
+  await expect(navigation).toHaveAttribute('data-scroll-start', 'false');
+  await expect(navigation).toHaveAttribute('data-scroll-end', 'false');
+  await page.screenshot({ path: testInfo.outputPath('sidebar-desktop.png') });
+  await page.setViewportSize({ width: 1100, height: 480 });
+  await expect.poll(async () => (await brand.boundingBox())!.height).toBe(brandHeight);
+  await expect(navigation).toHaveAttribute('data-scroll-end', 'true');
+  const bodyPosition = await page.evaluate(() => scrollY);
+  await navigation.getByRole('link', { name: 'Providers', exact: true }).scrollIntoViewIfNeeded();
+  await expect(navigation).toHaveAttribute('data-scroll-start', 'true');
+  await expect(navigation.getByRole('link', { name: 'Providers', exact: true })).toBeInViewport();
+  expect(await page.evaluate(() => scrollY)).toBe(bodyPosition);
+  geometry.push({ phase: 'short desktop', ...await checkSpacing() });
+  await page.screenshot({ path: testInfo.outputPath('sidebar-short.png') });
+  await page.setViewportSize({ width: 390, height: 480 });
+  await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
+  const drawer = page.getByRole('dialog', { name: 'Navigation', exact: true });
+  await expect(drawer).toBeVisible();
+  expect((await brand.boundingBox())!.height).toBe(brandHeight);
+  geometry.push({ phase: 'short mobile', ...await checkSpacing() });
+  const links = await navigation.getByRole('link').all();
+  for (const link of links) expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await navigation.getByRole('link', { name: 'Providers', exact: true }).scrollIntoViewIfNeeded();
+  await expect(navigation).toHaveAttribute('data-scroll-start', 'true');
+  await page.screenshot({ path: testInfo.outputPath('sidebar-mobile.png') });
+  await page.keyboard.press('Escape');
+  await expect(drawer).toHaveCount(0);
+  await mkdir(testInfo.outputDir, { recursive: true });
+  await writeFile(testInfo.outputPath('sidebar-spacing.json'), JSON.stringify(geometry, null, 2));
+});
+
+test('system section navigation scrolls smoothly with a clean surface and respects reduced motion', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/settings/system');
+  const navigation = page.getByRole('navigation', { name: 'System sections', exact: true });
+  const sheet = page.locator('.settings-sheet');
+  const mask = sheet.locator('.settings-scroll-mask');
+  await expect(sheet).toHaveCSS('overflow-x', 'clip');
+  await expect(mask).toHaveCSS('opacity', '0');
+  await page.screenshot({ path: testInfo.outputPath('system-surface-top.png') });
+  await page.evaluate(() => {
+    const samples: number[] = [];
+    (window as Window & { systemScrollSamples?: number[] }).systemScrollSamples = samples;
+    window.addEventListener('scroll', () => samples.push(scrollY), { passive: true });
+  });
+  await navigation.getByRole('link', { name: 'Multimodal', exact: true }).click();
+  await expectSystemAnchor(page, 'system-multimodal');
+  const samples = await page.evaluate(() => (window as Window & { systemScrollSamples?: number[] }).systemScrollSamples!);
+  const unique = Array.from(new Set(samples));
+  expect(unique.length).toBeGreaterThan(3);
+  expect(unique.some(value => value > 50 && value < samples.at(-1)! - 50)).toBeTruthy();
+  await expect(navigation.locator('[aria-current="location"]')).toHaveText('Multimodal');
+  await expect(page.locator('#system-multimodal')).toBeFocused();
+  await expect(mask).toHaveCSS('opacity', '1');
+  expect((await mask.boundingBox())!.height).toBeGreaterThanOrEqual(32);
+  const [maskBox, headerBox] = await Promise.all([mask.boundingBox(), page.locator('.page-header.is-sticky').boundingBox()]);
+  expect(Math.abs(maskBox!.y - headerBox!.y - headerBox!.height)).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: testInfo.outputPath('system-surface-scrolled.png') });
+  await navigation.getByRole('link', { name: 'Web', exact: true }).press('Enter');
+  await expectSystemAnchor(page, 'system-web');
+  await expect(page).toHaveURL(/#system-web$/);
+  await expect(page.locator('#system-web')).toBeFocused();
+  await page.evaluate(() => {
+    window.scrollBy({ top: 220, behavior: 'instant' });
+    (window as Window & { systemScrollSamples?: number[] }).systemScrollSamples!.length = 0;
+  });
+  await navigation.getByRole('link', { name: 'Web', exact: true }).click();
+  await expectSystemAnchor(page, 'system-web');
+  const repeatedSamples = await page.evaluate(() => (window as Window & { systemScrollSamples?: number[] }).systemScrollSamples!);
+  expect(new Set(repeatedSamples).size).toBeGreaterThan(3);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await navigation.getByRole('link', { name: 'Traffic', exact: true }).click();
+  // Reduced motion must finish immediately, rather than passing after an animation timeout.
+  const reducedDelta = await page.evaluate(() => new Promise<number>(resolve => requestAnimationFrame(() => {
+    const section = document.getElementById('system-traffic')!;
+    const target = Math.max(0, scrollY + section.getBoundingClientRect().top - Number.parseFloat(getComputedStyle(section).scrollMarginTop));
+    resolve(Math.abs(scrollY - target));
+  })));
+  expect(reducedDelta).toBeLessThanOrEqual(2);
+  await expect(mask).toHaveCSS('opacity', '0');
+  await page.goBack();
+  await expect(page).toHaveURL(/#system-web$/);
+  await expectSystemAnchor(page, 'system-web');
+  await mkdir(testInfo.outputDir, { recursive: true });
+  await writeFile(testInfo.outputPath('smooth-scroll.json'), JSON.stringify({ samples, repeatedSamples, reducedDelta }, null, 2));
+});
+
+test('system section navigation keeps clicked short sections selected at the shared page end', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/settings/system');
+  const navigation = page.getByRole('navigation', { name: 'System sections', exact: true });
+  const current = navigation.locator('[aria-current="location"]');
+  const database = navigation.getByRole('link', { name: 'Database connection', exact: true });
+  const overrides = navigation.getByRole('link', { name: 'Overrides & drift', exact: true });
+  await database.click();
+  await expectSystemAnchor(page, 'system-database');
+  await expect(page.getByRole('heading', { name: 'Database connection', exact: true })).toBeInViewport();
+  await expect(page.getByRole('heading', { name: 'Overrides & drift', exact: true })).toBeInViewport();
+  const position = await page.evaluate(() => scrollY);
+  const remaining = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight - scrollY);
+  expect(remaining).toBeLessThanOrEqual(2);
+  await page.screenshot({ path: testInfo.outputPath('database-selected.png') });
+  await expect(current).toHaveText('Database connection');
+  await page.locator('.settings-sheet').dispatchEvent('wheel', { deltaY: 100, ctrlKey: true });
+  await expect(current).toHaveText('Database connection');
+  await overrides.click();
+  await expect(current).toHaveText('Overrides & drift');
+  expect(Math.abs(await page.evaluate(() => scrollY) - position)).toBeLessThanOrEqual(2);
+  await database.press('Enter');
+  await expect(current).toHaveText('Database connection');
+  expect(Math.abs(await page.evaluate(() => scrollY) - position)).toBeLessThanOrEqual(2);
+  // A real scrolling key releases the explicit selection even at the document boundary.
+  await page.locator('#system-database').press('PageDown');
+  await expect(current).toHaveText('Overrides & drift');
+  await database.click();
+  await expect(current).toHaveText('Database connection');
+  // Manual movement away and back must follow the viewport, despite the unchanged database hash.
+  if (testInfo.project.name === 'mobile-webkit') await page.keyboard.press('PageUp');
+  else { await page.mouse.move(1000, 450); await page.mouse.wheel(0, -450); }
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeLessThan(position - 100);
+  await page.evaluate(() => new Promise<void>(resolve => {
+    let last = scrollY;
+    let stable = 0;
+    const check = () => {
+      stable = Math.abs(scrollY - last) < 0.5 ? stable + 1 : 0;
+      last = scrollY;
+      if (stable >= 3) resolve();
+      else requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
+  }));
+  await expect(current).not.toHaveText('Database connection');
+  await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
+  await expect(current).toHaveText('Overrides & drift');
+  await expect(page).toHaveURL(/#system-database$/);
+  await overrides.click();
+  await expectSystemAnchor(page, 'system-overrides');
+  await database.click();
+  await expectSystemAnchor(page, 'system-database');
+  await expect(current).toHaveText('Database connection');
+  await page.goBack();
+  await expect(page).toHaveURL(/#system-overrides$/);
+  await expect(current).toHaveText('Overrides & drift');
+  await page.goForward();
+  await expect(page).toHaveURL(/#system-database$/);
+  await expect(current).toHaveText('Database connection');
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  await expect(current).toHaveText('Database connection');
+  await page.setViewportSize({ width: 390, height: 1100 });
+  await page.goto('/settings/system#system-database');
+  await expectSystemAnchor(page, 'system-database');
+  await expect(current).toHaveText('Database connection');
+  await overrides.click();
+  await expectSystemAnchor(page, 'system-overrides');
+  await expect(current).toHaveText('Overrides & drift');
+  await database.click();
+  await expectSystemAnchor(page, 'system-database');
+  await expect(current).toHaveText('Database connection');
 });

@@ -2,7 +2,7 @@
 
 <script lang="ts">
   import { selectedTarget } from '#lib/stores/targets.ts';
-  import { workspaceEntryURL } from '#lib/scope/navigation.ts';
+  import { workspaceLink } from '#lib/scope/navigation.ts';
   import { onMount } from 'svelte';
   import { createPageStore } from '#lib/stores/page.ts';
 
@@ -11,15 +11,15 @@
   export let current = '/memory';
 
   const items = [
-    { href: '/memory', label: 'Memory documents' },
-    { href: '/memory/summaries', label: 'Summaries' },
-    { href: '/memory/impressions', label: 'Impressions' },
-    { href: '/memory/facts', label: 'Facts' },
-    { href: '/memory/items', label: 'Agent Memory' },
-    { href: '/memory/keys', label: 'Key Memories' }
+    { kind:'', href: '/memory', label: 'Memory documents' },
+    { kind:'summary', href: '/memory/summaries', label: 'Summaries' },
+    { kind:'impression', href: '/memory/impressions', label: 'Impressions' },
+    { kind:'fact', href: '/memory/facts', label: 'Facts' },
+    { kind:'', href: '/memory/items', label: 'Agent Memory' },
+    { kind:'', href: '/memory/keys', label: 'Key Memories' }
   ];
 
-  let suffix = '';
+  let owner: string | undefined;
   let navigation: HTMLElement;
 
   onMount(() => {
@@ -35,7 +35,7 @@
 
   $: {
     const userId = $page.url.searchParams.get('user_id');
-    suffix = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
+    owner = userId || undefined;
   }
 </script>
 
@@ -46,7 +46,7 @@
       tabindex="0"
       class:is-active={current === item.href}
       aria-current={current === item.href ? 'page' : undefined}
-      href={workspaceEntryURL($selectedTarget?.id, `${item.href}${suffix}`)}
+      href={workspaceLink($selectedTarget?.id,item.href === '/memory/keys' ? 'keys' : 'memory', {owner,kind:item.kind || undefined})}
     >{item.label}</a>
   {/each}
 </nav>
