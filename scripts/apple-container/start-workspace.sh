@@ -70,6 +70,35 @@ if [[ "$SKIP_BUILD" != "1" ]]; then
     "$ROOT_DIR"
 fi
 
+# shellcheck source=../dev/extractor-lib.sh
+source "$ROOT_DIR/scripts/dev/extractor-lib.sh"
+memstation_extractor_configure
+
+if ! memstation_apple_volume_exists "$MEMSTATION_APPLE_EXTRACTOR_VOLUME"; then
+  container volume create "$MEMSTATION_APPLE_EXTRACTOR_VOLUME" >/dev/null
+fi
+if [[ "$SKIP_BUILD" != "1" ]]; then
+  echo "Building memory extractor image with Apple container..."
+  container build \
+    --tag "$MEMSTATION_APPLE_EXTRACTOR_IMAGE" \
+    --file "$ROOT_DIR/apps/extractor/Dockerfile" \
+    "$ROOT_DIR"
+fi
+memstation_apple_remove_container "$MEMSTATION_APPLE_EXTRACTOR"
+echo "Starting memory extractor in Apple container..."
+container run --detach \
+  --name "$MEMSTATION_APPLE_EXTRACTOR" \
+  --network "$MEMSTATION_APPLE_NETWORK" \
+  --env MEMSTATION_EXTRACTOR_HOST=0.0.0.0 \
+  --env MEMSTATION_EXTRACTOR_BACKEND="$MEMSTATION_EXTRACTOR_BACKEND" \
+  --env MEMSTATION_EXTRACTOR_TOKEN="$MEMSTATION_MEMORY_PROCESSING_TOKEN" \
+  --env MEMSTATION_EXTRACTOR_MODEL="$MEMSTATION_MEMORY_PROCESSING_MODEL" \
+  --env MEMSTATION_EXTRACTOR_REVISION="$MEMSTATION_MEMORY_PROCESSING_REVISION" \
+  --env MEMSTATION_EXTRACTOR_SPLITTER="$MEMSTATION_MEMORY_PROCESSING_SPLITTER" \
+  --env HF_HOME=/models/huggingface \
+  --volume "${MEMSTATION_APPLE_EXTRACTOR_VOLUME}:/models" \
+  "$MEMSTATION_APPLE_EXTRACTOR_IMAGE" >/dev/null
+
 # Recreate only the stateless workspace so image, ports, and environment stay in sync.
 memstation_apple_remove_container "$MEMSTATION_APPLE_WORKSPACE"
 
@@ -92,6 +121,11 @@ container run --detach \
   --env MEMSTATION_CORS_ALLOWED_ORIGINS="${MEMSTATION_CORS_ALLOWED_ORIGINS:-}" \
   --env MEMSTATION_SESSION_COOKIE_SECURE=false \
   --env MEMSTATION_SESSION_COOKIE_CROSS_SITE=false \
+  --env MEMSTATION_MEMORY_PROCESSING_ENDPOINT="http://${MEMSTATION_APPLE_EXTRACTOR}:8092" \
+  --env MEMSTATION_MEMORY_PROCESSING_TOKEN="$MEMSTATION_MEMORY_PROCESSING_TOKEN" \
+  --env MEMSTATION_MEMORY_PROCESSING_MODEL="$MEMSTATION_MEMORY_PROCESSING_MODEL" \
+  --env MEMSTATION_MEMORY_PROCESSING_REVISION="$MEMSTATION_MEMORY_PROCESSING_REVISION" \
+  --env MEMSTATION_MEMORY_PROCESSING_SPLITTER="$MEMSTATION_MEMORY_PROCESSING_SPLITTER" \
   --mount "type=bind,source=${ROOT_DIR},target=${MEMSTATION_APPLE_WORKSPACE_DIR}" \
   "$MEMSTATION_APPLE_WORKSPACE_IMAGE" sleep infinity >/dev/null
 

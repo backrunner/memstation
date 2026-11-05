@@ -2,7 +2,7 @@
   "name": "MemStation",
   "dockerComposeFile": ["../deploy/compose/docker-compose.yml"],
   "service": "workspace",
-  "runServices": ["workspace", "postgres", "redis"],
+  "runServices": ["workspace", "postgres", "redis", "extractor"],
   "workspaceFolder": "/workspace/memstation",
   "shutdownAction": "stopCompose",
   "forwardPorts": [8080, 5173],

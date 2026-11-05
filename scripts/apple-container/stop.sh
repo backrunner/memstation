@@ -12,11 +12,12 @@ fi
 
 memstation_apple_require_container
 
-for name in "$MEMSTATION_APPLE_WORKSPACE" "$MEMSTATION_APPLE_REDIS" "$MEMSTATION_APPLE_POSTGRES"; do
+for name in "$MEMSTATION_APPLE_WORKSPACE" "$MEMSTATION_APPLE_EXTRACTOR" "$MEMSTATION_APPLE_REDIS" "$MEMSTATION_APPLE_POSTGRES"; do
   memstation_apple_remove_container "$name"
 done
 
 if [[ "$PURGE" == "1" ]]; then
+  container volume delete "$MEMSTATION_APPLE_EXTRACTOR_VOLUME" >/dev/null 2>&1 || true
   container volume delete "$MEMSTATION_APPLE_REDIS_VOLUME" >/dev/null 2>&1 || true
   container volume delete "$MEMSTATION_APPLE_POSTGRES_VOLUME" >/dev/null 2>&1 || true
   container network delete "$MEMSTATION_APPLE_NETWORK" >/dev/null 2>&1 || true

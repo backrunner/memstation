@@ -19,16 +19,21 @@ if [ ! -f .env.memstation-dev ]; then
   )
 fi
 
+# Entity recall is always active. The stack defaults to the extractor weights pinned in
+# scripts/dev/extractor.env; set these in .env.memstation-dev to use reviewed alternatives:
+# MEMSTATION_MEMORY_PROCESSING_TOKEN, _MODEL, _REVISION
+# Set your own TOKEN for anything other than a private local stack.
+
 ms_compose() {
   docker compose --project-name memstation-local --env-file .env.memstation-dev \
     -f deploy/compose/docker-compose.yml "$@"
 }
 
-ms_compose build memstation manager worker scheduler
+ms_compose build extractor memstation manager worker scheduler
 ms_compose up -d --wait postgres redis
 ms_compose run --rm memstation migrate
 ms_compose run --rm memstation seed
-ms_compose up -d memstation worker scheduler manager
+ms_compose up -d extractor memstation worker scheduler manager
 ```
 
 Open **http://127.0.0.1:4173**, select **Local**, and use the admin token stored in
@@ -41,6 +46,14 @@ Use `ms_compose logs -f memstation worker scheduler` to inspect processing and
 `ms_compose down` to stop without removing data. Do not add `--volumes` when data
 should be preserved. This is a **local development stack**, not an internet-facing
 production configuration; see [SECURITY.md](../../SECURITY.md).
+
+Entity-assisted retrieval is always active and the extractor is a normal
+Compose service. Set its token, model and immutable revision in the env file
+before running the server commands above; see [memory processing](../../docs/memory-processing.md).
+For a host-native Go server, start the local encoder separately and set its
+reachable `MEMSTATION_MEMORY_PROCESSING_ENDPOINT` as well. Startup rejects missing
+configuration. Runtime query timeouts degrade the entity channel explicitly;
+configured source-index failures retry after preserving original text.
 
 ## Development workflows
 
@@ -66,7 +79,7 @@ Reset flow
 
 Local env file
 - The reset script stores local development secrets in `.env.memstation-dev`.
-- If `.env.memstation-dev` does not exist, the script generates a fresh admin token, master key, and Manager session encryption key automatically. Existing files receive a Manager key if the setting is absent.
+- If `.env.memstation-dev` does not exist, the script generates a fresh admin token, master key, and Manager session encryption key automatically. Existing files receive a Manager key if the setting is absent. It checks the required extractor settings before deleting volumes; add the selected model, immutable revision and separate extractor token before rerunning.
 - You can override the path with `MEMSTATION_ENV_FILE=/path/to/file ./scripts/dev/reset-compose-stack.sh`.
 
 Services

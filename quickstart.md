@@ -188,6 +188,8 @@ pnpm dev
 - 上游密钥加密存储依赖 `MEMSTATION_MASTER_KEY`
 - 端口、日志、Telemetry 也都属于服务启动前配置
 
+记忆处理必须连接 extractor 服务。开发入口（`pnpm dev`、`pnpm dev:server`、`pnpm dev:portless`、`pnpm dev:apple`）和评测入口（`scripts/eval/stack.sh up`）都会自动启动完整服务，默认权重固定在 `scripts/dev/extractor.env`，首次运行需要 `uv` 并下载模型。生产部署请自行设置 `MEMSTATION_MEMORY_PROCESSING_ENDPOINT`、`TOKEN`、`MODEL` 和固定的 `REVISION`，缺一服务会在启动时报错，详见 `docs/memory-processing.md`。
+
 ## 7. 推荐使用习惯
 
 日常开发建议这样分：

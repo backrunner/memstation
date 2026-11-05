@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memstation-extractor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memstation-extractor
+  template:
+    metadata:
+      labels:
+        app: memstation-extractor
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: extractor
+          image: memstation/extractor:0.1.0
+          ports:
+            - containerPort: 8092
+          env:
+            - name: MEMSTATION_EXTRACTOR_HOST
+              value: "0.0.0.0"
+            - name: MEMSTATION_EXTRACTOR_BACKEND
+              value: "gliner"
+            - name: MEMSTATION_EXTRACTOR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: memstation-secrets
+                  key: MEMSTATION_MEMORY_PROCESSING_TOKEN
+            - name: MEMSTATION_EXTRACTOR_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: memstation-config
+                  key: MEMSTATION_MEMORY_PROCESSING_MODEL
+            - name: MEMSTATION_EXTRACTOR_REVISION
+              valueFrom:
+                configMapKeyRef:
+                  name: memstation-config
+                  key: MEMSTATION_MEMORY_PROCESSING_REVISION
+            - name: MEMSTATION_EXTRACTOR_SPLITTER
+              valueFrom:
+                configMapKeyRef:
+                  name: memstation-config
+                  key: MEMSTATION_MEMORY_PROCESSING_SPLITTER
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8092
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: memstation-extractor
+spec:
+  selector:
+    app: memstation-extractor
+  ports:
+    - port: 8092
+      targetPort: 8092

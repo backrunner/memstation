@@ -24,6 +24,10 @@ data:
   TOKEN_THRESHOLD: "64000"
   MEMSTATION_RATE_LIMIT_RPS: "20"
   MEMSTATION_RATE_LIMIT_BURST: "40"
+  MEMSTATION_MEMORY_PROCESSING_ENDPOINT: "http://memstation-extractor:8092"
+  MEMSTATION_MEMORY_PROCESSING_MODEL: ""
+  MEMSTATION_MEMORY_PROCESSING_REVISION: ""
+  MEMSTATION_MEMORY_PROCESSING_SPLITTER: "char"
 ---
 apiVersion: v1
 kind: Secret
@@ -33,6 +37,7 @@ type: Opaque
 stringData:
   MEMSTATION_ADMIN_TOKEN: "replace-with-a-strong-admin-token"
   MEMSTATION_MASTER_KEY: "replace-with-a-strong-master-key"
+  MEMSTATION_MEMORY_PROCESSING_TOKEN: "replace-with-a-separate-service-token"
   OPENAI_API_KEY: ""
   ANTHROPIC_API_KEY: ""
   GEMINI_API_KEY: ""

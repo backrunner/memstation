@@ -70,6 +70,27 @@ compose() {
     "$@"
 }
 
+# Check the effective Compose environment before deleting any development data.
+validate_processing_environment() {
+  local resolved key value token="" model="" revision=""
+  resolved=$(compose config --environment)
+  while IFS='=' read -r key value; do
+    case "$key" in
+      MEMSTATION_MEMORY_PROCESSING_ENTITY_RECALL_ENABLED)
+        echo "Remove MEMSTATION_MEMORY_PROCESSING_ENTITY_RECALL_ENABLED; entity-assisted retrieval is always active." >&2
+        exit 1
+        ;;
+      MEMSTATION_MEMORY_PROCESSING_TOKEN) token=$value ;;
+      MEMSTATION_MEMORY_PROCESSING_MODEL) model=$value ;;
+      MEMSTATION_MEMORY_PROCESSING_REVISION) revision=$value ;;
+    esac
+  done <<< "$resolved"
+  if [[ -z "$token" || -z "$model" || -z "$revision" ]]; then
+    echo "Configure MEMSTATION_MEMORY_PROCESSING_TOKEN, MODEL and REVISION in the Compose environment before resetting data; entity recall is always active." >&2
+    exit 1
+  fi
+}
+
 wait_for_healthy_service() {
   local service=$1
   local timeout=${2:-120}
@@ -152,6 +173,7 @@ done
 require_command docker
 docker compose version >/dev/null 2>&1
 ensure_env_file
+validate_processing_environment
 
 echo "Resetting local MemStation dev stack..."
 compose down --volumes --remove-orphans
@@ -168,7 +190,7 @@ if [[ $RUN_SEED -eq 1 ]]; then
 fi
 
 if [[ $START_SERVICES -eq 1 ]]; then
-  services=(memstation worker scheduler)
+  services=(extractor memstation worker scheduler)
   if [[ $START_MANAGER -eq 1 ]]; then
     services+=(manager)
   fi

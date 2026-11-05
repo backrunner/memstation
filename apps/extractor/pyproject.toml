@@ -1,0 +1,13 @@
+[project]
+name = "memstation-extractor"
+version = "0.1.0"
+description = "Local source-span extraction for MemStation"
+requires-python = ">=3.11,<3.13"
+dependencies = []
+
+[project.optional-dependencies]
+gliner = ["gliner2[local]==2.1.0", "huggingface-hub==2.3.0"]
+uie = ["paddlenlp==2.8.1; sys_platform == 'linux' and platform_machine == 'x86_64'", "paddlepaddle==3.3.1; sys_platform == 'linux' and platform_machine == 'x86_64'"]
+
+[tool.uv]
+conflicts = [[{ extra = "gliner" }, { extra = "uie" }]]

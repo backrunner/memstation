@@ -18,6 +18,10 @@ export MEMSTATION_CORS_ALLOWED_ORIGINS=${MEMSTATION_CORS_ALLOWED_ORIGINS:-}
 export MEMSTATION_SESSION_COOKIE_SECURE=${MEMSTATION_SESSION_COOKIE_SECURE:-false}
 export MEMSTATION_SESSION_COOKIE_CROSS_SITE=${MEMSTATION_SESSION_COOKIE_CROSS_SITE:-false}
 
+# shellcheck source=./extractor-lib.sh
+source "$ROOT_DIR/scripts/dev/extractor-lib.sh"
+memstation_extractor_ensure
+
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "required command not found: $1" >&2
@@ -54,6 +58,7 @@ start_server() {
 
 cleanup() {
   stop_server
+  memstation_extractor_stop
 }
 
 trap cleanup EXIT INT TERM
