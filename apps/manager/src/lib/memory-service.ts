@@ -10,8 +10,11 @@ export interface WorkspaceActor {actor_id:string;display_name:string;kind:string
 export interface MemoryControl {next_cursor?:string;actors:WorkspaceActor[];sources:{id:string;revision:number;speaker_actor_id:string;status:string}[];receipts:MemoryReceipt[];jobs:MemoryJob[];operations:MemoryOperation[];limit:number}
 export interface Integration {id:string;name:string;kind:string;agent_id:string;external_space_id:string;allowed_event_types:string[];revision:number}
 export interface Partition {id:string;agent_id:string;audience_actor_ids:string[];revision:number}
-export interface BackgroundCall {id:string;role:string;model_alias:string;model_version:string;job_id:string;attempt:number;status:string;broker_usage_id:string;provider_request_id:string;input_tokens:number;output_tokens:number;reported_cost:string;currency:string;usage_authority:string;failure_code?:string}
+export interface BackgroundCall {id:string;role:string;stage:string;strategy:string;duration_ms:number;usage_known:boolean;created_at:string;model_alias:string;model_version:string;job_id:string;attempt:number;status:string;broker_usage_id:string;provider_request_id:string;input_tokens:number;output_tokens:number;reported_cost:string;currency:string;usage_authority:string;failure_code?:string}
+export interface ProcessingPolicy {entity_recall_timeout_ms:number;strategy:string;model:string;revision:string;splitter:string;threshold:number;audit_rate:number;max_semantic_bytes:number;identity:string}
+export interface AIUsageGroup {day:string;stage:string;strategy:string;model:string;authority:string;status:string;calls:number;known_usage_calls:number;input_tokens:number;output_tokens:number;duration_ms:number;retries:number}
+export interface AIUsageReport {query:{since:string;until:string};groups:AIUsageGroup[];costs:{currency:string;amount:string;calls:number}[];unpriced_calls:number}
 export interface RecordDetail {id?:string;type?:string;kind?:string;node_id:string;content:string;revision:number;subject_actor_ids:string[];source_refs:SourceRef[];generation_id:string;status:string}
 export interface SourceDetail {id:string;revision:number;speaker_actor_id:string;parts:{type:string;text?:string;actor_id?:string;author?:{actor_id:string};media?:ContentBlock}[]}
 
-export interface MemoryCapabilities {status:string;runtime:{ai_backend:string;role_aliases:Record<string,string>;embedding:{model_version:string;dimensions:number;fingerprint:string};usage_authority:string};limitations:string[]}
+export interface MemoryCapabilities {status:string;runtime:{processing:ProcessingPolicy;ai_backend:string;role_aliases:Record<string,string>;embedding:{model_version:string;dimensions:number;fingerprint:string};usage_authority:string};limitations:string[]}

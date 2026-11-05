@@ -15,14 +15,14 @@
 </script>
 
 <section class="page-stack">
-  <PageHeader title="Conversations" description={`Browse conversations in ${data.workspaceResult.value?.name ?? 'this workspace'}.`} />
+  <PageHeader title="Conversations" />
   <form method="GET" class="filter-bar">
     <TextInputField name="q" label="Filter conversations" bind:value={query} placeholder="Conversation ID, provider or status" maxlength={1024} />
     <Button class="btn-secondary" type="submit">Apply</Button>
   </form>
   <WorkspaceReadStatus failure={data.records.failure} />
   {#if data.records.value}
-    <p class="helper-text">{records.length} shown, newest first. New activity may move conversations between pages.</p>
+    <p class="helper-text">{records.length} conversations</p>
     {#if records.length === 0}<p class="notice-card">No conversations match this view.</p>{/if}
     <div class="list-table">
       {#each records as item (item.conversation_id)}

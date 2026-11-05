@@ -91,7 +91,7 @@
 </script>
 
 <section class="page-stack workspace-settings">
-  <PageHeader title={workspace.name} subtitle={`Owned by ${workspace.user_id}`} />
+  <PageHeader title="Workspace settings" />
   <a class="text-link" href={workspaceDirectoryURL(scope.target.id)}>All workspaces</a>
   <form class="page-stack" on:submit|preventDefault={save}>
     <TextInputField label="Workspace name" bind:value={name} maxlength={120} required disabled={busy || workspace.status !== 'active'} />

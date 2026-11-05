@@ -23,7 +23,7 @@
 </script>
 
 <section class="page-stack">
-  <PageHeader title="Memory documents" description={`Browse memory documents in ${data.workspaceResult.value?.name ?? 'this workspace'}.`} />
+  <PageHeader title="Memory documents" />
   <a class="text-link" href={`${base}/memory/search`}>Search memory and fact history</a>
   <form method="GET" class="filter-bar">
     <TextInputField name="q" label="Filter documents" bind:value={query} placeholder="Content or document ID" maxlength={1024} />
@@ -34,7 +34,7 @@
   <WorkspaceReadStatus failure={data.records.failure} />
   {#if data.after}<a class="text-link" href={pageURL()}>First page</a>{/if}
   {#if data.records.value}
-    <p class="helper-text">{records.length} shown in this memory generation. New edits may move records between pages.</p>
+    <p class="helper-text">{records.length} documents</p>
     {#if data.generation}<p class="helper-text">Viewing generation {data.generation}. <a href={`${base}/memory`}>Return to active memory</a></p>{/if}
     {#if records.length === 0}<p class="notice-card">No memory documents match this view.</p>{/if}
     <div class="list-table">

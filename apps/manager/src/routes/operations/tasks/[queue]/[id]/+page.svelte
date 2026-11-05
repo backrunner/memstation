@@ -84,11 +84,7 @@
 </script>
 
 <section class="page-stack">
-  <PageHeader
-    eyebrow="Operations / Task"
-    title={$page.params.id}
-    description="Inspect retry context, payload, queue pressure, and rerun status for this worker task."
-  />
+  <PageHeader title={$page.params.id}/>
 
   {#if !$targetState.session.authenticated}
     <div class="notice-card">Connect this target to inspect task detail.</div>
@@ -105,15 +101,14 @@
       <section class="card page-stack">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Task</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Execution and retry context</h2>
+            <h2 class="section-title">Execution</h2>
           </div>
           <div class="runtime-field-status">
             <StatusBadge tone={detail.item.state === 'active' ? 'brand' : detail.item.state === 'archived' || detail.item.state === 'retry' ? 'warning' : 'muted'} label={detail.item.state} />
             {#if detail.item.is_orphaned}
               <StatusBadge tone="danger" label="orphaned" />
             {/if}
-            <StatusBadge tone={audits.length > 0 ? 'brand' : 'muted'} label={`${audits.length} reruns`} />
+            <span class="subtle-text">{audits.length} reruns</span>
           </div>
         </div>
 
@@ -150,8 +145,7 @@
       <section class="card page-stack">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Linked entities</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Conversation, user, and queue pressure</h2>
+            <h2 class="section-title">Related records</h2>
           </div>
         </div>
 
@@ -192,8 +186,7 @@
       <section class="card page-stack">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Payload</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Decoded task payload and error detail</h2>
+            <h2 class="section-title">Payload and error</h2>
           </div>
         </div>
         <div class="grid-2" style="align-items: start;">
@@ -211,8 +204,7 @@
       <section class="card page-stack">
         <div class="page-header">
           <div>
-            <div class="sidebar-label">Rerun Audit</div>
-            <h2 class="page-title" style="font-size: 1.35rem;">Recorded rerun actions for this queue task</h2>
+            <h2 class="section-title">Rerun history</h2>
           </div>
           <a class="btn-ghost" href={`/audit?action=requeue_task&target_type=queue_task&target_id=${encodeURIComponent(detail.item.id)}`}>Open audit</a>
         </div>
@@ -224,7 +216,7 @@
               <div class="debug-block">
                 <div class="inline-group" style="justify-content: space-between; margin-bottom: 8px;">
                   <strong>{event.action}</strong>
-                  <StatusBadge tone="brand" label={event.created_at ? new Date(event.created_at).toLocaleString() : 'n/a'} />
+                  <time class="subtle-text" datetime={event.created_at}>{event.created_at ? new Date(event.created_at).toLocaleString() : 'n/a'}</time>
                 </div>
                 <MetadataRow items={[event.actor_type ?? 'admin', event.actor_id ?? 'unknown']} />
                 <div style="margin-top: 10px;">

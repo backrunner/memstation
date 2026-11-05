@@ -17,7 +17,7 @@
 </script>
 
 <section class="page-stack">
-  <PageHeader title="Search memory" description={`Search ${data.workspaceResult.value?.name ?? 'this workspace'} using its configured memory retrieval service.`} />
+  <PageHeader title="Search memory" />
   <a class="text-link" href={`${base}/memory`}>Browse memory documents</a>
   {#key JSON.stringify(data.filters)}
     <form method="GET" class="page-stack">
@@ -46,7 +46,7 @@
   <WorkspaceReadStatus failure={data.result.failure || data.workspaceResult.failure} />
   {#if data.result.value}
     {#if data.historical}<p class="notice-card">Historical fact snapshots are read only. Opening a current record may show newer content.</p>{/if}
-    <p class="helper-text">{data.result.value.memories.length} ranked results, up to {data.filters.top_n} requested.</p>
+    <p class="helper-text">{data.result.value.memories.length} results</p>
     <div class="search-results">
       {#each data.result.value.memories as item (`${item.type}:${item.id}`)}
         <article class="search-result">
@@ -59,7 +59,7 @@
         </article>
       {:else}<p class="notice-card">No memories match these filters.</p>{/each}
     </div>
-  {:else if !data.submitted && !data.result.failure}<p class="helper-text">Enter a topic to retrieve relevant memory. Use the time filters to inspect past facts.</p>{/if}
+  {/if}
 </section>
 
 <style>

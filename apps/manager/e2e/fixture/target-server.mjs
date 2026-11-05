@@ -2301,6 +2301,7 @@ const server = http.createServer(async (req, res) => {
         metadata: {
           ...(item.metadata || {}),
           ...(body.as_of || body.known_at ? { historical_snapshot: true, recorded_at: item.updated_at } : {}),
+          matched_entities: item.id==='summary-1' && String(body.query || '').toLowerCase().includes('memstation') ? ['MemStation'] : [],
           matched_keywords: tokensFromQuery(String(body.query || '')).filter((token) =>
             Array.isArray(item.metadata?.keywords) && item.metadata.keywords.some((keyword) => String(keyword).toLowerCase().includes(token))
           )

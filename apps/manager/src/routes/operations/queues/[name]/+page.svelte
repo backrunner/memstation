@@ -82,11 +82,7 @@
 </script>
 
 <section class="page-stack">
-  <PageHeader
-    eyebrow="Operations / Queue"
-    title={$page.params.name}
-    description="Inspect this worker lane, review backlog posture, and jump into the tasks currently occupying it."
-  />
+  <PageHeader title={$page.params.name}/>
 
   {#if !$targetState.session.authenticated}
     <div class="notice-card">Connect this target to inspect queue detail.</div>
@@ -109,20 +105,20 @@
     </div>
 
     <div class="kpi-grid">
-      <KpiCard label="Pending" value={String(queue.pending)} meta="Waiting to be processed." />
-      <KpiCard label="Active" value={String(queue.active)} meta="Currently executing." />
-      <KpiCard label="Retry" value={String(queue.retry)} meta="Tasks waiting for retry." />
-      <KpiCard label="Latency" value={`${queue.latency_ms ?? 0} ms`} meta="Observed queue latency." />
+      <KpiCard label="Pending" value={String(queue.pending)} />
+      <KpiCard label="Active" value={String(queue.active)} />
+      <KpiCard label="Retry" value={String(queue.retry)} />
+      <KpiCard label="Latency" value={`${queue.latency_ms ?? 0} ms`} />
     </div>
 
     <section class="card">
       <div class="inline-group" style="justify-content: space-between; flex-wrap: wrap;">
         <div class="inline-group" style="flex-wrap: wrap;">
           {#each ['retry', 'archived', 'scheduled', 'active', 'pending'] as state}
-            <Button class={selectedStates.includes(state) ? 'button-secondary' : 'button-ghost'} type="button" onclick={() => toggleState(state)}>{state}</Button>
+            <Button class={selectedStates.includes(state) ? 'btn-secondary btn-sm' : 'btn-ghost btn-sm'} type="button" aria-pressed={selectedStates.includes(state)} onclick={() => toggleState(state)}>{state}</Button>
           {/each}
         </div>
-        <div class="helper-text">Showing {tasks.length} tasks from queue `{queue.name}`.</div>
+        <div class="helper-text">{tasks.length} task{tasks.length === 1 ? '' : 's'}</div>
       </div>
     </section>
 
@@ -164,8 +160,7 @@
         <div class="debug-block">
           <div class="page-header">
             <div>
-              <div class="sidebar-label">Queue Metrics</div>
-              <h2 class="page-title" style="font-size: 1.2rem;">Current lane posture</h2>
+              <h2 class="section-title">Queue status</h2>
             </div>
           </div>
           <JsonView value={queue} />
@@ -174,8 +169,7 @@
         <div class="debug-block">
           <div class="page-header">
             <div>
-              <div class="sidebar-label">Selected Task</div>
-              <h2 class="page-title" style="font-size: 1.2rem;">Payload preview</h2>
+              <h2 class="section-title">Payload preview</h2>
             </div>
           </div>
           {#if selectedTask}

@@ -37,7 +37,6 @@
   const receipts = $derived(latestReceipts(data.control.value?.receipts ?? []));
   const integrations = $derived(data.integrations.value?.items ?? []);
   const partitions = $derived(data.partitions.value?.items ?? []);
-  const activeView = $derived(memoryServiceViews.find(item => item.id === view)!);
 
   let scopeSelection = $state(untrack(() => data.partition));
   let busy = $state(false);
@@ -291,7 +290,7 @@
 </script>
 
 <section class="page-stack memory-service" aria-busy={busy}>
-  <PageHeader title="Memory service" subtitle="Review memory and manage its sources.">
+  <PageHeader title="Memory service">
     <svelte:fragment slot="actions"><Button class="btn-secondary" disabled={busy} onclick={refresh}>Refresh</Button></svelte:fragment>
   </PageHeader>
 
@@ -316,7 +315,7 @@
     {#if data.capabilities.value?.status === 'memory-disabled'}<div class="unavailable-state"><h3>Long-term memory is unavailable</h3><p>Check the service connection and recovery status before sending more messages.</p></div>{/if}
     <div class="activity-grid">
       <section class="processing-panel" aria-labelledby="message-processing-heading">
-        <div class="view-heading"><div><h2 id="message-processing-heading">Message processing</h2><p>Messages become searchable as indexing completes.</p></div></div>
+        <div class="view-heading"><div><h2 id="message-processing-heading">Message processing</h2></div></div>
       <div class="processing-list">
         {#each receipts as receipt, index (receipt.id)}
           {@const progress = receiptProgress(receipt)}
@@ -336,26 +335,26 @@
     </section>
       </section>
       <aside class="attention" aria-label="Needs attention">
-        <div><h3>Needs attention</h3><p>Keep your workspace memory accurate and up to date.</p></div>
+        <div><h3>Needs attention</h3></div>
         <a class="attention-link" href={viewLink('review')}><div><strong>{pending.length}</strong><span>Suggestions to review</span></div><ArrowRight size={17} aria-hidden="true" /></a>
-        {#if failedJobs.length}<a class="attention-link attention-failed" href="#processing-tasks-heading"><div><strong>{failedJobs.length}</strong><span>Failed tasks</span></div><ArrowRight size={17} aria-hidden="true" /></a>{:else}<p class="attention-clear">No failed tasks.</p>{/if}
+        {#if failedJobs.length}<a class="attention-link attention-failed" href="#processing-tasks-heading"><div><strong>{failedJobs.length}</strong><span>Failed tasks</span></div><ArrowRight size={17} aria-hidden="true" /></a>{/if}
         <a class="attention-footer" href={viewLink('connections')}>Manage message sources <ArrowRight size={14} aria-hidden="true" /></a>
       </aside>
     </div>
     <div class="activity-details">
-    <CollapsibleSection title="Source messages" count={data.control.value?.sources.length ?? 0} variant="panel" description="Inspect original messages and authors.">
+    <CollapsibleSection title="Source messages" count={data.control.value?.sources.length ?? 0} variant="panel">
       {#each data.control.value?.sources ?? [] as source (source.id)}<div class="record-row"><div class="row-copy"><strong>{actorName(source.speaker_actor_id)}</strong><MetadataRow items={[memoryLabel(source.status), `Revision ${source.revision}`]} /></div><Button class="btn-secondary" disabled={busy || source.status !== 'active'} onclick={() => viewSource(source.id)}>View message</Button></div>{:else}<p class="quiet-empty">No source messages in this audience.</p>{/each}
     </CollapsibleSection>
-    <CollapsibleSection title="AI usage" count={data.usage.value?.items.length ?? 0} variant="panel" description="Model calls and tokens for this audience.">
+    <CollapsibleSection title="AI usage" count={data.usage.value?.items.length ?? 0} variant="panel">
       {#if data.usage.failure}<p class="error-state">{data.usage.failure}</p>{/if}
-      {#each data.usage.value?.items ?? [] as call (call.id)}<div class="record-row"><div class="row-copy"><strong>{memoryLabel(call.role)}</strong><MetadataRow items={[memoryLabel(call.status), `${call.input_tokens + call.output_tokens} tokens`, call.reported_cost ? `${call.reported_cost} ${call.currency}` : 'Cost not reported']} /></div><Button class="btn-secondary" onclick={() => { selectedCall = call; open('usage'); }}>Details</Button></div>{:else}<p class="quiet-empty">No AI calls recorded for this audience.</p>{/each}
+      {#each data.usage.value?.items ?? [] as call (call.id)}<div class="record-row"><div class="row-copy"><strong>{memoryLabel(call.role)}</strong><MetadataRow items={[memoryLabel(call.status), `${call.usage_authority==='local' ? 'Local inference' : call.usage_known ? `${call.input_tokens + call.output_tokens} tokens` : 'Tokens not reported'}`, call.reported_cost ? `${call.reported_cost} ${call.currency}` : 'Cost not reported']} /></div><Button class="btn-secondary" onclick={() => { selectedCall = call; open('usage'); }}>Details</Button></div>{:else}<p class="quiet-empty">No AI calls recorded for this audience.</p>{/each}
       {#if data.usage.value?.items.length === 100}<a class="text-link" href={viewLink('activity', 'usage', data.usage.value.items.at(-1)!.id)}>More AI calls</a>{/if}
     </CollapsibleSection>
     </div>
   </section>
 
   <section class="service-view" hidden={view !== 'review'} aria-label="Memory review">
-    <div class="view-heading"><div><h2>Review suggestions</h2><p>{activeView.description}</p></div><div class="actions"><Button class="btn-secondary" onclick={() => findMemory('inspect')}>Find memory</Button><Button class="btn-primary" onclick={() => addSuggestion()}>{candidateDirty ? 'Resume suggestion' : 'Add suggestion'}</Button></div></div>
+    <div class="view-heading"><div><h2>Review suggestions</h2></div><div class="actions"><Button class="btn-secondary" onclick={() => findMemory('inspect')}>Find memory</Button><Button class="btn-primary" onclick={() => addSuggestion()}>{candidateDirty ? 'Resume suggestion' : 'Add suggestion'}</Button></div></div>
     <div class="review-filter"><SelectField label="Show suggestions" bind:value={candidateFilter} items={[{ value: 'pending', label: 'Needs review' }, { value: 'all', label: 'All suggestions' }, { value: 'approved', label: 'Approved' }, { value: 'rejected', label: 'Rejected' }, { value: 'invalidated', label: 'Source changed' }]} /></div>
     <div class="suggestion-list">
       {#each displayedCandidates as candidate (candidate.id)}<article class="suggestion">
@@ -371,13 +370,13 @@
   </section>
 
   <section class="service-view" hidden={view !== 'sharing'} aria-label="Memory sharing">
-    <div class="view-heading"><div><h2>Shared copies</h2><p>{activeView.description}</p></div><Button class="btn-primary" onclick={() => findMemory('publish')}>Publish memory</Button></div>
+    <div class="view-heading"><div><h2>Shared copies</h2></div><Button class="btn-primary" onclick={() => findMemory('publish')}>Publish memory</Button></div>
     {#each data.publications.value?.items ?? [] as publication (publication.id)}<article class="record-row"><div class="row-copy"><strong>{workspaceName(publication.target_workspace_id)}</strong><MetadataRow items={[memoryLabel(publication.status), publication.target_partition_id ? 'Private audience' : 'Workspace members']} /></div><div class="actions">{#if ['active', 'paused'].includes(publication.status)}<Button class="btn-secondary" disabled={busy} onclick={() => reviewPublication(publication)}>Review source</Button><Button class="btn-secondary" disabled={busy} onclick={() => act(async () => { await request(`/publications/${encodeURIComponent(publication.id)}/retract`, { expected_revision: publication.revision }); }, 'Shared copy retracted.')}>Retract</Button>{/if}</div></article>{:else}<div class="empty-state"><h3>No shared copies</h3><p>Publish selected memory to share it with another workspace.</p></div>{/each}
     {#if data.publications.value?.items.length === 100}<a class="text-link" href={viewLink('sharing', 'publications', data.publications.value.items.at(-1)!.id)}>More shared copies</a>{/if}
   </section>
 
   <section class="service-view" hidden={view !== 'connections'} aria-label="Memory connections">
-    <div class="view-heading"><div><h2>Message sources</h2><p>{activeView.description}</p></div><Button class="btn-primary" onclick={() => connectionDirty ? open('connection') : editIntegration()}>{connectionDirty ? 'Resume connection' : 'Connect source'}</Button></div>
+    <div class="view-heading"><div><h2>Message sources</h2></div><Button class="btn-primary" onclick={() => connectionDirty ? open('connection') : editIntegration()}>{connectionDirty ? 'Resume connection' : 'Connect source'}</Button></div>
     {#each integrations as item (item.id + item.agent_id)}<div class="record-row"><div class="row-copy"><strong>{item.name}</strong><MetadataRow items={[agentName(item.agent_id), item.allowed_event_types.length ? 'Receiving messages' : 'Ingestion revoked']} /></div><Button class="btn-secondary" onclick={() => editIntegration(item)}>Edit connection</Button></div>{:else}<div class="empty-state"><h3>No sources connected</h3><p>Connect a chat or app through an authorized Agent.</p></div>{/each}
     <div class="access-link"><span>Agent permissions and service credentials</span><a class="text-link" href={`${scopeBase}/access`}>Manage Agents</a></div>
     <section class="service-block" aria-labelledby="private-audiences-heading"><div class="block-heading"><div><h3 id="private-audiences-heading">Private audiences</h3><p>Limit memory to one Agent and named recipients.</p></div><Button class="btn-secondary" onclick={() => audienceDirty ? open('audience') : editPartition()}>{audienceDirty ? 'Resume audience' : 'Create private audience'}</Button></div>
@@ -386,7 +385,7 @@
   </section>
 
   <section class="service-view" hidden={view !== 'data'} aria-label="Memory data controls">
-    <div class="view-heading"><div><h2>Data controls</h2><p>{activeView.description}</p></div></div>
+    <div class="view-heading"><div><h2>Data controls</h2></div></div>
     <section class="data-action"><div><h3>Export memory</h3><p>Download the selected audience’s records as JSON.</p></div><Button class="btn-secondary" disabled={busy} onclick={exportData}>Create export</Button></section>
     <CollapsibleSection title="Delete data" bind:open={deletionOpen}>
       <p class="helper-text">Deletes from the selected audience. Access is blocked before background cleanup.</p>
@@ -463,7 +462,7 @@
         {#if selectedOperation.kind !== 'export'}<dl class="operation-steps"><dt>Access blocked</dt><dd>{selectedOperation.read_blocked ? 'Done' : 'Pending'}</dd><dt>Live data cleaned</dt><dd>{selectedOperation.online_cleaned ? 'Done' : 'Pending'}</dd><dt>Deletion history saved</dt><dd>{selectedOperation.journal_persisted ? 'Done' : 'Pending'}</dd></dl><p class="helper-text">Older backups follow the deployment’s retention policy. Restores must apply the latest deletion history.</p>{:else}<p class="helper-text">Exports contain only the selected audience’s authorized records.{selectedOperation.expires_at ? ` Available until ${new Date(selectedOperation.expires_at).toLocaleString()}.` : ''}</p>{/if}
         {#if selectedOperation.failure_code}<p class="problem">{memoryLabel(selectedOperation.failure_code)}</p>{/if}<CollapsibleSection title="Operation identifier"><p class="mono">{selectedOperation.id}</p></CollapsibleSection>
       {:else if dialog === 'usage' && selectedCall}
-        <dl class="detail-grid"><dt>Purpose</dt><dd>{memoryLabel(selectedCall.role)}</dd><dt>Result</dt><dd>{memoryLabel(selectedCall.status)}</dd><dt>Model</dt><dd>{selectedCall.model_version || selectedCall.model_alias}</dd><dt>Input tokens</dt><dd>{selectedCall.input_tokens}</dd><dt>Output tokens</dt><dd>{selectedCall.output_tokens}</dd><dt>Reported cost</dt><dd>{selectedCall.reported_cost ? `${selectedCall.reported_cost} ${selectedCall.currency}` : 'Not reported'}</dd></dl>
+        <dl class="detail-grid"><dt>Purpose</dt><dd>{memoryLabel(selectedCall.role)}</dd><dt>Result</dt><dd>{memoryLabel(selectedCall.status)}</dd><dt>Model</dt><dd>{selectedCall.model_version || selectedCall.model_alias}</dd><dt>Input tokens</dt><dd>{selectedCall.usage_known ? selectedCall.input_tokens : 'Not reported'}</dd><dt>Output tokens</dt><dd>{selectedCall.usage_known ? selectedCall.output_tokens : 'Not reported'}</dd><dt>Reported cost</dt><dd>{selectedCall.reported_cost ? `${selectedCall.reported_cost} ${selectedCall.currency}` : 'Not reported'}</dd></dl>
         <p class="helper-text">Broker usage is shown for reconciliation and is not added again to gateway billing.</p><CollapsibleSection title="Call identifiers"><dl class="detail-grid"><dt>Call</dt><dd>{selectedCall.id}</dd><dt>Broker usage</dt><dd>{selectedCall.broker_usage_id || 'Unknown'}</dd><dt>Job</dt><dd>{selectedCall.job_id || 'Search query'}</dd><dt>Model alias</dt><dd>{selectedCall.model_alias}</dd></dl></CollapsibleSection>
       {/if}
     </div>
@@ -474,7 +473,7 @@
       {:else if dialog === 'source' && selectedSource}<Button class="btn-secondary" disabled={busy} onclick={deleteSource}>Delete message</Button><Button class="btn-primary" disabled={busy} onclick={() => addSuggestion(true)}>Use as evidence</Button>
       {:else if dialog === 'memory' && inspectRecord}{#if memoryMode === 'publish'}{#if preview}<Button class="btn-secondary" disabled={busy} onclick={() => preview = false}>Back</Button><Button class="btn-primary" disabled={busy} onclick={publish}>Publish copy</Button>{:else}<Button class="btn-secondary" disabled={busy} onclick={() => inspectRecord = null}>Choose another</Button><Button type="submit" form={`${formPrefix}-publication`} class="btn-primary" disabled={busy}>Preview copy</Button>{/if}{:else}<Button class="btn-secondary" disabled={busy || inspectRecord.type !== 'fact'} onclick={correct}>Suggest correction</Button><Button class="btn-primary" disabled={busy} onclick={() => memoryMode = 'publish'}>Share a copy</Button>{/if}
       {:else if dialog === 'operation' && selectedOperation}<Button class="btn-secondary" disabled={busy} onclick={() => operation(selectedOperation!.id)}>Refresh status</Button>{#if selectedOperation.kind === 'export' && selectedOperation.status === 'complete' && selectedOperation.result}<Button class="btn-primary" onclick={download}>Download export</Button>{/if}
-      {:else if dialog === 'usage' && selectedCall?.status === 'unknown'}<Button class="btn-primary" disabled={busy} onclick={() => act(async () => { selectedCall = await request<BackgroundCall>(`/usage/${encodeURIComponent(selectedCall!.id)}/reconcile`, {}); }, 'Usage reconciled.')}>Reconcile call</Button>
+      {:else if dialog === 'usage' && selectedCall?.status === 'unknown' && selectedCall.usage_authority === 'broker'}<Button class="btn-primary" disabled={busy} onclick={() => act(async () => { selectedCall = await request<BackgroundCall>(`/usage/${encodeURIComponent(selectedCall!.id)}/reconcile`, {}); }, 'Usage reconciled.')}>Reconcile call</Button>
       {:else}<Button class="btn-secondary" disabled={busy} onclick={close}>Done</Button>{/if}
     </div>
   </Dialog.Content></Dialog.Portal>
@@ -497,7 +496,7 @@
   .service-view:not([aria-label='Memory activity']) { padding: 24px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-xs); }
   .view-heading, .block-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
   .view-heading h2 { font-size: 18px; font-weight: 600; margin: 0; letter-spacing: -.02em; }
-  .view-heading p, .block-heading p, .data-action p { margin: 5px 0 0; color: var(--text-muted); font-size: var(--font-size-sm); line-height: 1.5; }
+  .block-heading p, .data-action p { margin: 5px 0 0; color: var(--text-muted); font-size: var(--font-size-sm); line-height: 1.5; }
   h3 { margin: 0; font-size: var(--font-size-sm); font-weight: 600; }
   .activity-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, .42fr); align-items: start; gap: 20px; }
   .processing-panel, .attention { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-xs); }
@@ -519,7 +518,6 @@
   .processing-counts strong { color: var(--text); font-size: 30px; line-height: 1.15; letter-spacing: -.04em; font-weight: 500; font-variant-numeric: tabular-nums; }
   .attention { display: grid; align-content: start; gap: 20px; padding: 24px; }
   .attention h3 { font-size: 15px; letter-spacing: -.01em; }
-  .attention p { margin: 6px 0 0; color: var(--text-muted); line-height: 1.6; font-size: var(--font-size-xs); }
   .attention-link { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 0 18px; border-bottom: 1px solid var(--border-subtle); color: var(--brand-strong); }
   .attention-link div { display: grid; gap: 6px; }
   .attention-link strong { font-size: 28px; line-height: 1.1; font-weight: 500; font-variant-numeric: tabular-nums; }
@@ -583,7 +581,7 @@
   @media (max-width: 900px) {
     .activity-grid { grid-template-columns: 1fr; gap: 16px; }
     .attention { grid-template-columns: 1fr 1fr; gap: 18px; }
-    .attention > div, .attention-footer, .attention-clear { grid-column: 1 / -1; }
+    .attention > div, .attention-footer { grid-column: 1 / -1; }
     .attention-link { padding-bottom: 0; border-bottom: 0; }
     .service-toolbar { align-items: stretch; }
     .activity-details { gap: 16px; }

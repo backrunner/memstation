@@ -19,7 +19,6 @@
 
 <section class="page-stack">
   <PageHeader title="Workspaces" subtitle={data.routeTarget.label} />
-  <p class="panel-meta">Each workspace has independent memory, actors and access policy.</p>
   <CollapsibleSection title="Create workspace"><form class="page-stack" onsubmit={create}>
     <TextInputField label="New workspace owner ID" bind:value={newOwner} required maxlength={256} />
     <TextInputField label="Workspace name" bind:value={newName} required maxlength={120} />
@@ -27,7 +26,7 @@
     {#if createError}<p class="error-state" role="alert">{createError}</p>{/if}
     <div><Button type="submit" class="btn-primary" disabled={busy}>Create workspace</Button></div>
   </form></CollapsibleSection>
-  {#if data.destination}<p class="notice-card">Choose the workspace to browse. Each workspace keeps its owner and records separate.</p>{/if}
+  {#if data.destination}<p class="notice-card">Choose a workspace to continue.</p>{/if}
   {#key JSON.stringify(data.filters)}
     <form class="workspace-search" action={base} method="GET">
       <TextInputField label="Search workspaces" name="q" value={data.filters.q} maxlength={120} placeholder="Workspace name or owner" />
@@ -46,7 +45,7 @@
           <span class="panel-meta">{workspace.kind}{workspace.status !== 'active' ? `, ${workspace.status}` : ''}</span>
         </a>
       {:else}
-        <p class="panel-meta">No workspaces match these filters. A Personal workspace is provisioned when an owner first uses an agent or credential; create agents explicitly and issue credentials for their workspace.</p>
+        <p class="panel-meta">No workspaces match these filters.</p>
       {/each}
     </div>
     <div class="pagination">

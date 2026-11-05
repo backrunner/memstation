@@ -178,7 +178,7 @@
   {#if createdKey}<section class="card page-stack" aria-label="New API key"><div class="page-header"><h2 class="section-title">New API key</h2><Button class="btn-secondary" onclick={() => { createdKey = ''; success = 'Credential created.'; }}>Hide key</Button></div><p class="panel-meta">Shown once. Copy and store it now.</p><CodeBlock code={createdKey} language="text" /></section>{/if}
   {#if loading}<p class="panel-meta" role="status">Loading agent access…</p>{/if}
   {#if detail}
-    <p class="panel-meta">Workspace {detail.workspace.name}. {detail.agent.status === 'active' ? 'Active' : 'Disabled'}. Each workspace has its own memory.</p>
+    <p class="panel-meta">Workspace {detail.workspace.name}. {detail.agent.status === 'active' ? 'Active' : 'Disabled'}.</p>
     <div class="access-columns">
       <section class="card page-stack">
         <h2 class="section-title">Agent identity</h2>

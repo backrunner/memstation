@@ -26,8 +26,8 @@ export const workspaceDocumentKinds = ['summary', 'segment', 'fact', 'impression
 // Record IDs, generations, cursors and owners never transfer between workspaces.
 export function switchWorkspaceURL(current: { pathname: string; searchParams: Pick<URLSearchParams, 'get'> }, targetId: string, workspaceId: string): string {
   const tail = current.pathname.split('/w/')[1]?.split('/').slice(1).join('/') ?? '';
-  const section = tail.startsWith('memory/search') ? 'memory/search' : ['memory', 'keys', 'conversations', 'access', 'settings'].find(item => tail === item || tail.startsWith(`${item}/`)) ?? 'memory';
-  const allowed = section === 'memory/search' ? ['q', 'kind', 'top_n', 'as_of', 'known_at', 'date_from', 'date_to'] : section === 'memory' ? ['q', 'kind'] : ['keys', 'conversations'].includes(section) ? ['q'] : [];
+  const section = tail.startsWith('memory/search') ? 'memory/search' : ['memory', 'keys', 'conversations', 'access', 'settings', 'usage'].find(item => tail === item || tail.startsWith(`${item}/`)) ?? 'memory';
+  const allowed = section === 'usage' ? ['since', 'until', 'stage', 'strategy', 'status', 'model'] : section === 'memory/search' ? ['q', 'kind', 'top_n', 'as_of', 'known_at', 'date_from', 'date_to'] : section === 'memory' ? ['q', 'kind'] : ['keys', 'conversations'].includes(section) ? ['q'] : [];
   const query = new URLSearchParams();
   for (const key of allowed) { const value = current.searchParams.get(key); if (value) query.set(key, value); }
   return `${workspaceBaseURL(targetId, workspaceId)}/${section}${query.size ? `?${query}` : ''}`;

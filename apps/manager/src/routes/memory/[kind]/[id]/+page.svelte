@@ -33,7 +33,7 @@
   import StatusBadge from '#lib/components/ui/StatusBadge.svelte';
   import TextInputField from '#lib/components/ui/TextInputField.svelte';
   import TextareaField from '#lib/components/ui/TextareaField.svelte';
-  import { matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '#lib/memory/keyword-signals.ts';
+  import { matchedEntitiesFromMetadata, matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '#lib/memory/keyword-signals.ts';
   import {
     documentKindFromRoute,
     memoryCollectionHref,
@@ -88,7 +88,6 @@
   let routeKind: MemoryRouteKind | null = null;
   let routeKey = '';
   let itemTitle = 'Memory Item';
-  let itemDescription = 'Inspect stored memory detail.';
   let currentCollectionHref = '/memory';
   let sourcePreview: ConversationRecord['messages'] = [];
   let sourcePartsByID = new Map<string, MessagePart>();
@@ -123,7 +122,6 @@
   }
 
   $: itemTitle = titleForKind(routeKind);
-  $: itemDescription = descriptionForKind(routeKind);
   $: currentCollectionHref = routeKind ? memoryCollectionHref(routeKind, activeUserId, $selectedTarget?.id) : '/memory';
   $: sourcePreview = sourceConversation?.messages?.slice(-4) ?? [];
   $: sourcePartsByID = new Map((sourceConversation?.parts ?? []).map((part) => [part.part_id, part]));
@@ -333,33 +331,6 @@
     }
   }
 
-  function descriptionForKind(kind: MemoryRouteKind | null): string {
-    switch (kind) {
-      case 'summaries':
-        return 'Inspect the source conversation, edit the rollup text, and verify downstream audit history.';
-      case 'impressions':
-        return 'Review soft-signal analysis output, linked relations, and manual correction history.';
-      case 'facts':
-        return 'Validate factual statements, graph links, and operator changes before they affect recall.';
-      case 'keys':
-        return 'Manage a stable operator-curated key slot and inspect every audited mutation.';
-      case 'events':
-        return 'Inspect durable event memories with time anchors, evidence, and graph links.';
-      case 'tasks':
-        return 'Review durable task state, commitments, follow-ups, and completion signals.';
-      case 'procedures':
-        return 'Review reusable workflows, tool practices, and operational preferences.';
-      case 'artifacts':
-        return 'Inspect persistent outputs or referenced resources preserved as retrievable memory.';
-      case 'entities':
-        return 'Inspect stable people, projects, tools, services, and organization graph anchors.';
-      case 'agent-actions':
-        return 'Inspect promoted agent or tool-call outcomes without retaining raw payloads.';
-      default:
-        return 'Inspect stored memory detail.';
-    }
-  }
-
   function reviewTone(value?: string): 'brand' | 'success' | 'warning' | 'danger' | 'muted' {
     if (value === 'approved') {
       return 'success';
@@ -368,22 +339,6 @@
       return 'danger';
     }
     if (value === 'pending') {
-      return 'warning';
-    }
-    return 'muted';
-  }
-
-  function auditTone(action: string): 'brand' | 'success' | 'warning' | 'danger' | 'muted' {
-    if (action.includes('delete') || action.includes('revoke')) {
-      return 'danger';
-    }
-    if (action.includes('create')) {
-      return 'success';
-    }
-    if (action.includes('update') || action.includes('requeue')) {
-      return 'brand';
-    }
-    if (action.includes('tool')) {
       return 'warning';
     }
     return 'muted';
@@ -454,9 +409,7 @@
 
 <section class="page-stack">
   <PageHeader
-    eyebrow={`Memory / ${itemTitle}`}
     title={$page.params.id}
-    description={itemDescription}
     subtitle={activeUserId ? `Scoped to user ${activeUserId}` : ''}
   />
 
@@ -564,6 +517,7 @@
             {/if}
 
             <MemoryKeywordSignals
+                matchedEntities={matchedEntitiesFromMetadata(documentItem.metadata)}
                 matchedKeywords={matchedKeywordsFromMetadata(documentItem.metadata)}
                 sourceKeywords={sourceKeywordsFromMetadata(documentItem.metadata)}
               />
@@ -713,10 +667,9 @@
             <div class="debug-block">
               <div class="page-header">
                 <div>
-                  <div class="sidebar-label">Evidence</div>
-                  <h3 style="margin: 0;">Source parts and derived artifacts</h3>
+                  <h3 class="section-title">Evidence</h3>
                 </div>
-                <StatusBadge tone="muted" label={`${documentItem.evidences?.length ?? 0} item${(documentItem.evidences?.length ?? 0) === 1 ? '' : 's'}`} />
+                <span class="subtle-text">{documentItem.evidences?.length ?? 0} items</span>
               </div>
               {#if (documentItem.evidences?.length ?? 0) === 0}
                 <div class="helper-text">No source evidence is attached to this memory document yet.</div>
@@ -735,17 +688,17 @@
                         <div class="runtime-field-status">
                           <StatusBadge tone={evidenceTone(evidence.evidence_kind)} label={artifact?.artifact_type ?? part?.part_type ?? 'evidence'} />
                           {#if evidence.weight !== undefined}
-                            <StatusBadge tone="muted" label={`weight ${evidence.weight.toFixed(2)}`} />
+                            <span class="subtle-text">Weight {evidence.weight.toFixed(2)}</span>
                           {/if}
                         </div>
                       </div>
                       <div class="message-body">{evidencePreview(evidence, part, artifact)}</div>
                       <div class="inline-group" style="margin-top: 10px; flex-wrap: wrap;">
                         {#if part}
-                          <StatusBadge tone="muted" label={`part ${part.part_id}`} />
+                          <span class="subtle-text mono">Part {part.part_id}</span>
                         {/if}
                         {#if artifact}
-                          <StatusBadge tone="brand" label={`artifact ${artifact.artifact_id}`} />
+                          <span class="subtle-text mono">Artifact {artifact.artifact_id}</span>
                         {/if}
                         {#if documentItem.conversation_id}
                           <a class="btn-ghost" href={workspaceLink($selectedTarget?.id, 'conversations', {owner:documentItem.user_id, record:documentItem.conversation_id})}>Open conversation timeline</a>
@@ -796,7 +749,7 @@
                       <strong>{event.action}</strong>
                       <MetadataRow items={[event.actor_type ?? 'system', event.actor_id ?? 'unknown']} />
                     </div>
-                    <StatusBadge tone={auditTone(event.action)} label={event.created_at ? new Date(event.created_at).toLocaleString() : 'n/a'} />
+                    <time class="subtle-text" datetime={event.created_at}>{event.created_at ? new Date(event.created_at).toLocaleString() : 'n/a'}</time>
                   </div>
                   <CollapsibleSection title="Event payload"><JsonView value={event.payload ?? {}} emptyLabel="No payload on this audit event." /></CollapsibleSection>
                 </div>

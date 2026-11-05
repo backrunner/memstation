@@ -10,7 +10,7 @@
     : rerankProviders);
   const help = $derived(parsed.provider === 'openrouter'
       ? 'Enter the full OpenRouter model ID, including its vendor prefix.'
-      : 'Enter the model ID accepted by this provider. ');
+      : '');
 
   function changeProvider(provider: string) {
     value = provider === 'disabled' ? '' : `${provider}:${parsed.provider === 'unknown' ? '' : parsed.model}`;
@@ -24,7 +24,7 @@
     value={parsed.model}
     disabled={parsed.provider === 'disabled'}
     placeholder={parsed.provider === 'openrouter' ? 'vendor/model-id' : 'Model ID'}
-    help={parsed.provider === 'disabled' ? 'Enable a provider to rerank retrieved memories.' : help}
+    {help}
     {error}
     oninput={(event) => { value = parsed.provider === 'unknown' ? event.currentTarget.value : `${parsed.provider}:${event.currentTarget.value}`; }}
   />

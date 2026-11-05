@@ -176,9 +176,7 @@
 
 <section class="page-stack">
   <PageHeader
-    eyebrow="Inspect / Memory"
     title="Summaries"
-    description="Primary rollup layer that condenses conversations into retrievable memory nodes."
     subtitle={activeUserId ? `Scoped to user ${activeUserId}` : ''}
   />
 

@@ -101,6 +101,46 @@ test.beforeEach(async ({ page }) => {
   await login(page);
 });
 
+test('workspace management usage separates missing costs and retains scoped filters', async ({ page }, testInfo) => {
+  const base = '/t/fixture-target/w/personal/usage';
+  await page.goto(base);
+  await expect(page.getByRole('heading', { name: 'Memory usage', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Processing stages', exact: true })).toBeVisible();
+  await expect(page.getByText('USD 0.012', { exact: false }).first()).toBeVisible();
+  await expect(page.getByText(/1 calls have no reported price/)).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Workspace sections' }).getByRole('link', { name: 'Usage', exact: true })).toHaveAttribute('aria-current', 'page');
+  await page.getByRole('button', { name: /Current processing policy/ }).click();
+  await expect(page.getByText('Entity query budget', {exact:true})).toBeVisible();
+  await expect(page.getByText('200 ms', {exact:true})).toBeVisible();
+  await page.getByRole('button', { name: /Filters/ }).click();
+  await chooseBitsSelectOption(page, 'Strategy', 'hybrid');
+  await page.getByRole('textbox', { name: 'Stage', exact: true }).fill('summary.generate');
+  await page.getByRole('button', { name: 'Apply filters', exact: true }).click();
+  await expect(page).toHaveURL(/strategy=hybrid/);
+  await expect(page).toHaveURL(/stage=summary.generate/);
+  await expect(page.locator('.error-state')).toHaveCount(0);
+  const directory = '../../.agents/archive/memory-processing-implementation-2026-10-27';
+  await mkdir(directory, { recursive: true });
+  await page.screenshot({ path: `${directory}/usage-${testInfo.project.name}.png`, fullPage: true });
+  await page.goto(`${base}?since=2026-11-01&until=2026-10-01`);
+  await expect(page.getByRole('alert')).toContainText('Choose a valid UTC date range');
+});
+
+test('memory search keeps entity matches and makes channel degradation visible', async ({ page }, testInfo) => {
+  await page.goto('/memory');
+  await page.getByLabel('Query').fill('MemStation gateway memory');
+  await page.getByRole('button', { name: 'Run search' }).click();
+  const summary = page.locator('.memory-result-card').filter({ hasText: 'MemStation launch tracks gateway rollout' }).first();
+  await expect(summary.getByText('Matched entities')).toBeVisible();
+  await expect(summary.locator('.keyword-signals')).toContainText('MemStation');
+  await page.screenshot({ path: testInfo.outputPath('entity-matches.png'), fullPage: true });
+  await page.route('**/api/admin/memory/search**', route => route.fulfill({
+    json: { memories: [], total: 0, query_embedding_tokens: 0, entity_recall: { status: 'timed_out', cache_hit: false, query_entities: 0, matched_nodes: 0, latency_ms: 200 } }
+  }), { times: 1 });
+  await page.getByRole('button', { name: 'Run search' }).click();
+  await expect(page.getByRole('status')).toContainText('Entity matching timed out.');
+});
+
 test('target manager accepts URI tokens without storing them with targets', async ({ page }) => {
   await page.context().clearCookies();
   await page.goto('/login');
@@ -393,7 +433,7 @@ test('playground preview flow streams and shows preview diff output', async ({ p
 
   await page.getByPlaceholder('ms-...').fill(gatewayAPIKey);
   await page.getByPlaceholder('Configured model name').fill('gpt-4.1-mini');
-  await page.getByPlaceholder('Message the target, test memory recall, or inspect persistence.').fill(prompt);
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill(prompt);
   await page.getByRole('button', { name: /^Send$/ }).click();
 
   await expect(page.getByText(`Fixture stream response for: ${prompt}`)).toBeVisible();
@@ -427,7 +467,7 @@ test('playground persisted flow writes memory and is inspectable in admin views'
   await toggleSwitch(page, 'Memory persist');
   await expect(page.locator('.switch-row').filter({ hasText: 'Memory persist' }).locator('[role="switch"]').first()).toHaveAttribute('data-state', 'checked');
 
-  await page.getByPlaceholder('Message the target, test memory recall, or inspect persistence.').fill(prompt);
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill(prompt);
   await page.getByRole('button', { name: 'Send & end' }).click();
 
   await expect(page.getByText(`Fixture stream response for: ${prompt}`)).toBeVisible();
@@ -453,14 +493,14 @@ test('playground conversation switching keeps background turns running and faile
 
   await page.getByPlaceholder('ms-...').fill(gatewayAPIKey);
   await page.getByPlaceholder('Configured model name').fill('gpt-4.1-mini');
-  await page.getByPlaceholder('Message the target, test memory recall, or inspect persistence.').fill(slowPrompt);
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill(slowPrompt);
   await page.getByRole('button', { name: /^Send$/ }).click();
 
   await expect(page.getByRole('button', { name: 'Generating…' })).toBeVisible();
   await page.getByRole('button', { name: 'New thread' }).click();
 
   await expect(page.getByPlaceholder('Configured model name')).toHaveValue('gpt-4.1-mini');
-  await page.getByPlaceholder('Message the target, test memory recall, or inspect persistence.').fill(rechargePrompt);
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill(rechargePrompt);
   await page.getByRole('button', { name: /^Send$/ }).click();
 
   await expect(page.locator('.field-error').filter({ hasText: 'Please recharge your balance before continuing this conversation.' })).toBeVisible();
@@ -480,7 +520,7 @@ test('playground and settings drafts survive internal route changes', async ({ p
   await page.getByPlaceholder('ms-...').fill(gatewayAPIKey);
   await page.getByPlaceholder('Configured model name').fill('gpt-4.1-mini');
   await toggleSwitch(page, 'Memory persist');
-  await page.getByPlaceholder('Message the target, test memory recall, or inspect persistence.').fill('Draft preservation turn');
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Draft preservation turn');
   await page.getByRole('button', { name: /^Send$/ }).click();
   await expect(page.getByText('Fixture stream response for: Draft preservation turn')).toBeVisible();
 
@@ -927,7 +967,7 @@ const layoutRoutes = [
   '/t/fixture-target/w/personal/keys', '/t/fixture-target/w/personal/keys/new',
   '/t/fixture-target/w/personal/keys/key-1',
   '/t/fixture-target/w/personal/conversations', '/t/fixture-target/w/personal/conversations/conv-seed-1',
-  '/t/fixture-target/w/personal/settings', '/t/fixture-target/w/personal/access',
+  '/t/fixture-target/w/personal/settings', '/t/fixture-target/w/personal/usage', '/t/fixture-target/w/personal/access',
   '/t/fixture-target/w/personal/access/coding-agent',
   ...['activity', 'review', 'sharing', 'connections', 'data'].map(view => `/t/fixture-target/w/personal/lifecycle?view=${view}`)
 ];
@@ -943,6 +983,7 @@ for (const width of [2560, 1920, 1440, 1024, 768, 390, 320]) {
         await page.goto(route);
         await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
         await expect(page.locator('.loading-state')).toHaveCount(0);
+        await expect(page.locator('.notice-card, .panel-meta[role="status"], .helper-text[role="status"]').filter({ hasText: /^Loading[\s.…]/ })).toHaveCount(0);
         if (route === '/audit') await expect(page.getByRole('button', { name: 'memory_document_create', exact: true })).toBeVisible();
         await expect(page.locator('.error-state')).toHaveCount(0);
         const frame = await page.evaluate(() => {
@@ -1460,11 +1501,11 @@ test('workspace management preserves draft through conflicts and scope changes',
   await expect(page.getByLabel('Workspace name')).toHaveValue('Local draft');
   await expect(page.getByRole('button', { name: 'Use draft against this version' })).toBeDisabled();
   await page.getByRole('button', { name: 'Load current version' }).click();
-  await expect(page.getByRole('heading', { name: 'Remote edit', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Switch workspace: Remote edit', exact: true })).toBeVisible();
   await expect(page.getByLabel('Workspace name')).toHaveValue('Local draft');
   await page.getByRole('button', { name: 'Use draft against this version' }).click();
   await page.getByRole('button', { name: 'Save workspace', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Local draft', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Switch workspace: Local draft', exact: true })).toBeVisible();
   await page.getByLabel('Workspace name').fill('Retained local draft');
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('link', { name: 'All workspaces', exact: true }).click();
@@ -1908,7 +1949,7 @@ test('workspace management paginates conversations and key memories across the f
 
 test('workspace management navigation requires explicit scope and rejects retired inputs', async ({ page }) => {
   await page.goto('/t/fixture-target/workspaces?section=keys');
-  await expect(page.getByText('Choose the workspace to browse.', { exact: false })).toBeVisible();
+  await expect(page.getByText('Choose a workspace to continue.', { exact: true })).toBeVisible();
   await page.getByRole('link', { name: /Personal Owner: admin/ }).click();
   await expect(page).toHaveURL('/t/fixture-target/w/personal/keys');
   await page.goto('/t/fixture-target/workspaces?section=conversations&record=conv-seed-1&user_id=admin');

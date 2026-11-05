@@ -728,14 +728,14 @@
     const overrideCount = countOverrides(runtimeSaved, runtimeDefaults);
     const dirtyCount = countDirty(runtime, runtimeSaved);
     const liveAppliedCount = countLiveApplied(runtime, runtimeSaved, runtimeDefaults, runtimeLive, runtimeMeta);
-    const parts = [overrideCount > 0 ? `${overrideCount} overrides` : 'Runtime defaults active'];
+    const parts = overrideCount > 0 ? [`${overrideCount} overrides`] : [];
     if (dirtyCount > 0) {
       parts.push(`${dirtyCount} draft`);
     }
     if (liveAppliedCount > 0) {
       parts.push(`${liveAppliedCount} live`);
     }
-    if (ready?.status && ready.status !== 'unknown') {
+    if (ready?.status && !['unknown', 'ok', 'ready'].includes(ready.status)) {
       parts.push(`Health ${ready.status}`);
     }
     return parts.join(', ');
@@ -768,9 +768,7 @@
 <section class="page-stack">
   <PageHeader
     sticky
-    eyebrow="Administer"
     title="System"
-    description="Runtime configuration — provider defaults, timeouts, thresholds, rerank, relations, CORS, and multimodal policy."
     subtitle={systemStatusLine()}
   >
     <div slot="actions">
@@ -811,7 +809,7 @@
       <SettingsNavigation items={sections} />
       <div class="settings-sheet" data-scrolled="false" use:observeSheetMask>
         <div class="settings-scroll-mask" aria-hidden="true"></div>
-        <SettingsSection id="system-traffic" title="Traffic" description="Provider defaults and request thresholds.">
+        <SettingsSection id="system-traffic" title="Traffic">
 <div class="form-grid two-up mobile-pairs">
             <SelectField
               label="Gateway default provider"
@@ -831,7 +829,7 @@
             <TextInputField label="Token threshold" bind:value={runtime.token_threshold} type="number" fieldClass="compact-field" min="0" error={runtimeFieldError('token_threshold')} />
           </div>
         </SettingsSection>
-        <SettingsSection id="system-recall" title="Recall" description="Vector store &amp; injection budget.">
+        <SettingsSection id="system-recall" title="Recall">
 <div class="form-grid two-up mobile-pairs">
             <SelectField label="Vector store backend" items={vectorStoreItems} bind:value={runtime.vector_store_backend} />
             <TextInputField label="Max context tokens" bind:value={runtime.max_context_tokens} type="number" fieldClass="compact-field" min="0" error={runtimeFieldError('max_context_tokens')} />
@@ -839,7 +837,7 @@
             <TextInputField label="Cache TTL (s)" bind:value={runtime.cache_ttl_seconds} type="number" fieldClass="compact-field" min="0" error={runtimeFieldError('cache_ttl_seconds')} />
           </div>
         </SettingsSection>
-        <SettingsSection id="system-rerank" title="Rerank" description="Choose a relevance model, then set the candidate budget.">
+        <SettingsSection id="system-rerank" title="Rerank">
 <div class="form-grid two-up mobile-pairs">
             <RerankModelField bind:value={runtime.rerank_model} error={runtimeFieldError('rerank_model')} />
             <TextInputField label="Candidate multiplier" bind:value={runtime.rerank_candidate_multiplier} type="number" fieldClass="compact-field" min="1" max="16" error={runtimeFieldError('rerank_candidate_multiplier')} />
@@ -847,14 +845,14 @@
             <TextInputField label="Max rerank candidates" bind:value={runtime.rerank_max_candidates} type="number" fieldClass="compact-field" min="1" error={runtimeFieldError('rerank_max_candidates')} />
           </div>
         </SettingsSection>
-        <SettingsSection id="system-relations" title="Relations" description="Hop graph decay settings.">
+        <SettingsSection id="system-relations" title="Relations">
 <div class="form-grid two-up mobile-pairs">
             <TextInputField label="Relation max hops" bind:value={runtime.memory_relation_max_hops} type="number" fieldClass="compact-field" min="1" max="4" error={runtimeFieldError('memory_relation_max_hops')} />
             <TextInputField label="Hop decay lambda" bind:value={runtime.memory_relation_hop_decay_lambda} type="number" fieldClass="compact-field" min="0" max="2" step="0.05" error={runtimeFieldError('memory_relation_hop_decay_lambda')} />
             <TextInputField label="Hop decay exponent" bind:value={runtime.memory_relation_hop_decay_exponent} type="number" fieldClass="compact-field" min="0.5" max="3" step="0.05" error={runtimeFieldError('memory_relation_hop_decay_exponent')} />
           </div>
         </SettingsSection>
-        <SettingsSection id="system-web" title="Web" description="Rate limits and cross-origin policy.">
+        <SettingsSection id="system-web" title="Web">
 <div class="form-grid two-up mobile-pairs">
           <TextInputField label="Rate limit RPS" bind:value={runtime.rate_limit_rps} type="number" fieldClass="compact-field" min="0" error={runtimeFieldError('rate_limit_rps')} />
           <TextInputField label="Rate limit burst" bind:value={runtime.rate_limit_burst} type="number" fieldClass="compact-field" min="0" error={runtimeFieldError('rate_limit_burst')} />
@@ -872,7 +870,7 @@
           />
         </div>
         </SettingsSection>
-        <SettingsSection id="system-multimodal" title="Multimodal" description="Blob storage, extractors, and content policy.">
+        <SettingsSection id="system-multimodal" title="Multimodal">
 <div class="system-subsection">
           <span class="sidebar-label">Storage</span>
           <div class="form-grid two-up mobile-pairs">
@@ -952,7 +950,7 @@
           </Button>
         </div>
         </SettingsSection>
-        <SettingsSection id="system-overrides" title="Overrides &amp; drift" description="Fields deviating from deployment defaults or the live runtime.">
+        <SettingsSection id="system-overrides" title="Overrides &amp; drift">
 {#if trackedRuntimeKeys().length === 0}
           <div class="empty-state">No overrides — system is using deployment defaults.</div>
         {:else}

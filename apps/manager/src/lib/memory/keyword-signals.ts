@@ -21,3 +21,7 @@ export function recordList(value: unknown): Array<Record<string, unknown>> {
   }
   return value.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null);
 }
+
+export function matchedEntitiesFromMetadata(metadata?: Record<string, unknown> | null): string[] {
+ return stringList(metadata?.matched_entities);
+}

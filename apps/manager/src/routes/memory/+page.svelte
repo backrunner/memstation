@@ -1,6 +1,7 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+import EntityRecallStatus from '#lib/components/memory/EntityRecallStatus.svelte';
   import MetadataRow from '#lib/components/ui/MetadataRow.svelte';
   import Button from '#lib/components/ui/Button.svelte';
   import CollapsibleSection from '#lib/components/ui/CollapsibleSection.svelte';
@@ -14,7 +15,7 @@
   import MemoryWorkspaceNav from '#lib/components/layout/MemoryWorkspaceNav.svelte';
   import MemoryKeywordSignals from '#lib/components/memory/MemoryKeywordSignals.svelte';
   import { memoryDetailHref, memoryRouteKindFromDocumentType } from '#lib/memory/routes.ts';
-  import { matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '#lib/memory/keyword-signals.ts';
+  import { matchedEntitiesFromMetadata, matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '#lib/memory/keyword-signals.ts';
   import PageHeader from '#lib/components/layout/PageHeader.svelte';
   import SelectField from '#lib/components/ui/SelectField.svelte';
   import TextInputField from '#lib/components/ui/TextInputField.svelte';
@@ -168,7 +169,7 @@
             <div class="filters two-up">
               <TextInputField label="Facts valid at" bind:value={asOf} type="datetime-local" help="Historical fact validity; time is local." />
               <TextInputField label="Known by" bind:value={knownAt} type="datetime-local" help="Fact versions recorded by this local time. Available from history tracking onward." />
-              <SelectField label="Relation search" bind:value={relationMode} disabled={Boolean(asOf || knownAt)} help="Relation traversal applies to current memories; historical searches return fact snapshots." items={[{value:'neighborhood',label:'Related memories'},{value:'evidence',label:'Supporting evidence'},{value:'dependencies',label:'Prerequisites'},{value:'dependents',label:'Downstream dependents'},{value:'conflicts',label:'Conflicting evidence'}]} />
+              <SelectField label="Relation search" bind:value={relationMode} disabled={Boolean(asOf || knownAt)} help="Relation traversal applies to current memories; historical searches return fact snapshots." items={[{value:'neighborhood',label:'Related memories'},{value:'evidence',label:'Supporting evidence'},{value:'dependencies',label:'Prerequisites'},{value:'dependents',label:'Downstream dependents'},{value:'conflicts',label:'Conflicting evidence'},{value:'entity_mentions',label:'Entity mentions'}]} />
               <TextInputField label="Entity scope" bind:value={entityScope} placeholder="Project or workspace" />
               <TextInputField label="Date from" bind:value={dateFrom} type="date" />
               <TextInputField label="Date to" bind:value={dateTo} type="date" />
@@ -184,6 +185,7 @@
           {/snippet}
         </FilterToolbar>
       </form>
+      <EntityRecallStatus diagnostics={searchResult?.entityRecall} />
       {#if searchError}<div class="error-state" role="alert">{searchError}</div>{/if}
       {#if searchResult && searchResult.memories.length === 0}<div class="empty-state">No memories match this query. Try another query or adjust the filters.</div>{/if}
 
@@ -208,6 +210,7 @@
               {#if memory.metadata?.historical_snapshot}<p class="helper-text">Historical fact snapshot. Open shows the current record.</p>{/if}
               {#if memory.metadata?.recall_path}<CollapsibleSection title="Why this memory was recalled"><pre>{JSON.stringify(memory.metadata.recall_path, null, 2)}</pre></CollapsibleSection>{/if}
               <MemoryKeywordSignals
+                matchedEntities={matchedEntitiesFromMetadata(memory.metadata)}
                 matchedKeywords={matchedKeywordsFromMetadata(memory.metadata)}
                 sourceKeywords={sourceKeywordsFromMetadata(memory.metadata)}
               />

@@ -444,7 +444,7 @@ export async function searchAdminMemories(
   }
 ): Promise<SearchMemoriesResult> {
   const suffix = payload.userId?.trim() ? `?user_id=${encodeURIComponent(payload.userId.trim())}` : '';
-  const result = await adminRequest<SearchMemoriesResult & { query_embedding_tokens?: number; memories?: Array<Record<string, unknown>> }>(target, `/api/admin/memory/search${suffix}`, {
+  const result = await adminRequest<SearchMemoriesResult & { entity_recall?: import('#lib/types.ts').EntityRecallDiagnostics; query_embedding_tokens?: number; memories?: Array<Record<string, unknown>> }>(target, `/api/admin/memory/search${suffix}`, {
     method: 'POST',
     body: JSON.stringify({
       query: payload.query,
@@ -462,6 +462,7 @@ export async function searchAdminMemories(
   });
   return {
     total: Number(result.total ?? 0),
+entityRecall:result.entity_recall,
     queryEmbeddingTokens: Number(result.queryEmbeddingTokens ?? result.query_embedding_tokens ?? 0),
     memories: (result.memories ?? []).map((item) => normalizeSearchMemoryItem(item as unknown as Record<string, unknown>))
   };

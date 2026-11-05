@@ -119,9 +119,7 @@
 </script>
 
 <section class="page-stack">
-  <PageHeader
-    title="Conversations"
-  />
+  <PageHeader title="Conversations" />
 
   {#if !$targetState.session.authenticated}
     <div class="notice-card">Connect this target to inspect conversation history.</div>

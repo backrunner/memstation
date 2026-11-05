@@ -493,11 +493,7 @@
 </script>
 
 <section class="page-stack">
-  <PageHeader
-    eyebrow="User"
-    title={$page.params.id}
-    description="API keys, settings, and memory generation state for this user."
-  >
+  <PageHeader title={$page.params.id}>
     <svelte:fragment slot="actions">
       {#if detail}<a class="btn-secondary" href={`/users/${encodeURIComponent($page.params.id ?? '')}/agents`}>Manage agents</a>{/if}
     </svelte:fragment>
@@ -527,7 +523,7 @@
 
     <div class="kpi-grid summary-metrics compact-kpis">
       <div class="kpi-card">
-        <span class="kpi-label">API Keys</span>
+        <span class="kpi-label">API keys</span>
         <strong class="kpi-value">{detail.stats.api_key_count}</strong>
       </div>
       <div class="kpi-card">
@@ -549,7 +545,7 @@
         <section class="card">
         <div class="page-header">
           <div>
-            <h2 class="section-title">Identity And Settings</h2>
+            <h2 class="section-title">Identity and settings</h2>
             {#if detail.user.is_admin}
               <div class="helper-text" style="margin-top: 4px;">Admin User</div>
             {/if}
@@ -597,7 +593,7 @@
         <section class="card">
           <div class="page-header">
             <div>
-              <h2 class="section-title">API Keys</h2>
+              <h2 class="section-title">API keys</h2>
               <p class="panel-meta">Creation and revocation are audited. Agent permissions can further restrict each key.</p>
             </div>
           </div>
@@ -648,7 +644,7 @@
         <section class="card">
         <div class="page-header">
           <div>
-            <h2 class="section-title">Retention And Rebuild</h2>
+            <h2 class="section-title">Retention and rebuild</h2>
           </div>
         </div>
         <div class="toolbar">
@@ -713,7 +709,7 @@
         <section class="card page-stack">
           <div class="page-header">
             <div>
-              <h2 class="section-title">Recent Sessions</h2>
+              <h2 class="section-title">Recent sessions</h2>
             </div>
             <a class="btn-ghost" href={workspaceLink($selectedTarget?.id, 'memory', {owner:detail.user.id})}>Open memory workspace</a>
           </div>
@@ -741,7 +737,7 @@
         <section class="card">
           <div class="page-header">
             <div>
-              <h2 class="section-title">Stable Memory Slots</h2>
+              <h2 class="section-title">Key memories</h2>
             </div>
             <a class="btn-ghost" href={workspaceLink($selectedTarget?.id, 'keys', {owner:detail.user.id})}>Manage key memories</a>
           </div>

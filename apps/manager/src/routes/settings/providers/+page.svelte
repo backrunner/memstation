@@ -645,9 +645,7 @@
 <section class="page-stack">
   <PageHeader
     sticky
-    eyebrow="Administer"
     title="Providers"
-    description="Manage upstream provider credentials, base URLs, and default routes. Writes are audited on the target."
   >
     <div slot="actions">
       {#if $targetState.session.authenticated && !loading}
@@ -763,7 +761,6 @@
             <Dialog.Title class="section-title provider-dialog-title" level={3}>
               {editingForm ? `Edit ${editingForm.provider}` : 'Provider'}
             </Dialog.Title>
-            <p class="panel-meta">Writes are audited on the selected target.</p>
           </div>
           <Dialog.Close class="btn-ghost btn-sm">Close</Dialog.Close>
         </div>

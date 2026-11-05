@@ -14,11 +14,11 @@
   let records = $derived(data.records.value?.items ?? []);
 </script>
 <section class="page-stack">
-  <PageHeader title="Key memories" description="Maintain durable preferences and instructions in this workspace." />
+  <PageHeader title="Key memories" />
   <WorkspaceReadStatus failure={data.records.failure} />
   <div class="key-toolbar"><form method="GET" class="key-filter"><TextInputField name="q" label="Filter key memories" bind:value={query} maxlength={1024} placeholder="Key, value, category or status" /><Button class="btn-secondary" type="submit">Apply</Button></form><a class="btn btn-primary" href={`${base}/keys/new`}>New key memory</a></div>
   {#if data.records.value}
-    <p class="helper-text">{records.length} shown, newest first. Edits may move key memories between pages.</p>
+    <p class="helper-text">{records.length} key memories</p>
     {#if records.length === 0}<p>No key memories match this view.</p>{/if}
     {#each records as item (item.id)}
       <a class="record-row" href={`${base}/keys/${encodeURIComponent(item.id)}`}><strong>{item.key}</strong><span class="preview">{item.value}</span><MetadataRow items={[item.category || 'Uncategorized', item.review_status || 'pending']} /></a>

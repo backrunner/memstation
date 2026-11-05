@@ -43,11 +43,7 @@
 </script>
 
 <section class="page-stack">
-  <PageHeader
-    eyebrow="Operate"
-    title="Queues"
-    description="Watch pending, active, scheduled, and retry counts by queue to spot buildup before it impacts summary, analysis, or embedding latency."
-  >
+  <PageHeader title="Queues">
     <div slot="actions">
       <Button class="btn-secondary btn-sm" type="button" onclick={loadQueues}>Refresh</Button>
     </div>

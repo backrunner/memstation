@@ -44,11 +44,7 @@
 </script>
 
 <section class="page-stack">
-  <PageHeader
-    eyebrow="Operate"
-    title="Cache"
-    description="Review process-local and Redis-backed cache behavior, TTL boundaries, and best-effort invalidation fan-out."
-  >
+  <PageHeader title="Cache">
     <div slot="actions">
       <Button class="btn-secondary btn-sm" type="button" onclick={loadCache}>Refresh</Button>
     </div>
@@ -65,8 +61,7 @@
       <section class="card page-stack">
         <div class="page-header">
           <div class="page-header-meta">
-            <span class="sidebar-label">L1 cache</span>
-            <h2 class="section-title">Process-local</h2>
+            <h2 class="section-title">L1 cache</h2>
           </div>
           <StatusBadge
             tone={cacheStatus.l1.enabled ? 'success' : 'muted'}
@@ -79,8 +74,7 @@
       <section class="card page-stack">
         <div class="page-header">
           <div class="page-header-meta">
-            <span class="sidebar-label">L2 cache</span>
-            <h2 class="section-title">Distributed store</h2>
+            <h2 class="section-title">L2 cache</h2>
           </div>
           <StatusBadge
             tone={cacheStatus.l2.enabled ? 'success' : 'warning'}
@@ -93,8 +87,7 @@
       <section class="card page-stack">
         <div class="page-header">
           <div class="page-header-meta">
-            <span class="sidebar-label">Invalidation</span>
-            <h2 class="section-title">Redis fan-out</h2>
+            <h2 class="section-title">Cache invalidation</h2>
           </div>
           <StatusBadge
             tone={cacheStatus.pubsub.enabled ? 'brand' : 'muted'}
@@ -110,7 +103,6 @@
         <div class="page-header">
           <div class="page-header-meta">
             <h2 class="section-title">Operator notes</h2>
-            <p class="panel-meta">Consistency expectations for this cache layer.</p>
           </div>
         </div>
         <div class="stack-list">
@@ -127,7 +119,6 @@
         <div class="page-header">
           <div class="page-header-meta">
             <h2 class="section-title">Cache health</h2>
-            <p class="panel-meta">Observed dependency state.</p>
           </div>
           <StatusBadge
             tone={cacheStatus.health?.status === 'ok' ? 'success' : 'warning'}

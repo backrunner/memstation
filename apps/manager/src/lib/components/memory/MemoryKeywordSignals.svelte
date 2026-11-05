@@ -1,11 +1,13 @@
 <script lang="ts">
+  export let matchedEntities: string[] = [];
   export let matchedKeywords: string[] = [];
   export let sourceKeywords: string[] = [];
   export let sourceLabel = 'Summary keyword index';
 </script>
 
-{#if matchedKeywords.length > 0 || sourceKeywords.length > 0}
+{#if matchedKeywords.length > 0 || sourceKeywords.length > 0 || matchedEntities.length > 0}
   <div class="keyword-signals">
+    {#if matchedEntities.length > 0}<p><span>Matched entities</span> {matchedEntities.join(', ')}</p>{/if}
     {#if matchedKeywords.length > 0}
       <p><span>Matched keywords</span> {matchedKeywords.join(', ')}</p>
     {/if}

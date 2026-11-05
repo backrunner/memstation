@@ -11,6 +11,7 @@
   import { createMemoryRebuild, fetchConversation, fetchConversationMemory, fetchConversationSources, requeueTask } from '#lib/api/client.ts';
   import ChatMessageCard from '#lib/components/chat/ChatMessageCard.svelte';
   import ConfirmActionDialog from '#lib/components/ui/ConfirmActionDialog.svelte';
+  import CollapsibleSection from '#lib/components/ui/CollapsibleSection.svelte';
   import JsonView from '#lib/components/content/JsonView.svelte';
   import PageHeader from '#lib/components/layout/PageHeader.svelte';
   import { memoryCollectionHref, memoryDetailHref, memoryRouteKindFromDocumentType } from '#lib/memory/routes.ts';
@@ -120,11 +121,7 @@
 </script>
 
 <section class="page-stack">
-  <PageHeader
-    eyebrow="Conversation"
-    title={$page.params.id}
-    description="Inspect the message timeline, worker lifecycle metadata, and memory artifacts linked to this conversation."
-  >
+  <PageHeader title={$page.params.id}>
     <div slot="actions">
       <Button class="btn-secondary btn-sm" type="button" disabled={requeueing} onclick={() => (requeueConfirmOpen = true)}>
         {requeueing ? 'Requeueing…' : 'Requeue analysis'}
@@ -151,7 +148,6 @@
         <div class="page-header">
           <div class="page-header-meta">
             <h2 class="section-title">Timeline</h2>
-            <p class="panel-meta">Protocol and message flow on the wire.</p>
           </div>
           <div class="inline-group">
             <StatusBadge tone={detail.finalize_status === 'ended' ? 'success' : detail.finalize_status === 'failed' ? 'danger' : 'warning'} label={detail.finalize_status} />
@@ -169,7 +165,6 @@
             <div class="page-header">
               <div class="page-header-meta">
                 <h3 class="section-title" style="font-size: var(--font-size-md);">Materialized timeline</h3>
-                <p class="panel-meta">Message parts and extracted artifacts.</p>
               </div>
             </div>
             <div class="stack-list">
@@ -219,7 +214,6 @@
           <div class="page-header">
             <div class="page-header-meta">
               <h3 class="section-title">Envelope</h3>
-              <p class="panel-meta">Routing &amp; protocol metadata.</p>
             </div>
           </div>
           <dl class="meta-grid compact">
@@ -246,7 +240,6 @@
           <div class="page-header">
             <div class="page-header-meta">
               <h3 class="section-title">Snapshot</h3>
-              <p class="panel-meta">Source retention for rebuilds.</p>
             </div>
           </div>
           {#if sources?.has_snapshot && sources.latest_snapshot}
@@ -273,27 +266,19 @@
           <div class="page-header">
             <div class="page-header-meta">
               <h3 class="section-title">Usage</h3>
-              <p class="panel-meta">Token totals.</p>
             </div>
           </div>
           <JsonView value={detail.usage} />
         </div>
 
-        <div class="card page-stack">
-          <div class="page-header">
-            <div class="page-header-meta">
-              <h3 class="section-title">Metadata</h3>
-              <p class="panel-meta">Stored request &amp; worker context.</p>
-            </div>
-          </div>
+        <CollapsibleSection title="Metadata" variant="panel">
           <JsonView value={detail.metadata ?? {}} />
-        </div>
+        </CollapsibleSection>
 
         <div class="card page-stack">
           <div class="page-header">
             <div class="page-header-meta">
               <h3 class="section-title">Segments</h3>
-              <p class="panel-meta">Incremental dialogue slices.</p>
             </div>
           </div>
           {#if (detail.segments?.length ?? 0) === 0}
@@ -325,7 +310,6 @@
           <div class="page-header">
             <div class="page-header-meta">
               <h3 class="section-title">Memory output</h3>
-              <p class="panel-meta">Documents linked to this conversation.</p>
             </div>
           </div>
           {#if memory?.generation_id}

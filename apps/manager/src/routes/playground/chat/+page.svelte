@@ -23,7 +23,7 @@
   import StatusBadge from '#lib/components/ui/StatusBadge.svelte';
   import SwitchField from '#lib/components/ui/SwitchField.svelte';
   import TextInputField from '#lib/components/ui/TextInputField.svelte';
-  import { matchedKeywordsFromMetadata, recordList, sourceKeywordsFromMetadata, stringList } from '#lib/memory/keyword-signals.ts';
+  import { matchedEntitiesFromMetadata, matchedKeywordsFromMetadata, recordList, sourceKeywordsFromMetadata, stringList } from '#lib/memory/keyword-signals.ts';
   import { buildMemoryTurnDiff, type MemoryTurnChange, type MemoryTurnDiffResult, type MemoryTurnKind } from '#lib/playground/memory-diff.ts';
   import {
     buildSessionDraftKey,
@@ -901,8 +901,6 @@
       parts.push('Needs retry');
     } else if (thread.completedTurns > 0) {
       parts.push(`${thread.completedTurns} turn${thread.completedTurns === 1 ? '' : 's'}`);
-    } else {
-      parts.push('Ready');
     }
     return parts.join(', ');
   }
@@ -988,19 +986,7 @@
     return providerItems.find((item) => item.value === value)?.label ?? 'Auto select';
   }
 
-  function modeLabel(value: 'transparent' | 'inject'): string {
-    return value === 'inject' ? 'Memory inject' : 'Transparent';
-  }
 
-  function playgroundStatusLine(): string {
-    const parts = [
-      $selectedTarget?.label ?? 'No Target',
-      pluralize(threads.length, 'thread'),
-      protocolLabel(protocol),
-      modeLabel(mode)
-    ];
-    return parts.join(', ');
-  }
 
   function threadMetaLine(): string {
     const parts = [model.trim() || 'No model', providerLabel(provider), stream ? 'Streaming' : 'Buffered'];
@@ -1012,27 +998,10 @@
     return parts.join(', ');
   }
 
-  function runMetaLine(): string {
-    const parts = [$selectedTarget?.label ?? 'No Target', sessionId];
-    if (memoryPersist) {
-      parts.push('Persist');
-    }
-    if (threadStatus === 'generating') {
-      parts.push('Generating');
-    } else if (threadStatus === 'failed') {
-      parts.push('Failed');
-    }
-    return parts.join(', ');
-  }
 </script>
 
 <section class="page-stack">
-  <PageHeader
-    eyebrow="Playground"
-    title="Chat"
-    subtitle={playgroundStatusLine()}
-    description="Send live gateway turns to validate proxy, injection, memory generation, and tool chain behavior."
-  />
+  <PageHeader title="Chat" />
 
   <div class="chat-studio">
     <section class="card chat-shell">
@@ -1087,7 +1056,6 @@
                 {#if messages.length === 0}
                   <div class="chat-empty-state">
                     <div class="chat-empty-title">Start a conversation</div>
-                    <div class="subtle-text">Send a live gateway turn and inspect memory behavior in real time.</div>
                   </div>
                 {:else}
                   {#each messages as message}
@@ -1108,7 +1076,7 @@
             label="Message" hideLabel
             textareaClass="chat-composer-input"
             bind:value={input}
-            placeholder="Message the target, test memory recall, or inspect persistence."
+            placeholder="Write a message…"
             onkeydown={handleComposerKeydown}
           />
           {#if error}
@@ -1116,7 +1084,6 @@
           {/if}
           <div class="chat-composer-footer">
             <div class="chat-composer-meta">
-              <span>{messages.length} message{messages.length === 1 ? '' : 's'}</span>
               <span>Ctrl/Cmd + Enter to send</span>
             </div>
             <div class="inline-group">
@@ -1137,7 +1104,6 @@
         <div class="page-header playground-inspector-header">
           <div class="page-header-meta playground-heading-stack">
             <h2 class="section-title">Run</h2>
-            <div class="panel-meta">{runMetaLine()}</div>
           </div>
         </div>
 
@@ -1178,7 +1144,7 @@
         <div class="page-header playground-inspector-header">
           <div class="page-header-meta playground-heading-stack">
             <h2 class="section-title">Inspect</h2>
-            <div class="panel-meta">{usageSummary(messages[messages.length - 1]?.usage)}</div>
+            {#if messages[messages.length - 1]?.usage}<div class="panel-meta">{usageSummary(messages[messages.length - 1]?.usage)}</div>{/if}
           </div>
         </div>
 
@@ -1256,7 +1222,8 @@
                         <div class="message-body">{item.content}</div>
                         <MetadataRow class="mono" items={[`Activity ${dateTimeLabel(item.activity_at)}`, `Importance ${numericLabel(item.importance)}`, `Decay ${numericLabel(item.decay_factor)}`]} />
                         <MemoryKeywordSignals
-                          matchedKeywords={matchedKeywordsFromMetadata(item.metadata)}
+                          matchedEntities={matchedEntitiesFromMetadata(item.metadata)}
+                matchedKeywords={matchedKeywordsFromMetadata(item.metadata)}
                           sourceKeywords={sourceKeywordsFromMetadata(item.metadata)}
                         />
                       </div>

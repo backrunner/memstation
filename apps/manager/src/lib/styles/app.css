@@ -1776,7 +1776,6 @@ samp {
 }
 
 .message-meta,
-.message-footer,
 .metadata-row {
   display: flex;
   flex-wrap: wrap;

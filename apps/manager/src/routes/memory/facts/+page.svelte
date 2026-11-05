@@ -177,9 +177,7 @@
 
 <section class="page-stack">
   <PageHeader
-    eyebrow="Inspect / Memory"
     title="Facts"
-    description="Structured statements that can supersede earlier information and feed injection and admin correction workflows."
     subtitle={activeUserId ? `Scoped to user ${activeUserId}` : ''}
   />
 

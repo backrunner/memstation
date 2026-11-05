@@ -35,7 +35,8 @@
       {/if}
     </section>
     <CollapsibleSection title="Processing and source details">
-      <MetadataRow items={[`Summary: ${item.summary_status || 'unknown'}`, `Analysis: ${item.analysis_status || 'unknown'}`]} />
+      <MetadataRow items={[`Strategy: ${item.metadata?.processing_strategy || 'unrecorded'}`, `Sources: ${item.metadata?.source_index_status || 'unrecorded'}`, `Semantic processing: ${item.metadata?.semantic_status || item.analysis_status || 'unknown'}`]} />
+ <MetadataRow items={[`Summary: ${item.summary_status || 'unknown'}`, `Analysis: ${item.analysis_status || 'unknown'}`]} />
       <JsonView value={{ metadata: item.metadata, segments: item.segments, parts: item.parts, artifacts: item.artifacts }} />
     </CollapsibleSection>
     <a class="text-link" href={`${base}/lifecycle`}>Workspace processing and rebuilds</a>

@@ -287,7 +287,7 @@
               bind:value={connectionInput}
               disabled={pending}
               placeholder="memstation://127.0.0.1:8080?key=..."
-              help="URI parameters can prefill label and key=. New targets exchange the token once for a session."
+              help="Connection links can include label= and key=."
               error={locatorPreview.error ?? formErrors.connection}
             />
           </div>
@@ -302,7 +302,7 @@
               type="password"
               autocomplete="off"
               placeholder="MEMSTATION_ADMIN_TOKEN"
-              help="Required when adding a new target unless the URI includes key=. The token is used once; reconnecting requires entering it again."
+              help="Required for a new connection. Re-enter it when reconnecting."
               error={formErrors.adminKey}
               inputClass="input-mono"
             />
@@ -313,9 +313,6 @@
           {/if}
 
           <div class="target-dialog-footer">
-            <p class="helper-text">
-              Labels are saved on this browser. Login sessions are held by Manager for each service.
-            </p>
             <div class="inline-group">
               <Button class="btn-primary" type="button" onclick={saveTarget} disabled={saving || removing}>{saving ? 'Connecting…' : 'Save target'}</Button>
             </div>
@@ -475,15 +472,11 @@
   .target-dialog-footer {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: 12px;
     padding-top: 12px;
     margin-top: 4px;
     border-top: 1px solid var(--border);
-  }
-
-  .target-dialog-footer .helper-text {
-    max-width: 320px;
   }
 
 

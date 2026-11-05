@@ -1,11 +1,11 @@
 import type { MemoryReceipt } from './memory-service.ts';
 
 export const memoryServiceViews = [
-  { id: 'activity', label: 'Activity', description: 'Follow messages as they become memory.' },
-  { id: 'review', label: 'Review', description: 'Check suggestions before they become lasting memory.' },
-  { id: 'sharing', label: 'Sharing', description: 'Publish approved copies to another workspace.' },
-  { id: 'connections', label: 'Connections', description: 'Choose message sources and private audiences.' },
-  { id: 'data', label: 'Data', description: 'Export, delete, or rebuild workspace memory.' }
+  { id: 'activity', label: 'Activity' },
+  { id: 'review', label: 'Review' },
+  { id: 'sharing', label: 'Sharing' },
+  { id: 'connections', label: 'Connections' },
+  { id: 'data', label: 'Data' }
 ] as const;
 export type MemoryServiceView = typeof memoryServiceViews[number]['id'];
 export function memoryServiceView(value: string | null): MemoryServiceView {

@@ -399,9 +399,4 @@
       </CollapsibleSection>
   {/if}
 
-  {#if message.metadata && Object.keys(message.metadata).length}
-    <div class="message-footer">
-      <span class="subtle-text">Metadata available in debug panel.</span>
-    </div>
-  {/if}
 </article>

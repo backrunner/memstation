@@ -77,11 +77,7 @@
 </script>
 
 <section class="page-stack">
-  <PageHeader
-    eyebrow="Inspect"
-    title="Users"
-    description="Find active users, identify accounts carrying the most memory or token load, and jump into per-user operational detail."
-  />
+  <PageHeader title="Users" />
 
   {#if !$targetState.session.authenticated}
     <div class="notice-card">Connect this target to inspect users.</div>

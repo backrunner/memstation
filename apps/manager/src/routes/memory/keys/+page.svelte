@@ -344,9 +344,7 @@
 <Dialog.Root bind:open={createOpen}>
 <section class="page-stack">
   <PageHeader
-    eyebrow="Inspect / Memory"
     title="Key memories"
-    description="Whitelisted slots backing memory tools and admin workflows: preferences, recent markers, operator-curated notes."
     subtitle={activeUserId ? `Scoped to user ${activeUserId}` : ''}
   >
     <div slot="actions">

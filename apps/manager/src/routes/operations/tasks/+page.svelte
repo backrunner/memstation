@@ -227,11 +227,7 @@
 </script>
 
 <section class="page-stack">
-  <PageHeader
-    eyebrow="Operate"
-    title="Tasks"
-    description="Review archived, retry, scheduled, and active work items, then re-run by queue identity or publish a manual follow-up task."
-  >
+  <PageHeader title="Tasks">
     <div slot="actions">
       <Button class="btn-secondary btn-sm" type="button" onclick={loadTasks}>Refresh</Button>
     </div>

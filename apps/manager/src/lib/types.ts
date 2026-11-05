@@ -303,7 +303,10 @@ export interface SearchMemoryItem {
   related?: RelatedMemory[];
 }
 
+export interface EntityRecallDiagnostics { status:string;cache_hit:boolean;query_entities:number;matched_nodes:number;latency_ms:number }
+
 export interface SearchMemoriesResult {
+entityRecall?: EntityRecallDiagnostics;
   total: number;
   queryEmbeddingTokens: number;
   memories: SearchMemoryItem[];

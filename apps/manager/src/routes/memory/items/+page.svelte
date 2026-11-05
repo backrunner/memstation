@@ -101,10 +101,6 @@
     return metadataString(item.metadata, 'title') || item.type;
   }
 
-  function typeLabel(value: string): string {
-    return typeOptions.find((item) => item.value === value)?.label ?? value;
-  }
-
   function statusTone(value?: string): 'brand' | 'success' | 'warning' | 'danger' | 'muted' {
     switch (value) {
       case 'current':
@@ -131,9 +127,7 @@
 
 <section class="page-stack">
   <PageHeader
-    eyebrow="Inspect / Memory"
     title="Agent Memory"
-    description="Durable events, tasks, procedures, artifacts, entities, and agent actions promoted from source conversations."
     subtitle={activeUserId ? `Scoped to user ${activeUserId}` : ''}
   />
 
@@ -153,9 +147,6 @@
       </div>
       <div class="inline-group" style="justify-content: space-between; flex-wrap: wrap;">
         <span class="helper-text">{visibleItems.length} of {items.length} agent memory items visible</span>
-        {#if typeFilter}
-          <StatusBadge tone="brand" label={typeLabel(typeFilter)} />
-        {/if}
       </div>
 
       {#if visibleItems.length === 0}
@@ -173,7 +164,7 @@
                   <span class="helper-text mono">{item.id}</span>
                 </div>
                 <div class="inline-group">
-                  <StatusBadge tone="muted" label={item.type} />
+                  {#if titleForItem(item) !== item.type}<span class="subtle-text">{item.type}</span>{/if}
                   {#if status}
                     <StatusBadge tone={statusTone(status)} label={status} />
                   {/if}
@@ -186,12 +177,14 @@
                 </div>
               </header>
               <div class="message-body">{item.content}</div>
+              {#if item.activity_at || typeof item.metadata?.confidence === 'number' || item.related?.length || item.evidences?.length}
               <div class="agent-memory-meta">
-                <span>activity {dateTimeLabel(item.activity_at)}</span>
-                <span>confidence {Number(item.metadata?.confidence ?? 0).toFixed(2)}</span>
-                <span>{item.related?.length ?? 0} relation{(item.related?.length ?? 0) === 1 ? '' : 's'}</span>
-                <span>{item.evidences?.length ?? 0} evidence item{(item.evidences?.length ?? 0) === 1 ? '' : 's'}</span>
+                {#if item.activity_at}<span>Activity {dateTimeLabel(item.activity_at)}</span>{/if}
+                {#if typeof item.metadata?.confidence === 'number'}<span>Confidence {item.metadata.confidence.toFixed(2)}</span>{/if}
+                {#if item.related?.length}<span>{item.related.length} relation{item.related.length === 1 ? '' : 's'}</span>{/if}
+                {#if item.evidences?.length}<span>{item.evidences.length} evidence item{item.evidences.length === 1 ? '' : 's'}</span>{/if}
               </div>
+              {/if}
             </article>
           {/each}
         </div>

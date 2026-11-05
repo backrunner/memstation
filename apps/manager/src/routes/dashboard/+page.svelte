@@ -130,9 +130,7 @@
 </script>
 
 <section class="page-stack">
-  <PageHeader
-    title="Dashboard"
-  />
+  <PageHeader title="Dashboard" />
 
   {#if !$targetState.session.authenticated}
     <div class="notice-card">Connect this target before dashboard data can be loaded.</div>
@@ -182,7 +180,6 @@
         <div class="page-header">
           <div class="page-header-meta">
             <h2 class="section-title">Recent conversation tokens</h2>
-            <p class="helper-text">Latest conversations, grouped by last activity</p>
           </div>
           <div class="segmented-control" role="group" aria-label="Range">
             {#each [7, 30] as item}

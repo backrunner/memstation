@@ -1,6 +1,6 @@
 import { workspaceBaseURL, workspaceDirectoryURL, workspaceDocumentKinds } from './routes.ts';
 
-export type WorkspaceSection = 'memory' | 'memory/search' | 'keys' | 'conversations';
+export type WorkspaceSection = 'memory' | 'memory/search' | 'keys' | 'conversations' | 'usage';
 export interface WorkspaceDestination { section: WorkspaceSection; record?: string; kind?: string; generation?: string }
 export function destinationQuery(destination: WorkspaceDestination): Record<string,string> {
   return Object.fromEntries(Object.entries(destination).filter(([,value]) => Boolean(value)));
@@ -9,12 +9,12 @@ export function readWorkspaceDestination(query: URLSearchParams): WorkspaceDesti
   if (query.has('open') || query.has('manager_target')) throw new Error('Unsupported navigation parameter.');
   const section = query.get('section');
   if (!section) return null;
-  if (!['memory','memory/search','keys','conversations'].includes(section)) throw new Error('Invalid workspace section.');
+  if (!['memory','memory/search','keys','conversations','usage'].includes(section)) throw new Error('Invalid workspace section.');
   for (const key of ['section','record','kind','generation']) if (query.getAll(key).length > 1) throw new Error('Choose one destination.');
   const record = query.get('record') || undefined;
   const kind = query.get('kind') || undefined;
   const generation = query.get('generation') || undefined;
-  if ((kind && !workspaceDocumentKinds.includes(kind as typeof workspaceDocumentKinds[number])) || (record && section === 'memory' && !kind) || (record && section === 'memory/search') || (kind && section !== 'memory' && section !== 'memory/search') || (generation && section === 'keys')) throw new Error('Invalid workspace destination.');
+  if ((kind && !workspaceDocumentKinds.includes(kind as typeof workspaceDocumentKinds[number])) || (record && section === 'memory' && !kind) || (record && (section === 'memory/search' || section === 'usage')) || (kind && section !== 'memory' && section !== 'memory/search') || (generation && (section === 'keys' || section === 'usage'))) throw new Error('Invalid workspace destination.');
   return {section: section as WorkspaceSection,record,kind,generation};
 }
 export function workspaceDestination(base: string, destination: WorkspaceDestination): string {

@@ -106,11 +106,7 @@
 </script>
 
 <section class="page-stack">
-  <PageHeader
-    eyebrow="Operate"
-    title="Health"
-    description="Dependency posture, drift, and queue/provider signals for the selected target."
-  >
+  <PageHeader title="Health">
     <div slot="actions">
       <Button class="btn-secondary btn-sm" type="button" onclick={loadHealth}>Refresh</Button>
     </div>
@@ -201,7 +197,6 @@
         <div class="page-header">
           <div class="page-header-meta">
             <h2 class="section-title">Runtime drift</h2>
-            <p class="panel-meta">Desired vs live configuration values.</p>
           </div>
           <a class="btn-ghost btn-sm" href="/settings/system">Open settings</a>
         </div>
@@ -233,8 +228,7 @@
       <section class="card page-stack">
         <div class="page-header">
           <div class="page-header-meta">
-            <h2 class="section-title">Queue posture</h2>
-            <p class="panel-meta">Depth and latency across worker queues.</p>
+            <h2 class="section-title">Worker queues</h2>
           </div>
           <a class="btn-ghost btn-sm" href="/operations/queues">Open queues</a>
         </div>
@@ -261,8 +255,7 @@
     <section class="card page-stack">
       <div class="page-header">
         <div class="page-header-meta">
-          <h2 class="section-title">Provider posture</h2>
-          <p class="panel-meta">Upstream provider health and configuration.</p>
+          <h2 class="section-title">Providers</h2>
         </div>
         <a class="btn-ghost btn-sm" href="/settings/providers">Open providers</a>
       </div>

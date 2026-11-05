@@ -343,37 +343,12 @@
     }
   }
 
-  function protocolLabel(value: GatewayProtocol): string {
-    return protocolItems.find((item) => item.value === value)?.label ?? value;
-  }
 
-  function headerLine(): string {
-    const parts = [$selectedTarget?.label ?? 'No Target', protocolLabel(protocol), mode === 'inject' ? 'Inject' : 'Transparent'];
-    if (sessionId) {
-      parts.push(sessionId);
-    }
-    return parts.join(', ');
-  }
 
-  function responseMeta(): string {
-    if (!responseStatus) {
-      return 'Send a raw gateway request to inspect headers, payload, and SSE frames.';
-    }
-    const pieces = [`HTTP ${responseStatus}`];
-    if (rawEvents.length > 0) {
-      pieces.push(`${rawEvents.length} raw frame${rawEvents.length === 1 ? '' : 's'}`);
-    }
-    return pieces.join(', ');
-  }
 </script>
 
 <section class="page-stack">
-  <PageHeader
-    eyebrow="Playground"
-    title="Protocols"
-    subtitle={headerLine()}
-    description="Compose raw gateway requests to verify protocol compatibility and inspect SSE frames."
-  />
+  <PageHeader title="Protocols" />
 
   <div class="page-columns">
     <div class="page-column">
@@ -421,7 +396,6 @@
         <div class="page-header">
           <div class="page-header-meta">
             <h2 class="section-title">Response</h2>
-            {#if !responseIsEmpty}<p class="panel-meta">{responseMeta()}</p>{/if}
           </div>
           {#if responseStatus > 0}
             <StatusBadge

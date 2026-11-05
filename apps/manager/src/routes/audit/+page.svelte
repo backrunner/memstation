@@ -102,11 +102,7 @@
 </script>
 
 <section class="page-stack">
-  <PageHeader
-    eyebrow="Administer"
-    title="Audit"
-    description="Track API key changes, memory edits, configuration updates, and tool-driven writes with their associated payloads."
-  >
+  <PageHeader title="Audit">
     <div slot="actions">
       <Button class="btn-secondary btn-sm" type="button" onclick={loadAudit}>Refresh</Button>
     </div>

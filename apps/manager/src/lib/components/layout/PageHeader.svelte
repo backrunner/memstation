@@ -1,8 +1,6 @@
 <script lang="ts">
   export let title = '';
   export let subtitle = '';
-  export let description = '';
-  export let eyebrow = '';
   export let sticky = false;
 
   // Publish the actual height so section navigation and anchors also work
@@ -30,7 +28,7 @@
   }
 </script>
 
-<header use:measureStickyHeader={sticky} class="page-header" class:is-sticky={sticky} data-has-context={eyebrow || description ? 'true' : undefined}>
+<header use:measureStickyHeader={sticky} class="page-header" class:is-sticky={sticky}>
   <div class="page-header-meta">
     <h1 class="page-title">{title}</h1>
     {#if subtitle}

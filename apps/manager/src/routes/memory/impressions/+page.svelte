@@ -175,9 +175,7 @@
 
 <section class="page-stack">
   <PageHeader
-    eyebrow="Inspect / Memory"
     title="Impressions"
-    description="Preference hints, attitudes, and familiarity signals useful for style adaptation and operator review."
     subtitle={activeUserId ? `Scoped to user ${activeUserId}` : ''}
   />
 

@@ -247,11 +247,7 @@
 </script>
 
 <section class="page-stack">
-  <PageHeader
-    eyebrow="Administer"
-    title="Models"
-    description="Configure default chat, summary, analysis, and embedding models plus provider routes for this target."
-  />
+  <PageHeader title="Models" />
 
   {#if !$targetState.session.authenticated}
     <div class="notice-card">Connect this target to modify runtime settings.</div>
@@ -270,7 +266,6 @@
           <div class="page-header">
             <div class="page-header-meta">
               <h2 class="section-title">Model defaults</h2>
-              <p class="panel-meta">Runtime model assignment for the four MemStation workflows.</p>
             </div>
           </div>
 
@@ -308,7 +303,6 @@
           <div class="page-header">
             <div class="page-header-meta">
               <h2 class="section-title">Provider routes</h2>
-              <p class="panel-meta">Readiness of upstream provider sets.</p>
             </div>
             <a class="btn-secondary btn-sm" href="/settings/providers">Open providers</a>
           </div>

@@ -1,6 +1,7 @@
 <svelte:options runes={false} />
 
 <script lang="ts">
+import EntityRecallStatus from '#lib/components/memory/EntityRecallStatus.svelte';
   import MetadataRow from '#lib/components/ui/MetadataRow.svelte';
   import Button from '#lib/components/ui/Button.svelte';
   import CollapsibleSection from '#lib/components/ui/CollapsibleSection.svelte';
@@ -11,7 +12,7 @@
   import PageHeader from '#lib/components/layout/PageHeader.svelte';
   import StatusBadge from '#lib/components/ui/StatusBadge.svelte';
   import TextInputField from '#lib/components/ui/TextInputField.svelte';
-  import { matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '#lib/memory/keyword-signals.ts';
+  import { matchedEntitiesFromMetadata, matchedKeywordsFromMetadata, sourceKeywordsFromMetadata } from '#lib/memory/keyword-signals.ts';
   import {
     buildSessionDraftKey,
     readSessionDraft,
@@ -146,11 +147,7 @@
 </script>
 
 <section class="page-stack">
-  <PageHeader
-    eyebrow="Playground"
-    title="Recall"
-    description="Inspect persisted extraction and run direct recall queries against the selected target."
-  />
+  <PageHeader title="Recall" />
 
   {#if !$targetState.session.authenticated}
     <div class="notice-card">Connect this target to inspect memory extraction details.</div>
@@ -160,7 +157,6 @@
         <div class="page-header">
           <div class="page-header-meta">
             <h2 class="section-title">Inspect conversation</h2>
-            <p class="panel-meta">Load metadata, messages, and persisted memory by id.</p>
           </div>
           <Button class="btn-secondary btn-sm" type="button" disabled={loading || !conversationId.trim()} onclick={inspectConversation}>
             {loading ? 'Loading…' : 'Inspect'}
@@ -173,7 +169,6 @@
         <div class="page-header">
           <div class="page-header-meta">
             <h2 class="section-title">Recall search</h2>
-            <p class="panel-meta">Run a semantic query against persisted memory.</p>
           </div>
           <Button class="btn-primary btn-sm" type="button" disabled={searchLoading || !searchQuery.trim()} onclick={runSearch}>
             {searchLoading ? 'Searching…' : 'Search'}
@@ -196,12 +191,13 @@
         <div class="page-header">
           <div class="page-header-meta">
             <h2 class="section-title">Extraction</h2>
-            <p class="panel-meta">Memory documents linked to the inspected conversation.</p>
           </div>
+          {#if detail}
           <div class="inline-group">
             <StatusBadge tone={detail?.summary_status === 'completed' ? 'success' : detail?.summary_status === 'failed' ? 'danger' : detail?.summary_status === 'skipped' ? 'muted' : 'warning'} label={`summary ${detail?.summary_status ?? 'n/a'}`} />
             <StatusBadge tone={detail?.analysis_status === 'completed' ? 'success' : detail?.analysis_status === 'failed' ? 'danger' : detail?.analysis_status === 'skipped' ? 'muted' : 'warning'} label={`analysis ${detail?.analysis_status ?? 'n/a'}`} />
           </div>
+          {/if}
         </div>
 
         {#if !detail}
@@ -224,7 +220,8 @@
                   </div>
                   <div class="message-body" style="margin-top: 6px;">{item.content}</div>
                   <MemoryKeywordSignals
-                    matchedKeywords={matchedKeywordsFromMetadata(item.metadata)}
+                    matchedEntities={matchedEntitiesFromMetadata(item.metadata)}
+                matchedKeywords={matchedKeywordsFromMetadata(item.metadata)}
                     sourceKeywords={sourceKeywordsFromMetadata(item.metadata)}
                   />
                   {#if item.metadata}
@@ -243,13 +240,13 @@
         <div class="page-header">
           <div class="page-header-meta">
             <h2 class="section-title">Search results</h2>
-            <p class="panel-meta">Top results ranked by effective score.</p>
           </div>
           {#if searchResult}
             <StatusBadge tone="brand" label={`${searchResult.total} matches`} />
           {/if}
         </div>
 
+        <EntityRecallStatus diagnostics={searchResult?.entityRecall} />
         {#if !searchResult}
           <div class="empty-state">Run a search to load recall results.</div>
         {:else}
@@ -263,7 +260,8 @@
                 </div>
                 <div class="message-body" style="margin-top: 6px;">{item.content}</div>
                 <MemoryKeywordSignals
-                  matchedKeywords={matchedKeywordsFromMetadata(item.metadata)}
+                  matchedEntities={matchedEntitiesFromMetadata(item.metadata)}
+                matchedKeywords={matchedKeywordsFromMetadata(item.metadata)}
                   sourceKeywords={sourceKeywordsFromMetadata(item.metadata)}
                 />
               </article>
