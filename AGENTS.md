@@ -15,6 +15,9 @@
 - 历史事实、来源追溯、事实替代链和时间查询是正式产品能力，不属于旧版本兼容；对外 OpenAI/Anthropic 等明确要求的协议适配也不属于旧版本兼容。超时、重试和服务故障降级按当前唯一契约实现，不得切回已移除的旧策略。移除兼容代码不等于授权删除现有运行数据；已有评测快照与失败证据继续留在被忽略的本地归档。
 - **评测禁止作弊或泄漏。** 记忆摄取只能使用声明的原始来源，检索/规划/证据选择/回答只能使用当前问题和已授权记忆；标准答案、标注证据、题目类别、历史判分和评测样本标识不得作为模型语义输入或决定产品检索路径。禁止针对题目、人物或数据集 ID 写规则、答案型记忆、标签衍生查询或答案缓存；来源记录使用每次请求的临时不透明标识映射。标准答案只交给冻结的离线评分器，标注证据只用于结果后的诊断；oracle 轨道单独标注、不得混入正式结果。实验先固定样本、输入模态、预算、模型和判分协议，再观察结果，所有失败及执行错误保留分母；不得选择性重试、删题、修改答案/判分以追分，或用已调优样本冒充未见测试集。纯文本与图片/图片描述轨道明确分开；全上下文和 oracle 成绩仅为经验诊断，不等于已证明的理论上限，未达到目标必须如实报告。
 - 上述事实来源约束不禁止通用语言理解、计算及对已给事实的常识性解释，但不得借此补入被测人物未记载的经历、关系、偏好或行踪。读者策略必须明确区分观察与解释，先固定策略再做完整样本对照，并把空记忆诊断单独报告；改善读者提示词不等于改善记忆召回，禁止混报两者收益。
+- **质量迭代优先针对失败 case 控制评测成本。** 先离线分析已有结果；失败样本只用于定位机制，不用于判断候选好坏。候选筛选使用事先冻结、按类别分层随机抽取的样本（默认至少 200 题），一题不得决定结论；优先复用已有上下文或检索快照，预先限定模型调用与 token 预算，不默认重跑全量。这里的完整对照指跑完事先冻结的样本，所有失败保留分母；失败样本筛选只用于离线开发诊断，不得进入模型语义输入或产品检索路径，也不得把该样本的改善冒充全量或未见测试集成绩。
+- **正确性优先于节省用量。** 首要验收是答题质量的统计显著改善，且已正确题的退步不超过同代码重复运行测得的噪声水平，不能用 token 降低抵消退步。允许预先声明合理的上下文及 token 增长来保留完整事实、精确原文和人物／时间关系；节省用量是质量稳定后的次级优化。评测仍使用冻结小样本和总预算，避免无效重复与无依据的全量重跑；上下文预算改变必须明示，不能冒充同预算对照。
+- **已验证的改进直接落入唯一正式代码路径，不新增功能开关。** 记忆摄取、召回、候选组织、重排及证据选择的质量改进不得做成可选实验策略、环境变量开关或旧新双轨实现。实验对照使用冻结的代码与数据快照。**未经用户明确要求，不得因单轮退步、无净收益或未通过质量验收而删除、还原或撤回候选实现。** 保留开发改动、代码快照与全部评测证据，明确标注已验证收益、退步和待验证状态；单项结果不能排除多个改动叠加后的收益。后续验证应预先声明候选依赖、组合、样本与预算，分别记录单项和组合效果，不通过选择性重评或删除失败来证明组合有效。模型、连接地址、资源预算和权限控制继续按正式契约配置，不承担质量策略切换。
 
 ---
 
@@ -256,7 +259,7 @@ ReAct Agent 可以保留，但必须受控：
 
 - 最大工具轮次：`2-3`
 - 必须有 token budget 和超时
-- 语义记忆仅由配置的 LLM 生成；禁止关键词、模板、启发式提取或评分兜底。ReAct 如启用，失败只能回退到同样受验证的单轮 LLM 结构化抽取；模型不可用或结果校验失败时任务失败并重试，不生成替代记忆。
+- 当前记忆处理明确支持 `generative`、`lightweight`、`hybrid` 三种策略，共用来源、作用域、验证与存储契约。语义事实、画像、叙述摘要、事实替代及 Key Memory 合并由配置的 LLM 完成；轻量编码器仅生成有精确原文区间的实体提及及路由信号，不推断 Actor 身份，不把实体提及当作用户事实。原文先独立索引，原文片段使用显式中性评分，禁止恢复关键词、模板事实或隐式故障兜底。混合策略保留固定抽样复核、输入预算与独立 deferred 状态；模型失败进入任务重试，不切换策略或伪装为空记忆。ReAct 如启用，失败只能回到同样受验证的单轮 LLM 结构化抽取。处理策略与用量契约见 `docs/memory-processing.md`；此规则替代历史实施记录中的 LLM-only 限制。
 - Agent 不允许直接修改核心事实，写入必须走验证层
 
 ### 6.6 Tool Injection 规则
@@ -478,6 +481,7 @@ v1.0 默认目标：
 - 顶部 navbar、连接提示和内容容器共用 `--page-max-width` 与居中规则，由 `.app-main` 统一提供外侧边距；页面不得重复添加横向 padding 或独立收窄根节点。普通共享面板与区块间距通过 `--panel-padding` / `--section-gap` 调整，桌面和手机分别取值；表格 flush 布局和紧凑内部行按语义保留。
 - 字体建议：`IBM Plex Sans` 或 `Geist`，代码字体 `JetBrains Mono`
 - 组件风格强调监控、数据密度、运维信息可读性
+- **Avoid unnecessary secondary labels and descriptions. Let the layout do the explaining.** 避免不必要的次级标签与说明，让布局本身表达结构和操作关系。标题、分组、字段标签或操作已清楚表达含义时，不再追加复述性副标题、说明、状态标签或空泛提示；优先通过层级、对齐、间距和就地操作组织信息。仅保留影响决策的权限与作用域、数据语义、风险、异常及恢复说明；不得以精简为由移除必要的表单标签、可访问名称或确认信息。
 - 禁止用圆点字符拼接 UI 文本；并列元数据使用 `MetadataRow` 的独立文本项与留白，说明使用自然语句。避免用另一种分隔符机械替代所有圆点；不增加装饰性图标、标签或卡片。
 - 交互动线优先就地完成：搜索与提交对齐、当前项不重复导航，切换上下文保留适用栏目和筛选；离开有未保存内容的页面先保护草稿。工作区服务器搜索使用基于 Bits UI Popover 的 `WorkspacePicker`，普通表单选择仍统一使用 `SelectField`。
 - 避免装饰性状态灯、渐变、发光、悬浮位移动效及重复胶囊标签；常规状态和元数据用文字呈现，填色提示用于失败、重试、历史事实等需要注意的状态
@@ -511,6 +515,8 @@ v1.0 需要以下测试层级：
 - 备份恢复演练：PostgreSQL 逻辑备份、Redis 快照恢复、计数校验与 artifact 导出
 
 ### 12.3 记忆评测与 Benchmark 基线
+
+候选替换前必须执行 `scripts/eval/check-locomo-candidate.sh` 的离线逐题验收，并显式设置 `MEMSTATION_ENFORCE_BENCHMARKS=true`。评测前固定计划哈希、基线与同代码重复基线的文件哈希、候选代码指纹、分层随机题集、模型/协议和 token 预算。门禁是配对统计检验：替换要求至少 200 题、精确 McNemar p<0.05、净增益超过重复基线的净波动；已正确题的退步数不得显著超过重复基线测得的噪声率，任一类别不得出现显著净退步。单题翻转作为诊断逐题保留，不单独阻断。漏题、执行错误、摄取不完整或协议/预算不符仍直接不通过，不得用总分收益抵消。以节省用量为目的的候选使用 `cost_reduction`：不要求增益，但读者输入 token 必须减少，净损失不得超过重复基线的净波动且不得显著。没有重复基线就没有噪声水平，不得进行替换判定；同一基线自身也会翻转的题不能作为保护题。只有与待替换代码及结果文件匹配、`replacement_eligible=true` 的验收记录才支持正式质量替换；上下文重放一致不等于效果提升。该验收结论不得作为自动撤回开发改动的依据：未通过的候选继续保留并可参与预先冻结的叠加验证，是否撤回由用户明确决定。计划、题目和结果留在私有忽略目录，不进入产品路径；默认 CI 只运行无模型的契约测试，不执行 LOCOMO 或质量阈值门禁。当前命令支持无额外规划生成的 v4 pipeline / 冻结语料检索重放；正式用法与适用边界见 `apps/server/tests/eval/README.md`。
 
 记忆 benchmark 是 v1.0 必做项，不是可选优化，也不属于 v1.1 才考虑的附加工作。但 benchmark 结果在当前阶段只作为观察、诊断和回归分析信号，不作为 CI / nightly 红线门禁。
 
@@ -564,6 +570,12 @@ Benchmark 基线固定采用 **LOCOMO-first 方法论 + 混合数据集落地**�
 - score breakdown
 - aggregate report
 - failures / regressions 样例
+
+读者策略验证使用同证据重放：`preparation.kind=frozen_reader_comparison` 固定两版提示词哈希，候选必须匹配当前代码，逐字保留上下文、来源记录和映射。空记忆诊断通过 `TestLiveLOCOMOEmptyReaderReplay` 单独记录，不调用 judge，不与正常答题分数混合；reader 只接收问题和记忆。此类提示词变化不能作为相同协议的检索替换验收，也不得回写历史成绩。具体契约见 `apps/server/tests/eval/README.md`。
+
+证据布局验证使用 `same_selected_records`，准备阶段和模型调用前均比较完整记录与完整来源映射，包括归属、类型、版本、元数据和来源坐标，并拒绝空上下文或上下文增长。记录数组重排不代表渲染后相邻，必须检查最终输入；同时移除类型分组和调整顺序应声明为组合变更。证据完整、来源邻接或合成校准通过均不能代替答题质量验收；同样遗漏在双臂得到不同判分时保留原始成绩，单独记录判分不一致，不择优重评。
+
+评测语料必须先通过摄取完整性校验（原文 segment 实际可被向量召回），否则该轮结果不得用于候选判定。每轮基线同时记录全文与标注证据对照，用来区分记忆损失和读者/判分损失。与外部公开成绩比较时，保留严格判分为主成绩，另行用冻结答案和外部判分提示词双轨重评并明确标注模型差异，不替换原成绩。
 
 ### 12.4 CI 基线
 
@@ -655,6 +667,12 @@ v1.x 后续路线：
 本节用于重启时快速恢复上下文；如后续实现进度发生变化，必须同步更新本节，而不能只改代码不改状态。
 
 ### 14.1 已完成
+
+- 2026-11-05 LOCOMO 召回迭代：相同冻结语料、DeepSeek v4.1 flash、本地 embedding 与精排，全量 1,540 题严格判分 1177 (76.43%)→1233 (80.06%)，90 增 34 减，p≈5e-7；固定 EverOS 判分提示 1279 (83.05%)→1343 (87.21%)；标注证据进入上下文 83.7%→88.6%；读者输入 -12%；1,510 题已完成配对为 1177→1208，其余收益来自旧执行错误修复。该版本为 150 精排候选（评测显式配置，默认仍 50，延迟未验收）、种子/精排按通道预留、更广的名称索引、读者上下文隐藏纯名称提及。此样本已用于调优，不是未见测试；全量运行仍有 3 条实体召回失败及 1 条判分解析失败，门禁未通过，须在修复后的代码上重跑；LongMemEval 待后续。同样 310 题筛选：显式调用的多轮证据搜索替换旧补查（证据 +4 点，但约 26K tokens/题且答案无净收益，未默认启用）；对话段落渲染、direct 读者、medium/high 读者 effort、语义 episode 均无显著收益，段落渲染已撤回，归档保留。修复判分器未转义引号导致的解析失败（统一 `decodePipelineJudgment`，对任一判定都不重新调用模型）、图关系超时超过 1 秒被静默缩短为 150ms、本地 extractor 复用旧代码进程（健康检查返回代码哈希，脚本拒绝陈旧进程）。26 题仍在 150ms 图超时下静默降级。全量文本轨道，未含图片。
+
+- 2026-11-02 质量优先的定向评测：明确正确性与逐题保护优先于 token 节省，允许预声明上下文增长；冻结证据配对 runner 支持最高 32KB 的显式预算和经过独立来源验证的预生成证据包，默认 CI 仍无模型调用。来源描述去重及来源补充候选均未通过小样本质量筛选，生产实现已恢复，不能据此宣称效果提升或替换基线。
+
+- 2026-11-01 Manager 信息层级整理：开发规范明确避免不必要的次级标签与说明，由布局表达结构；全量检查页面与共享组件，清理复述性介绍、重复上下文、普通元数据胶囊和无操作意义的正常提示，修正记忆服务详情区块错行。保留字段与可访问名称、权限／历史事实／费用语义、草稿保护和破坏性确认，原始对话元数据改为按需展开。
 
 - 2026-10-27 综合基线与提交前复核：已核对 LOCOMO 单开发对话 152 题 raw／derived 各 114/152、combined 107/152、全文对照 128/152，LongMemEval 七类覆盖 37/42，MemoryArena low 数学 94/354、物理 46/86；这些完成范围不等于最新代码、全量数据集或理论上限成绩。35 题真实 Worker 混合集仍为 48/140 条完成答案，按成本要求停止，不补跑模型对照或付费诊断。复核修复预算重试失败／取消时丢失首次用量、空响应被当成功，以及证据上下文暴露存储坐标／附件原始字段的问题；Summary／Analysis／Key Memory 原始来源与事实 ID 在模型边界使用请求内临时编号，返回后恢复再校验，原始追溯数据不改。最终独立 PostgreSQL／Redis 全量 race 为 687 项测试／子测试通过、18 项显式 opt-in 跳过、无失败；Chromium／移动 WebKit 134 项 E2E、Node 26.12.1 下 pnpm lint／test／production build、Go format／lint、完整 go generate 幂等检查、Atlas lint／dry-run、备份 dry-run、Worker recovery 和 12 项 Python 测试通过。公开增量密钥扫描无真实凭据，验证材料留在忽略归档。完整范围、已知准确率及延迟缺口见被忽略的 `.agents/archive/review-push-2026-10-27/baseline.md`；提交推送与远端 CI 结果以该归档的最终记录为准，不把旧评测分数称为本次修复收益。
 
@@ -905,3 +923,11 @@ v1.x 后续路线：
 - 所有“未来可扩展”都必须建立在“今天就能实现、今天就能测试、今天就能运维”的设计上
 
 - 2026-10-24 Workspace 检索与切换：文档列表新增数据库内容／ID 筛选和绑定 owner／workspace／generation／条件的游标分页，不再局限最近 100 条；同时间多类型排序稳定，软删除 Key 不再返回。范围内检索复用 MemoryEngine，支持活动时间与 Fact 双时间历史快照，历史正文只读并明确跳转当前记录。Manager 新增服务器搜索的工作区切换器，保留栏目／通用筛选、清除记录／游标／代次，维护草稿提醒与迟到响应边界；移动端折叠次要筛选并显示所选条件。Go 全量／PostgreSQL 相关 race／format／lint、Manager 27 项单测／84 项完整 E2E 加专项回归／生产构建和真实 Go／PostgreSQL／Redis 联调通过。会话与 Key Memory 列表分页、旧路由迁移、其他类型空间与 Subject／SourceEvent／Run 仍待实施；详见 检索与切换记录（本地归档：`.agents/archive/docs/plans/workspace-agents/workspace-search-2026-10-24.md`）。
+
+### LOCOMO runner alignment (2026-10-31)
+
+- LOCOMO production QA protocol v4 shares deployment processing configuration, mandatory entity recall, source Worker indexing and policy-bound task publication. All retrieval arms use one isolated PostgreSQL corpus; raw selects original segments, derived excludes them, combined includes source/conversation expansion. Historical raw-turn results are not matched v4 controls.
+- Manifests pin encoder identity, processing policy, role temperatures/output budgets/timeouts and endpoint hashes. Checkpoints validate source generation and semantic completion/defer state; all failed attempts remain in the denominator. Extraction temperature is transmitted and participates in generation identity. Actual extraction/entity calls use the isolated AI usage ledger.
+- Methodology is in `apps/server/tests/eval/README.md`. Fresh corpus quality measurements remain manual; transport fixtures and local contract checks are not accuracy gains or published-framework parity.
+
+- Semantic episode extraction now reserves at most 1,024 bytes / two neighboring original windows inside the existing batch budget. Context-only observations cannot independently create a new memory; exact source coordinates remain validated. Cross-session event identity is not inferred by this mechanism, and its quality effect requires a fresh paired corpus experiment.

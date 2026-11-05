@@ -53,7 +53,7 @@ The launcher binds loopback and uses an 8192-token context with one inference sl
 
 ## Bounds and failures
 
-The default candidate multiplier is 6, minimum 20, maximum 50. Change these in System settings or `MEMSTATION_RERANK_CANDIDATE_MULTIPLIER`, `MEMSTATION_RERANK_MIN_CANDIDATES`, `MEMSTATION_RERANK_MAX_CANDIDATES`.
+The default candidate multiplier is 6, minimum 20, maximum 50. A wider pool raises recall at no generation-token cost, but each rerank takes proportionally longer on a local model. Change these in System settings or `MEMSTATION_RERANK_CANDIDATE_MULTIPLIER`, `MEMSTATION_RERANK_MIN_CANDIDATES`, `MEMSTATION_RERANK_MAX_CANDIDATES`.
 
 Calls use the existing provider timeout, retry and telemetry path. Unknown/duplicate indexes, missing fields, nonfinite/out-of-range scores and incomplete batches cannot partially modify ranking. Provider failures fall back to the original candidate scores. Cancellation of the caller remains cancellation. Engine diagnostics and trace attributes distinguish `disabled`, `skipped`, `applied`, and `degraded`; they contain fixed error codes, not upstream response bodies or credentials.
 
@@ -69,7 +69,7 @@ Historical validity, explicit time filters and authorization still run before ra
 Without a configured model, or when inference fails validation, bounded hybrid
 relevance is `clamp(max(dense, lexical, graph), 0, 1)` with the same bounded
 secondary factors. Invalid batches apply atomically: they never partly overwrite
-scores. Components identify `relevance_v1` or `hybrid_v1` according to the signal
+scores. Components identify `relevance_v1` or `hybrid_v2` according to the signal
 actually used. These are diagnostic labels, not configurable alternate policies.
 Clear the model reference to disable reranking. Removed settings are rejected.
 
@@ -80,6 +80,21 @@ inference admits only the fully scored pool; invalid batches preserve first-stag
 results. Dense and lexical channels each reserve a third of the bounded model pool
 before preliminary-score filling. The `preliminary` selection remains available
 for ablation. This is channel reservation, not RRF or BM25.
+
+After constructing a model batch, debug `rerank.admission` reports `available`
+and `submitted` counts for three groups: `query_scored` has at least one positive
+dense, lexical, entity or relation signal; `expansion_only` has only conversation
+or supersession inheritance; `source_mention` is an entity record explicitly
+marked as a source mention. Counts use distinct valid node identities. Source
+mentions can also be query-scored, so the groups are not additive. These counters
+describe model admission, not evidence support, successful inference or answer
+quality. They do not alter selection, inference text, scores or source hydration.
+
+Identical document text does not make separate memories interchangeable. Admitted
+nodes retain their own source paths, authors and times through ranking and source
+hydration. Evidence additions must fit the remaining budget after explicitly
+protected facts and complete source passages; they cannot evict or clip that
+protected evidence.
 
 Relevance scores are not calibrated probabilities of answer correctness. Validate
 candidate coverage, final ranking, evidence packing, answer quality and latency

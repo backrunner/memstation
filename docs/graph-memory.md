@@ -4,7 +4,7 @@ MemStation retains PostgreSQL, `MemoryNode`, `MemoryRelation` and the `VectorSto
 
 ## Bounded traversal
 
-Online retrieval defaults to two hops, 24 edges per node, 256 total edges, 128 candidate nodes and a 150 ms graph-fetch budget. The SQL repository applies directional adjacency limits before returning rows. Direct seeds are sorted before the node budget is applied. A graph timeout retains direct retrieval and marks returned records with `metadata.graph_timeout`; parent request cancellation still cancels the request.
+Online retrieval defaults to two hops, 24 edges per node, 256 total edges, 128 candidate nodes and a 150 ms graph-fetch budget. The SQL repository applies directional adjacency limits before returning rows. Direct seeds are sorted and capped by the node budget first; the same budget then separately limits the neighbours expansion may add, so a full seed set cannot block expansion. A graph timeout retains direct retrieval and marks returned records with `metadata.graph_timeout`; parent request cancellation still cancels the request.
 
 Deployment settings (prefix `MEMSTATION_MEMORY_RELATION_`):
 
@@ -17,7 +17,7 @@ Deployment settings (prefix `MEMSTATION_MEMORY_RELATION_`):
 
 Invalid or nonpositive budgets fall back to safe defaults. Existing hop configuration remains available. The time budget covers graph fetching and traversal, not the embedding provider or the complete request.
 
-Search accepts `relation_mode`: `neighborhood` (default), `evidence`, `dependencies`, `dependents`, or `conflicts`. Dependency and causal relations preserve their direction. Conflict mode can recall contradictory evidence; ordinary neighborhood expansion does not promote contradictions, replacements or superseded facts. Edge confidence and a bounded-neighborhood degree penalty affect graph contribution. The strongest path wins, preventing repeated derivations from accumulating artificial corroboration. `metadata.recall_path` exposes the seed, traversed nodes, relation IDs/types and contribution. Ranking continues through the existing importance and time-decay scorer.
+Search accepts `relation_mode`: `neighborhood` (default), `evidence`, `dependencies`, `dependents`, `conflicts`, or `entity_mentions`. Dependency and causal relations preserve their direction. Conflict mode can recall contradictory evidence; ordinary neighborhood expansion does not promote contradictions, replacements or superseded facts. Edge confidence and a bounded-neighborhood degree penalty affect graph contribution. The strongest path wins, preventing repeated derivations from accumulating artificial corroboration. `metadata.recall_path` exposes the seed, traversed nodes, relation IDs/types and contribution. Ranking continues through the existing importance and time-decay scorer.
 
 ## Historical facts
 
@@ -64,7 +64,7 @@ Canonical entity identity includes an optional `entity_scope` from conversation 
 
 Use the actual generation returned by the API. Omit `source_node_id` for a name-only alias. Review by resubmitting the same scoped alias and target with `confirmed` or `revoked`. The authenticated admin route scopes the operation by query `user_id`; a body cannot override it. Endpoint types, users and generations are validated. Ambiguous confirmations, cycles and conflicting source mappings are rejected. PostgreSQL serializes review within a user/generation and commits its audit record atomically. Manager entity details provide candidate creation and confirmation/revocation dialogs.
 
-Aliases currently match normalized exact query text within the supplied `entity_scope`; they do not automatically resolve arbitrary pronouns or fuzzy names. Name similarity alone never confirms a merge. Mappings are generation-scoped and must be reviewed for a new generation.
+Aliases match normalized exact query text, and extracted query names when entity recall is enabled, within the supplied `entity_scope`; they do not automatically resolve arbitrary pronouns or fuzzy names. Name similarity alone never confirms a merge. Mappings are generation-scoped and must be reviewed for a new generation.
 
 ## Validation and evaluation
 

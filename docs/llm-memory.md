@@ -1,6 +1,6 @@
 # LLM 记忆生成
 
-语义记忆仅通过配置的 LLM 生成。已删除关键词匹配、固定画像、文本拼接摘要、模板事实和启发式重要性评分的生产入口。在线 Worker、generation rebuild 和 Playground 预览复用同一处理服务。
+生成式语义记忆通过配置的 LLM 生成。当前还支持轻量实体提及和混合调度，原文片段使用显式中性评分；策略、来源边界与用量面板见 [记忆处理与用量](memory-processing.md)。已删除的关键词匹配、固定画像、模板事实和隐式故障兜底不会恢复。在线生成式 Worker、generation rebuild 和 Playground 预览复用同一语义处理服务。
 
 ## 模型职责与配置
 
@@ -9,7 +9,8 @@
 | 摘要 | `SUMMARY_MODEL` / 用户有效 `summary_model` | 摘要、主题、关键词、重要性、衰减系数 |
 | 分析 | `ANALYSIS_MODEL` / 用户有效 `analysis_model` | Fact、可选 Impression、Task/Event/Procedure/Entity/Agent Action/Artifact、语义关系 |
 | Key Memory | `analysis_model` | 根据已验证事实和现有 Key Memory 合并长期核心信息 |
-| 来源片段和人工 Key 的评分 | `summary_model` / `analysis_model` | 重要性、衰减系数、活动时间及理由 |
+| 原始来源片段评分 | 显式中性策略 | importance=1、decay_factor=1；不调用 LLM |
+| 人工 Key 的评分 | `analysis_model` | 重要性、衰减系数、活动时间及理由 |
 | 向量 | 部署级 `EMBEDDING_MODEL` | Embedding，不参与语义事实生成 |
 
 模型名保持配置化。支持 provider 前缀；没有前缀时使用内部默认 provider。不存在隐式切换模型或规则兜底。
@@ -82,3 +83,20 @@ Only an explicit length/max-tokens finish reason permits one retry of the same i
 Manual failure-cohort evaluation is documented in [the evaluation guide](../apps/server/tests/eval/REGRESSION.md). Dataset files, selections, model outputs and reports remain under ignored `.agents/archive/`; the failure-enriched cohort is a development diagnostic and is not a representative benchmark score.
 
 Native images, audio and other attachments follow the selected model and transport capability policy. Supported media is attached to Summary/Fact requests; unsupported media becomes a text marker and cannot support a fact. See [Native media input](multimodal-input.md).
+
+## Episode batch context
+
+When semantic episodes are enabled, extraction reserves up to 1,024 bytes and
+two neighboring source windows within the existing 6,000-byte / 12-source batch
+limit. Each source byte remains primary once. Retained overlap is explicitly
+`context_only`; every emitted record must also cite new primary evidence. This
+lets the LLM cite an antecedent together with a later statement without emitting
+an old-only observation again. It does not establish cross-session event identity.
+
+Overlap keeps exact original byte/code-point spans, source dates, roles and
+revision provenance. Attachment payloads are not replayed as text context.
+Ambiguous antecedents remain uncertain; the model must preserve plans,
+cancellations and completed outcomes. Prompt and batching policy changes
+invalidate analysis checkpoints. These bounds and fixture tests establish
+correctness, not a LOCOMO accuracy gain; promotion remains a manual paired
+quality decision with fresh ingestion and a frozen reader/judge.

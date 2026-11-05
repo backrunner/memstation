@@ -88,6 +88,13 @@ The Go server ships as one binary with `serve`, `worker`, `scheduler`, `migrate`
 See [architecture](docs/architecture.md), [LLM generation](docs/llm-memory.md) and
 [graph memory](docs/graph-memory.md) for details and current limits.
 
+Memory-quality candidates use a [manual, offline acceptance check](apps/server/tests/eval/README.md#candidate-acceptance-before-replacement)
+with a frozen cohort, per-case regression protection and explicit token budgets.
+Benchmark runs remain outside default CI; passing a development cohort does not
+establish accuracy on unseen conversations.
+[Reader-only replay and empty-memory diagnostics](apps/server/tests/eval/README.md#reader-only-frozen-evidence-comparison)
+keep prompt changes separate from retrieval improvements and preserve original grades.
+
 ## Quick start
 
 For the development workflow, install Docker with Compose, Node.js **26.12.1** and

@@ -2,6 +2,12 @@
 
 Manager 的筛选、记录元数据、身份详情、任务表单、聊天工具和调试信息统一使用 `apps/manager/src/lib/components/ui/CollapsibleSection.svelte`。不要在页面重新写原生 `details/summary` 或局部展开按钮样式。
 
+## 信息层级
+
+避免不必要的次级标签与说明，让布局本身表达结构和操作关系（Avoid unnecessary secondary labels and descriptions. Let the layout do the explaining）。页面、分区和折叠标题已经说明内容时，不再追加复述性介绍；通过分组、对齐、间距和就地操作建立层级。
+
+字段标签、可访问名称、权限范围、历史事实语义、费用缺失和破坏性操作后果仍须明确。只有能帮助用户作出当前决定的说明才常驻显示；运行细节和原始数据按需展开。空状态给出缺少的内容及必要的下一步，避免重复标题或描述显而易见的操作。
+
 ## 用法
 
 ```svelte

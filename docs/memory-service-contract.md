@@ -39,7 +39,8 @@ HTTP Header 同名多值和非法受众 JSON 均拒绝。gRPC 使用小写同名
 | `POST /api/v1/memory/forget` | `memory.forget` | source_refs/node_ids/actor_id/workspace + partition_id；先阻断读取，再异步清理 |
 | `POST /api/v1/exports` | `memory.export` | 当前选定分区导出 operation；结果保留 24 小时，下载再次复核来源 |
 | `GET /api/v1/operations/{id}` | 对应删除/撤回/导出权限 | read_blocked、online_cleaned、journal_persisted、backup_status、失败、到期时间及结果 |
-| `GET /api/v1/usage` | `usage.read` | 当前范围 broker 调用；`after` 为上一页最后 ID，最多 100 条 |
+| `GET /api/v1/usage` | `usage.read` | 当前范围 direct / broker / 本地抽取调用；支持阶段、策略、模型、状态及时间筛选；`after` 为上一页最后 ID，最多 100 条 |
+| `GET /api/v1/usage/summary` | `usage.read` | 当前授权范围内的完整区间聚合，币种分开、缺失价格不视为零；见 [处理与用量](memory-processing.md) |
 | `POST /api/v1/usage/{id}/reconcile` | `usage.read` | 向 broker 对账 unknown 调用；结果未知不宣称零费用 |
 
 `workspace:true` 的 forget 指整个选定 partition，不隐式擦除不可见私有分区。删除所有分区需要逐分区显式管理操作。导出权限不自动包含原文读取：缺少 `sources.read` 时剔除原文 segment、证据正文和源 metadata，保留派生内容与 sourceRefs。普通 recall/inspect 同样遵守这个边界。
