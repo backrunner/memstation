@@ -41,6 +41,8 @@ func expandRelationPaths(base map[string]float64, relations []domain.MemoryRelat
 		}
 	}
 	frontier := cloneScoreMap(base)
+	// Seeds have their own bound; MaxNodes limits only the neighbours added here.
+	discovered := 0
 	for hop := 0; hop < cfg.MaxHops && len(frontier) > 0; hop++ {
 		next := map[string]float64{}
 		ids := make([]string, 0, len(frontier))
@@ -80,8 +82,11 @@ func expandRelationPaths(base map[string]float64, relations []domain.MemoryRelat
 				if score <= scores[dst] {
 					continue
 				}
-				if _, exists := scores[dst]; !exists && len(scores) >= budget.MaxNodes {
-					continue
+				if _, exists := scores[dst]; !exists {
+					if discovered >= budget.MaxNodes {
+						continue
+					}
+					discovered++
 				}
 				scores[dst] = score
 				p := paths[id]
@@ -112,20 +117,23 @@ func containsPathNode(ids []string, id string) bool {
 	return false
 }
 
-func (e *Engine) addEntitySeeds(ctx context.Context, input domain.SearchInput, seeds map[string]float64) error {
+func (e *Engine) addEntitySeeds(ctx context.Context, input domain.SearchInput, seeds map[string]float64, queryNames []string) error {
 	aliases, err := e.repo.ListEntityAliases(ctx, input.UserID, input.GenerationID)
 	if err != nil {
 		return err
 	}
 	scope := domain.NormalizeEntityAlias(input.EntityScope)
-	q := domain.NormalizeEntityAlias(input.Query)
+	queries := map[string]bool{domain.NormalizeEntityAlias(input.Query): true}
+	for _, name := range queryNames {
+		queries[domain.NormalizeEntityAlias(name)] = true
+	}
 	// Only explicit, confirmed aliases participate. Candidate mappings are visible
 	// to administrators but cannot contaminate retrieval.
 	for _, a := range aliases {
 		if a.Status != "confirmed" || a.Scope != scope {
 			continue
 		}
-		if q == a.Alias {
+		if queries[a.Alias] {
 			seeds[a.TargetNodeID] = math.Max(seeds[a.TargetNodeID], 0.9)
 			if a.SourceNodeID != "" {
 				seeds[a.SourceNodeID] = math.Max(seeds[a.SourceNodeID], 0.9)
@@ -215,7 +223,7 @@ func (e *Engine) searchHistoricalFacts(ctx context.Context, input domain.SearchI
 		// retained for display but must not penalize a then-valid fact.
 		scored := d
 		scored.Metadata = mergeSearchMetadata(d.Metadata, map[string]any{"is_superseded": false, "superseded_by_id": "", "valid_to": nil})
-		comp := scoreDocumentAt(scored, scores[d.NodeID], d.Score, 0, 0, 0, 0, false, now, cfg)
+		comp := scoreDocumentAt(scored, scores[d.NodeID], d.Score, 0, 0, 0, 0, 0, false, now, cfg)
 		candidates = append(candidates, searchCandidate{Document: d, PreliminaryScore: comp.EffectiveScore, BaseSemanticScore: scores[d.NodeID], KeywordScore: d.Score})
 	}
 	rs, rr, rerankDiagnostics := e.rerankCandidates(ctx, input, candidates)
@@ -235,7 +243,7 @@ func (e *Engine) searchHistoricalFacts(ctx context.Context, input domain.SearchI
 		if _, ok := rr[d.NodeID]; ok {
 			rerankApplied = true
 		}
-		comp := scoreDocumentAt(scored, c.BaseSemanticScore, c.KeywordScore, 0, 0, 0, rs[d.NodeID], rerankApplied, now, cfg)
+		comp := scoreDocumentAt(scored, c.BaseSemanticScore, c.KeywordScore, 0, 0, 0, 0, rs[d.NodeID], rerankApplied, now, cfg)
 		d.Score = comp.SemanticScore
 		d.EffectiveScore = comp.EffectiveScore
 		d.Metadata = mergeSearchMetadata(d.Metadata, map[string]any{"historical_snapshot": true, "as_of": input.AsOf, "known_at": input.KnownAt})

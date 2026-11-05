@@ -7,6 +7,7 @@ import (
 )
 
 func TestEmptyAutoKeyWhitelistDisablesLLMConsolidation(t *testing.T) {
+	setTestMemoryEncoderConfig(t)
 	t.Setenv("MEMSTATION_KEY_MEMORY_AUTO_KEYS", "")
 	cfg, err := LoadConfig()
 	if err != nil {
@@ -18,6 +19,7 @@ func TestEmptyAutoKeyWhitelistDisablesLLMConsolidation(t *testing.T) {
 }
 
 func TestLoadConfigRejectsWildcardCredentialedCORSOrigin(t *testing.T) {
+	setTestMemoryEncoderConfig(t)
 	t.Setenv("MEMSTATION_CORS_ALLOWED_ORIGINS", "*")
 
 	_, err := LoadConfig()
@@ -30,6 +32,7 @@ func TestLoadConfigRejectsWildcardCredentialedCORSOrigin(t *testing.T) {
 }
 
 func TestLoadConfigRejectsCrossSiteAdminCookieWithoutSecureFlag(t *testing.T) {
+	setTestMemoryEncoderConfig(t)
 	t.Setenv("MEMSTATION_SESSION_COOKIE_CROSS_SITE", "true")
 	t.Setenv("MEMSTATION_SESSION_COOKIE_SECURE", "false")
 
@@ -54,6 +57,7 @@ func TestRemovedRerankSettingsRejected(t *testing.T) {
 }
 
 func TestMemoryLLMBudgetConfiguration(t *testing.T) {
+	setTestMemoryEncoderConfig(t)
 	t.Setenv("MEMSTATION_MEMORY_MIN_OUTPUT_TOKENS", "32768")
 	t.Setenv("MEMSTATION_MEMORY_MAX_OUTPUT_TOKENS", "131072")
 	t.Setenv("MEMSTATION_MEMORY_LLM_TIMEOUT_SECONDS", "600")
@@ -64,5 +68,35 @@ func TestMemoryLLMBudgetConfiguration(t *testing.T) {
 	t.Setenv("MEMSTATION_MEMORY_MAX_OUTPUT_TOKENS", "16384")
 	if _, err = LoadConfig(); err == nil {
 		t.Fatal("inverted memory output limits accepted")
+	}
+}
+
+func setTestMemoryEncoderConfig(t *testing.T) {
+	t.Helper()
+	t.Setenv("MEMSTATION_MEMORY_PROCESSING_ENDPOINT", "http://127.0.0.1:8092")
+	t.Setenv("MEMSTATION_MEMORY_PROCESSING_TOKEN", "test-only-extractor-token")
+	t.Setenv("MEMSTATION_MEMORY_PROCESSING_MODEL", "fixture-encoder")
+	t.Setenv("MEMSTATION_MEMORY_PROCESSING_REVISION", "fixture-pinned-revision")
+}
+
+func TestEntityRecallRequiresConfigurationAndRejectsRemovedSwitch(t *testing.T) {
+	setTestMemoryEncoderConfig(t)
+	cfg, err := LoadConfig()
+	if err != nil || cfg.MemoryProcessing.EntityRecallTimeoutMS != 200 {
+		t.Fatalf("mandatory entity recall configuration: %+v %v", cfg.MemoryProcessing, err)
+	}
+	for _, value := range []string{"true", "false", ""} {
+		t.Run("removed_switch_"+value, func(t *testing.T) {
+			t.Setenv("MEMSTATION_MEMORY_PROCESSING_ENTITY_RECALL_ENABLED", value)
+			if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), "unsupported") {
+				t.Fatalf("removed switch accepted: %v", err)
+			}
+		})
+	}
+	for _, key := range []string{"ENDPOINT", "TOKEN", "MODEL", "REVISION"} {
+		t.Setenv("MEMSTATION_MEMORY_PROCESSING_"+key, "")
+	}
+	if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), "MEMSTATION_MEMORY_PROCESSING_ENDPOINT") {
+		t.Fatalf("mandatory extractor settings missing without error: %v", err)
 	}
 }

@@ -23,7 +23,7 @@ type evidenceReader struct {
 func TestEvidenceKeepsDeclaredSessionClockSeparateFromProcessingTime(t *testing.T) {
 	doc := domain.MemoryDocument{ID: "episode", Type: domain.MemoryTypeEpisode, Content: "An event occurred last week.", CreatedAt: time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC), Metadata: map[string]any{"source_session_time": "9:00 am on 23 October, 2026"}}
 	text := FormatEvidenceDocument(doc)
-	if !strings.Contains(text, `"source_session_time":"9:00 am on 23 October, 2026"`) || !strings.Contains(text, `"recorded_at":"2026-10-26T00:00:00Z"`) || strings.Contains(text, `"valid_from"`) {
+	if !strings.Contains(text, "9:00 am on 23 October, 2026") || strings.Contains(text, "2026-10-26") || strings.Contains(text, "valid_from") {
 		t.Fatal("source clock lost or promoted into inferred event validity", text)
 	}
 }
@@ -45,7 +45,7 @@ func TestEvidencePreservesAttributionNegationAndBudget(t *testing.T) {
 	}
 	got := packEvidence(docs, nil, EvidenceOptions{MaxBytes: 16000})
 	text := buildEvidenceSystemPrompt(got)
-	if len(got) != 2 || strings.Contains(text, "do-not-render") || !strings.Contains(text, "recorded_at") || !strings.Contains(text, "valid_from") || strings.Count(text, "我没有参加活动。") != 2 {
+	if len(got) != 2 || strings.Contains(text, "do-not-render") || !strings.Contains(text, "valid_from") || strings.Count(text, "我没有参加活动。") != 2 {
 		t.Fatal(text)
 	}
 	for _, budget := range []int{20, 200, 400, 800} {
@@ -146,7 +146,7 @@ func TestInjectionUsesEvidencePacketAndWholePromptBudget(t *testing.T) {
 		t.Fatalf("injection: %+v %+v %v", injected, result, err)
 	}
 	prompt := injected.Messages[0].Text
-	if !strings.Contains(prompt, "did not attend") || !strings.Contains(prompt, "source_context") || estimateEvidenceTokens(prompt) > req.MaxInjectionTokens {
+	if !strings.Contains(prompt, "did not attend") || !strings.Contains(prompt, "original text") || estimateEvidenceTokens(prompt) > req.MaxInjectionTokens {
 		t.Fatal(prompt)
 	}
 	req.MaxInjectionTokens = 8
@@ -194,10 +194,35 @@ func TestEvidenceExperimentDoesNotChangeDefaultInjection(t *testing.T) {
 func TestEvidencePromptExcludesStorageCoordinatesAndRawAttachments(t *testing.T) {
 	doc := domain.MemoryDocument{ID: "PRIVATE-DOCUMENT", ConversationID: "PRIVATE-CONVERSATION", Type: domain.MemoryTypeFact, Content: "Alice declined.", SourceRefs: []domain.SourceRef{{WorkspaceID: "PRIVATE-WORKSPACE", MessageID: "PRIVATE-MESSAGE", Revision: 1}}, Metadata: map[string]any{"ref": "PRIVATE-REFERENCE", "source_parts": []domain.SourcePart{{Type: "media", Media: &domain.ContentBlock{Type: domain.ContentBlockImage, SourceURL: "https://example.invalid/PRIVATE-URL"}}}, "speaker": "Alice"}}
 	text := buildEvidenceSystemPrompt([]domain.MemoryDocument{doc})
-	if strings.Contains(text, "PRIVATE-") || !strings.Contains(text, "Alice declined.") || !strings.Contains(text, "memory-1") {
+	if strings.Contains(text, "PRIVATE-") || !strings.Contains(text, "Alice declined.") {
 		t.Fatal(text)
 	}
 	if doc.Metadata["ref"] != "PRIVATE-REFERENCE" || len(doc.SourceRefs) != 1 {
 		t.Fatal("prompt projection mutated stored provenance")
+	}
+}
+
+func TestEvidenceHeaderKeepsReaderFactsAndDropsStorageDetail(t *testing.T) {
+	created := time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC)
+	dated := domain.MemoryDocument{ID: "a", ConversationID: "c", Type: domain.MemoryTypeEvent, Content: "Alice cancelled.", CreatedAt: created, Metadata: map[string]any{"source_session_time": "8 May 2023", "speaker": "Alice", "status": "cancelled", "support_kind": "model_inference", "start_sequence": 3}}
+	text := FormatEvidenceDocument(dated)
+	if text != "[8 May 2023; speaker: Alice; cancelled; inferred]\nAlice cancelled." {
+		t.Fatal(text)
+	}
+	// A date already in the original text is not repeated.
+	inline := FormatEvidenceDocument(domain.MemoryDocument{Type: domain.MemoryTypeSegment, Content: "[Conversation date: 8 May 2023] Hi", Metadata: map[string]any{"session_date": "8 May 2023"}})
+	if inline != "[original text]\n[Conversation date: 8 May 2023] Hi" {
+		t.Fatal(inline)
+	}
+	// Without a source clock the stored time stays labelled, never presented as the event date.
+	undated := FormatEvidenceDocument(domain.MemoryDocument{Type: domain.MemoryTypeFact, Content: "Alice left.", CreatedAt: created})
+	if undated != "[recorded 2026-10-26]\nAlice left." {
+		t.Fatal(undated)
+	}
+	// Equal text with different provenance must remain distinct evidence.
+	other := dated
+	other.Metadata = map[string]any{"source_session_time": "9 May 2023", "speaker": "Bob"}
+	if evidenceIdentity(dated) == evidenceIdentity(other) {
+		t.Fatal("records with different provenance merged")
 	}
 }

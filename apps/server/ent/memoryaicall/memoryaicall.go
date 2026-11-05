@@ -17,6 +17,14 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// FieldStage holds the string denoting the stage field in the database.
+	FieldStage = "stage"
+	// FieldStrategy holds the string denoting the strategy field in the database.
+	FieldStrategy = "strategy"
+	// FieldDurationMs holds the string denoting the duration_ms field in the database.
+	FieldDurationMs = "duration_ms"
+	// FieldUsageKnown holds the string denoting the usage_known field in the database.
+	FieldUsageKnown = "usage_known"
 	// FieldUserID holds the string denoting the user_id field in the database.
 	FieldUserID = "user_id"
 	// FieldWorkspaceID holds the string denoting the workspace_id field in the database.
@@ -64,6 +72,10 @@ var Columns = []string{
 	FieldID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
+	FieldStage,
+	FieldStrategy,
+	FieldDurationMs,
+	FieldUsageKnown,
 	FieldUserID,
 	FieldWorkspaceID,
 	FieldPartitionID,
@@ -102,6 +114,14 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultStage holds the default value on creation for the "stage" field.
+	DefaultStage string
+	// DefaultStrategy holds the default value on creation for the "strategy" field.
+	DefaultStrategy string
+	// DefaultDurationMs holds the default value on creation for the "duration_ms" field.
+	DefaultDurationMs int64
+	// DefaultUsageKnown holds the default value on creation for the "usage_known" field.
+	DefaultUsageKnown bool
 	// DefaultPartitionID holds the default value on creation for the "partition_id" field.
 	DefaultPartitionID string
 	// DefaultPartitionIds holds the default value on creation for the "partition_ids" field.
@@ -150,6 +170,26 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// ByStage orders the results by the stage field.
+func ByStage(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStage, opts...).ToFunc()
+}
+
+// ByStrategy orders the results by the strategy field.
+func ByStrategy(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStrategy, opts...).ToFunc()
+}
+
+// ByDurationMs orders the results by the duration_ms field.
+func ByDurationMs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDurationMs, opts...).ToFunc()
+}
+
+// ByUsageKnown orders the results by the usage_known field.
+func ByUsageKnown(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUsageKnown, opts...).ToFunc()
 }
 
 // ByUserID orders the results by the user_id field.

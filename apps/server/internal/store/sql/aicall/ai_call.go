@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/runtimeconfig"
@@ -38,7 +39,7 @@ func (r *AICallRepository) StartAICall(ctx context.Context, c domain.AICall) err
 	if db == nil {
 		return errors.New("AI call ledger unavailable")
 	}
-	_, err = db.ExecContext(ctx, `INSERT INTO memory_ai_calls(id,user_id,workspace_id,partition_id,role,model_alias,trace_id,job_id,attempt,usage_authority,partition_ids) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'broker',$10)`, c.ID, c.UserID, workspace, c.PartitionID, c.Role, c.ModelAlias, c.TraceID, c.JobID, c.Attempt, dbutilstore.MarshalJSON(security.Partitions(ctx)))
+	_, err = db.ExecContext(ctx, `INSERT INTO memory_ai_calls(id,user_id,workspace_id,partition_id,role,model_alias,trace_id,job_id,attempt,usage_authority,partition_ids,stage,strategy) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, c.ID, c.UserID, workspace, c.PartitionID, c.Role, c.ModelAlias, c.TraceID, c.JobID, c.Attempt, c.UsageAuthority, dbutilstore.MarshalJSON(security.Partitions(ctx)), c.Stage, c.Strategy)
 	return err
 }
 
@@ -56,7 +57,7 @@ func (r *AICallRepository) FinishAICall(ctx context.Context, c domain.AICall) er
 	if db == nil {
 		return errors.New("AI call ledger unavailable")
 	}
-	result, err := db.ExecContext(ctx, `UPDATE memory_ai_calls SET model_version=$5,provider_request_id=$6,broker_usage_id=$7,status=$8,input_tokens=$9,output_tokens=$10,reported_cost=$11,currency=$12,failure_code=$13,updated_at=now() WHERE id=$1 AND user_id=$2 AND workspace_id=$3 AND partition_id=$4 AND status IN('started','unknown')`, c.ID, c.UserID, workspace, c.PartitionID, c.ModelVersion, c.ProviderRequestID, c.BrokerUsageID, c.Status, c.InputTokens, c.OutputTokens, c.ReportedCost, c.Currency, c.FailureCode)
+	result, err := db.ExecContext(ctx, `UPDATE memory_ai_calls SET model_version=$5,provider_request_id=$6,broker_usage_id=$7,status=$8,input_tokens=$9,output_tokens=$10,reported_cost=$11,currency=$12,failure_code=$13,duration_ms=$14,usage_known=$15,updated_at=now() WHERE id=$1 AND user_id=$2 AND workspace_id=$3 AND partition_id=$4 AND status IN('started','unknown')`, c.ID, c.UserID, workspace, c.PartitionID, c.ModelVersion, c.ProviderRequestID, c.BrokerUsageID, c.Status, c.InputTokens, c.OutputTokens, c.ReportedCost, c.Currency, c.FailureCode, c.DurationMS, c.UsageKnown)
 	if err != nil {
 		return err
 	}
@@ -64,7 +65,7 @@ func (r *AICallRepository) FinishAICall(ctx context.Context, c domain.AICall) er
 		return e
 	} else if n != 1 {
 		var same bool
-		err = db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM memory_ai_calls WHERE id=$1 AND user_id=$2 AND workspace_id=$3 AND partition_id=$4 AND status=$5 AND broker_usage_id=$6 AND provider_request_id=$7 AND model_version=$8 AND input_tokens=$9 AND output_tokens=$10 AND reported_cost=$11 AND currency=$12 AND failure_code=$13)`, c.ID, c.UserID, workspace, c.PartitionID, c.Status, c.BrokerUsageID, c.ProviderRequestID, c.ModelVersion, c.InputTokens, c.OutputTokens, c.ReportedCost, c.Currency, c.FailureCode).Scan(&same)
+		err = db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM memory_ai_calls WHERE id=$1 AND user_id=$2 AND workspace_id=$3 AND partition_id=$4 AND status=$5 AND broker_usage_id=$6 AND provider_request_id=$7 AND model_version=$8 AND input_tokens=$9 AND output_tokens=$10 AND reported_cost=$11 AND currency=$12 AND failure_code=$13 AND duration_ms=$14 AND usage_known=$15)`, c.ID, c.UserID, workspace, c.PartitionID, c.Status, c.BrokerUsageID, c.ProviderRequestID, c.ModelVersion, c.InputTokens, c.OutputTokens, c.ReportedCost, c.Currency, c.FailureCode, c.DurationMS, c.UsageKnown).Scan(&same)
 		if err != nil {
 			return err
 		}
@@ -76,6 +77,10 @@ func (r *AICallRepository) FinishAICall(ctx context.Context, c domain.AICall) er
 }
 
 func (r *AICallRepository) AICalls(ctx context.Context, after string, limit int) ([]domain.AICall, error) {
+	return r.FilteredAICalls(ctx, domain.AIUsageQuery{}, after, limit)
+}
+
+func (r *AICallRepository) FilteredAICalls(ctx context.Context, q domain.AIUsageQuery, after string, limit int) ([]domain.AICall, error) {
 	a, err := scopestore.LifecycleAccess(ctx)
 	if err != nil {
 		return nil, err
@@ -87,7 +92,7 @@ func (r *AICallRepository) AICalls(ctx context.Context, after string, limit int)
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	rows, err := db.QueryContext(ctx, `SELECT id,workspace_id,partition_id,role,model_alias,model_version,trace_id,job_id,attempt,provider_request_id,broker_usage_id,CASE WHEN status='started' THEN 'unknown' ELSE status END,input_tokens,output_tokens,reported_cost,currency,usage_authority,failure_code,created_at,updated_at,partition_ids FROM memory_ai_calls WHERE user_id=$1 AND workspace_id=$2 AND `+`NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(partition_ids) p(id) WHERE NOT (`+storeaccess.PartitionSQL(ctx, "p.id")+`))`+` AND ($3='' OR id>$3) ORDER BY id LIMIT $4`, a.UserID, a.WorkspaceID, after, limit)
+	rows, err := db.QueryContext(ctx, `SELECT id,workspace_id,partition_id,role,model_alias,model_version,trace_id,job_id,attempt,provider_request_id,broker_usage_id,CASE WHEN status='started' THEN 'unknown' ELSE status END,input_tokens,output_tokens,reported_cost,currency,usage_authority,failure_code,created_at,updated_at,partition_ids,stage,strategy,duration_ms,usage_known FROM memory_ai_calls WHERE user_id=$1 AND workspace_id=$2 AND `+`NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(partition_ids) p(id) WHERE NOT (`+storeaccess.PartitionSQL(ctx, "p.id")+`))`+` AND ($3='' OR id>$3) AND ($5::timestamptz IS NULL OR created_at >= $5) AND ($6::timestamptz IS NULL OR created_at < $6) AND ($7='' OR stage=$7) AND ($8='' OR strategy=$8) AND ($9='' OR (CASE WHEN status='started' THEN 'unknown' ELSE status END)=$9) AND ($10='' OR model_alias=$10) ORDER BY id LIMIT $4`, a.UserID, a.WorkspaceID, after, limit, optionalUsageTime(q.Since), optionalUsageTime(q.Until), q.Stage, q.Strategy, q.Status, q.Model)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +101,7 @@ func (r *AICallRepository) AICalls(ctx context.Context, after string, limit int)
 	for rows.Next() {
 		var c domain.AICall
 		var partitions []byte
-		if err = rows.Scan(&c.ID, &c.WorkspaceID, &c.PartitionID, &c.Role, &c.ModelAlias, &c.ModelVersion, &c.TraceID, &c.JobID, &c.Attempt, &c.ProviderRequestID, &c.BrokerUsageID, &c.Status, &c.InputTokens, &c.OutputTokens, &c.ReportedCost, &c.Currency, &c.UsageAuthority, &c.FailureCode, &c.CreatedAt, &c.UpdatedAt, &partitions); err != nil {
+		if err = rows.Scan(&c.ID, &c.WorkspaceID, &c.PartitionID, &c.Role, &c.ModelAlias, &c.ModelVersion, &c.TraceID, &c.JobID, &c.Attempt, &c.ProviderRequestID, &c.BrokerUsageID, &c.Status, &c.InputTokens, &c.OutputTokens, &c.ReportedCost, &c.Currency, &c.UsageAuthority, &c.FailureCode, &c.CreatedAt, &c.UpdatedAt, &partitions, &c.Stage, &c.Strategy, &c.DurationMS, &c.UsageKnown); err != nil {
 			return nil, err
 		}
 		if err = json.Unmarshal(partitions, &c.PartitionIDs); err != nil {
@@ -170,7 +175,7 @@ func (r *AICallRepository) AICall(ctx context.Context, id string) (domain.AICall
 	}
 	var c domain.AICall
 	var partitions []byte
-	err = db.QueryRowContext(ctx, `SELECT id,user_id,workspace_id,partition_id,partition_ids,role,model_alias,model_version,trace_id,job_id,attempt,provider_request_id,broker_usage_id,CASE WHEN status='started' THEN 'unknown' ELSE status END,input_tokens,output_tokens,reported_cost,currency,usage_authority,failure_code,created_at,updated_at FROM memory_ai_calls WHERE id=$1 AND user_id=$2 AND workspace_id=$3 AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(partition_ids) p(id) WHERE NOT (`+storeaccess.PartitionSQL(ctx, "p.id")+`))`, id, a.UserID, a.WorkspaceID).Scan(&c.ID, &c.UserID, &c.WorkspaceID, &c.PartitionID, &partitions, &c.Role, &c.ModelAlias, &c.ModelVersion, &c.TraceID, &c.JobID, &c.Attempt, &c.ProviderRequestID, &c.BrokerUsageID, &c.Status, &c.InputTokens, &c.OutputTokens, &c.ReportedCost, &c.Currency, &c.UsageAuthority, &c.FailureCode, &c.CreatedAt, &c.UpdatedAt)
+	err = db.QueryRowContext(ctx, `SELECT id,user_id,workspace_id,partition_id,partition_ids,role,model_alias,model_version,trace_id,job_id,attempt,provider_request_id,broker_usage_id,CASE WHEN status='started' THEN 'unknown' ELSE status END,input_tokens,output_tokens,reported_cost,currency,usage_authority,failure_code,created_at,updated_at,stage,strategy,duration_ms,usage_known FROM memory_ai_calls WHERE id=$1 AND user_id=$2 AND workspace_id=$3 AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(partition_ids) p(id) WHERE NOT (`+storeaccess.PartitionSQL(ctx, "p.id")+`))`, id, a.UserID, a.WorkspaceID).Scan(&c.ID, &c.UserID, &c.WorkspaceID, &c.PartitionID, &partitions, &c.Role, &c.ModelAlias, &c.ModelVersion, &c.TraceID, &c.JobID, &c.Attempt, &c.ProviderRequestID, &c.BrokerUsageID, &c.Status, &c.InputTokens, &c.OutputTokens, &c.ReportedCost, &c.Currency, &c.UsageAuthority, &c.FailureCode, &c.CreatedAt, &c.UpdatedAt, &c.Stage, &c.Strategy, &c.DurationMS, &c.UsageKnown)
 	if errors.Is(err, sqlpkg.ErrNoRows) {
 		return c, domain.ErrAccessNotFound
 	}
@@ -178,4 +183,11 @@ func (r *AICallRepository) AICall(ctx context.Context, id string) (domain.AICall
 		return c, err
 	}
 	return c, json.Unmarshal(partitions, &c.PartitionIDs)
+}
+
+func optionalUsageTime(t time.Time) any {
+	if t.IsZero() {
+		return nil
+	}
+	return t
 }

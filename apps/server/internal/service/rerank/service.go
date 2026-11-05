@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"memstation/apps/server/internal/aicall"
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/ports"
 	"memstation/apps/server/internal/provider"
@@ -16,10 +17,12 @@ import (
 )
 
 type Service struct {
-	client       *http.Client
-	resolver     provider.ConfigResolver
-	defaultModel string
-	timeout      *runtimeconfig.DurationValue
+	processingStrategy string
+	ledger             ports.AICallRepository
+	client             *http.Client
+	resolver           provider.ConfigResolver
+	defaultModel       string
+	timeout            *runtimeconfig.DurationValue
 }
 
 func NewService(resolver provider.ConfigResolver, defaultModel string, timeout time.Duration) *Service {
@@ -34,7 +37,8 @@ func NewService(resolver provider.ConfigResolver, defaultModel string, timeout t
 	}
 }
 
-func (s *Service) Rerank(ctx context.Context, input domain.RerankInput) ([]domain.RerankResult, error) {
+func (s *Service) Rerank(ctx context.Context, input domain.RerankInput) (out []domain.RerankResult, resultErr error) {
+	ctx = aicall.WithDefaults(ctx, "rerank", s.processingStrategy)
 	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
 
@@ -56,6 +60,11 @@ func (s *Service) Rerank(ctx context.Context, input domain.RerankInput) ([]domai
 	}
 
 	endpoint := strings.TrimRight(runtime.BaseURL, "/") + "/rerank"
+	rec, err := aicall.Start(ctx, s.ledger, input.UserID, "rerank", runtime.Model, "memstation")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { resultErr = errors.Join(resultErr, rec.Finish(ctx, resultErr)) }()
 	raw, _, err := provider.DoJSONRequest(
 		ctx,
 		s.client,
@@ -93,7 +102,7 @@ func (s *Service) Rerank(ctx context.Context, input domain.RerankInput) ([]domai
 		results = response.Data.Results
 	}
 
-	out := make([]domain.RerankResult, 0, len(results))
+	out = make([]domain.RerankResult, 0, len(results))
 	seen := map[int]bool{}
 	for _, item := range results {
 		if item.Index == nil || item.RelevanceScore == nil {
@@ -197,3 +206,7 @@ func rerankHeaders(key string) map[string]string {
 	}
 	return headers
 }
+
+func (s *Service) SetLedger(ledger ports.AICallRepository) { s.ledger = ledger }
+
+func (s *Service) SetProcessingStrategy(strategy string) { s.processingStrategy = strategy }

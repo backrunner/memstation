@@ -99,10 +99,11 @@ type FactLineage struct {
 }
 
 type SearchResult struct {
-	Trace                *RecallTrace     `json:"trace,omitempty"`
-	Memories             []MemoryDocument `json:"memories"`
-	Total                int              `json:"total"`
-	QueryEmbeddingTokens int              `json:"query_embedding_tokens"`
+	EntityRecall         *EntityRecallDiagnostics `json:"entity_recall,omitempty"`
+	Trace                *RecallTrace             `json:"trace,omitempty"`
+	Memories             []MemoryDocument         `json:"memories"`
+	Total                int                      `json:"total"`
+	QueryEmbeddingTokens int                      `json:"query_embedding_tokens"`
 }
 
 type KeywordMatch struct {

@@ -10,6 +10,7 @@ import (
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/service/memoryllm"
+	"memstation/apps/server/internal/service/processing"
 )
 
 type scoreGenerator func(context.Context, memoryllm.Request) (json.RawMessage, error)
@@ -43,5 +44,25 @@ func TestScoreFailuresNeverProduceHeuristicValuesOrWrites(t *testing.T) {
 				t.Fatal("failed scoring wrote memory", keys, err)
 			}
 		})
+	}
+}
+
+func TestLightweightExplicitKeyMemoryWriteDoesNotInvokeScoringLLM(t *testing.T) {
+	policy, err := processing.New(processing.Config{EntityRecallTimeoutMS: 200, Strategy: "lightweight", Endpoint: "http://127.0.0.1:8092", Token: "fixture", Model: "encoder", Revision: "pinned", Splitter: "char", Threshold: .75, MaxSemanticBytes: 4096}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(nil, memorystore.NewInMemoryMemoryRepository())
+	service.SetProcessingPolicy(policy)
+	service.SetScorer(&Scorer{generator: scoreGenerator(func(context.Context, memoryllm.Request) (json.RawMessage, error) {
+		t.Fatal("lightweight explicit write called LLM")
+		return nil, nil
+	})})
+	km, err := service.UpsertKeyMemory(context.Background(), domain.KeyMemory{UserID: "owner", Key: "preferences", Value: "Explicitly supplied preference"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if km.Importance != 1 || km.DecayFactor != 1 || km.Metadata["score_reason"] != "explicit_write" {
+		t.Fatalf("unexpected explicit scores: %+v", km)
 	}
 }

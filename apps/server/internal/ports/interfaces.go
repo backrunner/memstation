@@ -60,6 +60,7 @@ type BlobStore interface {
 }
 
 type MemoryRepository interface {
+	MatchEntityNames(ctx context.Context, userID, generationID, scope string, names []string) ([]domain.EntityNameMatch, error)
 	RecallRelations(ctx context.Context, query domain.RelationQuery) ([]domain.MemoryRelation, error)
 	SearchFactsAt(ctx context.Context, input domain.SearchInput) ([]domain.MemoryDocument, error)
 	ListEntityAliases(ctx context.Context, userID, generationID string) ([]domain.EntityAlias, error)

@@ -126,6 +126,7 @@ func applyExtractionBatch(ctx context.Context, input Input, user, conversation s
 				return errors.New("invalid LLM entity identity")
 			}
 			doc.Metadata["title"] = item.CanonicalName
+			doc.Metadata["canonical_name"] = item.CanonicalName
 			doc.Metadata["entity_kind"] = item.EntityKind
 			doc.Metadata["entity_scope"] = metadataString(input.Conversation.Metadata, "entity_scope")
 			if len(doc.SourceRefs) > 0 || security.WritePartition(ctx) != "" {

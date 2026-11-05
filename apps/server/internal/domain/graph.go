@@ -27,9 +27,10 @@ func (q RelationQuery) Normalized() RelationQuery {
 	q.MaxEdgesPerNode = boundedGraphInt(q.MaxEdgesPerNode, 24, 64)
 	q.MaxEdges = boundedGraphInt(q.MaxEdges, 256, 1024)
 	q.MaxNodes = boundedGraphInt(q.MaxNodes, 128, 512)
-	if q.Timeout <= 0 || q.Timeout > time.Second {
+	if q.Timeout <= 0 {
 		q.Timeout = 150 * time.Millisecond
 	}
+	q.Timeout = min(q.Timeout, time.Second)
 	if q.MinWeight <= 0 {
 		q.MinWeight = 0.05
 	}
@@ -48,7 +49,7 @@ func boundedGraphInt(value, fallback, ceiling int) int {
 
 func ValidateRelationMode(mode string) error {
 	switch mode {
-	case "", "neighborhood", "evidence", "dependencies", "dependents", "conflicts":
+	case "", "neighborhood", "evidence", "dependencies", "dependents", "conflicts", "entity_mentions":
 		return nil
 	}
 	return fmt.Errorf("invalid relation_mode %q", mode)
@@ -56,6 +57,8 @@ func ValidateRelationMode(mode string) error {
 
 func RelationTypesForMode(mode string) []string {
 	switch mode {
+	case "entity_mentions":
+		return []string{MemoryRelationMentionsEntity}
 	case "evidence":
 		return []string{MemoryRelationSupports, MemoryRelationDerivedFrom, "summarized_into"}
 	case "dependencies", "dependents":

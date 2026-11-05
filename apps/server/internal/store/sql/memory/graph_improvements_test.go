@@ -52,7 +52,7 @@ func graphStorageContract(t *testing.T, r ports.MemoryRepository) {
 			t.Fatal(err)
 		}
 	}
-	edges, err := r.RecallRelations(ctx, domain.RelationQuery{UserID: u, GenerationID: g, NodeIDs: []string{u + "hub"}, MaxEdgesPerNode: 5, MaxEdges: 4, MaxNodes: 4, Mode: "dependencies"})
+	edges, err := r.RecallRelations(ctx, domain.RelationQuery{UserID: u, GenerationID: g, NodeIDs: []string{u + "hub"}, MaxEdgesPerNode: 5, MaxEdges: 4, MaxNodes: 3, Mode: "dependencies"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,5 +172,19 @@ func graphStorageContract(t *testing.T, r ports.MemoryRepository) {
 	}
 	if !found {
 		t.Fatal("manual edit moved implicit fact validity to edit time")
+	}
+}
+
+func TestWalkRelationsAdmitsNeighboursWhenSeedsFillNodeBudget(t *testing.T) {
+	q := domain.RelationQuery{NodeIDs: []string{"seed-a", "seed-b"}, MaxNodes: 2, MaxHops: 1, MaxEdges: 16, MaxEdgesPerNode: 8}
+	edges, err := walkRelations(context.Background(), q, func(context.Context, []string) ([]domain.MemoryRelation, error) {
+		return []domain.MemoryRelation{
+			{ID: "r1", SrcNodeID: "seed-a", DstNodeID: "near-1", RelationType: domain.MemoryRelationDerivedFrom, Weight: 1},
+			{ID: "r2", SrcNodeID: "seed-a", DstNodeID: "near-2", RelationType: domain.MemoryRelationDerivedFrom, Weight: .9},
+			{ID: "r3", SrcNodeID: "seed-a", DstNodeID: "over-budget", RelationType: domain.MemoryRelationDerivedFrom, Weight: .8},
+		}, nil
+	})
+	if err != nil || len(edges) != 2 || edges[0].ID != "r1" || edges[1].ID != "r2" {
+		t.Fatalf("edges=%+v err=%v", edges, err)
 	}
 }

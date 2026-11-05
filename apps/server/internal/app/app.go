@@ -55,6 +55,7 @@ import (
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
 	"memstation/apps/server/internal/service/memoryllm"
 	multimodalservice "memstation/apps/server/internal/service/multimodal"
+	"memstation/apps/server/internal/service/processing"
 	providerconfigservice "memstation/apps/server/internal/service/providerconfig"
 	rerankservice "memstation/apps/server/internal/service/rerank"
 	settingsservice "memstation/apps/server/internal/service/settings"
@@ -247,9 +248,11 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	embeddingClient := embeddingservice.NewService(providerCfg.Resolver(providerconfigservice.ScopeEmbedding), settings, cfg.ProviderTimeout)
 	vectorStore.SetEmbedder(embeddingClient)
 	aiLedger := aicallstore.NewAICallRepository(dbHandle)
+	embeddingClient.SetLedger(aiLedger)
+	embeddingClient.SetProcessingStrategy(cfg.MemoryProcessing.Strategy)
 	var broker *aibroker.Client
 	if cfg.MemoryAIBackend == "broker" {
-		broker, err = aibroker.New(aibroker.Config{BaseURL: cfg.MemoryBrokerBaseURL, Credential: cfg.MemoryBrokerCredential, Timeout: cfg.ProviderTimeout, GenerationTimeout: cfg.MemoryLLMTimeout, Roles: map[string]string{"summary": cfg.MemoryBrokerSummaryAlias, "analysis": cfg.MemoryBrokerAnalysisAlias, "embedding": cfg.MemoryBrokerEmbeddingAlias, "rerank": cfg.MemoryBrokerRerankAlias}, Embedding: domain.EmbeddingIdentity{ModelVersion: cfg.MemoryBrokerEmbeddingModel, Dimensions: cfg.MemoryBrokerEmbeddingDimensions, Fingerprint: cfg.MemoryBrokerEmbeddingFingerprint}}, aiLedger)
+		broker, err = aibroker.New(aibroker.Config{Strategy: cfg.MemoryProcessing.Strategy, BaseURL: cfg.MemoryBrokerBaseURL, Credential: cfg.MemoryBrokerCredential, Timeout: cfg.ProviderTimeout, GenerationTimeout: cfg.MemoryLLMTimeout, Roles: map[string]string{"summary": cfg.MemoryBrokerSummaryAlias, "analysis": cfg.MemoryBrokerAnalysisAlias, "embedding": cfg.MemoryBrokerEmbeddingAlias, "rerank": cfg.MemoryBrokerRerankAlias}, Embedding: domain.EmbeddingIdentity{ModelVersion: cfg.MemoryBrokerEmbeddingModel, Dimensions: cfg.MemoryBrokerEmbeddingDimensions, Fingerprint: cfg.MemoryBrokerEmbeddingFingerprint}}, aiLedger)
 		if err != nil {
 			return nil, err
 		}
@@ -273,6 +276,8 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		HopDecayExponent: cfg.MemoryRelationHopDecayExponent,
 	})
 	reranker := rerankservice.NewService(providerCfg.Resolver(providerconfigservice.ScopeRerank), cfg.RerankModel, cfg.ProviderTimeout)
+	reranker.SetLedger(aiLedger)
+	reranker.SetProcessingStrategy(cfg.MemoryProcessing.Strategy)
 	memoryEngine.SetReranker(reranker)
 	if broker != nil {
 		memoryEngine.SetReranker(broker)
@@ -313,11 +318,18 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	memories := memoryservice.NewService(memoryEngine, memoryRepo)
 	memories.SetKeyMemoryCache(jsonCache)
 	memories.SetVectorStore(vectorStore)
-	memoryLLM := memoryllm.NewClientWithOptions(internalProviderRegistry, settings, cfg.MemoryLLMTimeout, memoryllm.Options{ReasoningEffort: cfg.MemoryReasoningEffort, MinOutputTokens: cfg.MemoryMinOutputTokens, MaxOutputTokens: cfg.MemoryMaxOutputTokens})
+	processor, err := processing.New(cfg.MemoryProcessing, aiLedger)
+	if err != nil {
+		return nil, err
+	}
+	memoryEngine.SetEntityRecall(processor, time.Duration(cfg.MemoryProcessing.EntityRecallTimeoutMS)*time.Millisecond)
+	memoryLLM := memoryllm.NewClientWithOptions(internalProviderRegistry, settings, cfg.MemoryLLMTimeout, memoryllm.Options{Strategy: cfg.MemoryProcessing.Strategy, ReasoningEffort: cfg.MemoryReasoningEffort, MinOutputTokens: cfg.MemoryMinOutputTokens, MaxOutputTokens: cfg.MemoryMaxOutputTokens})
 	memoryLLM.SetInputPreparer(inputPreparer)
+	memoryLLM.SetLedger(aiLedger)
 	if broker != nil {
 		memoryLLM.SetRuntime(broker)
 	}
+	memories.SetProcessingPolicy(processor)
 	memoryScorer := memoryservice.NewScorerWithGenerator(memoryLLM)
 	memories.SetScorer(memoryScorer)
 	memories.SetGenerationService(generations)
@@ -326,6 +338,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	admin := adminservice.NewService(conversationRepo, mediaRepo, memoryRepo, settings, audit, models)
 	admin.SetGenerationService(generations)
 	admin.SetMemoryProcessor(analysis, cfg.KeyMemoryAutoKeys)
+	admin.SetProcessingPolicy(processor)
 	usage := usageservice.NewService(dbHandle, conversationRepo)
 	admin.AttachUserRuntime(users, apiKeys, usage)
 	sessionManager := security.NewAdminSessionManager(cfg.MasterKey, 8*time.Hour)
@@ -377,7 +390,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	health.Add("deletion_history", observability.CheckFunc(memoryGate.Verify))
 	lifecycle := lifecycleservice.NewService(lifecycleRepo)
 	lifecycle.SetReady(memoryGate.Check)
-	memoryRuntime := domain.MemoryRuntime{AIBackend: cfg.MemoryAIBackend, RoleAliases: map[string]string{}, UsageAuthority: "memstation"}
+	memoryRuntime := domain.MemoryRuntime{Processing: cfg.MemoryProcessing.Public(), AIBackend: cfg.MemoryAIBackend, RoleAliases: map[string]string{}, UsageAuthority: "memstation"}
 	if broker != nil {
 		memoryRuntime.RoleAliases = map[string]string{"summary": cfg.MemoryBrokerSummaryAlias, "analysis": cfg.MemoryBrokerAnalysisAlias, "embedding": cfg.MemoryBrokerEmbeddingAlias, "rerank": cfg.MemoryBrokerRerankAlias}
 		memoryRuntime.Embedding = domain.EmbeddingIdentity{ModelVersion: cfg.MemoryBrokerEmbeddingModel, Dimensions: cfg.MemoryBrokerEmbeddingDimensions, Fingerprint: cfg.MemoryBrokerEmbeddingFingerprint}
@@ -392,6 +405,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 	})
 
 	publisher := worker.NewPublisher(logger, asynqClient)
+	publisher.SetProcessingPolicy(cfg.MemoryProcessing.Identity())
 	relay := worker.NewRelay(logger, outboxRepo, publisher)
 	scheduler := worker.NewScheduler(logger, relay, conversations, cfg.ConversationTimeout)
 	relay.SetTaskAuthority(ingestionRepo)
@@ -473,6 +487,7 @@ func buildContainer(ctx context.Context) (*Container, error) {
 		},
 	})
 	workerMux := worker.NewServeMux(logger, worker.Services{
+		Processing:           processor,
 		AcknowledgeReceipt:   ingestionRepo.AcknowledgeReceipt,
 		DataReady:            memoryGate.Check,
 		ProcessOperation:     lifecycleRepo.ProcessOperation,

@@ -69,7 +69,7 @@ func TestLosslessSlicesSurviveGenerationRebuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	repo := memorystore.NewInMemoryMemoryRepository()
-	svc := Services{Generations: gens, Memories: repo, Vectors: vector.NewPGVectorStore(nil), Publisher: &recordingPublisher{}, Analysis: analysisservice.NewService(memoryllmfixture.Generator{}), TaskAuthority: fixtureTaskAuthority{}}
+	svc := Services{Processing: fixtureProcessing(t), Generations: gens, Memories: repo, Vectors: vector.NewPGVectorStore(nil), Publisher: &recordingPublisher{}, Analysis: analysisservice.NewService(memoryllmfixture.Generator{}), TaskAuthority: fixtureTaskAuthority{}}
 	task := newTask(t, TypeMemoryRebuildConversation, MemoryRebuildConversationPayload{UserID: "u", GenerationID: gen.GenerationID, SnapshotID: snapshot.SnapshotID})
 	handler := handleMemoryRebuildConversation(nilLogger(), svc)
 	if err = handler(ctx, task); err != nil {

@@ -64,6 +64,6 @@ type SearchMemoryItem {
   lineage: FactLineage
   related: [RelatedMemory!]!
 }
-type SearchMemoriesResult { memories: [SearchMemoryItem!]!, total: Int!, queryEmbeddingTokens: Int! }
+type SearchMemoriesResult { memories: [SearchMemoryItem!]!, total: Int!, queryEmbeddingTokens: Int!, entityRecall: JSON }
 type TokenUsageStats { inputTokens: Int!, outputTokens: Int!, totalTokens: Int! }
 type SystemOverview { activeConversations: Int!, keyMemoryCount: Int!, recentAuditEvents: Int! }

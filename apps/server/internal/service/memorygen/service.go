@@ -61,7 +61,7 @@ func (s *Service) CaptureSourceSnapshot(ctx context.Context, conversation domain
 
 func snapshotFromConversation(conversation domain.ConversationRecord) domain.MemorySourceSnapshot {
 	now := time.Now().UTC()
-	metadata := cloneMap(conversation.Metadata)
+	metadata := domain.PublicMemoryMetadata(conversation.Metadata)
 	if metadata == nil {
 		metadata = map[string]any{}
 	}

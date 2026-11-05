@@ -3,6 +3,7 @@ package memoryllm
 import (
 	"context"
 	"errors"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -96,6 +97,27 @@ func TestConfiguredRoleDefaultProviderAndTokenBudget(t *testing.T) {
 	}
 	if !strings.Contains(a.request.Messages[0].Text, "untrusted data") {
 		t.Fatal("missing source trust boundary")
+	}
+}
+
+func TestTemperatureIsSentAndBoundToGenerationIdentity(t *testing.T) {
+	a := &recordingAdapter{response: `{}`}
+	settings := settingsservice.NewService(nil, nil, "chat", "summary", "analysis", "embedding", 2048)
+	registry := provider.NewRegistry(domain.ProviderAnthropic, a)
+	temperature := 0.0
+	c := NewClientWithOptions(registry, settings, time.Second, Options{Temperature: &temperature})
+	if c.GenerationPolicyID() == NewClient(registry, settings, time.Second).GenerationPolicyID() {
+		t.Fatal("explicit zero reused provider-default identity")
+	}
+	temperature = 1 // Caller mutation cannot change a frozen generation policy.
+	if _, err := c.Generate(context.Background(), Request{UserID: "owner", Role: "analysis_model", Task: "analysis.extract"}); err != nil || a.request.Temperature == nil || *a.request.Temperature != 0 {
+		t.Fatal("temperature not sent", err)
+	}
+	for _, value := range []float64{-1, 3, math.NaN(), math.Inf(1)} {
+		c := NewClientWithOptions(registry, settings, time.Second, Options{Temperature: &value})
+		if _, err := c.Generate(context.Background(), Request{UserID: "owner", Role: "analysis_model"}); err == nil || a.calls != 1 {
+			t.Fatal("invalid temperature reached provider")
+		}
 	}
 }
 

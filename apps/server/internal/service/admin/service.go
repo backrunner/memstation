@@ -8,7 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"memstation/apps/server/internal/aicall"
 	"memstation/apps/server/internal/security"
+	"memstation/apps/server/internal/service/processing"
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/modelcap"
@@ -23,18 +25,19 @@ import (
 )
 
 type Service struct {
-	conversations ports.ConversationRepository
-	media         ports.MediaRepository
-	memories      ports.MemoryRepository
-	settings      *settingssvc.Service
-	audit         *auditsvc.Service
-	models        *modelcap.Registry
-	users         *userservice.Service
-	apiKeys       *apikeyservice.Service
-	usage         *usageservice.Service
-	processor     *analysisservice.Service
-	autoKeys      []string
-	generations   *memorygenservice.Service
+	conversations    ports.ConversationRepository
+	media            ports.MediaRepository
+	memories         ports.MemoryRepository
+	settings         *settingssvc.Service
+	audit            *auditsvc.Service
+	models           *modelcap.Registry
+	users            *userservice.Service
+	apiKeys          *apikeyservice.Service
+	usage            *usageservice.Service
+	processor        *analysisservice.Service
+	processingPolicy *processing.Service
+	autoKeys         []string
+	generations      *memorygenservice.Service
 }
 
 type ConversationListItem = domain.ConversationListItem
@@ -216,14 +219,19 @@ func (s *Service) SetMemoryProcessor(processor *analysisservice.Service, autoKey
 }
 
 func (s *Service) PreviewMemory(ctx context.Context, userID, conversationID string, messages []domain.UnifiedMessage) (MemoryPreview, error) {
-	if s.processor == nil {
-		return MemoryPreview{}, fmt.Errorf("memory LLM is not configured")
-	}
 	if conversationID == "" {
 		conversationID = "preview"
 	}
 	now := time.Now().UTC()
 	input := analysisservice.Input{UserID: userID, ConversationID: conversationID, Conversation: domain.ConversationRecord{UserID: userID, ConversationID: conversationID, Messages: messages}}
+	ctx = aicall.WithMetadata(ctx, "preview", s.processingPolicy.Config().Strategy)
+	local, promote, err := s.previewLightweight(ctx, input, now)
+	if err != nil || !promote {
+		return local, err
+	}
+	if s.processor == nil {
+		return MemoryPreview{}, fmt.Errorf("memory LLM is not configured")
+	}
 	generated, err := s.processor.SummarizeConversation(ctx, input)
 	if err != nil {
 		return MemoryPreview{}, err
@@ -254,8 +262,9 @@ func (s *Service) PreviewMemory(ctx context.Context, userID, conversationID stri
 	preview := MemoryPreview{
 		ConversationID: conversationID, SummaryStatus: "preview", AnalysisStatus: "preview", Keywords: generated.Keywords,
 		Summary: map[string]any{"id": input.Summary.ID, "type": "summary", "content": generated.Summary, "topic_label": generated.TopicLabel, "importance": generated.Importance, "decay_factor": generated.DecayFactor, "activity_at": now, "time_tier": domain.ClassifyTimeTier(now, now), "extraction_method": "llm"},
-		Facts:   []map[string]any{}, GenericItems: []map[string]any{}, KeyMemories: []map[string]any{}, Metadata: map[string]any{"message_count": len(messages), "extraction_method": "llm"},
+		Facts:   []map[string]any{}, GenericItems: []map[string]any{}, KeyMemories: []map[string]any{}, Metadata: map[string]any{"message_count": len(messages), "extraction_method": "llm", "processing_strategy": s.processingPolicy.Config().Strategy, "semantic_status": "preview"},
 	}
+	preview.GenericItems = append(preview.GenericItems, local.GenericItems...)
 	for _, fact := range result.Facts {
 		preview.Facts = append(preview.Facts, previewFactMap(fact, now))
 	}

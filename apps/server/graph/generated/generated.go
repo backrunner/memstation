@@ -73,6 +73,7 @@ type ComplexityRoot struct {
 		BrokerUsageID     func(childComplexity int) int
 		CreatedAt         func(childComplexity int) int
 		Currency          func(childComplexity int) int
+		DurationMS        func(childComplexity int) int
 		FailureCode       func(childComplexity int) int
 		ID                func(childComplexity int) int
 		InputTokens       func(childComplexity int) int
@@ -84,10 +85,13 @@ type ComplexityRoot struct {
 		ProviderRequestID func(childComplexity int) int
 		ReportedCost      func(childComplexity int) int
 		Role              func(childComplexity int) int
+		Stage             func(childComplexity int) int
 		Status            func(childComplexity int) int
+		Strategy          func(childComplexity int) int
 		TraceID           func(childComplexity int) int
 		UpdatedAt         func(childComplexity int) int
 		UsageAuthority    func(childComplexity int) int
+		UsageKnown        func(childComplexity int) int
 		WorkspaceID       func(childComplexity int) int
 	}
 
@@ -285,6 +289,7 @@ type ComplexityRoot struct {
 	MemoryRuntimeInfo struct {
 		AIBackend      func(childComplexity int) int
 		Embedding      func(childComplexity int) int
+		Processing     func(childComplexity int) int
 		RoleAliases    func(childComplexity int) int
 		UsageAuthority func(childComplexity int) int
 	}
@@ -354,13 +359,14 @@ type ComplexityRoot struct {
 		IngestionProgress           func(childComplexity int, scope WorkspaceScope, id string) int
 		KeyMemories                 func(childComplexity int) int
 		Me                          func(childComplexity int) int
-		MemoryBackgroundUsage       func(childComplexity int, scope WorkspaceScope, after *string, limit *int) int
+		MemoryBackgroundUsage       func(childComplexity int, scope WorkspaceScope, after *string, limit *int, since *time.Time, until *time.Time, stage *string, strategy *string, status *string, model *string) int
 		MemoryCandidates            func(childComplexity int, scope WorkspaceScope, id *string, after *string) int
 		MemoryControl               func(childComplexity int, scope WorkspaceScope, after *string, limit *int) int
 		MemoryOperation             func(childComplexity int, scope WorkspaceScope, id string) int
 		MemoryPublications          func(childComplexity int, scope WorkspaceScope, after *string) int
 		MemoryRecord                func(childComplexity int, scope WorkspaceScope, id string) int
 		MemorySummaries             func(childComplexity int) int
+		MemoryUsageReport           func(childComplexity int, scope WorkspaceScope, since *time.Time, until *time.Time, stage *string, strategy *string, status *string, model *string) int
 		SearchMemories              func(childComplexity int, query string, topN *int, asOf *string, knownAt *string, relationMode *string, entityScope *string) int
 		SourceDetail                func(childComplexity int, scope WorkspaceScope, id string) int
 		SystemOverview              func(childComplexity int) int
@@ -384,6 +390,7 @@ type ComplexityRoot struct {
 	}
 
 	SearchMemoriesResult struct {
+		EntityRecall         func(childComplexity int) int
 		Memories             func(childComplexity int) int
 		QueryEmbeddingTokens func(childComplexity int) int
 		Total                func(childComplexity int) int
@@ -522,6 +529,8 @@ type MemoryGenerationInfoResolver interface {
 	Metadata(ctx context.Context, obj *domain.MemoryGeneration) (any, error)
 }
 type MemoryRuntimeInfoResolver interface {
+	Processing(ctx context.Context, obj *domain.MemoryRuntime) (any, error)
+
 	RoleAliases(ctx context.Context, obj *domain.MemoryRuntime) (any, error)
 }
 type MutationResolver interface {
@@ -575,7 +584,8 @@ type QueryResolver interface {
 	MemoryCandidates(ctx context.Context, scope WorkspaceScope, id *string, after *string) ([]*domain.MemoryCandidate, error)
 	MemoryOperation(ctx context.Context, scope WorkspaceScope, id string) (*domain.MemoryOperation, error)
 	MemoryPublications(ctx context.Context, scope WorkspaceScope, after *string) ([]*domain.MemoryPublication, error)
-	MemoryBackgroundUsage(ctx context.Context, scope WorkspaceScope, after *string, limit *int) ([]*domain.AICall, error)
+	MemoryUsageReport(ctx context.Context, scope WorkspaceScope, since *time.Time, until *time.Time, stage *string, strategy *string, status *string, model *string) (any, error)
+	MemoryBackgroundUsage(ctx context.Context, scope WorkspaceScope, after *string, limit *int, since *time.Time, until *time.Time, stage *string, strategy *string, status *string, model *string) ([]*domain.AICall, error)
 	WorkspaceAgentDetail(ctx context.Context, scope WorkspaceScope, agent string) (*domain.AgentDetail, error)
 	WorkspaceMemoryGenerations(ctx context.Context, scope WorkspaceScope) ([]*domain.MemoryGeneration, error)
 	WorkspaceMemoryCapabilities(ctx context.Context, scope WorkspaceScope) (*domain.MemoryCapabilities, error)
@@ -721,6 +731,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.BackgroundCall.Currency(childComplexity), true
+	case "BackgroundCall.duration_ms":
+		if e.ComplexityRoot.BackgroundCall.DurationMS == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BackgroundCall.DurationMS(childComplexity), true
 	case "BackgroundCall.failure_code":
 		if e.ComplexityRoot.BackgroundCall.FailureCode == nil {
 			break
@@ -787,12 +803,24 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.BackgroundCall.Role(childComplexity), true
+	case "BackgroundCall.stage":
+		if e.ComplexityRoot.BackgroundCall.Stage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BackgroundCall.Stage(childComplexity), true
 	case "BackgroundCall.status":
 		if e.ComplexityRoot.BackgroundCall.Status == nil {
 			break
 		}
 
 		return e.ComplexityRoot.BackgroundCall.Status(childComplexity), true
+	case "BackgroundCall.strategy":
+		if e.ComplexityRoot.BackgroundCall.Strategy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BackgroundCall.Strategy(childComplexity), true
 	case "BackgroundCall.trace_id":
 		if e.ComplexityRoot.BackgroundCall.TraceID == nil {
 			break
@@ -811,6 +839,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.BackgroundCall.UsageAuthority(childComplexity), true
+	case "BackgroundCall.usage_known":
+		if e.ComplexityRoot.BackgroundCall.UsageKnown == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BackgroundCall.UsageKnown(childComplexity), true
 	case "BackgroundCall.workspace_id":
 		if e.ComplexityRoot.BackgroundCall.WorkspaceID == nil {
 			break
@@ -1704,6 +1738,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.MemoryRuntimeInfo.Embedding(childComplexity), true
+	case "MemoryRuntimeInfo.processing":
+		if e.ComplexityRoot.MemoryRuntimeInfo.Processing == nil {
+			break
+		}
+
+		return e.ComplexityRoot.MemoryRuntimeInfo.Processing(childComplexity), true
 	case "MemoryRuntimeInfo.role_aliases":
 		if e.ComplexityRoot.MemoryRuntimeInfo.RoleAliases == nil {
 			break
@@ -2179,7 +2219,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.MemoryBackgroundUsage(childComplexity, args["scope"].(WorkspaceScope), args["after"].(*string), args["limit"].(*int)), true
+		return e.ComplexityRoot.Query.MemoryBackgroundUsage(childComplexity, args["scope"].(WorkspaceScope), args["after"].(*string), args["limit"].(*int), args["since"].(*time.Time), args["until"].(*time.Time), args["stage"].(*string), args["strategy"].(*string), args["status"].(*string), args["model"].(*string)), true
 	case "Query.memoryCandidates":
 		if e.ComplexityRoot.Query.MemoryCandidates == nil {
 			break
@@ -2241,6 +2281,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.MemorySummaries(childComplexity), true
+	case "Query.memoryUsageReport":
+		if e.ComplexityRoot.Query.MemoryUsageReport == nil {
+			break
+		}
+
+		args, err := ec.field_Query_memoryUsageReport_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.MemoryUsageReport(childComplexity, args["scope"].(WorkspaceScope), args["since"].(*time.Time), args["until"].(*time.Time), args["stage"].(*string), args["strategy"].(*string), args["status"].(*string), args["model"].(*string)), true
 	case "Query.searchMemories":
 		if e.ComplexityRoot.Query.SearchMemories == nil {
 			break
@@ -2390,6 +2441,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.RelatedMemory.Weight(childComplexity), true
 
+	case "SearchMemoriesResult.entityRecall":
+		if e.ComplexityRoot.SearchMemoriesResult.EntityRecall == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SearchMemoriesResult.EntityRecall(childComplexity), true
 	case "SearchMemoriesResult.memories":
 		if e.ComplexityRoot.SearchMemoriesResult.Memories == nil {
 			break
@@ -2998,7 +3055,7 @@ type SourceInfo { id: ID!, revision: Long!, speaker_actor_id: ID!, status: Strin
 type MemoryJobInfo { generation_id: ID!, id: ID!, queue: String!, operation_id: ID, user_id: ID!, workspace_id: ID!, partition_id: ID!, conversation_id: ID!, task_type: String!, status: String!, attempt: Int!, failure_code: String, next_retry_at: Time }
 type MemoryControlInfo { actors: [ActorInfo!]!, sources: [SourceInfo!]!, receipts: [IngestionProgress!]!, jobs: [MemoryJobInfo!]!, operations: [LifecycleOperation!]!, limit: Int!, nextCursor: String! }
 type MemoryRecord { kind: String!, visibility: String!, valid_from: Time, valid_to: Time, id: ID!, node_id: ID!, workspace_id: ID!, partition_id: ID, generation_id: ID!, content: String!, subject_actor_ids: [ID!]!, source_refs: [SourceReference!]!, revision: Long!, status: String! }
-type BackgroundCall { id: ID!, workspace_id: ID!, partition_ids: [ID!]!, role: String!, model_alias: String!, model_version: String!, trace_id: String!, job_id: String!, attempt: Int!, provider_request_id: String!, broker_usage_id: String!, status: String!, input_tokens: Int!, output_tokens: Int!, reported_cost: String!, currency: String!, usage_authority: String!, failure_code: String!, created_at: Time!, updated_at: Time! }
+type BackgroundCall { stage:String!, strategy:String!, duration_ms:Long!, usage_known:Boolean!, id: ID!, workspace_id: ID!, partition_ids: [ID!]!, role: String!, model_alias: String!, model_version: String!, trace_id: String!, job_id: String!, attempt: Int!, provider_request_id: String!, broker_usage_id: String!, status: String!, input_tokens: Int!, output_tokens: Int!, reported_cost: String!, currency: String!, usage_authority: String!, failure_code: String!, created_at: Time!, updated_at: Time! }
 extend type Query {
  workspaceDirectory(user: ID = "", after: String = "", query: String = "", limit: Int = 50): WorkspaceDirectory!
  workspaceIntegrations(scope: WorkspaceScope!): [IntegrationInfo!]!
@@ -3011,7 +3068,8 @@ extend type Query {
  memoryCandidates(scope: WorkspaceScope!, id: ID = "", after: String = ""): [CandidateRecord!]!
  memoryOperation(scope: WorkspaceScope!, id: ID!): LifecycleOperation!
  memoryPublications(scope: WorkspaceScope!, after: String = ""): [PublicationRecord!]!
- memoryBackgroundUsage(scope: WorkspaceScope!, after: String = "", limit: Int = 50): [BackgroundCall!]!
+ memoryUsageReport(scope:WorkspaceScope!, since:Time, until:Time, stage:String="", strategy:String="", status:String="", model:String=""):JSON!
+ memoryBackgroundUsage(scope: WorkspaceScope!, after: String = "", limit: Int = 50, since:Time, until:Time, stage:String="", strategy:String="", status:String="", model:String=""): [BackgroundCall!]!
 }
 extend type Mutation {
  reconcileBackgroundUsage(scope: WorkspaceScope!, id: ID!): BackgroundCall!
@@ -3037,7 +3095,7 @@ extend type Query {workspaceAgentDetail(scope: WorkspaceScope!, agent: ID!): Wor
 
 type MemoryGenerationInfo {generation_id: ID!, user_id: ID!, workspace_id: ID!, status: String!, scope: String!, conversation_id: ID, is_active: Boolean!, structure_version: Int!, embedding_version: Int!, embedding_model: String!, activate_on_success: Boolean!, source_count: Int!, processed_count: Int!, embedding_count: Int!, failure_count: Int!, last_error: String, metadata: JSON, created_at: Time!, updated_at: Time!, activated_at: Time}
 type MemoryCapabilitiesInfo {contract_version: String!, server_version: String!, status: String!, capabilities: JSON!, limitations: [String!]!, runtime: MemoryRuntimeInfo!}
-type MemoryRuntimeInfo {ai_backend: String!, role_aliases: JSON!, embedding: EmbeddingIdentityInfo!, usage_authority: String!}
+type MemoryRuntimeInfo {processing:JSON!,ai_backend: String!, role_aliases: JSON!, embedding: EmbeddingIdentityInfo!, usage_authority: String!}
 type EmbeddingIdentityInfo {model_version: String!, dimensions: Int!, fingerprint: String!}
 extend type Query {workspaceMemoryGenerations(scope: WorkspaceScope!): [MemoryGenerationInfo!]!, workspaceMemoryCapabilities(scope: WorkspaceScope!): MemoryCapabilitiesInfo!}
 extend type Mutation {rebuildWorkspaceMemory(scope: WorkspaceScope!, embedding_model: String = "", activate_on_success: Boolean = true): MemoryGenerationInfo!, activateWorkspaceGeneration(scope: WorkspaceScope!, id: ID!): MemoryGenerationInfo!, discardWorkspaceGeneration(scope: WorkspaceScope!, id: ID!): MemoryGenerationInfo!}
@@ -3108,7 +3166,7 @@ type SearchMemoryItem {
   lineage: FactLineage
   related: [RelatedMemory!]!
 }
-type SearchMemoriesResult { memories: [SearchMemoryItem!]!, total: Int!, queryEmbeddingTokens: Int! }
+type SearchMemoriesResult { memories: [SearchMemoryItem!]!, total: Int!, queryEmbeddingTokens: Int!, entityRecall: JSON }
 type TokenUsageStats { inputTokens: Int!, outputTokens: Int!, totalTokens: Int! }
 type SystemOverview { activeConversations: Int!, keyMemoryCount: Int!, recentAuditEvents: Int! }
 `, BuiltIn: false},
@@ -3165,6 +3223,14 @@ func (ec *executionContext) childFields_AuditEvent(ctx context.Context, field gr
 
 func (ec *executionContext) childFields_BackgroundCall(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
+	case "stage":
+		return ec.fieldContext_BackgroundCall_stage(ctx, field)
+	case "strategy":
+		return ec.fieldContext_BackgroundCall_strategy(ctx, field)
+	case "duration_ms":
+		return ec.fieldContext_BackgroundCall_duration_ms(ctx, field)
+	case "usage_known":
+		return ec.fieldContext_BackgroundCall_usage_known(ctx, field)
 	case "id":
 		return ec.fieldContext_BackgroundCall_id(ctx, field)
 	case "workspace_id":
@@ -3593,6 +3659,8 @@ func (ec *executionContext) childFields_MemoryRecord(ctx context.Context, field 
 
 func (ec *executionContext) childFields_MemoryRuntimeInfo(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
+	case "processing":
+		return ec.fieldContext_MemoryRuntimeInfo_processing(ctx, field)
 	case "ai_backend":
 		return ec.fieldContext_MemoryRuntimeInfo_ai_backend(ctx, field)
 	case "role_aliases":
@@ -3685,6 +3753,8 @@ func (ec *executionContext) childFields_SearchMemoriesResult(ctx context.Context
 		return ec.fieldContext_SearchMemoriesResult_total(ctx, field)
 	case "queryEmbeddingTokens":
 		return ec.fieldContext_SearchMemoriesResult_queryEmbeddingTokens(ctx, field)
+	case "entityRecall":
+		return ec.fieldContext_SearchMemoriesResult_entityRecall(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type SearchMemoriesResult", field.Name)
 }
@@ -4726,6 +4796,54 @@ func (ec *executionContext) field_Query_memoryBackgroundUsage_args(ctx context.C
 		return nil, err
 	}
 	args["limit"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "since",
+		func(ctx context.Context, v any) (*time.Time, error) {
+			return ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["since"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "until",
+		func(ctx context.Context, v any) (*time.Time, error) {
+			return ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["until"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "stage",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOString2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["stage"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "strategy",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOString2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["strategy"] = arg6
+	arg7, err := graphql.ProcessArgField(ctx, rawArgs, "status",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOString2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["status"] = arg7
+	arg8, err := graphql.ProcessArgField(ctx, rawArgs, "model",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOString2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["model"] = arg8
 	return args, nil
 }
 
@@ -4852,6 +4970,68 @@ func (ec *executionContext) field_Query_memoryRecord_args(ctx context.Context, r
 		return nil, err
 	}
 	args["id"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_memoryUsageReport_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "scope",
+		func(ctx context.Context, v any) (WorkspaceScope, error) {
+			return ec.unmarshalNWorkspaceScope2memstationᚋappsᚋserverᚋgraphᚋgeneratedᚐWorkspaceScope(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["scope"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "since",
+		func(ctx context.Context, v any) (*time.Time, error) {
+			return ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["since"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "until",
+		func(ctx context.Context, v any) (*time.Time, error) {
+			return ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["until"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "stage",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOString2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["stage"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "strategy",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOString2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["strategy"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "status",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOString2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["status"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "model",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOString2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["model"] = arg6
 	return args, nil
 }
 
@@ -5486,6 +5666,98 @@ func (ec *executionContext) _AuditEvent_targetID(ctx context.Context, field grap
 }
 func (ec *executionContext) fieldContext_AuditEvent_targetID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("AuditEvent", field, false, false, "String")
+}
+
+func (ec *executionContext) _BackgroundCall_stage(ctx context.Context, field graphql.CollectedField, obj *domain.AICall) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BackgroundCall_stage(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Stage, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BackgroundCall_stage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BackgroundCall", field, false, false, "String")
+}
+
+func (ec *executionContext) _BackgroundCall_strategy(ctx context.Context, field graphql.CollectedField, obj *domain.AICall) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BackgroundCall_strategy(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Strategy, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BackgroundCall_strategy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BackgroundCall", field, false, false, "String")
+}
+
+func (ec *executionContext) _BackgroundCall_duration_ms(ctx context.Context, field graphql.CollectedField, obj *domain.AICall) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BackgroundCall_duration_ms(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DurationMS, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int64) graphql.Marshaler {
+			return ec.marshalNLong2int64(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BackgroundCall_duration_ms(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BackgroundCall", field, false, false, "Long")
+}
+
+func (ec *executionContext) _BackgroundCall_usage_known(ctx context.Context, field graphql.CollectedField, obj *domain.AICall) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_BackgroundCall_usage_known(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.UsageKnown, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_BackgroundCall_usage_known(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("BackgroundCall", field, false, false, "Boolean")
 }
 
 func (ec *executionContext) _BackgroundCall_id(ctx context.Context, field graphql.CollectedField, obj *domain.AICall) (ret graphql.Marshaler) {
@@ -9327,6 +9599,29 @@ func (ec *executionContext) fieldContext_MemoryRecord_status(_ context.Context, 
 	return graphql.NewScalarFieldContext("MemoryRecord", field, false, false, "String")
 }
 
+func (ec *executionContext) _MemoryRuntimeInfo_processing(ctx context.Context, field graphql.CollectedField, obj *domain.MemoryRuntime) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_MemoryRuntimeInfo_processing(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.MemoryRuntimeInfo().Processing(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v any) graphql.Marshaler {
+			return ec.marshalNJSON2interface(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_MemoryRuntimeInfo_processing(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("MemoryRuntimeInfo", field, true, true, "JSON")
+}
+
 func (ec *executionContext) _MemoryRuntimeInfo_ai_backend(ctx context.Context, field graphql.CollectedField, obj *domain.MemoryRuntime) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -11857,6 +12152,50 @@ func (ec *executionContext) fieldContext_Query_memoryPublications(ctx context.Co
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_memoryUsageReport(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_memoryUsageReport(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().MemoryUsageReport(ctx, fc.Args["scope"].(WorkspaceScope), fc.Args["since"].(*time.Time), fc.Args["until"].(*time.Time), fc.Args["stage"].(*string), fc.Args["strategy"].(*string), fc.Args["status"].(*string), fc.Args["model"].(*string))
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v any) graphql.Marshaler {
+			return ec.marshalNJSON2interface(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_memoryUsageReport(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type JSON does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_memoryUsageReport_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_memoryBackgroundUsage(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -11867,7 +12206,7 @@ func (ec *executionContext) _Query_memoryBackgroundUsage(ctx context.Context, fi
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().MemoryBackgroundUsage(ctx, fc.Args["scope"].(WorkspaceScope), fc.Args["after"].(*string), fc.Args["limit"].(*int))
+			return ec.Resolvers.Query().MemoryBackgroundUsage(ctx, fc.Args["scope"].(WorkspaceScope), fc.Args["after"].(*string), fc.Args["limit"].(*int), fc.Args["since"].(*time.Time), fc.Args["until"].(*time.Time), fc.Args["stage"].(*string), fc.Args["strategy"].(*string), fc.Args["status"].(*string), fc.Args["model"].(*string))
 		},
 		nil,
 		func(ctx context.Context, selections ast.SelectionSet, v []*domain.AICall) graphql.Marshaler {
@@ -12300,6 +12639,29 @@ func (ec *executionContext) _SearchMemoriesResult_queryEmbeddingTokens(ctx conte
 }
 func (ec *executionContext) fieldContext_SearchMemoriesResult_queryEmbeddingTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("SearchMemoriesResult", field, false, false, "Int")
+}
+
+func (ec *executionContext) _SearchMemoriesResult_entityRecall(ctx context.Context, field graphql.CollectedField, obj *SearchMemoriesResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SearchMemoriesResult_entityRecall(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.EntityRecall, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v any) graphql.Marshaler {
+			return ec.marshalOJSON2interface(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SearchMemoriesResult_entityRecall(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SearchMemoriesResult", field, false, false, "JSON")
 }
 
 func (ec *executionContext) _SearchMemoryItem_id(ctx context.Context, field graphql.CollectedField, obj *SearchMemoryItem) (ret graphql.Marshaler) {
@@ -16217,6 +16579,26 @@ func (ec *executionContext) _BackgroundCall(ctx context.Context, sel ast.Selecti
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("BackgroundCall")
+		case "stage":
+			out.Values[i] = ec._BackgroundCall_stage(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "strategy":
+			out.Values[i] = ec._BackgroundCall_strategy(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "duration_ms":
+			out.Values[i] = ec._BackgroundCall_duration_ms(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "usage_known":
+			out.Values[i] = ec._BackgroundCall_usage_known(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "id":
 			out.Values[i] = ec._BackgroundCall_id(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -17511,6 +17893,12 @@ func (ec *executionContext) _MemoryRuntimeInfo(ctx context.Context, sel ast.Sele
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("MemoryRuntimeInfo")
+		case "processing":
+			out.ResolveConcurrently(ec.OperationContext, &deferred, i,
+				true, true,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._MemoryRuntimeInfo_processing(ctx, field, obj)
+				})
 		case "ai_backend":
 			out.Values[i] = ec._MemoryRuntimeInfo_ai_backend(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -18097,6 +18485,12 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				func(ctx context.Context) graphql.Marshaler {
 					return ec._Query_memoryPublications(ctx, field)
 				})
+		case "memoryUsageReport":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, true,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_memoryUsageReport(ctx, field)
+				})
 		case "memoryBackgroundUsage":
 			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
 				true, true,
@@ -18229,6 +18623,11 @@ func (ec *executionContext) _SearchMemoriesResult(ctx context.Context, sel ast.S
 		case "queryEmbeddingTokens":
 			out.Values[i] = ec._SearchMemoriesResult_queryEmbeddingTokens(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "entityRecall":
+			out.Values[i] = ec._SearchMemoriesResult_entityRecall(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
 				out.Invalids++
 			}
 		default:

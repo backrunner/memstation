@@ -22,12 +22,15 @@ type SourceTurn struct {
 	WorkspaceID    string
 	ConversationID string
 	Sequence       int
-	Role           MessageRole
-	Speaker        string
-	OccurredAt     time.Time
-	SourceDate     string
-	ExternalRef    string
-	Text           string
-	Refs           []SourceRef
-	Parts          []SourcePart
+	// Anchor is computed by the source reader from the validated requested
+	// revision references or sequence coordinates, never from source text.
+	Anchor      bool
+	Role        MessageRole
+	Speaker     string
+	OccurredAt  time.Time
+	SourceDate  string
+	ExternalRef string
+	Text        string
+	Refs        []SourceRef
+	Parts       []SourcePart
 }

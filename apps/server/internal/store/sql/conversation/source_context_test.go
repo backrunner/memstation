@@ -34,6 +34,11 @@ func TestSourceWindowMemoryBoundaries(t *testing.T) {
 	if err != nil || len(got) != 1 || got[0].Text != "before" {
 		t.Fatalf("whole-record budget: %+v %v", got, err)
 	}
+	in.MaxBytes, in.Limit = 1024, 1
+	got, err = repo.ReadSourceWindow(ctx, in)
+	if err != nil || len(got) != 1 || !got[0].Anchor || got[0].Sequence != 1 {
+		t.Fatalf("neighbor displaced cited turn: %+v %v", got, err)
+	}
 	in.UserID = "other"
 	if got, err = repo.ReadSourceWindow(ctx, in); err == nil || len(got) != 0 {
 		t.Fatal("cross-owner read", got, err)
@@ -67,6 +72,14 @@ func TestSourceWindowPostgresEventsRevisionAndAccess(t *testing.T) {
 	got, err := reader.ReadSourceWindow(ctx, in)
 	if err != nil || len(got) != 2 || got[0].Sequence != seq || len(got[0].Refs) != 1 || len(got[0].Parts) != 1 || got[0].Speaker == got[1].Speaker || got[1].Text != "I did not attend." {
 		t.Fatalf("source window: %+v %v", got, err)
+	}
+	// Anchor the later source. A LIMIT of one must not select its earlier neighbor.
+	limited := in
+	limited.Refs = got[1].Refs
+	limited.Limit = 1
+	got, err = reader.ReadSourceWindow(ctx, limited)
+	if err != nil || len(got) != 1 || !got[0].Anchor || got[0].Text != "I did not attend." {
+		t.Fatalf("event anchor lost before SQL limit: %+v %v", got, err)
 	}
 	restricted := security.WithAccess(ctx, domain.AccessContext{UserID: owner, WorkspaceID: b.WorkspaceID, ScopeVersion: 2, PartitionIDs: []string{"other"}, Capabilities: domain.AllCapabilities()})
 	if got, err = reader.ReadSourceWindow(restricted, in); err != nil || len(got) != 0 {
@@ -107,6 +120,12 @@ func TestSourceWindowPostgresVersionedConversation(t *testing.T) {
 	got, err := repo.ReadSourceWindow(ctx, in)
 	if err != nil || len(got) != 2 || got[0].Speaker != "Alice" || got[0].ExternalRef != "D1:1" || got[1].Role != domain.RoleAssistant {
 		t.Fatalf("conversation: %+v %v", got, err)
+	}
+	limited := in
+	limited.Sequences, limited.Limit = []int{1}, 1
+	got, err = repo.ReadSourceWindow(ctx, limited)
+	if err != nil || len(got) != 1 || !got[0].Anchor || got[0].Sequence != 1 {
+		t.Fatalf("conversation anchor lost before SQL limit: %+v %v", got, err)
 	}
 	in.ConversationRevision = 2
 	if got, err = repo.ReadSourceWindow(ctx, in); err != nil || len(got) != 0 {

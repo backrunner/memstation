@@ -92,6 +92,7 @@ type DeletionEntry struct {
 }
 
 type MemoryRuntime struct {
+	Processing     ProcessingPolicy  `json:"processing"`
 	AIBackend      string            `json:"ai_backend"`
 	RoleAliases    map[string]string `json:"role_aliases"`
 	Embedding      EmbeddingIdentity `json:"embedding"`

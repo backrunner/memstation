@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/security"
+	"memstation/apps/server/internal/service/aibroker"
 	ingestionservice "memstation/apps/server/internal/service/ingestion"
 	lifecycleservice "memstation/apps/server/internal/service/lifecycle"
 	pb "memstation/apps/server/proto/memstation/v1"
@@ -309,9 +311,32 @@ func (s *memoryDataServiceServer) Usage(ctx context.Context, req *pb.AIUsageRequ
 	if s.deps.AIUsage == nil {
 		return nil, status.Error(codes.Unavailable, "usage unavailable")
 	}
-	items, err := s.deps.AIUsage.List(ctx, req.GetAfter(), int(req.GetLimit()))
+	q := domain.AIUsageQuery{Stage: req.GetStage(), Strategy: req.GetStrategy(), Status: req.GetStatus(), Model: req.GetModel()}
+	for _, field := range []struct {
+		value  string
+		target *time.Time
+	}{{req.GetSince(), &q.Since}, {req.GetUntil(), &q.Until}} {
+		value, target := field.value, field.target
+		if value != "" {
+			parsed, err := time.Parse(time.RFC3339, value)
+			if err != nil {
+				return nil, status.Error(codes.InvalidArgument, "invalid usage date")
+			}
+			*target = parsed
+		}
+	}
+	items, err := s.deps.AIUsage.FilteredList(ctx, q, req.GetAfter(), int(req.GetLimit()))
+	payload := map[string]any{"items": items, "usage_authority": "per_call", "additional_charge": false}
+	if err == nil && req.GetIncludeReport() {
+		var report domain.AIUsageReport
+		report, err = s.deps.AIUsage.Report(ctx, q)
+		payload["report"] = report
+	}
+	if errors.Is(err, aibroker.ErrInvalidUsageQuery) {
+		return nil, status.Error(codes.InvalidArgument, "invalid usage query")
+	}
 	out := &pb.AIUsageResponse{}
-	return out, contractResponse(map[string]any{"items": items, "usage_authority": "broker", "additional_charge": false}, out, err)
+	return out, contractResponse(payload, out, err)
 }
 
 func (s *memoryDataServiceServer) ReconcileUsage(ctx context.Context, req *pb.RecordRequest) (*pb.AICall, error) {

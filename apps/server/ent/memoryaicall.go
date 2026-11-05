@@ -22,6 +22,14 @@ type MemoryAICall struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// Stage holds the value of the "stage" field.
+	Stage string `json:"stage,omitempty"`
+	// Strategy holds the value of the "strategy" field.
+	Strategy string `json:"strategy,omitempty"`
+	// DurationMs holds the value of the "duration_ms" field.
+	DurationMs int64 `json:"duration_ms,omitempty"`
+	// UsageKnown holds the value of the "usage_known" field.
+	UsageKnown bool `json:"usage_known,omitempty"`
 	// UserID holds the value of the "user_id" field.
 	UserID string `json:"user_id,omitempty"`
 	// WorkspaceID holds the value of the "workspace_id" field.
@@ -70,9 +78,11 @@ func (*MemoryAICall) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case memoryaicall.FieldPartitionIds:
 			values[i] = new([]byte)
-		case memoryaicall.FieldAttempt, memoryaicall.FieldInputTokens, memoryaicall.FieldOutputTokens:
+		case memoryaicall.FieldUsageKnown:
+			values[i] = new(sql.NullBool)
+		case memoryaicall.FieldDurationMs, memoryaicall.FieldAttempt, memoryaicall.FieldInputTokens, memoryaicall.FieldOutputTokens:
 			values[i] = new(sql.NullInt64)
-		case memoryaicall.FieldID, memoryaicall.FieldUserID, memoryaicall.FieldWorkspaceID, memoryaicall.FieldPartitionID, memoryaicall.FieldRole, memoryaicall.FieldModelAlias, memoryaicall.FieldModelVersion, memoryaicall.FieldTraceID, memoryaicall.FieldJobID, memoryaicall.FieldProviderRequestID, memoryaicall.FieldBrokerUsageID, memoryaicall.FieldStatus, memoryaicall.FieldReportedCost, memoryaicall.FieldCurrency, memoryaicall.FieldUsageAuthority, memoryaicall.FieldFailureCode:
+		case memoryaicall.FieldID, memoryaicall.FieldStage, memoryaicall.FieldStrategy, memoryaicall.FieldUserID, memoryaicall.FieldWorkspaceID, memoryaicall.FieldPartitionID, memoryaicall.FieldRole, memoryaicall.FieldModelAlias, memoryaicall.FieldModelVersion, memoryaicall.FieldTraceID, memoryaicall.FieldJobID, memoryaicall.FieldProviderRequestID, memoryaicall.FieldBrokerUsageID, memoryaicall.FieldStatus, memoryaicall.FieldReportedCost, memoryaicall.FieldCurrency, memoryaicall.FieldUsageAuthority, memoryaicall.FieldFailureCode:
 			values[i] = new(sql.NullString)
 		case memoryaicall.FieldCreatedAt, memoryaicall.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -108,6 +118,30 @@ func (_m *MemoryAICall) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
+			}
+		case memoryaicall.FieldStage:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field stage", values[i])
+			} else if value.Valid {
+				_m.Stage = value.String
+			}
+		case memoryaicall.FieldStrategy:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field strategy", values[i])
+			} else if value.Valid {
+				_m.Strategy = value.String
+			}
+		case memoryaicall.FieldDurationMs:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field duration_ms", values[i])
+			} else if value.Valid {
+				_m.DurationMs = value.Int64
+			}
+		case memoryaicall.FieldUsageKnown:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field usage_known", values[i])
+			} else if value.Valid {
+				_m.UsageKnown = value.Bool
 			}
 		case memoryaicall.FieldUserID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -266,6 +300,18 @@ func (_m *MemoryAICall) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	builder.WriteString("stage=")
+	builder.WriteString(_m.Stage)
+	builder.WriteString(", ")
+	builder.WriteString("strategy=")
+	builder.WriteString(_m.Strategy)
+	builder.WriteString(", ")
+	builder.WriteString("duration_ms=")
+	builder.WriteString(fmt.Sprintf("%v", _m.DurationMs))
+	builder.WriteString(", ")
+	builder.WriteString("usage_known=")
+	builder.WriteString(fmt.Sprintf("%v", _m.UsageKnown))
 	builder.WriteString(", ")
 	builder.WriteString("user_id=")
 	builder.WriteString(_m.UserID)

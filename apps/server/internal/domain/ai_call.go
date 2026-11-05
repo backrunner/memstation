@@ -3,6 +3,10 @@ package domain
 import "time"
 
 type AICall struct {
+	Stage             string   `json:"stage"`
+	Strategy          string   `json:"strategy"`
+	DurationMS        int64    `json:"duration_ms"`
+	UsageKnown        bool     `json:"usage_known"`
 	PartitionIDs      []string `json:"partition_ids"`
 	ID                string   `json:"id"`
 	UserID            string   `json:"-"`

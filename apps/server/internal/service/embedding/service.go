@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"memstation/apps/server/internal/aicall"
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/ports"
 	"memstation/apps/server/internal/provider"
@@ -16,10 +17,12 @@ import (
 )
 
 type Service struct {
-	client   *http.Client
-	resolver provider.ConfigResolver
-	settings *settingsservice.Service
-	timeout  *runtimeconfig.DurationValue
+	processingStrategy string
+	ledger             ports.AICallRepository
+	client             *http.Client
+	resolver           provider.ConfigResolver
+	settings           *settingsservice.Service
+	timeout            *runtimeconfig.DurationValue
 }
 
 func NewService(resolver provider.ConfigResolver, settings *settingsservice.Service, timeout time.Duration) *Service {
@@ -34,7 +37,8 @@ func NewService(resolver provider.ConfigResolver, settings *settingsservice.Serv
 	}
 }
 
-func (s *Service) Embed(ctx context.Context, input domain.EmbeddingInput) (domain.EmbeddingResult, error) {
+func (s *Service) Embed(ctx context.Context, input domain.EmbeddingInput) (out domain.EmbeddingResult, resultErr error) {
+	ctx = aicall.WithDefaults(ctx, "embedding.query", s.processingStrategy)
 	ctx, cancel := s.withTimeout(ctx)
 	defer cancel()
 
@@ -43,6 +47,16 @@ func (s *Service) Embed(ctx context.Context, input domain.EmbeddingInput) (domai
 		return domain.EmbeddingResult{}, err
 	}
 
+	rec, err := aicall.Start(ctx, s.ledger, input.UserID, "embedding", runtime.Model, "memstation")
+	if err != nil {
+		return out, err
+	}
+	defer func() {
+		rec.Call.InputTokens = out.PromptTokens
+		rec.Call.ModelVersion = out.Model
+		rec.Call.UsageKnown = out.PromptTokens > 0
+		resultErr = errors.Join(resultErr, rec.Finish(ctx, resultErr))
+	}()
 	raw, _, err := provider.DoJSONRequest(
 		ctx,
 		s.client,
@@ -183,3 +197,7 @@ func firstNonEmpty(values ...string) string {
 }
 
 var _ ports.EmbeddingClient = (*Service)(nil)
+
+func (s *Service) SetLedger(ledger ports.AICallRepository) { s.ledger = ledger }
+
+func (s *Service) SetProcessingStrategy(strategy string) { s.processingStrategy = strategy }

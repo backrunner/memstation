@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"errors"
+	"time"
 
 	"memstation/apps/server/graph/generated"
 	"memstation/apps/server/internal/domain"
@@ -74,4 +75,15 @@ func memoryGraphError(err error) error {
 		code = "invalid_request"
 	}
 	return &gqlerror.Error{Message: code, Extensions: map[string]any{"code": code}}
+}
+
+func usageGraphQuery(since, until *time.Time, stage, strategy, status, model *string) domain.AIUsageQuery {
+	q := domain.AIUsageQuery{Stage: derefString(stage), Strategy: derefString(strategy), Status: derefString(status), Model: derefString(model)}
+	if since != nil {
+		q.Since = *since
+	}
+	if until != nil {
+		q.Until = *until
+	}
+	return q
 }

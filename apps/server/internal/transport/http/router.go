@@ -124,6 +124,7 @@ func NewRouter(deps Dependencies) http.Handler {
 			}
 			writeJSON(w, 200, out)
 		})
+		r.Get("/api/v1/usage/summary", aiUsageReportHandler(deps.AIUsage))
 		r.Get("/api/v1/usage", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Cache-Control", "no-store")
 			if deps.AIUsage == nil {
@@ -131,12 +132,17 @@ func NewRouter(deps Dependencies) http.Handler {
 				return
 			}
 			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-			items, err := deps.AIUsage.List(r.Context(), r.URL.Query().Get("after"), limit)
+			q, err := usageQuery(r)
+			if err != nil {
+				writeError(w, 400, "invalid_request", "invalid usage query")
+				return
+			}
+			items, err := deps.AIUsage.FilteredList(r.Context(), q, r.URL.Query().Get("after"), limit)
 			if err != nil {
 				lifecycleError(w, err)
 				return
 			}
-			writeJSON(w, 200, map[string]any{"items": items, "usage_authority": "broker", "additional_charge": false})
+			writeJSON(w, 200, map[string]any{"items": items, "usage_authority": "per_call", "additional_charge": false})
 		})
 		r.Get("/api/v1/workspaces", workspaceDiscovery(deps.APIKeys))
 		r.Post("/v1/chat/completions", chatHandler(deps.Gateway))

@@ -32,6 +32,7 @@ import (
 )
 
 type Config struct {
+	Strategy          string
 	BaseURL           string
 	Credential        string
 	Roles             map[string]string
@@ -165,11 +166,19 @@ func (c *Client) post(ctx context.Context, user, role, path string, payload any,
 	}()
 	job := aicall.JobFromContext(ctx)
 	span := trace.SpanContextFromContext(ctx)
-	call := domain.AICall{ID: uuid.NewString(), PartitionIDs: security.Partitions(ctx), UserID: user, WorkspaceID: workspace, PartitionID: security.WritePartition(ctx), Role: role, ModelAlias: alias, JobID: job.ID, Attempt: job.Attempt, TraceID: span.TraceID().String(), UsageAuthority: "broker", Status: "unknown"}
+	meta := aicall.MetadataFromContext(ctx)
+	call := domain.AICall{Stage: meta.Stage, Strategy: meta.Strategy, ID: uuid.NewString(), PartitionIDs: security.Partitions(ctx), UserID: user, WorkspaceID: workspace, PartitionID: security.WritePartition(ctx), Role: role, ModelAlias: alias, JobID: job.ID, Attempt: job.Attempt, TraceID: span.TraceID().String(), UsageAuthority: "broker", Status: "unknown"}
+	if call.Stage == "" {
+		call.Stage = role
+	}
+	if call.Strategy == "" {
+		call.Strategy = c.config.Strategy
+	}
 	if err = c.ledger.StartAICall(ctx, call); err != nil {
 		return nil, nil, err
 	}
 	defer func() {
+		call.DurationMS = time.Since(started).Milliseconds()
 		defer func() { aicall.Record(ctx, call) }()
 		recordCtx, done := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer done()
@@ -245,6 +254,7 @@ func (c *Client) post(ctx context.Context, user, role, path string, payload any,
 		call.FailureCode = "invalid_response"
 		return nil, headers, errors.New("invalid broker response")
 	}
+	call.UsageKnown = usage.Usage.Input > 0 || usage.Usage.Output > 0
 	call.InputTokens = usage.Usage.Input
 	call.OutputTokens = usage.Usage.Output
 	call.Status = "complete"

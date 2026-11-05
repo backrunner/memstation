@@ -157,12 +157,14 @@ func TestEpisodeBatchesBoundShortTurnsWithoutDroppingSources(t *testing.T) {
 			size := 0
 			for _, s := range batch {
 				size += len(s.Text)
-				gotText += s.Text
+				if !s.ContextOnly {
+					gotText += s.Text
+					sourceCount++
+				}
 			}
 			if enabled && (len(batch) > episodeBatchSources || size > episodeBatchBytes) {
 				t.Fatal("unbounded episode batch", len(batch), size)
 			}
-			sourceCount += len(batch)
 			return json.RawMessage(`{"facts":[],"items":[],"impression":null,"episodes":[]}`), nil
 		})
 		_, err := NewServiceWithOptions(g, Options{SemanticEpisodes: enabled}).AnalyzeConversation(context.Background(), in)
@@ -175,7 +177,7 @@ func TestEpisodeBatchesBoundShortTurnsWithoutDroppingSources(t *testing.T) {
 			wantText += s.Text
 		}
 		if err != nil || calls != wantCalls || sourceCount != 39 || gotText != wantText {
-			t.Fatal("batching lost/reordered sources or changed legacy calls", enabled, calls, sourceCount, err)
+			t.Fatal("batching lost/reordered primary sources", enabled, calls, sourceCount, err)
 		}
 	}
 }

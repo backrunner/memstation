@@ -460,6 +460,10 @@ func toProtoSearchResult(item domain.SearchResult) *pb.SearchResponse {
 		QueryEmbeddingTokens: int32(item.QueryEmbeddingTokens),
 		Memories:             make([]*pb.MemoryDocument, 0, len(item.Memories)),
 	}
+	if item.EntityRecall != nil {
+		d := item.EntityRecall
+		out.EntityRecall = &pb.EntityRecallDiagnostics{Status: d.Status, CacheHit: d.CacheHit, QueryEntities: int32(d.QueryEntities), MatchedNodes: int32(d.MatchedNodes), LatencyMs: d.LatencyMS}
+	}
 	for _, memory := range item.Memories {
 		out.Memories = append(out.Memories, toProtoMemoryDocument(memory))
 	}

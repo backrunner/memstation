@@ -11,6 +11,7 @@ import (
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/modelcap"
+	"memstation/apps/server/internal/service/processing"
 )
 
 const (
@@ -19,6 +20,7 @@ const (
 )
 
 type Config struct {
+	MemoryProcessing                 processing.Config
 	ModelInputModalities             modelcap.InputPolicy
 	SemanticEpisodesEnabled          bool
 	MemoryReasoningEffort            string
@@ -127,6 +129,10 @@ func LoadConfig() (Config, error) {
 		}
 	}
 
+	processingConfig, err := processing.LoadConfig()
+	if err != nil {
+		return Config{}, err
+	}
 	v := viper.New()
 	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 	v.AutomaticEnv()
@@ -352,6 +358,7 @@ func LoadConfig() (Config, error) {
 		MemoryBrokerCredential:           v.GetString("memory_broker_credential"),
 		MemoryBrokerBaseURL:              v.GetString("memory_broker_base_url"),
 		MemoryAIBackend:                  v.GetString("memory_ai_backend"),
+		MemoryProcessing:                 processingConfig,
 		DeletionJournalPath:              v.GetString("deletion_journal_path"),
 		DeletionJournalKey:               v.GetString("deletion_journal_key"),
 		IngestionWindowBudget:            v.GetInt("ingestion_window_budget"),
@@ -405,6 +412,9 @@ func LoadConfig() (Config, error) {
 			MaxAssetBytes:             v.GetInt64("multimodal_max_asset_bytes"),
 			AllowedMIMETypes:          csvList(v.GetString("multimodal_allowed_mime_types")),
 		},
+	}
+	if err := cfg.MemoryProcessing.Validate(); err != nil {
+		return Config{}, err
 	}
 	if cfg.MemoryMinOutputTokens < 1 || cfg.MemoryMaxOutputTokens < cfg.MemoryMinOutputTokens || cfg.MemoryMaxOutputTokens > 262144 || cfg.MemoryLLMTimeout <= 0 || cfg.MemoryLLMTimeout > time.Hour {
 		return Config{}, errors.New("invalid memory LLM token limits or timeout")

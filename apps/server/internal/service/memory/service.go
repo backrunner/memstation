@@ -19,16 +19,18 @@ import (
 	"memstation/apps/server/internal/ports"
 	"memstation/apps/server/internal/security"
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
+	"memstation/apps/server/internal/service/processing"
 )
 
 type Service struct {
-	watermarks  ports.RecallWatermarkReader
-	engine      ports.MemoryEngine
-	repo        ports.MemoryRepository
-	cache       *cache.JSONStore
-	vectors     ports.VectorStore
-	scorer      *Scorer
-	generations *memorygenservice.Service
+	watermarks       ports.RecallWatermarkReader
+	engine           ports.MemoryEngine
+	repo             ports.MemoryRepository
+	cache            *cache.JSONStore
+	vectors          ports.VectorStore
+	scorer           *Scorer
+	processingPolicy *processing.Service
+	generations      *memorygenservice.Service
 }
 
 func (s *Service) SetWatermarks(reader ports.RecallWatermarkReader) { s.watermarks = reader }
@@ -44,6 +46,8 @@ func (s *Service) SetKeyMemoryCache(store *cache.JSONStore) {
 func (s *Service) SetVectorStore(store ports.VectorStore) {
 	s.vectors = store
 }
+
+func (s *Service) SetProcessingPolicy(policy *processing.Service) { s.processingPolicy = policy }
 
 func (s *Service) SetScorer(scorer *Scorer) {
 	s.scorer = scorer
@@ -94,9 +98,17 @@ func (s *Service) Search(ctx context.Context, input domain.SearchInput) (domain.
 	if queryID == "" {
 		queryID = domain.AccessID("query", fmt.Sprint(started.UnixNano()))
 	}
-	result.Trace = &domain.RecallTrace{QueryID: queryID, LatencyMS: time.Since(started).Milliseconds(), ReturnedCount: returned, EligibleCount: len(result.Memories), ScoreDefinition: "provider semantic score retained in metadata; effective score combines semantic relevance, importance, time decay and configured relation/reranking adjustments; not factual confidence"}
+	result.Trace = &domain.RecallTrace{QueryID: queryID, LatencyMS: time.Since(started).Milliseconds(), ReturnedCount: returned, EligibleCount: len(result.Memories), ScoreDefinition: "provider semantic score retained in metadata; effective score combines semantic, keyword and entity relevance, importance, time decay and configured relation/reranking adjustments; not factual confidence"}
 	result.Trace.ProviderCalls = calls.Calls()
 	result.Trace.FailureCode = calls.FailureCode()
+	if result.EntityRecall != nil {
+		switch result.EntityRecall.Status {
+		case "unavailable", "timed_out", "budget_exceeded":
+			if result.Trace.FailureCode == "" {
+				result.Trace.FailureCode = "entity_recall_" + result.EntityRecall.Status
+			}
+		}
+	}
 	result.Trace.Degraded = result.Trace.FailureCode != ""
 	for _, call := range result.Trace.ProviderCalls {
 		if call.ProviderRequestID != "" && result.Trace.ProviderRequestID == "" {
@@ -563,7 +575,7 @@ func (s *Service) applyKeyMemoryScore(ctx context.Context, km domain.KeyMemory) 
 	if score.DecayFactor == 0 {
 		score.DecayFactor = 1
 	}
-	if s.scorer != nil && stringMetadataValue(km.Metadata, "extraction_method") != "llm" {
+	if s.processingPolicy.Config().Strategy != "lightweight" && s.scorer != nil && stringMetadataValue(km.Metadata, "extraction_method") != "llm" {
 		var err error
 		score, err = s.scorer.Score(ctx, input)
 		if err != nil {

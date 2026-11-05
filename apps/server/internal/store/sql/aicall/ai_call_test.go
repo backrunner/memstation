@@ -2,13 +2,66 @@ package aicall
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/runtimeconfig"
 	"memstation/apps/server/internal/security"
 	ingestfixturestore "memstation/apps/server/internal/store/sql/internal/ingestfixture"
 )
+
+func TestUsageReportSeparatesCurrenciesUnknownUsageAndPrivateAudience(t *testing.T) {
+	db, _, ctx, b := ingestfixturestore.IngestionFixture(t)
+	repo := NewAICallRepository(runtimeconfig.NewStaticDBHandle(db))
+	user := security.UserIDFromContext(ctx)
+	for i, item := range []struct {
+		price, currency string
+		known           bool
+	}{{"0.1", "USD", true}, {"0.2", "USD", true}, {"0.05", "EUR", true}, {"", "", false}} {
+		call := domain.AICall{ID: fmt.Sprintf("usage-%d", i), UserID: user, WorkspaceID: b.WorkspaceID, PartitionIDs: []string{""}, Role: "analysis", Stage: "analysis.extract", Strategy: "hybrid", ModelAlias: "pinned", UsageAuthority: "memstation"}
+		if err := repo.StartAICall(ctx, call); err != nil {
+			t.Fatal(err)
+		}
+		call.Status = "complete"
+		call.ReportedCost = item.price
+		call.Currency = item.currency
+		call.InputTokens = 100
+		call.UsageKnown = item.known
+		if err := repo.FinishAICall(ctx, call); err != nil {
+			t.Fatal(err)
+		}
+	}
+	access, _ := security.AccessFromContext(ctx)
+	access.PartitionIDs = []string{"", "private"}
+	privateCtx := security.WithAccess(context.Background(), access)
+	private := domain.AICall{ID: "usage-private", UserID: user, WorkspaceID: b.WorkspaceID, PartitionIDs: access.PartitionIDs, Role: "analysis", Stage: "analysis.extract", Strategy: "hybrid", ModelAlias: "pinned", UsageAuthority: "broker"}
+	if err := repo.StartAICall(privateCtx, private); err != nil {
+		t.Fatal(err)
+	}
+	q := domain.AIUsageQuery{Since: time.Now().Add(-time.Hour), Until: time.Now().Add(time.Hour), Strategy: "hybrid"}
+	report, err := repo.AIUsageReport(ctx, q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Groups) != 1 || report.Groups[0].Calls != 4 || report.Groups[0].KnownUsageCalls != 3 || report.UnpricedCalls != 1 {
+		t.Fatalf("private leakage or missing counters: %+v", report)
+	}
+	if len(report.Costs) != 2 || report.Costs[0].Currency != "EUR" || report.Costs[1].Currency != "USD" || report.Costs[1].Amount != "0.3" {
+		t.Fatalf("currencies merged or imprecise decimal sum: %+v", report.Costs)
+	}
+	q.Stage = "summary.generate"
+	report, err = repo.AIUsageReport(ctx, q)
+	if err != nil || len(report.Groups) != 0 {
+		t.Fatalf("stage filter ignored: %+v %v", report, err)
+	}
+	q.Stage = "analysis.extract"
+	items, err := repo.FilteredAICalls(ctx, q, "", 100)
+	if err != nil || len(items) != 4 {
+		t.Fatalf("filtered calls mismatch: %+v %v", items, err)
+	}
+}
 
 func TestAICallLedgerPreservesPrivateAudienceAndBillingReferences(t *testing.T) {
 	db, _, ctx, b := ingestfixturestore.IngestionFixture(t)

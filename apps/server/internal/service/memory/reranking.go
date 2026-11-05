@@ -16,21 +16,35 @@ import (
 // RerankDiagnostics distinguishes an absent reranker from failed inference and
 // genuine zero relevance. Reasons are fixed codes, never provider error bodies.
 type RerankDiagnostics struct {
-	InputBytes       int     `json:"input_bytes"`
-	MaxDocumentBytes int     `json:"max_document_bytes"`
-	ScorePolicy      string  `json:"score_policy"`
-	Status           string  `json:"status"`
-	Reason           string  `json:"reason,omitempty"`
-	Candidates       int     `json:"candidates"`
-	Scored           int     `json:"scored"`
-	Excluded         int     `json:"excluded"`
-	Selection        string  `json:"selection,omitempty"`
-	Millis           float64 `json:"millis"`
+	InputBytes       int                        `json:"input_bytes"`
+	MaxDocumentBytes int                        `json:"max_document_bytes"`
+	ScorePolicy      string                     `json:"score_policy"`
+	Status           string                     `json:"status"`
+	Reason           string                     `json:"reason,omitempty"`
+	Candidates       int                        `json:"candidates"`
+	Scored           int                        `json:"scored"`
+	Excluded         int                        `json:"excluded"`
+	Selection        string                     `json:"selection,omitempty"`
+	Millis           float64                    `json:"millis"`
+	Admission        RerankAdmissionDiagnostics `json:"admission"`
+}
+
+// Counts describe the admission boundary, not answer support or recall quality.
+// A source mention can also be query-scored, so these groups can overlap.
+type RerankAdmissionCounts struct {
+	Available int `json:"available"`
+	Submitted int `json:"submitted"`
+}
+
+type RerankAdmissionDiagnostics struct {
+	QueryScored   RerankAdmissionCounts `json:"query_scored"`
+	ExpansionOnly RerankAdmissionCounts `json:"expansion_only"`
+	SourceMention RerankAdmissionCounts `json:"source_mention"`
 }
 
 func (e *Engine) rerankCandidates(ctx context.Context, input domain.SearchInput, candidates []searchCandidate) (scores map[string]float64, ranks map[string]int, diagnostic RerankDiagnostics) {
 	scores, ranks = map[string]float64{}, map[string]int{}
-	diagnostic.Status, diagnostic.ScorePolicy = "disabled", "hybrid_v1"
+	diagnostic.Status, diagnostic.ScorePolicy = "disabled", "hybrid_v2"
 	ctx, span := observability.TraceSpan(ctx, "memory.rerank")
 	start := time.Now()
 	defer func() {
@@ -98,6 +112,7 @@ func (e *Engine) rerankCandidates(ctx context.Context, input domain.SearchInput,
 		diagnostic.MaxDocumentBytes = max(diagnostic.MaxDocumentBytes, len(text))
 	}
 	diagnostic.Candidates = len(documents)
+	diagnostic.Admission = describeRerankAdmission(candidates, allowed)
 	if len(documents) < 2 {
 		diagnostic.Reason = "insufficient_candidates"
 		return
@@ -140,6 +155,34 @@ func (e *Engine) rerankCandidates(ctx context.Context, input domain.SearchInput,
 	diagnostic.ScorePolicy = "relevance_v1"
 	diagnostic.Excluded = len(candidates) - len(results)
 	return
+}
+
+func describeRerankAdmission(candidates []searchCandidate, submitted map[string]bool) RerankAdmissionDiagnostics {
+	var diagnostic RerankAdmissionDiagnostics
+	seen := map[string]bool{}
+	for _, c := range candidates {
+		id := c.Document.NodeID
+		if id == "" || seen[id] || rerankDocumentText(c.Document) == "" {
+			continue
+		}
+		seen[id] = true
+		count := func(group *RerankAdmissionCounts) {
+			group.Available++
+			if submitted[id] {
+				group.Submitted++
+			}
+		}
+		scored := c.BaseSemanticScore > 0 || c.KeywordScore > 0 || c.EntityScore > 0 || c.RelationExpansion > 0
+		if scored {
+			count(&diagnostic.QueryScored)
+		} else if c.ConversationBoost > 0 || c.SupersessionBoost > 0 {
+			count(&diagnostic.ExpansionOnly)
+		}
+		if c.Document.Type == domain.MemoryTypeEntity && c.Document.Metadata["interpretation"] == "source_mention" {
+			count(&diagnostic.SourceMention)
+		}
+	}
+	return diagnostic
 }
 
 // Candidate collection uses the same bounded budget with reranking enabled or
@@ -189,6 +232,14 @@ func balanceRerankChannels(ordered []searchCandidate, limit int) []searchCandida
 	for _, signal := range []func(searchCandidate) float64{
 		func(c searchCandidate) float64 { return c.BaseSemanticScore },
 		func(c searchCandidate) float64 { return c.KeywordScore },
+		func(c searchCandidate) float64 {
+			// Literal mentions route retrieval to their sources. Their bare names
+			// must not consume the reservation intended for answer evidence.
+			if c.Document.Type == domain.MemoryTypeEntity && c.Document.Metadata["interpretation"] == "source_mention" {
+				return 0
+			}
+			return c.EntityScore
+		},
 	} {
 		channel := append([]searchCandidate(nil), ordered...)
 		// Stable sorting preserves the preliminary score and deterministic ID

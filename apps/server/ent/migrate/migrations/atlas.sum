@@ -1,4 +1,4 @@
-h1:nFxYH024pE9Bnz9RHq5X5hiKdrfio6kwGiWJJQ8yiNc=
+h1:DoSS8i7SF7nblgQLwK6GHdeYVZlYFWQbWXzjBvgH9PA=
 202603160001_init.sql h1:kSlvetIqfS9bYFjRXLkuf1msnUQNkfu1LMXgMnvQ+P4=
 202603220001_conversation_segments.sql h1:rTllHAUIkJ9m+f1Gb4axHSM9cYfbsGiuDBUfWZKSwWA=
 202604080001_memory_rebuild.sql h1:0pIhGHKtgTZnIMvpdbZGeCpJpbTJeRK2wBi7rncQyLg=
@@ -33,3 +33,5 @@ h1:nFxYH024pE9Bnz9RHq5X5hiKdrfio6kwGiWJJQ8yiNc=
 202610250013_generation_carries.sql h1:bhP/v2MIS4huxn3tgV1G6wx6q54JXvIgllZRssNfg+8=
 202610250014_revoke_private_audience.sql h1:gmO2nimXRze57IGF2KXNl63liLpcWbNm1YzJiUGvudw=
 202610250015_semantic_episodes.sql h1:j7FR7x33v9+huU4U2BP5SUXfiqIGr+ggxo7bmaWTpO0=
+202610270001_memory_processing_usage.sql h1:v5Tv5gVSraxXwOKTA+ZiKkTKbEAPUqR5ABjpDGp24PY=
+202610270002_entity_name_index.sql h1:mN230zMj6A0mG4Y6ihRUnIoq7FNnYsEvx1WB+dRiJgs=

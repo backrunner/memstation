@@ -44,7 +44,7 @@ func TestTaskScopeValidationPrecedesSideEffects(t *testing.T) {
 	// Every registered handler rejects an unsupported workspace before touching
 	// nil dependencies or invoking external analysis, embedding or media services.
 	mux := NewServeMux(nilLogger(), Services{TaskAuthority: fixtureTaskAuthority{}})
-	for _, kind := range []string{TypeConversationFinalize, TypeMediaExtract, TypeSummaryGenerate, TypeAnalysisExtract, TypeEmbeddingGenerate, TypeEmbeddingDelete, TypeKeyMemoryGraphSync, TypeKeyMemoryReconcile, TypeMemoryRebuildConversation, TypeMemoryRebuildActivate} {
+	for _, kind := range []string{TypeConversationFinalize, TypeSourceIndex, TypeMediaExtract, TypeSummaryGenerate, TypeAnalysisExtract, TypeEmbeddingGenerate, TypeEmbeddingDelete, TypeKeyMemoryGraphSync, TypeKeyMemoryReconcile, TypeMemoryRebuildConversation, TypeMemoryRebuildActivate} {
 		err = mux.ProcessTask(ctx, newTask(t, kind, map[string]any{"user_id": "owner", "workspace_id": "other", "schema_version": 1}))
 		if !errors.Is(err, asynq.SkipRetry) {
 			t.Fatalf("%s bypassed scope guard: %v", kind, err)
@@ -122,7 +122,7 @@ func (p *failFirstPublisher) Publish(_ context.Context, task domain.TaskMessage)
 	return nil
 }
 
-func TestFinalizeRetryPublishesQueuedSummary(t *testing.T) {
+func TestFinalizeRetryPublishesSourceIndex(t *testing.T) {
 	ctx := context.Background()
 	repo := conversationsFromRecords(t, "owner", "conversation")
 	publisher := &failFirstPublisher{}
@@ -134,7 +134,7 @@ func TestFinalizeRetryPublishesQueuedSummary(t *testing.T) {
 	if err := handler(ctx, task); err != nil {
 		t.Fatal(err)
 	}
-	if len(publisher.tasks) != 1 || publisher.tasks[0].Type != TypeSummaryGenerate {
+	if len(publisher.tasks) != 1 || publisher.tasks[0].Type != TypeSourceIndex {
 		t.Fatal("queued state swallowed retry after publish failure")
 	}
 }

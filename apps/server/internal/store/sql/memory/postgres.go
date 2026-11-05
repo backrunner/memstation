@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"crypto/sha256"
 	sqlpkg "database/sql"
 	"encoding/json"
 	"errors"
@@ -201,6 +202,11 @@ func (r *PostgresMemoryRepository) StoreDocumentTx(ctx context.Context, doc doma
 		}
 	}
 
+	// Summary processing stores source segments again after source indexing.
+	// Metadata-only writes must not hide an already searchable original. Verify
+	// against the vector's actual content hash, not mutable segment metadata (the
+	// conversation repository may already have replaced that side-table row).
+	contentHash := fmt.Sprintf("%x", sha256.Sum256([]byte(doc.Content)))
 	_, err = tx.ExecContext(ctx, `
 	        INSERT INTO memory_nodes (id, generation_id, user_id, node_type, entity_id, importance, decay_factor, activity_at, time_tier, embedding_status, created_at, updated_at, workspace_id,partition_id,subject_actor_ids,source_refs,revision,source_conversation_id)
 	        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
@@ -214,10 +220,22 @@ func (r *PostgresMemoryRepository) StoreDocumentTx(ctx context.Context, doc doma
 	            decay_factor = EXCLUDED.decay_factor,
 	            activity_at = EXCLUDED.activity_at,
 	            time_tier = EXCLUDED.time_tier,
-	            embedding_status = EXCLUDED.embedding_status,
+             embedding_status = CASE
+                 WHEN memory_nodes.node_type='segment' AND EXCLUDED.node_type='segment'
+                  AND memory_nodes.embedding_status='ready'
+                  AND memory_nodes.generation_id=EXCLUDED.generation_id
+                  AND EXISTS (SELECT 1 FROM memory_embeddings e
+                      JOIN memory_generations g ON g.generation_id=e.generation_id
+                       AND g.user_id=e.user_id AND g.workspace_id=e.workspace_id
+                       AND g.embedding_model=e.embedding_model AND g.embedding_version=e.embedding_version
+                      WHERE e.node_id=memory_nodes.id AND e.user_id=EXCLUDED.user_id
+                       AND e.workspace_id=EXCLUDED.workspace_id AND e.generation_id=EXCLUDED.generation_id
+                       AND e.node_type='segment' AND e.content_hash=$19)
+                 THEN memory_nodes.embedding_status
+                 ELSE EXCLUDED.embedding_status END,
 	            updated_at = EXCLUDED.updated_at
 	        WHERE memory_nodes.user_id = EXCLUDED.user_id AND memory_nodes.workspace_id = EXCLUDED.workspace_id
-	    `, doc.NodeID, doc.GenerationID, doc.UserID, string(doc.Type), doc.ID, doc.Importance, doc.DecayFactor, doc.ActivityAt, string(doc.TimeTier), "pending", doc.CreatedAt, doc.UpdatedAt, doc.WorkspaceID, doc.PartitionID, dbutilstore.MarshalJSON(doc.SubjectActorIDs), dbutilstore.MarshalJSON(doc.SourceRefs), doc.Revision, doc.ConversationID)
+	    `, doc.NodeID, doc.GenerationID, doc.UserID, string(doc.Type), doc.ID, doc.Importance, doc.DecayFactor, doc.ActivityAt, string(doc.TimeTier), "pending", doc.CreatedAt, doc.UpdatedAt, doc.WorkspaceID, doc.PartitionID, dbutilstore.MarshalJSON(doc.SubjectActorIDs), dbutilstore.MarshalJSON(doc.SourceRefs), doc.Revision, doc.ConversationID, contentHash)
 	if err != nil {
 		return err
 	}

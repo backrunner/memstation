@@ -76,6 +76,7 @@ func (c *Client) reconcile(ctx context.Context, call domain.AICall) (domain.AICa
 	call.BrokerUsageID = result.UsageID
 	call.ProviderRequestID = result.RequestID
 	call.ModelVersion = result.ModelVersion
+	call.UsageKnown = result.Input > 0 || result.Output > 0
 	call.InputTokens = result.Input
 	call.OutputTokens = result.Output
 	call.ReportedCost = result.Cost

@@ -33,6 +33,7 @@ import (
 	gatewayservice "memstation/apps/server/internal/service/gateway"
 	memoryservice "memstation/apps/server/internal/service/memory"
 	multimodalservice "memstation/apps/server/internal/service/multimodal"
+	"memstation/apps/server/internal/service/processing"
 	providerconfigservice "memstation/apps/server/internal/service/providerconfig"
 	settingsservice "memstation/apps/server/internal/service/settings"
 	systemconfigservice "memstation/apps/server/internal/service/systemconfig"
@@ -41,6 +42,7 @@ import (
 	blobstore "memstation/apps/server/internal/store/blob"
 	"memstation/apps/server/internal/store/vector"
 	"memstation/apps/server/internal/testutil/memoryllmfixture"
+	"memstation/apps/server/internal/testutil/memoryprocessingfixture"
 	httptransport "memstation/apps/server/internal/transport/http"
 	"memstation/apps/server/internal/worker"
 	"memstation/apps/server/tests/testutil/mockprovider"
@@ -50,7 +52,7 @@ const e2eTestAdminToken = "e2e-test-admin-token"
 
 func TestLiveEndpoint(t *testing.T) {
 	t.Parallel()
-	router := newTestRouter()
+	router := newTestRouter(t)
 
 	request := httptest.NewRequest(http.MethodGet, "/health/live", nil)
 	recorder := httptest.NewRecorder()
@@ -70,7 +72,7 @@ func TestLiveEndpoint(t *testing.T) {
 
 func TestAdminLoginCreatesSession(t *testing.T) {
 	t.Parallel()
-	router := newTestRouter()
+	router := newTestRouter(t)
 
 	request := httptest.NewRequest(http.MethodPost, "/api/admin/login", bytes.NewBufferString(`{"token":"`+e2eTestAdminToken+`"}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -102,7 +104,7 @@ func TestAdminLoginCreatesSession(t *testing.T) {
 
 func TestAdminHTTPRoutesRequireSessionCookieNotBearerToken(t *testing.T) {
 	t.Parallel()
-	router := newTestRouter()
+	router := newTestRouter(t)
 
 	bearerRequest := httptest.NewRequest(http.MethodGet, "/api/admin/overview", nil)
 	bearerRequest.Header.Set("Authorization", "Bearer "+e2eTestAdminToken)
@@ -134,7 +136,7 @@ func TestAdminHTTPRoutesRequireSessionCookieNotBearerToken(t *testing.T) {
 
 func TestChatCompletionStreamingEndpoint(t *testing.T) {
 	t.Parallel()
-	router := newProxyRouter()
+	router := newProxyRouter(t)
 
 	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(`{"model":"gpt-4.1-mini","stream":true,"messages":[{"role":"user","content":"hello"}]}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -156,7 +158,7 @@ func TestChatCompletionStreamingEndpoint(t *testing.T) {
 
 func TestGatewayReturnsConversationHeadersAndSupportsMemoryPreview(t *testing.T) {
 	t.Parallel()
-	router := newProxyRouter()
+	router := newProxyRouter(t)
 
 	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewBufferString(`{"model":"gpt-4.1-mini","messages":[{"role":"user","content":"remember that i am validating the preview panel"}]}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -293,7 +295,10 @@ func TestCORSPreflightAllowsConfiguredManagerOrigin(t *testing.T) {
 	audit := auditsvc.NewService(nil)
 	admin := adminservice.NewService(conversations, mediaRepo, memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAICompatible, "", "", "", ""))
 	admin.SetMemoryProcessor(analysisservice.NewService(memoryllmfixture.Generator{}), []string{"preferences"})
+	processor := fixtureProcessing(t)
+	admin.SetProcessingPolicy(processor)
 	engine := memoryservice.NewEngine(memoryRepo, vector.NewPGVectorStore(nil))
+	engine.SetEntityRecall(processor, time.Second)
 	memorySvc := memoryservice.NewService(engine, memoryRepo)
 	session := security.NewAdminSessionManager(e2eTestAdminToken, time.Hour)
 
@@ -333,7 +338,7 @@ func TestCORSPreflightAllowsConfiguredManagerOrigin(t *testing.T) {
 func TestCORSDefaultsReflectIncomingOrigins(t *testing.T) {
 	t.Parallel()
 
-	router := newTestRouter()
+	router := newTestRouter(t)
 
 	adminPreflight := httptest.NewRequest(http.MethodOptions, "/api/admin/session", nil)
 	adminPreflight.Header.Set("Origin", "https://manager.example")
@@ -432,7 +437,7 @@ func TestCORSWildcardDoesNotEnableCredentialedOrigins(t *testing.T) {
 func TestAdminUserAndCacheEndpoints(t *testing.T) {
 	t.Parallel()
 
-	router := newTestRouter()
+	router := newTestRouter(t)
 	cookies := loginCookies(t, router)
 
 	usersRequest := httptest.NewRequest(http.MethodGet, "/api/admin/users", nil)
@@ -478,7 +483,7 @@ func TestAdminUserAndCacheEndpoints(t *testing.T) {
 func TestAdminConfigRuntimeUpdates(t *testing.T) {
 	t.Parallel()
 
-	router := newTestRouter()
+	router := newTestRouter(t)
 	cookies := loginCookies(t, router)
 
 	updateRequest := httptest.NewRequest(http.MethodPut, "/api/admin/config", bytes.NewBufferString(`{"runtime":{"default_provider":"anthropic","message_threshold":12,"provider_timeout_seconds":45,"rerank_model":"jina:jina-reranker-v2-base-multilingual","rerank_candidate_multiplier":8,"rerank_min_candidates":24,"rerank_max_candidates":80,"memory_relation_max_hops":3,"memory_relation_hop_decay_lambda":0.5,"memory_relation_hop_decay_exponent":1.6,"multimodal_enabled":false,"multimodal_storage_backend":"local","multimodal_storage_local_root":"./data/runtime-test-blobs","multimodal_extract_image_model":"vision-v2","multimodal_audio_transcription_enabled":false,"multimodal_max_asset_bytes":2048,"multimodal_allowed_mime_types":["image/png","audio/mpeg"]}}`))
@@ -572,7 +577,7 @@ func TestAdminConfigRuntimeUpdates(t *testing.T) {
 func TestAdminProviderDiagnostics(t *testing.T) {
 	t.Parallel()
 
-	router := newTestRouter()
+	router := newTestRouter(t)
 	cookies := loginCookies(t, router)
 
 	initialRequest := httptest.NewRequest(http.MethodGet, "/api/admin/providers/diagnostics", nil)
@@ -643,7 +648,7 @@ func TestAdminProviderDiagnostics(t *testing.T) {
 func TestAdminMemoryEndpoints(t *testing.T) {
 	t.Parallel()
 
-	router := newTestRouter()
+	router := newTestRouter(t)
 	cookies := loginCookies(t, router)
 
 	createKeyRequest := httptest.NewRequest(http.MethodPost, "/api/admin/memory/keys", bytes.NewBufferString(`{"key":"favorite_food","value":"dumplings","category":"profile"}`))
@@ -764,7 +769,7 @@ func TestAdminMemoryEndpoints(t *testing.T) {
 func TestAdminTaskDetailUnavailableWithoutInspector(t *testing.T) {
 	t.Parallel()
 
-	router := newTestRouter()
+	router := newTestRouter(t)
 	cookies := loginCookies(t, router)
 
 	request := httptest.NewRequest(http.MethodGet, "/api/admin/tasks/detail?queue=default&id=missing", nil)
@@ -778,7 +783,7 @@ func TestAdminTaskDetailUnavailableWithoutInspector(t *testing.T) {
 	}
 }
 
-func newTestRouter() http.Handler {
+func newTestRouter(t *testing.T) http.Handler {
 	memoryRepo := memorystore.NewInMemoryMemoryRepository()
 	conversations := conversationstore.NewInMemoryConversationRepository()
 	_ = memoryRepo.StoreDocument(context.Background(), domain.MemoryDocument{
@@ -920,11 +925,14 @@ func newTestRouter() http.Handler {
 	audit := auditsvc.NewService(nil)
 	admin := adminservice.NewService(conversations, mediastore.NewInMemoryMediaRepository(), memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAICompatible, "", "", "", ""))
 	admin.SetMemoryProcessor(analysisservice.NewService(memoryllmfixture.Generator{}), []string{"preferences"})
+	processor := fixtureProcessing(t)
+	admin.SetProcessingPolicy(processor)
 	users := userservice.NewService(nil)
 	apiKeys := apikeyservice.NewService(nil)
 	usage := usageservice.NewService(nil, conversations)
 	admin.AttachUserRuntime(users, apiKeys, usage)
 	engine := memoryservice.NewEngine(memoryRepo, vector.NewPGVectorStore(nil))
+	engine.SetEntityRecall(processor, time.Second)
 	engine.SetRerankConfig(memoryservice.RerankConfig{
 		Model:               cfg.RerankModel,
 		CandidateMultiplier: cfg.RerankCandidateMultiplier,
@@ -1006,7 +1014,7 @@ func newTestRouter() http.Handler {
 	})
 }
 
-func newProxyRouter() http.Handler {
+func newProxyRouter(t *testing.T) http.Handler {
 	memoryRepo := memorystore.NewInMemoryMemoryRepository()
 	conversations := conversationstore.NewInMemoryConversationRepository()
 	outbox := conversationstore.NewInMemoryOutboxRepository()
@@ -1014,11 +1022,14 @@ func newProxyRouter() http.Handler {
 	audit := auditsvc.NewService(nil)
 	admin := adminservice.NewService(conversations, mediastore.NewInMemoryMediaRepository(), memoryRepo, settings, audit, modelcap.NewRegistry(domain.ProviderOpenAICompatible, "", "", "", ""))
 	admin.SetMemoryProcessor(analysisservice.NewService(memoryllmfixture.Generator{}), []string{"preferences"})
+	processor := fixtureProcessing(t)
+	admin.SetProcessingPolicy(processor)
 	users := userservice.NewService(nil)
 	apiKeys := apikeyservice.NewService(nil)
 	usage := usageservice.NewService(nil, conversations)
 	admin.AttachUserRuntime(users, apiKeys, usage)
 	engine := memoryservice.NewEngine(memoryRepo, vector.NewPGVectorStore(nil))
+	engine.SetEntityRecall(processor, time.Second)
 	memorySvc := memoryservice.NewService(engine, memoryRepo)
 	session := security.NewAdminSessionManager(e2eTestAdminToken, time.Hour)
 	gateway := gatewayservice.NewService(
@@ -1127,4 +1138,14 @@ func loginCookies(t *testing.T, router http.Handler) []*http.Cookie {
 		t.Fatalf("expected login 200, got %d body=%s", recorder.Code, recorder.Body.String())
 	}
 	return recorder.Result().Cookies()
+}
+
+func fixtureProcessing(t *testing.T) *processing.Service {
+	t.Helper()
+	processor, closeEncoder, err := memoryprocessingfixture.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(closeEncoder)
+	return processor
 }

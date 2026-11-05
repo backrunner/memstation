@@ -16,3 +16,7 @@ type AICallRepository interface {
 type MemoryModelRuntime interface {
 	Adapter(string) (ProviderAdapter, string, error)
 }
+
+type AIUsageReporter interface {
+	AIUsageReport(context.Context, domain.AIUsageQuery) (domain.AIUsageReport, error)
+}

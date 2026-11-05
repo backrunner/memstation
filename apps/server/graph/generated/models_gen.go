@@ -74,6 +74,7 @@ type SearchMemoriesResult struct {
 	Memories             []*SearchMemoryItem `json:"memories"`
 	Total                int                 `json:"total"`
 	QueryEmbeddingTokens int                 `json:"queryEmbeddingTokens"`
+	EntityRecall         any                 `json:"entityRecall,omitempty"`
 }
 
 type SearchMemoryItem struct {

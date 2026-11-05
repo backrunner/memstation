@@ -20,11 +20,13 @@ import (
 )
 
 type Engine struct {
-	sources     ports.SourceContextReader
-	repo        ports.MemoryRepository
-	vectors     ports.VectorStore
-	reranker    ports.Reranker
-	generations *memorygenservice.Service
+	entityExtractor ports.QueryEntityExtractor
+	entityTimeout   time.Duration
+	sources         ports.SourceContextReader
+	repo            ports.MemoryRepository
+	vectors         ports.VectorStore
+	reranker        ports.Reranker
+	generations     *memorygenservice.Service
 
 	configMu       sync.RWMutex
 	evidence       EvidenceConfig
@@ -54,7 +56,8 @@ type RerankConfig struct {
 }
 
 type DebugSearchResult struct {
-	Timings *SearchTimings `json:"timings,omitempty"`
+	Timings       *SearchTimings            `json:"timings,omitempty"`
+	SeedAdmission *SeedAdmissionDiagnostics `json:"seed_admission,omitempty"`
 	// Candidates is the authorized, scored pool before the final page cutoff.
 	// It is bounded independently and never enlarges the public Search result.
 	Candidates []domain.MemoryDocument    `json:"candidates,omitempty"`
@@ -63,6 +66,18 @@ type DebugSearchResult struct {
 	Components map[string]ScoreComponents `json:"components"`
 	BaseScores map[string]float64         `json:"base_scores"`
 	Rerank     RerankDiagnostics          `json:"rerank"`
+}
+
+// These counts describe pre-graph seed admission, not final evidence recall.
+// Channels overlap: a node can have both direct and entity-index relevance.
+type SeedAdmissionDiagnostics struct {
+	Limit                int `json:"limit"`
+	Candidates           int `json:"candidates"`
+	Retained             int `json:"retained"`
+	EntityCandidates     int `json:"entity_candidates"`
+	EntityRetained       int `json:"entity_retained"`
+	EntityOnlyCandidates int `json:"entity_only_candidates"`
+	EntityOnlyRetained   int `json:"entity_only_retained"`
 }
 
 // Timings include provider and queue time, and exclude answer generation.
@@ -75,6 +90,7 @@ type SearchTimings struct {
 	HydrationMillis float64 `json:"hydration_millis"`
 	RerankMillis    float64 `json:"rerank_millis"`
 	RankingMillis   float64 `json:"ranking_millis"`
+	EntityMillis    float64 `json:"entity_millis"`
 }
 
 type searchCandidate struct {
@@ -82,6 +98,7 @@ type searchCandidate struct {
 	PreliminaryScore  float64
 	BaseSemanticScore float64
 	KeywordScore      float64
+	EntityScore       float64
 	RelationExpansion float64
 	SupersessionBoost float64
 	ConversationBoost float64
@@ -461,7 +478,16 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 	keywordScores := map[string]float64{}
 	keywordMatches := map[string]domain.KeywordMatch{}
 	timings.ScopeMillis = float64(time.Since(started).Microseconds()) / 1000
+	var entities entityRecall
+	var entityErr error
+	var entityWG sync.WaitGroup
+	entityWG.Go(func() { entities, entityErr = e.recallEntitiesWithinBudget(ctx, input, cfg.useEntities) })
 	keywordResults, vectorResults, err := e.recallDirect(ctx, input, embeddingVersion, embeddingModel, timings)
+	entityWG.Wait()
+	if entityErr != nil {
+		return DebugSearchResult{}, entityErr
+	}
+	timings.EntityMillis = float64(entities.diagnostics.LatencyMS)
 	if err != nil {
 		return DebugSearchResult{}, err
 	}
@@ -487,17 +513,23 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 		}
 		seedScores[nodeID] = combineDirectSignal(semanticScores[nodeID], score)
 	}
-	if err := e.addEntitySeeds(ctx, input, seedScores); err != nil {
+	for id, score := range entities.scores {
+		seedScores[id] = math.Max(seedScores[id], score)
+	}
+	previousSeeds := cloneScoreMap(seedScores)
+	if err := e.addEntitySeeds(ctx, input, seedScores, entities.names); err != nil {
 		return DebugSearchResult{}, err
 	}
 	for id, score := range seedScores {
-		if score > combineDirectSignal(semanticScores[id], keywordScores[id]) {
-			semanticScores[id] = 0
-			keywordScores[id] = score
+		if score > previousSeeds[id] {
+			entities.scores[id] = math.Max(entities.scores[id], score)
 		}
 	}
 	if len(seedScores) == 0 {
-		return e.searchWithoutVectors(ctx, input, variant)
+		result, err := e.searchWithoutVectors(ctx, input, variant)
+		result.Result.EntityRecall = entities.diagnostics
+		result.Timings = timings
+		return result, err
 	}
 
 	baseNodeIDs := make([]string, 0, len(seedScores))
@@ -512,11 +544,30 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 	})
 
 	seedBudget := (domain.RelationQuery{MaxNodes: e.RelationRecallConfig().MaxNodes}).Normalized().MaxNodes
+	baseNodeIDs = balanceSeedChannels(baseNodeIDs, seedBudget, semanticScores, keywordScores, entities.sources)
+	admission := &SeedAdmissionDiagnostics{Limit: seedBudget, Candidates: len(baseNodeIDs)}
+	for _, id := range baseNodeIDs {
+		if entities.scores[id] > 0 {
+			admission.EntityCandidates++
+			if semanticScores[id] <= 0 && keywordScores[id] <= 0 {
+				admission.EntityOnlyCandidates++
+			}
+		}
+	}
 	if len(baseNodeIDs) > seedBudget {
 		for _, id := range baseNodeIDs[seedBudget:] {
 			delete(seedScores, id)
 		}
 		baseNodeIDs = baseNodeIDs[:seedBudget]
+	}
+	admission.Retained = len(baseNodeIDs)
+	for _, id := range baseNodeIDs {
+		if entities.scores[id] > 0 {
+			admission.EntityRetained++
+			if semanticScores[id] <= 0 && keywordScores[id] <= 0 {
+				admission.EntityOnlyRetained++
+			}
+		}
 	}
 	scoreMap := cloneScoreMap(seedScores)
 	relationScores := cloneScoreMap(seedScores)
@@ -554,14 +605,24 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 	}
 	conversationBoosts := map[string]float64{}
 	if input.IncludeConversation {
-		scoreMap, conversationBoosts, _, err = e.expandConversationCandidates(ctx, input, scoreMap, docs)
+		scoreMap, conversationBoosts, docs, err = e.expandConversationCandidates(ctx, input, scoreMap, docs)
 		if err != nil {
 			return DebugSearchResult{}, err
 		}
 	}
-	scoreMap, supersessionBoosts, supersessionLineage, err := e.canonicalizeSupersededScores(ctx, input, scoreMap, relations)
+	scoreMap, supersessionBoosts, supersessionLineage, err := e.canonicalizeSupersededScores(ctx, input, scoreMap, docs)
 	if err != nil {
 		return DebugSearchResult{}, err
+	}
+	// Carry only the name-index relevance across the store-verified current
+	// fact lineage; never retrieve a stale entity-linked fact as the current head.
+	for head, meta := range supersessionLineage {
+		for _, old := range meta.SupersededAliasNodeIDs {
+			if entities.scores[old] > entities.scores[head] {
+				entities.scores[head] = entities.scores[old]
+				entities.matched[head] = append([]string{}, entities.matched[old]...)
+			}
+		}
 	}
 	candidateNodeIDs = candidateNodeIDs[:0]
 	for nodeID := range scoreMap {
@@ -585,12 +646,13 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 		relationExpansion := maxFloat(relationScores[doc.NodeID]-baseScore, 0)
 		supersessionBoost := supersessionBoosts[doc.NodeID]
 		conversationBoost := conversationBoosts[doc.NodeID]
-		components := scoreDocumentAt(doc, semanticScores[doc.NodeID], keywordScores[doc.NodeID], relationExpansion, supersessionBoost, conversationBoost, 0, false, now, cfg)
+		components := scoreDocumentAt(doc, semanticScores[doc.NodeID], keywordScores[doc.NodeID], entities.scores[doc.NodeID], relationExpansion, supersessionBoost, conversationBoost, 0, false, now, cfg)
 		candidates = append(candidates, searchCandidate{
 			Document:          doc,
 			PreliminaryScore:  components.EffectiveScore,
 			BaseSemanticScore: semanticScores[doc.NodeID],
 			KeywordScore:      keywordScores[doc.NodeID],
+			EntityScore:       entities.scores[doc.NodeID],
 			RelationExpansion: relationExpansion,
 			SupersessionBoost: supersessionBoost,
 			ConversationBoost: conversationBoost,
@@ -626,7 +688,15 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 		if _, ok := rerankRanks[doc.NodeID]; ok {
 			rerankApplied = true
 		}
-		components := scoreDocumentAt(doc, candidate.BaseSemanticScore, candidate.KeywordScore, candidate.RelationExpansion, candidate.SupersessionBoost, candidate.ConversationBoost, rerankScore, rerankApplied, now, cfg)
+		components := scoreDocumentAt(doc, candidate.BaseSemanticScore, candidate.KeywordScore, candidate.EntityScore, candidate.RelationExpansion, candidate.SupersessionBoost, candidate.ConversationBoost, rerankScore, rerankApplied, now, cfg)
+		if names := entities.matched[doc.NodeID]; len(names) > 0 {
+			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{"matched_entities": names})
+		}
+		if path, ok := paths[doc.NodeID]; ok {
+			if names := entities.matched[path.SeedNodeID]; len(names) > 0 {
+				doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{"matched_entities": names})
+			}
+		}
 		if match, ok := keywordMatches[doc.NodeID]; ok {
 			doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{
 				"matched_keywords": match.Keywords,
@@ -652,6 +722,7 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 				"rerank_score":   rerankScore,
 			})
 		}
+		doc.Metadata = mergeSearchMetadata(doc.Metadata, map[string]any{"entity_score": components.EntityScore})
 		doc.Score = components.SemanticScore
 		doc.EffectiveScore = components.EffectiveScore
 		if cfg.useRelations {
@@ -675,10 +746,12 @@ func (e *Engine) search(ctx context.Context, input domain.SearchInput, variant S
 	}
 	timings.RankingMillis = float64(time.Since(phase).Microseconds()) / 1000
 	return DebugSearchResult{
-		Timings:    timings,
-		Candidates: pool,
+		SeedAdmission: admission,
+		Timings:       timings,
+		Candidates:    pool,
 		Result: domain.SearchResult{
 			Memories:             memories,
+			EntityRecall:         entities.diagnostics,
 			Total:                len(memories),
 			QueryEmbeddingTokens: max(len(strings.Fields(input.Query))*3, len(strings.TrimSpace(input.Query))/4),
 		},
@@ -726,7 +799,7 @@ func (e *Engine) searchWithoutVectors(ctx context.Context, input domain.SearchIn
 			scoreMap[nodeID] = score
 		}
 	}
-	scoreMap, supersessionBoosts, supersessionLineage, err := e.canonicalizeSupersededScores(ctx, input, scoreMap, nil)
+	scoreMap, supersessionBoosts, supersessionLineage, err := e.canonicalizeSupersededScores(ctx, input, scoreMap, result.Memories)
 	if err != nil {
 		return DebugSearchResult{}, err
 	}
@@ -746,7 +819,7 @@ func (e *Engine) searchWithoutVectors(ctx context.Context, input domain.SearchIn
 		if doc.ID == "" || !matchesTemporalSearchInput(doc, input) || !matchesSearchDocument(ctx, doc, input) {
 			continue
 		}
-		components := scoreDocumentAt(doc, baseScores[doc.NodeID], 0, 0, supersessionBoosts[doc.NodeID], conversationBoosts[doc.NodeID], 0, false, now, cfg)
+		components := scoreDocumentAt(doc, baseScores[doc.NodeID], 0, 0, 0, supersessionBoosts[doc.NodeID], conversationBoosts[doc.NodeID], 0, false, now, cfg)
 		candidates = append(candidates, searchCandidate{
 			Document:          doc,
 			PreliminaryScore:  components.EffectiveScore,
@@ -773,7 +846,7 @@ func (e *Engine) searchWithoutVectors(ctx context.Context, input domain.SearchIn
 		if _, ok := rerankRanks[doc.NodeID]; ok {
 			rerankApplied = true
 		}
-		components := scoreDocumentAt(doc, candidate.BaseSemanticScore, 0, 0, candidate.SupersessionBoost, candidate.ConversationBoost, rerankScore, rerankApplied, now, cfg)
+		components := scoreDocumentAt(doc, candidate.BaseSemanticScore, 0, 0, 0, candidate.SupersessionBoost, candidate.ConversationBoost, rerankScore, rerankApplied, now, cfg)
 		if meta, ok := supersessionLineage[doc.NodeID]; ok {
 			doc = mergeLineageSearchMetadata(doc, meta)
 		}
@@ -1067,14 +1140,32 @@ func (cfg RelationRecallConfig) hopPenalty(hop int) float64 {
 	return clamp(math.Exp(-cfg.HopDecayLambda*math.Pow(distance, cfg.HopDecayExponent)), 0, 1)
 }
 
-func (e *Engine) canonicalizeSupersededScores(ctx context.Context, input domain.SearchInput, scoreMap map[string]float64, relations []domain.MemoryRelation) (map[string]float64, map[string]float64, map[string]domain.MemoryLineageMeta, error) {
+func (e *Engine) canonicalizeSupersededScores(ctx context.Context, input domain.SearchInput, scoreMap map[string]float64, candidates []domain.MemoryDocument) (map[string]float64, map[string]float64, map[string]domain.MemoryLineageMeta, error) {
 	if e.repo == nil || len(scoreMap) == 0 {
 		return scoreMap, nil, nil, nil
 	}
 
-	nodeIDs := make([]string, 0, len(scoreMap))
+	// Only facts participate in supersession. Reuse candidate identities to
+	// avoid rehydrating every source segment/entity just to discard it here.
+	// Fact metadata is still read fresh before looking up its current lineage;
+	// all final candidates are revalidated by the caller after canonicalization.
+	knownNonFacts := make(map[string]struct{}, len(candidates))
+	for _, doc := range candidates {
+		if doc.Type != "" && doc.Type != domain.MemoryTypeFact && doc.NodeID != "" {
+			knownNonFacts[doc.NodeID] = struct{}{}
+		}
+	}
+	nodeIDs := make([]string, 0)
 	for nodeID := range scoreMap {
-		nodeIDs = append(nodeIDs, nodeID)
+		// A node not hydrated earlier may have become visible since that read.
+		// Its type is unknown, so retain the fresh lookup rather than assuming
+		// it cannot be a superseded fact.
+		if _, skip := knownNonFacts[nodeID]; !skip {
+			nodeIDs = append(nodeIDs, nodeID)
+		}
+	}
+	if len(nodeIDs) == 0 {
+		return scoreMap, nil, nil, nil
 	}
 	docs, err := e.repo.ListDocumentsByNodeIDsInGeneration(ctx, input.UserID, input.GenerationID, nodeIDs)
 	if err != nil {
@@ -1134,7 +1225,6 @@ func (e *Engine) canonicalizeSupersededScores(ctx context.Context, input domain.
 		lineageMeta[head.NodeID] = meta
 		delete(canonicalizedScores, doc.NodeID)
 	}
-	_ = relations
 
 	boosts := map[string]float64{}
 	for nodeID, inherited := range inheritedScores {

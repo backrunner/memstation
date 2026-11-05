@@ -74,6 +74,26 @@ func UpdatedAt(v time.Time) predicate.MemoryAICall {
 	return predicate.MemoryAICall(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
+// Stage applies equality check predicate on the "stage" field. It's identical to StageEQ.
+func Stage(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldEQ(FieldStage, v))
+}
+
+// Strategy applies equality check predicate on the "strategy" field. It's identical to StrategyEQ.
+func Strategy(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldEQ(FieldStrategy, v))
+}
+
+// DurationMs applies equality check predicate on the "duration_ms" field. It's identical to DurationMsEQ.
+func DurationMs(v int64) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldEQ(FieldDurationMs, v))
+}
+
+// UsageKnown applies equality check predicate on the "usage_known" field. It's identical to UsageKnownEQ.
+func UsageKnown(v bool) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldEQ(FieldUsageKnown, v))
+}
+
 // UserID applies equality check predicate on the "user_id" field. It's identical to UserIDEQ.
 func UserID(v string) predicate.MemoryAICall {
 	return predicate.MemoryAICall(sql.FieldEQ(FieldUserID, v))
@@ -242,6 +262,186 @@ func UpdatedAtLT(v time.Time) predicate.MemoryAICall {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.MemoryAICall {
 	return predicate.MemoryAICall(sql.FieldLTE(FieldUpdatedAt, v))
+}
+
+// StageEQ applies the EQ predicate on the "stage" field.
+func StageEQ(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldEQ(FieldStage, v))
+}
+
+// StageNEQ applies the NEQ predicate on the "stage" field.
+func StageNEQ(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldNEQ(FieldStage, v))
+}
+
+// StageIn applies the In predicate on the "stage" field.
+func StageIn(vs ...string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldIn(FieldStage, vs...))
+}
+
+// StageNotIn applies the NotIn predicate on the "stage" field.
+func StageNotIn(vs ...string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldNotIn(FieldStage, vs...))
+}
+
+// StageGT applies the GT predicate on the "stage" field.
+func StageGT(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldGT(FieldStage, v))
+}
+
+// StageGTE applies the GTE predicate on the "stage" field.
+func StageGTE(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldGTE(FieldStage, v))
+}
+
+// StageLT applies the LT predicate on the "stage" field.
+func StageLT(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldLT(FieldStage, v))
+}
+
+// StageLTE applies the LTE predicate on the "stage" field.
+func StageLTE(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldLTE(FieldStage, v))
+}
+
+// StageContains applies the Contains predicate on the "stage" field.
+func StageContains(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldContains(FieldStage, v))
+}
+
+// StageHasPrefix applies the HasPrefix predicate on the "stage" field.
+func StageHasPrefix(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldHasPrefix(FieldStage, v))
+}
+
+// StageHasSuffix applies the HasSuffix predicate on the "stage" field.
+func StageHasSuffix(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldHasSuffix(FieldStage, v))
+}
+
+// StageEqualFold applies the EqualFold predicate on the "stage" field.
+func StageEqualFold(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldEqualFold(FieldStage, v))
+}
+
+// StageContainsFold applies the ContainsFold predicate on the "stage" field.
+func StageContainsFold(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldContainsFold(FieldStage, v))
+}
+
+// StrategyEQ applies the EQ predicate on the "strategy" field.
+func StrategyEQ(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldEQ(FieldStrategy, v))
+}
+
+// StrategyNEQ applies the NEQ predicate on the "strategy" field.
+func StrategyNEQ(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldNEQ(FieldStrategy, v))
+}
+
+// StrategyIn applies the In predicate on the "strategy" field.
+func StrategyIn(vs ...string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldIn(FieldStrategy, vs...))
+}
+
+// StrategyNotIn applies the NotIn predicate on the "strategy" field.
+func StrategyNotIn(vs ...string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldNotIn(FieldStrategy, vs...))
+}
+
+// StrategyGT applies the GT predicate on the "strategy" field.
+func StrategyGT(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldGT(FieldStrategy, v))
+}
+
+// StrategyGTE applies the GTE predicate on the "strategy" field.
+func StrategyGTE(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldGTE(FieldStrategy, v))
+}
+
+// StrategyLT applies the LT predicate on the "strategy" field.
+func StrategyLT(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldLT(FieldStrategy, v))
+}
+
+// StrategyLTE applies the LTE predicate on the "strategy" field.
+func StrategyLTE(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldLTE(FieldStrategy, v))
+}
+
+// StrategyContains applies the Contains predicate on the "strategy" field.
+func StrategyContains(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldContains(FieldStrategy, v))
+}
+
+// StrategyHasPrefix applies the HasPrefix predicate on the "strategy" field.
+func StrategyHasPrefix(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldHasPrefix(FieldStrategy, v))
+}
+
+// StrategyHasSuffix applies the HasSuffix predicate on the "strategy" field.
+func StrategyHasSuffix(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldHasSuffix(FieldStrategy, v))
+}
+
+// StrategyEqualFold applies the EqualFold predicate on the "strategy" field.
+func StrategyEqualFold(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldEqualFold(FieldStrategy, v))
+}
+
+// StrategyContainsFold applies the ContainsFold predicate on the "strategy" field.
+func StrategyContainsFold(v string) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldContainsFold(FieldStrategy, v))
+}
+
+// DurationMsEQ applies the EQ predicate on the "duration_ms" field.
+func DurationMsEQ(v int64) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldEQ(FieldDurationMs, v))
+}
+
+// DurationMsNEQ applies the NEQ predicate on the "duration_ms" field.
+func DurationMsNEQ(v int64) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldNEQ(FieldDurationMs, v))
+}
+
+// DurationMsIn applies the In predicate on the "duration_ms" field.
+func DurationMsIn(vs ...int64) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldIn(FieldDurationMs, vs...))
+}
+
+// DurationMsNotIn applies the NotIn predicate on the "duration_ms" field.
+func DurationMsNotIn(vs ...int64) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldNotIn(FieldDurationMs, vs...))
+}
+
+// DurationMsGT applies the GT predicate on the "duration_ms" field.
+func DurationMsGT(v int64) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldGT(FieldDurationMs, v))
+}
+
+// DurationMsGTE applies the GTE predicate on the "duration_ms" field.
+func DurationMsGTE(v int64) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldGTE(FieldDurationMs, v))
+}
+
+// DurationMsLT applies the LT predicate on the "duration_ms" field.
+func DurationMsLT(v int64) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldLT(FieldDurationMs, v))
+}
+
+// DurationMsLTE applies the LTE predicate on the "duration_ms" field.
+func DurationMsLTE(v int64) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldLTE(FieldDurationMs, v))
+}
+
+// UsageKnownEQ applies the EQ predicate on the "usage_known" field.
+func UsageKnownEQ(v bool) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldEQ(FieldUsageKnown, v))
+}
+
+// UsageKnownNEQ applies the NEQ predicate on the "usage_known" field.
+func UsageKnownNEQ(v bool) predicate.MemoryAICall {
+	return predicate.MemoryAICall(sql.FieldNEQ(FieldUsageKnown, v))
 }
 
 // UserIDEQ applies the EQ predicate on the "user_id" field.

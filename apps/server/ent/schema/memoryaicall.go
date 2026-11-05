@@ -12,6 +12,7 @@ type MemoryAICall struct{ ent.Schema }
 func (MemoryAICall) Mixin() []ent.Mixin { return []ent.Mixin{TimeMixin{}} }
 func (MemoryAICall) Fields() []ent.Field {
 	return []ent.Field{
+		field.String("stage").Default(""), field.String("strategy").Default(""), field.Int64("duration_ms").Default(0), field.Bool("usage_known").Default(false),
 		field.String("id"), field.String("user_id"), field.String("workspace_id"), field.String("partition_id").Default(""), field.JSON("partition_ids", []string{}).Default([]string{""}),
 		field.String("role"), field.String("model_alias"), field.String("model_version").Default(""), field.String("trace_id").Default(""), field.String("job_id").Default(""), field.Int("attempt").Default(0),
 		field.String("provider_request_id").Default(""), field.String("broker_usage_id").Default(""), field.String("status").Default("started"), field.Int("input_tokens").Default(0), field.Int("output_tokens").Default(0),

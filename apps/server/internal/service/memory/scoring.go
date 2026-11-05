@@ -11,6 +11,7 @@ type SearchVariant string
 
 const (
 	SearchVariantFull               SearchVariant = "full"
+	SearchVariantFullNoEntities     SearchVariant = "full_no_entities"
 	SearchVariantFullNoRelations    SearchVariant = "full_no_relations"
 	SearchVariantSemanticOnly       SearchVariant = "semantic_only"
 	SearchVariantSemanticImportance SearchVariant = "semantic_importance"
@@ -20,6 +21,7 @@ type ScoreComponents struct {
 	ScorePolicy       string  `json:"score_policy"`
 	BaseSemanticScore float64 `json:"base_semantic_score"`
 	KeywordScore      float64 `json:"keyword_score"`
+	EntityScore       float64 `json:"entity_score"`
 	DirectScore       float64 `json:"direct_score"`
 	RerankScore       float64 `json:"rerank_score"`
 	RerankApplied     bool    `json:"rerank_applied"`
@@ -33,7 +35,7 @@ type ScoreComponents struct {
 	EffectiveScore    float64 `json:"effective_score"`
 }
 
-type searchConfig struct{ useRelations, useImportance, useTimeDecay bool }
+type searchConfig struct{ useRelations, useImportance, useTimeDecay, useEntities bool }
 
 func configForVariant(v SearchVariant) searchConfig {
 	switch v {
@@ -42,17 +44,19 @@ func configForVariant(v SearchVariant) searchConfig {
 	case SearchVariantSemanticImportance:
 		return searchConfig{useImportance: true}
 	case SearchVariantFullNoRelations:
-		return searchConfig{useImportance: true, useTimeDecay: true}
-	default:
+		return searchConfig{useImportance: true, useTimeDecay: true, useEntities: true}
+	case SearchVariantFullNoEntities:
 		return searchConfig{useRelations: true, useImportance: true, useTimeDecay: true}
+	default:
+		return searchConfig{useRelations: true, useImportance: true, useTimeDecay: true, useEntities: true}
 	}
 }
 
-func scoreDocument(doc domain.MemoryDocument, base, keyword, relation, supersession, conversation, rerank float64, rerankApplied bool, cfg searchConfig) ScoreComponents {
-	return scoreDocumentAt(doc, base, keyword, relation, supersession, conversation, rerank, rerankApplied, time.Now().UTC(), cfg)
+func scoreDocument(doc domain.MemoryDocument, base, keyword, entity, relation, supersession, conversation, rerank float64, rerankApplied bool, cfg searchConfig) ScoreComponents {
+	return scoreDocumentAt(doc, base, keyword, entity, relation, supersession, conversation, rerank, rerankApplied, time.Now().UTC(), cfg)
 }
 
-func scoreDocumentAt(doc domain.MemoryDocument, base, keyword, relation, supersession, conversation, rerank float64, rerankApplied bool, now time.Time, cfg searchConfig) ScoreComponents {
+func scoreDocumentAt(doc domain.MemoryDocument, base, keyword, entity, relation, supersession, conversation, rerank float64, rerankApplied bool, now time.Time, cfg searchConfig) ScoreComponents {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
@@ -60,7 +64,7 @@ func scoreDocumentAt(doc domain.MemoryDocument, base, keyword, relation, superse
 	// Without a validated reranker batch, use bounded direct/graph relevance;
 	// there is no alternate scoring policy or late conversation bonus.
 	direct := combineDirectSignal(base, keyword)
-	c := ScoreComponents{ScorePolicy: "hybrid_v1", BaseSemanticScore: base, KeywordScore: keyword, DirectScore: direct, RerankScore: rerank, RerankApplied: rerankApplied, RelationExpansion: relation, SupersessionBoost: supersession, ConversationBoost: conversation, SemanticScore: clamp(math.Max(direct, relation), 0, 1), ImportanceWeight: 1, TimeDecay: 1, FreshnessPenalty: domain.StalePenalty(doc, now)}
+	c := ScoreComponents{ScorePolicy: "hybrid_v2", BaseSemanticScore: base, KeywordScore: keyword, EntityScore: entity, DirectScore: direct, RerankScore: rerank, RerankApplied: rerankApplied, RelationExpansion: relation, SupersessionBoost: supersession, ConversationBoost: conversation, SemanticScore: clamp(math.Max(math.Max(direct, entity), relation), 0, 1), ImportanceWeight: 1, TimeDecay: 1, FreshnessPenalty: domain.StalePenalty(doc, now)}
 	if rerankApplied {
 		c.ScorePolicy = "relevance_v1"
 		c.SemanticScore = rerank
@@ -75,12 +79,12 @@ func scoreDocumentAt(doc domain.MemoryDocument, base, keyword, relation, superse
 	return c
 }
 
-func ExplainDocumentScore(doc domain.MemoryDocument, base, keyword, relation, supersession, conversation, rerank float64, rerankApplied bool, variant SearchVariant) ScoreComponents {
-	return scoreDocument(doc, base, keyword, relation, supersession, conversation, rerank, rerankApplied, configForVariant(variant))
+func ExplainDocumentScore(doc domain.MemoryDocument, base, keyword, entity, relation, supersession, conversation, rerank float64, rerankApplied bool, variant SearchVariant) ScoreComponents {
+	return scoreDocument(doc, base, keyword, entity, relation, supersession, conversation, rerank, rerankApplied, configForVariant(variant))
 }
 
 func ExplainDocumentScoreAt(doc domain.MemoryDocument, signals ScoreComponents, now time.Time, variant SearchVariant, rerankApplied bool) ScoreComponents {
-	return scoreDocumentAt(doc, signals.BaseSemanticScore, signals.KeywordScore, signals.RelationExpansion, signals.SupersessionBoost, signals.ConversationBoost, signals.RerankScore, rerankApplied, now, configForVariant(variant))
+	return scoreDocumentAt(doc, signals.BaseSemanticScore, signals.KeywordScore, signals.EntityScore, signals.RelationExpansion, signals.SupersessionBoost, signals.ConversationBoost, signals.RerankScore, rerankApplied, now, configForVariant(variant))
 }
 
 func combineDirectSignal(base, keyword float64) float64 { return clamp(math.Max(base, keyword), 0, 1) }

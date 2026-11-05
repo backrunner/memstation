@@ -9,6 +9,7 @@ import (
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/security"
+	"memstation/apps/server/internal/service/aibroker"
 	lifecycleservice "memstation/apps/server/internal/service/lifecycle"
 
 	"github.com/go-chi/chi/v5"
@@ -51,6 +52,10 @@ func memoryRecoveryBarrier(check func(context.Context) error) func(http.Handler)
 }
 
 func lifecycleError(w http.ResponseWriter, err error) {
+	if errors.Is(err, aibroker.ErrInvalidUsageQuery) {
+		writeError(w, 400, "invalid_request", "invalid usage query")
+		return
+	}
 	if errors.Is(err, lifecycleservice.ErrInvalidInput) {
 		writeError(w, 400, "invalid_request", "invalid memory lifecycle input")
 		return
@@ -245,17 +250,23 @@ func registerAdminLifecycleRoutes(r chi.Router, deps Dependencies) {
 			}
 			writeJSON(w, 200, out)
 		})
+		r.Get("/usage/summary", aiUsageReportHandler(deps.AIUsage))
 		r.Get("/usage", func(w http.ResponseWriter, r *http.Request) {
 			if deps.AIUsage == nil {
 				writeError(w, 503, "unavailable", "usage unavailable")
 				return
 			}
-			out, err := deps.AIUsage.List(r.Context(), r.URL.Query().Get("after"), 100)
+			q, err := usageQuery(r)
+			if err != nil {
+				writeError(w, 400, "invalid_request", "invalid usage query")
+				return
+			}
+			out, err := deps.AIUsage.FilteredList(r.Context(), q, r.URL.Query().Get("after"), 100)
 			if err != nil {
 				lifecycleError(w, err)
 				return
 			}
-			writeJSON(w, 200, map[string]any{"items": out, "usage_authority": "broker", "additional_charge": false})
+			writeJSON(w, 200, map[string]any{"items": out, "usage_authority": "per_call", "additional_charge": false})
 		})
 
 		r.Post("/memory/candidates/{id}/decision", func(w http.ResponseWriter, r *http.Request) {

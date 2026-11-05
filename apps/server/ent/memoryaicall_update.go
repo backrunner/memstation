@@ -35,6 +35,69 @@ func (_u *MemoryAICallUpdate) SetUpdatedAt(v time.Time) *MemoryAICallUpdate {
 	return _u
 }
 
+// SetStage sets the "stage" field.
+func (_u *MemoryAICallUpdate) SetStage(v string) *MemoryAICallUpdate {
+	_u.mutation.SetStage(v)
+	return _u
+}
+
+// SetNillableStage sets the "stage" field if the given value is not nil.
+func (_u *MemoryAICallUpdate) SetNillableStage(v *string) *MemoryAICallUpdate {
+	if v != nil {
+		_u.SetStage(*v)
+	}
+	return _u
+}
+
+// SetStrategy sets the "strategy" field.
+func (_u *MemoryAICallUpdate) SetStrategy(v string) *MemoryAICallUpdate {
+	_u.mutation.SetStrategy(v)
+	return _u
+}
+
+// SetNillableStrategy sets the "strategy" field if the given value is not nil.
+func (_u *MemoryAICallUpdate) SetNillableStrategy(v *string) *MemoryAICallUpdate {
+	if v != nil {
+		_u.SetStrategy(*v)
+	}
+	return _u
+}
+
+// SetDurationMs sets the "duration_ms" field.
+func (_u *MemoryAICallUpdate) SetDurationMs(v int64) *MemoryAICallUpdate {
+	_u.mutation.ResetDurationMs()
+	_u.mutation.SetDurationMs(v)
+	return _u
+}
+
+// SetNillableDurationMs sets the "duration_ms" field if the given value is not nil.
+func (_u *MemoryAICallUpdate) SetNillableDurationMs(v *int64) *MemoryAICallUpdate {
+	if v != nil {
+		_u.SetDurationMs(*v)
+	}
+	return _u
+}
+
+// AddDurationMs adds value to the "duration_ms" field.
+func (_u *MemoryAICallUpdate) AddDurationMs(v int64) *MemoryAICallUpdate {
+	_u.mutation.AddDurationMs(v)
+	return _u
+}
+
+// SetUsageKnown sets the "usage_known" field.
+func (_u *MemoryAICallUpdate) SetUsageKnown(v bool) *MemoryAICallUpdate {
+	_u.mutation.SetUsageKnown(v)
+	return _u
+}
+
+// SetNillableUsageKnown sets the "usage_known" field if the given value is not nil.
+func (_u *MemoryAICallUpdate) SetNillableUsageKnown(v *bool) *MemoryAICallUpdate {
+	if v != nil {
+		_u.SetUsageKnown(*v)
+	}
+	return _u
+}
+
 // SetUserID sets the "user_id" field.
 func (_u *MemoryAICallUpdate) SetUserID(v string) *MemoryAICallUpdate {
 	_u.mutation.SetUserID(v)
@@ -373,6 +436,21 @@ func (_u *MemoryAICallUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(memoryaicall.FieldUpdatedAt, field.TypeTime, value)
 	}
+	if value, ok := _u.mutation.Stage(); ok {
+		_spec.SetField(memoryaicall.FieldStage, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Strategy(); ok {
+		_spec.SetField(memoryaicall.FieldStrategy, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DurationMs(); ok {
+		_spec.SetField(memoryaicall.FieldDurationMs, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedDurationMs(); ok {
+		_spec.AddField(memoryaicall.FieldDurationMs, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.UsageKnown(); ok {
+		_spec.SetField(memoryaicall.FieldUsageKnown, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(memoryaicall.FieldUserID, field.TypeString, value)
 	}
@@ -467,6 +545,69 @@ type MemoryAICallUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *MemoryAICallUpdateOne) SetUpdatedAt(v time.Time) *MemoryAICallUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
+	return _u
+}
+
+// SetStage sets the "stage" field.
+func (_u *MemoryAICallUpdateOne) SetStage(v string) *MemoryAICallUpdateOne {
+	_u.mutation.SetStage(v)
+	return _u
+}
+
+// SetNillableStage sets the "stage" field if the given value is not nil.
+func (_u *MemoryAICallUpdateOne) SetNillableStage(v *string) *MemoryAICallUpdateOne {
+	if v != nil {
+		_u.SetStage(*v)
+	}
+	return _u
+}
+
+// SetStrategy sets the "strategy" field.
+func (_u *MemoryAICallUpdateOne) SetStrategy(v string) *MemoryAICallUpdateOne {
+	_u.mutation.SetStrategy(v)
+	return _u
+}
+
+// SetNillableStrategy sets the "strategy" field if the given value is not nil.
+func (_u *MemoryAICallUpdateOne) SetNillableStrategy(v *string) *MemoryAICallUpdateOne {
+	if v != nil {
+		_u.SetStrategy(*v)
+	}
+	return _u
+}
+
+// SetDurationMs sets the "duration_ms" field.
+func (_u *MemoryAICallUpdateOne) SetDurationMs(v int64) *MemoryAICallUpdateOne {
+	_u.mutation.ResetDurationMs()
+	_u.mutation.SetDurationMs(v)
+	return _u
+}
+
+// SetNillableDurationMs sets the "duration_ms" field if the given value is not nil.
+func (_u *MemoryAICallUpdateOne) SetNillableDurationMs(v *int64) *MemoryAICallUpdateOne {
+	if v != nil {
+		_u.SetDurationMs(*v)
+	}
+	return _u
+}
+
+// AddDurationMs adds value to the "duration_ms" field.
+func (_u *MemoryAICallUpdateOne) AddDurationMs(v int64) *MemoryAICallUpdateOne {
+	_u.mutation.AddDurationMs(v)
+	return _u
+}
+
+// SetUsageKnown sets the "usage_known" field.
+func (_u *MemoryAICallUpdateOne) SetUsageKnown(v bool) *MemoryAICallUpdateOne {
+	_u.mutation.SetUsageKnown(v)
+	return _u
+}
+
+// SetNillableUsageKnown sets the "usage_known" field if the given value is not nil.
+func (_u *MemoryAICallUpdateOne) SetNillableUsageKnown(v *bool) *MemoryAICallUpdateOne {
+	if v != nil {
+		_u.SetUsageKnown(*v)
+	}
 	return _u
 }
 
@@ -837,6 +978,21 @@ func (_u *MemoryAICallUpdateOne) sqlSave(ctx context.Context) (_node *MemoryAICa
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(memoryaicall.FieldUpdatedAt, field.TypeTime, value)
+	}
+	if value, ok := _u.mutation.Stage(); ok {
+		_spec.SetField(memoryaicall.FieldStage, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Strategy(); ok {
+		_spec.SetField(memoryaicall.FieldStrategy, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DurationMs(); ok {
+		_spec.SetField(memoryaicall.FieldDurationMs, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedDurationMs(); ok {
+		_spec.AddField(memoryaicall.FieldDurationMs, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.UsageKnown(); ok {
+		_spec.SetField(memoryaicall.FieldUsageKnown, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(memoryaicall.FieldUserID, field.TypeString, value)

@@ -14920,6 +14920,11 @@ type MemoryAICallMutation struct {
 	id                  *string
 	created_at          *time.Time
 	updated_at          *time.Time
+	stage               *string
+	strategy            *string
+	duration_ms         *int64
+	addduration_ms      *int64
+	usage_known         *bool
 	user_id             *string
 	workspace_id        *string
 	partition_id        *string
@@ -15123,6 +15128,170 @@ func (m *MemoryAICallMutation) OldUpdatedAt(ctx context.Context) (v time.Time, e
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *MemoryAICallMutation) ResetUpdatedAt() {
 	m.updated_at = nil
+}
+
+// SetStage sets the "stage" field.
+func (m *MemoryAICallMutation) SetStage(s string) {
+	m.stage = &s
+}
+
+// Stage returns the value of the "stage" field in the mutation.
+func (m *MemoryAICallMutation) Stage() (r string, exists bool) {
+	v := m.stage
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStage returns the old "stage" field's value of the MemoryAICall entity.
+// If the MemoryAICall object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryAICallMutation) OldStage(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStage: %w", err)
+	}
+	return oldValue.Stage, nil
+}
+
+// ResetStage resets all changes to the "stage" field.
+func (m *MemoryAICallMutation) ResetStage() {
+	m.stage = nil
+}
+
+// SetStrategy sets the "strategy" field.
+func (m *MemoryAICallMutation) SetStrategy(s string) {
+	m.strategy = &s
+}
+
+// Strategy returns the value of the "strategy" field in the mutation.
+func (m *MemoryAICallMutation) Strategy() (r string, exists bool) {
+	v := m.strategy
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStrategy returns the old "strategy" field's value of the MemoryAICall entity.
+// If the MemoryAICall object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryAICallMutation) OldStrategy(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStrategy is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStrategy requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStrategy: %w", err)
+	}
+	return oldValue.Strategy, nil
+}
+
+// ResetStrategy resets all changes to the "strategy" field.
+func (m *MemoryAICallMutation) ResetStrategy() {
+	m.strategy = nil
+}
+
+// SetDurationMs sets the "duration_ms" field.
+func (m *MemoryAICallMutation) SetDurationMs(i int64) {
+	m.duration_ms = &i
+	m.addduration_ms = nil
+}
+
+// DurationMs returns the value of the "duration_ms" field in the mutation.
+func (m *MemoryAICallMutation) DurationMs() (r int64, exists bool) {
+	v := m.duration_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDurationMs returns the old "duration_ms" field's value of the MemoryAICall entity.
+// If the MemoryAICall object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryAICallMutation) OldDurationMs(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDurationMs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDurationMs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDurationMs: %w", err)
+	}
+	return oldValue.DurationMs, nil
+}
+
+// AddDurationMs adds i to the "duration_ms" field.
+func (m *MemoryAICallMutation) AddDurationMs(i int64) {
+	if m.addduration_ms != nil {
+		*m.addduration_ms += i
+	} else {
+		m.addduration_ms = &i
+	}
+}
+
+// AddedDurationMs returns the value that was added to the "duration_ms" field in this mutation.
+func (m *MemoryAICallMutation) AddedDurationMs() (r int64, exists bool) {
+	v := m.addduration_ms
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetDurationMs resets all changes to the "duration_ms" field.
+func (m *MemoryAICallMutation) ResetDurationMs() {
+	m.duration_ms = nil
+	m.addduration_ms = nil
+}
+
+// SetUsageKnown sets the "usage_known" field.
+func (m *MemoryAICallMutation) SetUsageKnown(b bool) {
+	m.usage_known = &b
+}
+
+// UsageKnown returns the value of the "usage_known" field in the mutation.
+func (m *MemoryAICallMutation) UsageKnown() (r bool, exists bool) {
+	v := m.usage_known
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUsageKnown returns the old "usage_known" field's value of the MemoryAICall entity.
+// If the MemoryAICall object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MemoryAICallMutation) OldUsageKnown(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUsageKnown is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUsageKnown requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUsageKnown: %w", err)
+	}
+	return oldValue.UsageKnown, nil
+}
+
+// ResetUsageKnown resets all changes to the "usage_known" field.
+func (m *MemoryAICallMutation) ResetUsageKnown() {
+	m.usage_known = nil
 }
 
 // SetUserID sets the "user_id" field.
@@ -15918,12 +16087,24 @@ func (m *MemoryAICallMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *MemoryAICallMutation) Fields() []string {
-	fields := make([]string, 0, 21)
+	fields := make([]string, 0, 25)
 	if m.created_at != nil {
 		fields = append(fields, memoryaicall.FieldCreatedAt)
 	}
 	if m.updated_at != nil {
 		fields = append(fields, memoryaicall.FieldUpdatedAt)
+	}
+	if m.stage != nil {
+		fields = append(fields, memoryaicall.FieldStage)
+	}
+	if m.strategy != nil {
+		fields = append(fields, memoryaicall.FieldStrategy)
+	}
+	if m.duration_ms != nil {
+		fields = append(fields, memoryaicall.FieldDurationMs)
+	}
+	if m.usage_known != nil {
+		fields = append(fields, memoryaicall.FieldUsageKnown)
 	}
 	if m.user_id != nil {
 		fields = append(fields, memoryaicall.FieldUserID)
@@ -15994,6 +16175,14 @@ func (m *MemoryAICallMutation) Field(name string) (ent.Value, bool) {
 		return m.CreatedAt()
 	case memoryaicall.FieldUpdatedAt:
 		return m.UpdatedAt()
+	case memoryaicall.FieldStage:
+		return m.Stage()
+	case memoryaicall.FieldStrategy:
+		return m.Strategy()
+	case memoryaicall.FieldDurationMs:
+		return m.DurationMs()
+	case memoryaicall.FieldUsageKnown:
+		return m.UsageKnown()
 	case memoryaicall.FieldUserID:
 		return m.UserID()
 	case memoryaicall.FieldWorkspaceID:
@@ -16045,6 +16234,14 @@ func (m *MemoryAICallMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldCreatedAt(ctx)
 	case memoryaicall.FieldUpdatedAt:
 		return m.OldUpdatedAt(ctx)
+	case memoryaicall.FieldStage:
+		return m.OldStage(ctx)
+	case memoryaicall.FieldStrategy:
+		return m.OldStrategy(ctx)
+	case memoryaicall.FieldDurationMs:
+		return m.OldDurationMs(ctx)
+	case memoryaicall.FieldUsageKnown:
+		return m.OldUsageKnown(ctx)
 	case memoryaicall.FieldUserID:
 		return m.OldUserID(ctx)
 	case memoryaicall.FieldWorkspaceID:
@@ -16105,6 +16302,34 @@ func (m *MemoryAICallMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUpdatedAt(v)
+		return nil
+	case memoryaicall.FieldStage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStage(v)
+		return nil
+	case memoryaicall.FieldStrategy:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStrategy(v)
+		return nil
+	case memoryaicall.FieldDurationMs:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDurationMs(v)
+		return nil
+	case memoryaicall.FieldUsageKnown:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUsageKnown(v)
 		return nil
 	case memoryaicall.FieldUserID:
 		v, ok := value.(string)
@@ -16247,6 +16472,9 @@ func (m *MemoryAICallMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *MemoryAICallMutation) AddedFields() []string {
 	var fields []string
+	if m.addduration_ms != nil {
+		fields = append(fields, memoryaicall.FieldDurationMs)
+	}
 	if m.addattempt != nil {
 		fields = append(fields, memoryaicall.FieldAttempt)
 	}
@@ -16264,6 +16492,8 @@ func (m *MemoryAICallMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *MemoryAICallMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case memoryaicall.FieldDurationMs:
+		return m.AddedDurationMs()
 	case memoryaicall.FieldAttempt:
 		return m.AddedAttempt()
 	case memoryaicall.FieldInputTokens:
@@ -16279,6 +16509,13 @@ func (m *MemoryAICallMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *MemoryAICallMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case memoryaicall.FieldDurationMs:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDurationMs(v)
+		return nil
 	case memoryaicall.FieldAttempt:
 		v, ok := value.(int)
 		if !ok {
@@ -16332,6 +16569,18 @@ func (m *MemoryAICallMutation) ResetField(name string) error {
 		return nil
 	case memoryaicall.FieldUpdatedAt:
 		m.ResetUpdatedAt()
+		return nil
+	case memoryaicall.FieldStage:
+		m.ResetStage()
+		return nil
+	case memoryaicall.FieldStrategy:
+		m.ResetStrategy()
+		return nil
+	case memoryaicall.FieldDurationMs:
+		m.ResetDurationMs()
+		return nil
+	case memoryaicall.FieldUsageKnown:
+		m.ResetUsageKnown()
 		return nil
 	case memoryaicall.FieldUserID:
 		m.ResetUserID()

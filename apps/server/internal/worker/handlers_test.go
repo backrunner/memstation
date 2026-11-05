@@ -24,9 +24,11 @@ import (
 	conversationservice "memstation/apps/server/internal/service/conversation"
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
 	multimodalservice "memstation/apps/server/internal/service/multimodal"
+	"memstation/apps/server/internal/service/processing"
 	blobstore "memstation/apps/server/internal/store/blob"
 	"memstation/apps/server/internal/store/vector"
 	"memstation/apps/server/internal/testutil/memoryllmfixture"
+	"memstation/apps/server/internal/testutil/memoryprocessingfixture"
 )
 
 type recordingPublisher struct {
@@ -114,8 +116,8 @@ func TestConversationFinalizeHandlerTransitionsToFinalAndQueuesSummary(t *testin
 	if conversation.SummaryStatus != domain.ProcessingStatusQueued {
 		t.Fatalf("expected queued summary status, got %s", conversation.SummaryStatus)
 	}
-	if len(publisher.tasks) != 1 || publisher.tasks[0].Type != TypeSummaryGenerate {
-		t.Fatalf("expected summary task to be queued, got %+v", publisher.tasks)
+	if len(publisher.tasks) != 1 || publisher.tasks[0].Type != TypeSourceIndex {
+		t.Fatalf("expected source indexing task to be queued, got %+v", publisher.tasks)
 	}
 }
 
@@ -1100,6 +1102,7 @@ func TestMemoryRebuildConversationSkipsSupersededSnapshot(t *testing.T) {
 	}
 
 	handler := handleMemoryRebuildConversation(nilLogger(), Services{
+		Processing:  fixtureProcessing(t),
 		Analysis:    analysisservice.NewService(memoryllmfixture.Generator{}),
 		Generations: generations, TaskAuthority: fixtureTaskAuthority{},
 	})
@@ -1188,6 +1191,7 @@ func TestMemoryRebuildConversationReplaysSnapshotArtifacts(t *testing.T) {
 	}
 
 	handler := handleMemoryRebuildConversation(nilLogger(), Services{
+		Processing:  fixtureProcessing(t),
 		Analysis:    analysisservice.NewService(memoryllmfixture.Generator{GenericTypes: []string{"artifact"}, PreferLastSource: true}),
 		Generations: generations,
 		Memories:    memories,
@@ -2194,6 +2198,11 @@ func newTask(t *testing.T, taskType string, payload any) *asynq.Task {
 			fields["workspace_id"] = domain.PersonalWorkspaceID(user)
 		}
 	}
+	if processingTaskType(taskType) {
+		if policy, _ := fields["processing_policy_id"].(string); policy == "" {
+			fields["processing_policy_id"] = memoryprocessingfixture.Config().Identity()
+		}
+	}
 	raw, err = json.Marshal(fields)
 	if err != nil {
 		t.Fatal(err)
@@ -2222,4 +2231,29 @@ func fixtureRelay(logger *slog.Logger, outbox ports.OutboxRepository, publisher 
 	r := NewRelay(logger, outbox, publisher)
 	r.SetTaskAuthority(fixtureTaskAuthority{})
 	return r
+}
+
+func fixtureProcessing(t *testing.T) *processing.Service {
+	t.Helper()
+	processor, close, err := memoryprocessingfixture.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(close)
+	return processor
+}
+
+func TestSourceIndexCurrentRequiresTheIndexedRevision(t *testing.T) {
+	indexed := domain.ConversationRecord{Revision: 3, Metadata: map[string]any{"source_index_generation": "g", "source_index_revision": float64(3)}}
+	if !sourceIndexCurrent(indexed, "g") {
+		t.Fatal("indexed revision not recognised after a JSON round trip")
+	}
+	appended := indexed
+	appended.Revision = 4
+	if sourceIndexCurrent(appended, "g") {
+		t.Fatal("segments rebuilt from a newer revision would skip their embeddings")
+	}
+	if sourceIndexCurrent(indexed, "other") {
+		t.Fatal("a different generation was treated as indexed")
+	}
 }

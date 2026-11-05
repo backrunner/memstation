@@ -3,6 +3,7 @@ package conversation
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,6 +35,11 @@ func (s *Service) UpdateThresholds(messageThreshold, tokenThreshold int) {
 }
 
 func (s *Service) PersistExchange(ctx context.Context, req domain.UnifiedRequest, resp *domain.UnifiedResponse) (string, error) {
+	for key := range req.RequestMetadata {
+		if strings.HasPrefix(key, "_processing_") || strings.HasPrefix(key, "source_index_") || key == "processing_strategy" || key == "processing_policy_id" || key == "semantic_status" {
+			return "", errors.New("reserved conversation metadata")
+		}
+	}
 	ctx, span := observability.TraceSpan(ctx, "conversation.persist_exchange",
 		attribute.String("conversation.user_id", req.UserID),
 		attribute.String("conversation.protocol", string(req.Protocol)),

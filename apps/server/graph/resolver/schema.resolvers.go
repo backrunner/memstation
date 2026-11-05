@@ -282,7 +282,7 @@ func (r *queryResolver) SearchMemories(ctx context.Context, query string, topN *
 			Related:        graphRelatedMemories(item.Related),
 		})
 	}
-	return &generated.SearchMemoriesResult{Memories: items, Total: result.Total, QueryEmbeddingTokens: result.QueryEmbeddingTokens}, nil
+	return &generated.SearchMemoriesResult{Memories: items, Total: result.Total, QueryEmbeddingTokens: result.QueryEmbeddingTokens, EntityRecall: result.EntityRecall}, nil
 }
 
 // TokenUsageStats is the resolver for the tokenUsageStats field.

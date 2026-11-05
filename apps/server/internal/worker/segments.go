@@ -50,9 +50,11 @@ func storeSegmentDocuments(ctx context.Context, services Services, segments []do
 		if err != nil {
 			return nil, err
 		}
-		if err := applyDocumentScore(ctx, services.Scorer, &doc, referenceTime); err != nil {
-			return nil, err
-		}
+		doc.Importance = 1
+		doc.DecayFactor = 1
+		doc.ActivityAt = domain.DeriveActivityAt(segment.CreatedAt, referenceTime, referenceTime)
+		doc.Metadata["score_reason"] = "neutral_source_policy"
+		doc.Metadata["extraction_method"] = "source"
 		if err := services.Memories.StoreDocument(ctx, doc); err != nil {
 			return nil, err
 		}

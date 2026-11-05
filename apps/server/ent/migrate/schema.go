@@ -443,6 +443,10 @@ var (
 		{Name: "id", Type: field.TypeString},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "stage", Type: field.TypeString, Default: ""},
+		{Name: "strategy", Type: field.TypeString, Default: ""},
+		{Name: "duration_ms", Type: field.TypeInt64, Default: 0},
+		{Name: "usage_known", Type: field.TypeBool, Default: false},
 		{Name: "user_id", Type: field.TypeString},
 		{Name: "workspace_id", Type: field.TypeString},
 		{Name: "partition_id", Type: field.TypeString, Default: ""},
@@ -472,12 +476,12 @@ var (
 			{
 				Name:    "memoryaicall_user_id_workspace_id_partition_id_created_at_id",
 				Unique:  false,
-				Columns: []*schema.Column{MemoryAiCallsColumns[3], MemoryAiCallsColumns[4], MemoryAiCallsColumns[5], MemoryAiCallsColumns[1], MemoryAiCallsColumns[0]},
+				Columns: []*schema.Column{MemoryAiCallsColumns[7], MemoryAiCallsColumns[8], MemoryAiCallsColumns[9], MemoryAiCallsColumns[1], MemoryAiCallsColumns[0]},
 			},
 			{
 				Name:    "memoryaicall_broker_usage_id",
 				Unique:  true,
-				Columns: []*schema.Column{MemoryAiCallsColumns[14]},
+				Columns: []*schema.Column{MemoryAiCallsColumns[18]},
 				Annotation: &entsql.IndexAnnotation{
 					Where: "broker_usage_id<>''",
 				},

@@ -128,9 +128,43 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 		return 0, err
 	}
 
+	conversation.Segments = segments
+	var lightweightDocs []domain.MemoryDocument
+
+	rawDocs, err := storeSegmentDocuments(ctx, services, segments, domain.MemoryDocument{Metadata: snapshotMetadata(snapshot)}, conversation.UpdatedAt, snapshot.Parts, snapshot.Artifacts, snapshot.Messages)
+	if err != nil {
+		return 0, err
+	}
+	collector := &rebuildLocalPublisher{}
+	localServices := services
+	localServices.Publisher = collector
+	promote, _, err := extractLightweight(ctx, localServices, conversation, generation, snapshot.SnapshotID)
+	if err != nil {
+		return 0, err
+	}
+	for _, task := range collector.tasks {
+		raw, _ := json.Marshal(task.Payload)
+		var payload EmbeddingPayload
+		if err = json.Unmarshal(raw, &payload); err != nil {
+			return 0, err
+		}
+		doc, ok, err := currentStoredDocumentForEmbeddingByNode(ctx, services, payload.UserID, payload.GenerationID, payload.NodeID, payload.NodeType)
+		if err != nil {
+			return 0, err
+		}
+		if !ok {
+			return 0, domain.ErrAccessNotFound
+		}
+		lightweightDocs = append(lightweightDocs, doc)
+	}
+	if !promote {
+		return upsertStoredDocumentEmbeddings(ctx, services, generation, snapshot, append(rawDocs, lightweightDocs...))
+	}
+
 	if services.Analysis == nil {
 		return 0, errors.New("memory LLM is not configured")
 	}
+
 	generated, err := summarizeWithCheckpoint(ctx, services, analysisservice.Input{UserID: snapshot.UserID, ConversationID: snapshot.ConversationID, Conversation: conversation}, scopeStableID(snapshot.UserID, generation.GenerationID, summaryDocumentID(snapshot.ConversationID, 1)), generation.GenerationID)
 	if err != nil {
 		return 0, err
@@ -295,6 +329,7 @@ func rebuildSnapshotIntoGeneration(ctx context.Context, services Services, gener
 		docs = append(docs, result.Impression)
 	}
 	docs = append(docs, genericDocs...)
+	docs = append(docs, lightweightDocs...)
 	return upsertStoredDocumentEmbeddings(ctx, services, generation, snapshot, docs)
 }
 
@@ -366,4 +401,11 @@ func upsertStoredDocumentEmbeddings(ctx context.Context, services Services, gene
 		embeddingCount++
 	}
 	return embeddingCount, nil
+}
+
+type rebuildLocalPublisher struct{ tasks []domain.TaskMessage }
+
+func (p *rebuildLocalPublisher) Publish(_ context.Context, t domain.TaskMessage) error {
+	p.tasks = append(p.tasks, t)
+	return nil
 }

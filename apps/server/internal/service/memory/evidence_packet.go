@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -51,6 +52,7 @@ type EvidenceDiagnostics struct {
 	Anchors           int               `json:"anchors"`
 	SourceTurns       int               `json:"source_turns"`
 	PackedSourceTurns int               `json:"packed_source_turns"`
+	PackedAnchorTurns int               `json:"packed_anchor_turns"`
 	Unavailable       int               `json:"unavailable"`
 	SourcesDisabled   bool              `json:"sources_disabled"`
 }
@@ -64,9 +66,67 @@ type EvidencePacket struct {
 
 func (e *Engine) SetSourceContextReader(reader ports.SourceContextReader) { e.sources = reader }
 
-// FormatEvidenceDocument emits only whitelisted provenance. Stored timestamps
-// are labelled as recorded_at; they are never substituted for event/source time.
+// FormatEvidenceDocument renders a record as one provenance line and its text. It
+// keeps only what a reader can use: who, when, status and whether the record is an
+// inference. Stored identifiers, offsets and types cost context and carry no evidence.
 func FormatEvidenceDocument(doc domain.MemoryDocument) string {
+	content := strings.TrimSpace(doc.Content)
+	metaText := func(key string) string {
+		value, _ := doc.Metadata[key].(string)
+		return strings.TrimSpace(value)
+	}
+	var parts []string
+	source := ""
+	for _, key := range []string{"source_session_time", "session_date", "source_time"} {
+		if source = metaText(key); source != "" {
+			break
+		}
+	}
+	switch {
+	case source != "" && !strings.Contains(content, source):
+		parts = append(parts, source)
+	case source == "" && !doc.CreatedAt.IsZero():
+		// Without a source clock this is only when the record was stored, never
+		// when the event happened, so it stays labelled.
+		parts = append(parts, "recorded "+doc.CreatedAt.UTC().Format(time.DateOnly))
+	}
+	if speaker := metaText("speaker"); speaker != "" {
+		parts = append(parts, "speaker: "+speaker)
+	}
+	for _, key := range []string{"participants", "source_times"} {
+		if value, ok := doc.Metadata[key]; ok && value != nil {
+			raw, err := json.Marshal(value)
+			if err == nil && string(raw) != "[]" {
+				parts = append(parts, key+": "+string(raw))
+			}
+		}
+	}
+	for _, key := range []string{"time_anchor", "valid_from", "valid_to", "event_time_precision", "subject_scope"} {
+		if value := metaText(key); value != "" {
+			parts = append(parts, key+": "+value)
+		}
+	}
+	if status := metaText("status"); status != "" && status != "current" && status != "active" {
+		parts = append(parts, status)
+	}
+	if doc.Metadata["is_superseded"] == true {
+		parts = append(parts, "superseded")
+	}
+	if metaText("support_kind") == "model_inference" {
+		parts = append(parts, "inferred")
+	}
+	if doc.Type == domain.MemoryTypeSegment || doc.Metadata["source_context"] == true {
+		parts = append(parts, "original text")
+	}
+	if len(parts) == 0 {
+		return content
+	}
+	return "[" + strings.Join(parts, "; ") + "]\n" + content
+}
+
+// evidenceIdentity distinguishes records by full provenance: equal text from
+// different people or dates is not interchangeable evidence. It is never rendered.
+func evidenceIdentity(doc domain.MemoryDocument) string {
 	meta := map[string]any{"id": doc.ID, "type": doc.Type}
 	if doc.ConversationID != "" {
 		meta["conversation_id"] = doc.ConversationID
@@ -162,7 +222,7 @@ func (e *Engine) PrepareEvidence(ctx context.Context, input domain.SearchInput, 
 			}
 		}
 		docs = validDocs
-		seen := map[string]bool{}
+		seen := map[string]int{}
 		for _, original := range docs[:min(len(docs), o.MaxAnchors)] {
 			doc, ok := canonical[original.NodeID]
 			if !ok || doc.ConversationID == "" || doc.GenerationID != original.GenerationID || doc.Revision != original.Revision {
@@ -194,11 +254,16 @@ func (e *Engine) PrepareEvidence(ctx context.Context, input domain.SearchInput, 
 					return packet, domain.ErrAccessDenied
 				}
 				id := fmt.Sprintf("source:%s:%d", turn.ConversationID, turn.Sequence)
-				if seen[id] {
+				if index, exists := seen[id]; exists {
+					// A turn first encountered as a neighbor may directly support a
+					// later candidate. Preserve that stronger source role on dedup.
+					if turn.Anchor {
+						sourceDocs[index].Metadata["source_anchor"] = true
+					}
 					continue
 				}
-				seen[id] = true
-				meta := map[string]any{"source_context": true, "start_sequence": turn.Sequence, "end_sequence": turn.Sequence, "speaker": turn.Speaker, "role": turn.Role}
+				seen[id] = len(sourceDocs)
+				meta := map[string]any{"source_context": true, "source_anchor": turn.Anchor, "start_sequence": turn.Sequence, "end_sequence": turn.Sequence, "speaker": turn.Speaker, "role": turn.Role}
 				if len(turn.Parts) > 0 {
 					meta["source_parts"] = turn.Parts
 				}
@@ -214,6 +279,11 @@ func (e *Engine) PrepareEvidence(ctx context.Context, input domain.SearchInput, 
 				sourceDocs = append(sourceDocs, domain.MemoryDocument{ID: id, UserID: input.UserID, WorkspaceID: w, PartitionID: doc.PartitionID, ConversationID: turn.ConversationID, Type: domain.MemoryTypeSegment, Content: turn.Text, SourceRefs: turn.Refs, Metadata: meta})
 			}
 		}
+		// Admission follows candidate relevance within each source role. A
+		// neighbor from an early hit cannot crowd out a later direct citation.
+		sort.SliceStable(sourceDocs, func(i, j int) bool {
+			return sourceDocs[i].Metadata["source_anchor"] == true && sourceDocs[j].Metadata["source_anchor"] != true
+		})
 	}
 	packet.Diagnostics.SourceTurns = len(sourceDocs)
 	packet.Memories = packEvidence(docs, sourceDocs, o)
@@ -224,6 +294,9 @@ func (e *Engine) PrepareEvidence(ctx context.Context, input domain.SearchInput, 
 	for _, doc := range packet.Memories {
 		if v, _ := doc.Metadata["source_context"].(bool); v {
 			packet.Diagnostics.PackedSourceTurns++
+			if doc.Metadata["source_anchor"] == true {
+				packet.Diagnostics.PackedAnchorTurns++
+			}
 		}
 	}
 	if len(packet.Memories) > 0 {
@@ -273,12 +346,14 @@ func packEvidence(core, sources []domain.MemoryDocument, o EvidenceOptions) []do
 	seen := map[string]bool{}
 	seenTurns := map[string]bool{}
 	add := func(d domain.MemoryDocument, capBytes, capTokens int) {
-		if strings.TrimSpace(d.Content) == "" {
+		// A literal mention routes to its source turn, which is hydrated separately.
+		// The bare name it stores is not evidence and costs the reader context.
+		if strings.TrimSpace(d.Content) == "" || (d.Type == domain.MemoryTypeEntity && d.Metadata["interpretation"] == "source_mention") {
 			return
 		}
 		// Provenance is part of identity. Equal text from different people or
 		// dates is not interchangeable evidence. Complementary facts survive.
-		identity := FormatEvidenceDocument(d)
+		identity := evidenceIdentity(d)
 		turnIdentity := evidenceTurnIdentity(d)
 		if seen[identity] || (turnIdentity != "" && seenTurns[turnIdentity]) {
 			return

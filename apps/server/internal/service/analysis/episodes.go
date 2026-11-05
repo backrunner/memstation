@@ -124,6 +124,6 @@ func episodeSourceTime(at time.Time) string {
 // Checkpoints and benchmark manifests bind enabled extraction to its prompts,
 // batching limits and quote provenance convention.
 func SemanticEpisodePolicyHash() string {
-	hash := sha256.Sum256([]byte(fmt.Sprintf("episode_batch_v2:%d:%d;quote_sequence_base_v1;", episodeBatchBytes, episodeBatchSources) + extractionInstruction + semanticEpisodeInstruction + extractionCorrectionHint))
+	hash := sha256.Sum256([]byte(fmt.Sprintf("episode_batch_v3:%d:%d:%d:%d;quote_sequence_base_v1;", episodeBatchBytes, episodeBatchSources, episodeContextBytes, episodeContextSources) + extractionInstruction + semanticEpisodeInstruction + episodeContextInstruction + extractionCorrectionHint))
 	return hex.EncodeToString(hash[:])
 }

@@ -48,6 +48,62 @@ func (_c *MemoryAICallCreate) SetNillableUpdatedAt(v *time.Time) *MemoryAICallCr
 	return _c
 }
 
+// SetStage sets the "stage" field.
+func (_c *MemoryAICallCreate) SetStage(v string) *MemoryAICallCreate {
+	_c.mutation.SetStage(v)
+	return _c
+}
+
+// SetNillableStage sets the "stage" field if the given value is not nil.
+func (_c *MemoryAICallCreate) SetNillableStage(v *string) *MemoryAICallCreate {
+	if v != nil {
+		_c.SetStage(*v)
+	}
+	return _c
+}
+
+// SetStrategy sets the "strategy" field.
+func (_c *MemoryAICallCreate) SetStrategy(v string) *MemoryAICallCreate {
+	_c.mutation.SetStrategy(v)
+	return _c
+}
+
+// SetNillableStrategy sets the "strategy" field if the given value is not nil.
+func (_c *MemoryAICallCreate) SetNillableStrategy(v *string) *MemoryAICallCreate {
+	if v != nil {
+		_c.SetStrategy(*v)
+	}
+	return _c
+}
+
+// SetDurationMs sets the "duration_ms" field.
+func (_c *MemoryAICallCreate) SetDurationMs(v int64) *MemoryAICallCreate {
+	_c.mutation.SetDurationMs(v)
+	return _c
+}
+
+// SetNillableDurationMs sets the "duration_ms" field if the given value is not nil.
+func (_c *MemoryAICallCreate) SetNillableDurationMs(v *int64) *MemoryAICallCreate {
+	if v != nil {
+		_c.SetDurationMs(*v)
+	}
+	return _c
+}
+
+// SetUsageKnown sets the "usage_known" field.
+func (_c *MemoryAICallCreate) SetUsageKnown(v bool) *MemoryAICallCreate {
+	_c.mutation.SetUsageKnown(v)
+	return _c
+}
+
+// SetNillableUsageKnown sets the "usage_known" field if the given value is not nil.
+func (_c *MemoryAICallCreate) SetNillableUsageKnown(v *bool) *MemoryAICallCreate {
+	if v != nil {
+		_c.SetUsageKnown(*v)
+	}
+	return _c
+}
+
 // SetUserID sets the "user_id" field.
 func (_c *MemoryAICallCreate) SetUserID(v string) *MemoryAICallCreate {
 	_c.mutation.SetUserID(v)
@@ -323,6 +379,22 @@ func (_c *MemoryAICallCreate) defaults() {
 		v := memoryaicall.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.Stage(); !ok {
+		v := memoryaicall.DefaultStage
+		_c.mutation.SetStage(v)
+	}
+	if _, ok := _c.mutation.Strategy(); !ok {
+		v := memoryaicall.DefaultStrategy
+		_c.mutation.SetStrategy(v)
+	}
+	if _, ok := _c.mutation.DurationMs(); !ok {
+		v := memoryaicall.DefaultDurationMs
+		_c.mutation.SetDurationMs(v)
+	}
+	if _, ok := _c.mutation.UsageKnown(); !ok {
+		v := memoryaicall.DefaultUsageKnown
+		_c.mutation.SetUsageKnown(v)
+	}
 	if _, ok := _c.mutation.PartitionID(); !ok {
 		v := memoryaicall.DefaultPartitionID
 		_c.mutation.SetPartitionID(v)
@@ -392,6 +464,18 @@ func (_c *MemoryAICallCreate) check() error {
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "MemoryAICall.updated_at"`)}
+	}
+	if _, ok := _c.mutation.Stage(); !ok {
+		return &ValidationError{Name: "stage", err: errors.New(`ent: missing required field "MemoryAICall.stage"`)}
+	}
+	if _, ok := _c.mutation.Strategy(); !ok {
+		return &ValidationError{Name: "strategy", err: errors.New(`ent: missing required field "MemoryAICall.strategy"`)}
+	}
+	if _, ok := _c.mutation.DurationMs(); !ok {
+		return &ValidationError{Name: "duration_ms", err: errors.New(`ent: missing required field "MemoryAICall.duration_ms"`)}
+	}
+	if _, ok := _c.mutation.UsageKnown(); !ok {
+		return &ValidationError{Name: "usage_known", err: errors.New(`ent: missing required field "MemoryAICall.usage_known"`)}
 	}
 	if _, ok := _c.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "MemoryAICall.user_id"`)}
@@ -492,6 +576,22 @@ func (_c *MemoryAICallCreate) createSpec() (*MemoryAICall, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(memoryaicall.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
+	}
+	if value, ok := _c.mutation.Stage(); ok {
+		_spec.SetField(memoryaicall.FieldStage, field.TypeString, value)
+		_node.Stage = value
+	}
+	if value, ok := _c.mutation.Strategy(); ok {
+		_spec.SetField(memoryaicall.FieldStrategy, field.TypeString, value)
+		_node.Strategy = value
+	}
+	if value, ok := _c.mutation.DurationMs(); ok {
+		_spec.SetField(memoryaicall.FieldDurationMs, field.TypeInt64, value)
+		_node.DurationMs = value
+	}
+	if value, ok := _c.mutation.UsageKnown(); ok {
+		_spec.SetField(memoryaicall.FieldUsageKnown, field.TypeBool, value)
+		_node.UsageKnown = value
 	}
 	if value, ok := _c.mutation.UserID(); ok {
 		_spec.SetField(memoryaicall.FieldUserID, field.TypeString, value)

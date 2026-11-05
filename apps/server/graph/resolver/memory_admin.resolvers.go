@@ -8,6 +8,7 @@ package resolver
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"memstation/apps/server/graph/generated"
 	"memstation/apps/server/internal/domain"
@@ -27,6 +28,11 @@ func (r *memoryGenerationInfoResolver) Status(ctx context.Context, obj *domain.M
 // Metadata is the resolver for the metadata field.
 func (r *memoryGenerationInfoResolver) Metadata(ctx context.Context, obj *domain.MemoryGeneration) (any, error) {
 	return obj.Metadata, nil
+}
+
+// Processing is the resolver for the processing field.
+func (r *memoryRuntimeInfoResolver) Processing(ctx context.Context, obj *domain.MemoryRuntime) (any, error) {
+	return obj.Processing, nil
 }
 
 // RoleAliases is the resolver for the role_aliases field.
@@ -304,13 +310,22 @@ func (r *queryResolver) MemoryPublications(ctx context.Context, scope generated.
 	return memoryGraphList(r.Lifecycle.Publications(ctx, derefString(after)))
 }
 
-// MemoryBackgroundUsage is the resolver for the memoryBackgroundUsage field.
-func (r *queryResolver) MemoryBackgroundUsage(ctx context.Context, scope generated.WorkspaceScope, after *string, limit *int) ([]*domain.AICall, error) {
+// MemoryUsageReport is the resolver for the memoryUsageReport field.
+func (r *queryResolver) MemoryUsageReport(ctx context.Context, scope generated.WorkspaceScope, since *time.Time, until *time.Time, stage *string, strategy *string, status *string, model *string) (any, error) {
 	ctx, err := r.memoryAdminScope(ctx, scope)
 	if err != nil {
 		return nil, err
 	}
-	return memoryGraphList(r.AIUsage.List(ctx, derefString(after), valueOrDefault(limit, 50)))
+	return r.AIUsage.Report(ctx, usageGraphQuery(since, until, stage, strategy, status, model))
+}
+
+// MemoryBackgroundUsage is the resolver for the memoryBackgroundUsage field.
+func (r *queryResolver) MemoryBackgroundUsage(ctx context.Context, scope generated.WorkspaceScope, after *string, limit *int, since *time.Time, until *time.Time, stage *string, strategy *string, status *string, model *string) ([]*domain.AICall, error) {
+	ctx, err := r.memoryAdminScope(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+	return memoryGraphList(r.AIUsage.FilteredList(ctx, usageGraphQuery(since, until, stage, strategy, status, model), derefString(after), valueOrDefault(limit, 50)))
 }
 
 // WorkspaceAgentDetail is the resolver for the workspaceAgentDetail field.

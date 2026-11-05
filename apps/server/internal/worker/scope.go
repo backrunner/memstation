@@ -8,6 +8,7 @@ import (
 
 	"github.com/hibiken/asynq"
 
+	"memstation/apps/server/internal/aicall"
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/security"
 )
@@ -15,6 +16,7 @@ import (
 type parentTaskScopeKey struct{}
 
 type taskScope struct {
+	ProcessingPolicyID   string `json:"processing_policy_id"`
 	ReceiptID            string `json:"receipt_id"`
 	OperationID          string `json:"operation_id"`
 	PartitionID          string `json:"partition_id"`
@@ -76,6 +78,15 @@ func bindTaskScope(ctx context.Context, task *asynq.Task, services Services) (co
 			return ctx, errors.Join(domain.ErrAccessDenied, asynq.SkipRetry)
 		}
 	}
+	if services.Processing != nil && processingTaskType(task.Type()) && scope.ProcessingPolicyID != services.Processing.Config().Identity() {
+		// The task must not run under a stale policy, and it will not retry, so its
+		// conversation has to show failed rather than queued; a rebuild re-processes it.
+		if scope.ConversationID != "" {
+			markConversationFailed(bound, services, scope.UserID, scope.ConversationID, true)
+		}
+		return ctx, errors.Join(errors.New("task processing policy changed"), asynq.SkipRetry)
+	}
+	bound = aicall.WithMetadata(bound, task.Type(), services.Processing.Config().Strategy)
 	return context.WithValue(bound, parentTaskScopeKey{}, scope), nil
 }
 

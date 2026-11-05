@@ -15,8 +15,9 @@ import (
 var ErrQueueUnavailable = errors.New("queue runtime is not configured")
 
 type Publisher struct {
-	logger *slog.Logger
-	client *asynq.Client
+	processingPolicyID string
+	logger             *slog.Logger
+	client             *asynq.Client
 }
 
 func NewPublisher(logger *slog.Logger, client *asynq.Client) *Publisher {
@@ -30,7 +31,12 @@ func (p *Publisher) Publish(ctx context.Context, task domain.TaskMessage) error 
 		}
 		return ErrQueueUnavailable
 	}
-	task, err := prepareScopedTask(ctx, task)
+	var err error
+	task, err = BindProcessingPolicy(task, p.processingPolicyID)
+	if err != nil {
+		return err
+	}
+	task, err = prepareScopedTask(ctx, task)
 	if err != nil {
 		return err
 	}
@@ -49,4 +55,33 @@ func (p *Publisher) Publish(ctx context.Context, task domain.TaskMessage) error 
 		return fmt.Errorf("enqueue task: %w", err)
 	}
 	return nil
+}
+
+// BindProcessingPolicy is shared by network publishers and durable evaluation
+// queues. It never mutates the caller's payload or relaxes consumer authority.
+func BindProcessingPolicy(task domain.TaskMessage, policyID string) (domain.TaskMessage, error) {
+	if policyID != "" && processingTaskType(task.Type) {
+		payload := make(map[string]any, len(task.Payload)+1)
+		for key, value := range task.Payload {
+			payload[key] = value
+		}
+		if policy, exists := payload["processing_policy_id"]; exists && policy != policyID {
+			return task, errors.New("task processing policy mismatch")
+		}
+		payload["processing_policy_id"] = policyID
+		task.Payload = payload
+		if task.UniqueKey != "" {
+			task.UniqueKey += ":" + policyID
+		}
+	}
+	return task, nil
+}
+
+func (p *Publisher) SetProcessingPolicy(id string) { p.processingPolicyID = id }
+func processingTaskType(kind string) bool {
+	switch kind {
+	case TypeSourceIndex, TypeMediaExtract, TypeSummaryGenerate, TypeAnalysisExtract, TypeKeyMemoryReconcile, TypeMemoryRebuildConversation:
+		return true
+	}
+	return false
 }

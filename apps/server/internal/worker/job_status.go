@@ -25,6 +25,7 @@ func trackMemoryJob(services Services) asynq.MiddlewareFunc {
 			jobID, _ := asynq.GetTaskID(ctx)
 			attemptNumber, _ := asynq.GetRetryCount(ctx)
 			ctx = aicall.WithJob(ctx, jobID, attemptNumber)
+			ctx = aicall.WithMetadata(ctx, "", services.Processing.Config().Strategy)
 			if services.DataReady != nil {
 				if err := services.DataReady(ctx); err != nil {
 					return err

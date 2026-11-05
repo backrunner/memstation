@@ -22,10 +22,12 @@ import (
 	memoryservice "memstation/apps/server/internal/service/memory"
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
 	multimodalservice "memstation/apps/server/internal/service/multimodal"
+	"memstation/apps/server/internal/service/processing"
 	"memstation/apps/server/internal/textutil"
 )
 
 type Services struct {
+	Processing           *processing.Service
 	AcknowledgeReceipt   func(context.Context, string) error
 	DataReady            func(context.Context) error
 	ProcessOperation     func(context.Context, string) error
@@ -54,6 +56,7 @@ func NewServeMux(logger *slog.Logger, services Services) *asynq.ServeMux {
 	mux.HandleFunc("ingestion.accepted", handleIngestionAccepted(services))
 	mux.HandleFunc(TypeConversationFinalize, handleConversationFinalize(logger, services))
 	mux.HandleFunc(TypeMediaExtract, handleMediaExtract(logger, services))
+	mux.HandleFunc(TypeSourceIndex, handleSourceIndex(logger, services))
 	mux.HandleFunc(TypeSummaryGenerate, handleSummaryGenerate(logger, services))
 	mux.HandleFunc(TypeEmbeddingGenerate, handleEmbeddingGenerate(logger, services))
 	mux.HandleFunc(TypeEmbeddingDelete, handleEmbeddingDelete(logger, services))
@@ -157,12 +160,8 @@ func handleConversationFinalize(logger *slog.Logger, services Services) func(con
 		if conversation.SummaryStatus == domain.ProcessingStatusCompleted || conversation.SummaryStatus == domain.ProcessingStatusRunning {
 			return nil
 		}
-		nextType := TypeSummaryGenerate
-		uniqueKey := TypeSummaryGenerate + ":" + conversationID
-		if services.Multimodal != nil {
-			nextType = TypeMediaExtract
-			uniqueKey = TypeMediaExtract + ":" + conversationID
-		}
+		nextType := TypeSourceIndex
+		uniqueKey := TypeSourceIndex + ":" + conversationID
 		return services.Publisher.Publish(ctx, domain.TaskMessage{
 			Type:      nextType,
 			Queue:     QueueDefault,
@@ -328,6 +327,7 @@ func handleSummaryGenerate(logger *slog.Logger, services Services) func(context.
 				SummaryStatus:  &running,
 				Metadata: map[string]any{
 					"summary_started_at": time.Now().UTC().Format(time.RFC3339),
+					"semantic_status":    "running",
 				},
 			}); err != nil {
 				return err
@@ -446,6 +446,9 @@ func handleSummaryGenerate(logger *slog.Logger, services Services) func(context.
 			return err
 		}
 		for _, segmentDoc := range segmentDocs {
+			if sourceIndexCurrent(conversation, payload.GenerationID) && len(artifacts) == 0 {
+				continue
+			}
 			if err := services.Publisher.Publish(ctx, domain.TaskMessage{
 				Type:      TypeEmbeddingGenerate,
 				Queue:     QueueDefault,
@@ -731,6 +734,7 @@ func handleAnalysisExtract(logger *slog.Logger, services Services) func(context.
 			UserID:         payload.UserID,
 			AnalysisStatus: &completed,
 			Metadata: map[string]any{
+				"semantic_status":        "completed",
 				"analysis_fact_id":       result.Fact.ID,
 				"analysis_fact_ids":      factDocumentIDs(result.Facts),
 				"analysis_impression_id": result.Impression.ID,
@@ -1241,6 +1245,7 @@ func markConversationFailed(ctx context.Context, services Services, userID, conv
 	update := domain.ConversationStateUpdate{
 		ConversationID: conversationID,
 		UserID:         userID,
+		Metadata:       map[string]any{"semantic_status": "failed"},
 	}
 	if summaryFailed {
 		update.SummaryStatus = &failed

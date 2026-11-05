@@ -23,6 +23,7 @@ import (
 	analysisservice "memstation/apps/server/internal/service/analysis"
 	vectorstore "memstation/apps/server/internal/store/vector"
 	"memstation/apps/server/internal/testutil/memoryllmfixture"
+	"memstation/apps/server/internal/testutil/memoryprocessingfixture"
 )
 
 type RecoveryOptions struct {
@@ -103,7 +104,13 @@ func RunRecoveryDrill(ctx context.Context, options RecoveryOptions) (RecoveryRep
 	outbox := conversationstore.NewInMemoryOutboxRepository()
 	queue := newRecoveryQueue(options.QueueBuffer)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	processor, closeEncoder, err := memoryprocessingfixture.New()
+	if err != nil {
+		return RecoveryReport{}, err
+	}
+	defer closeEncoder()
 	services := Services{
+		Processing:     processor,
 		TaskAuthority:  recoveryTaskAuthority{conversations, memories},
 		Conversations:  conversations,
 		Memories:       memories,
@@ -119,6 +126,7 @@ func RunRecoveryDrill(ctx context.Context, options RecoveryOptions) (RecoveryRep
 	relay.SetTaskAuthority(services.TaskAuthority)
 	handlers := map[string]func(context.Context, *asynq.Task) error{
 		TypeConversationFinalize: handleConversationFinalize(logger, services),
+		TypeSourceIndex:          handleSourceIndex(logger, services),
 		TypeSummaryGenerate:      handleSummaryGenerate(logger, services),
 		TypeEmbeddingGenerate:    handleEmbeddingGenerate(logger, services),
 		TypeAnalysisExtract:      handleAnalysisExtract(logger, services),
@@ -356,6 +364,14 @@ func newRecoveryQueue(size int) *recoveryQueue {
 }
 
 func (q *recoveryQueue) Publish(ctx context.Context, task domain.TaskMessage) error {
+	if processingTaskType(task.Type) {
+		copyPayload := make(map[string]any, len(task.Payload)+1)
+		for key, value := range task.Payload {
+			copyPayload[key] = value
+		}
+		copyPayload["processing_policy_id"] = memoryprocessingfixture.Config().Identity()
+		task.Payload = copyPayload
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}

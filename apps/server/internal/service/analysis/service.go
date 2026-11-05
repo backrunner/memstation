@@ -138,6 +138,7 @@ type Summary struct {
 	ChunkCount       int      `json:"-"`
 }
 type Source struct {
+	ContextOnly     bool `json:"context_only,omitempty"`
 	media           []domain.ContentBlock
 	MediaSHA256     string             `json:"media_sha256,omitempty"`
 	NativeMedia     bool               `json:"native_media,omitempty"`
@@ -407,7 +408,7 @@ func (s *Service) AnalyzeConversation(ctx context.Context, input Input) (Result,
 	enableEpisodes := input.WritePolicy.EnableSemanticEpisodes || s.SemanticEpisodesEnabled()
 	batches, err := sourceBatches(sources)
 	if enableEpisodes {
-		batches, err = sourceBatchesWithLimits(sources, episodeBatchBytes, episodeBatchBytes, episodeBatchSources)
+		batches, err = episodeSourceBatches(sources)
 	}
 	if err != nil {
 		return Result{}, err
@@ -450,7 +451,7 @@ func (s *Service) AnalyzeConversation(ctx context.Context, input Input) (Result,
 		payload := map[string]any{"sources": batch, "evidence_source_ids": evidenceIDs, "summary": input.Summary.Content, "existing_facts": existing, "existing_facts_truncated": existingTruncated}
 		instruction := extractionInstruction
 		if policy.EnableSemanticEpisodes {
-			instruction += semanticEpisodeInstruction
+			instruction += semanticEpisodeInstruction + episodeContextInstruction
 		}
 		identity, err := json.Marshal([]any{"analysis_batch_v1", instruction, extractionCorrectionHint, payload, policy, s.GenerationPolicyID()})
 		if err != nil {
@@ -532,6 +533,7 @@ func documentFromItem(item Item, kind domain.MemoryType, user, conversation stri
 	quotes := []any{}
 	parts := []string{}
 	eventSources := false
+	primaryEvidence := false
 	supportedActors := map[string]bool{}
 	for _, quote := range item.Quotes {
 		found := false
@@ -588,6 +590,7 @@ func documentFromItem(item Item, kind domain.MemoryType, user, conversation stri
 				parts = append(parts, source.PartID)
 			}
 			found = true
+			primaryEvidence = primaryEvidence || !source.ContextOnly
 			break
 		}
 		if !found {
@@ -623,6 +626,9 @@ func documentFromItem(item Item, kind domain.MemoryType, user, conversation stri
 	}
 	if len(quotes) == 0 && mediaCount == 0 {
 		return domain.MemoryDocument{}, errors.New("LLM memory requires original source evidence")
+	}
+	if !primaryEvidence && mediaCount == 0 {
+		return domain.MemoryDocument{}, errors.New("LLM memory requires new source evidence, not only retained context")
 	}
 	return doc, nil
 }

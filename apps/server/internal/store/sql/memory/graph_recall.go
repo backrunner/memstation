@@ -24,6 +24,9 @@ func walkRelations(ctx context.Context, q domain.RelationQuery, fetch func(conte
 	}
 	seenNodes := map[string]bool{}
 	seenEdges := map[string]bool{}
+	// MaxNodes bounds seeds and discovered neighbours separately: full seeds must
+	// not leave expansion with no capacity.
+	discovered := 0
 	for _, id := range frontier {
 		seenNodes[id] = true
 	}
@@ -55,7 +58,7 @@ func walkRelations(ctx context.Context, q domain.RelationQuery, fetch func(conte
 				if dst == "" || counts[node] >= q.MaxEdgesPerNode {
 					continue
 				}
-				if !seenNodes[dst] && len(seenNodes) >= q.MaxNodes {
+				if !seenNodes[dst] && discovered >= q.MaxNodes {
 					continue
 				}
 				seenEdges[relationIdentity(edge)] = true
@@ -64,6 +67,7 @@ func walkRelations(ctx context.Context, q domain.RelationQuery, fetch func(conte
 				if !seenNodes[dst] {
 					seenNodes[dst] = true
 					next[dst] = true
+					discovered++
 				}
 				break
 			}

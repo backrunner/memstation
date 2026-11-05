@@ -50,7 +50,7 @@ func TestAliasReviewAndGraphTimeoutPreserveDirectRecall(t *testing.T) {
 	engine := NewEngine(timeoutGraphRepository{repo}, nil)
 	input := domain.SearchInput{UserID: "u", GenerationID: ("gen:current:" + domain.PersonalWorkspaceID("u")), Query: "记忆站", EntityScope: "work", TopN: 1}
 	seeds := map[string]float64{}
-	if err := engine.addEntitySeeds(ctx, input, seeds); err != nil || len(seeds) != 0 {
+	if err := engine.addEntitySeeds(ctx, input, seeds, nil); err != nil || len(seeds) != 0 {
 		t.Fatal("unreviewed alias affected retrieval", err)
 	}
 	alias.Status = "confirmed"
@@ -66,7 +66,7 @@ func TestAliasReviewAndGraphTimeoutPreserveDirectRecall(t *testing.T) {
 	}
 	input.EntityScope = "personal"
 	seeds = map[string]float64{}
-	if err := engine.addEntitySeeds(ctx, input, seeds); err != nil || len(seeds) != 0 {
+	if err := engine.addEntitySeeds(ctx, input, seeds, nil); err != nil || len(seeds) != 0 {
 		t.Fatal("alias leaked across context", err)
 	}
 	alias.Status = "revoked"
@@ -74,7 +74,24 @@ func TestAliasReviewAndGraphTimeoutPreserveDirectRecall(t *testing.T) {
 		t.Fatal(err)
 	}
 	input.EntityScope = "work"
-	if err := engine.addEntitySeeds(ctx, input, seeds); err != nil || len(seeds) != 0 {
+	if err := engine.addEntitySeeds(ctx, input, seeds, nil); err != nil || len(seeds) != 0 {
 		t.Fatal("revoked alias still participates", err)
+	}
+}
+
+func TestRelationExpansionAdmitsNeighboursWhenSeedsFillNodeBudget(t *testing.T) {
+	cfg := RelationRecallConfig{MaxNodes: 2, MaxHops: 1, MaxEdges: 16, MaxEdgesPerNode: 8}
+	base := map[string]float64{"seed-a": 1, "seed-b": .9}
+	relations := []domain.MemoryRelation{
+		{ID: "r1", SrcNodeID: "seed-a", DstNodeID: "near-1", RelationType: domain.MemoryRelationDerivedFrom, Weight: 1},
+		{ID: "r2", SrcNodeID: "seed-a", DstNodeID: "near-2", RelationType: domain.MemoryRelationDerivedFrom, Weight: .9},
+		{ID: "r3", SrcNodeID: "seed-a", DstNodeID: "over-budget", RelationType: domain.MemoryRelationDerivedFrom, Weight: .8},
+	}
+	scores, _, _ := expandRelationPaths(base, relations, cfg)
+	if scores["near-1"] <= 0 || scores["near-2"] <= 0 {
+		t.Fatalf("full seed set blocked expansion: %v", scores)
+	}
+	if _, admitted := scores["over-budget"]; admitted {
+		t.Fatalf("neighbour budget not enforced: %v", scores)
 	}
 }

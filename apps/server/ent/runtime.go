@@ -446,64 +446,80 @@ func init() {
 	memoryaicall.DefaultUpdatedAt = memoryaicallDescUpdatedAt.Default.(func() time.Time)
 	// memoryaicall.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	memoryaicall.UpdateDefaultUpdatedAt = memoryaicallDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// memoryaicallDescStage is the schema descriptor for stage field.
+	memoryaicallDescStage := memoryaicallFields[0].Descriptor()
+	// memoryaicall.DefaultStage holds the default value on creation for the stage field.
+	memoryaicall.DefaultStage = memoryaicallDescStage.Default.(string)
+	// memoryaicallDescStrategy is the schema descriptor for strategy field.
+	memoryaicallDescStrategy := memoryaicallFields[1].Descriptor()
+	// memoryaicall.DefaultStrategy holds the default value on creation for the strategy field.
+	memoryaicall.DefaultStrategy = memoryaicallDescStrategy.Default.(string)
+	// memoryaicallDescDurationMs is the schema descriptor for duration_ms field.
+	memoryaicallDescDurationMs := memoryaicallFields[2].Descriptor()
+	// memoryaicall.DefaultDurationMs holds the default value on creation for the duration_ms field.
+	memoryaicall.DefaultDurationMs = memoryaicallDescDurationMs.Default.(int64)
+	// memoryaicallDescUsageKnown is the schema descriptor for usage_known field.
+	memoryaicallDescUsageKnown := memoryaicallFields[3].Descriptor()
+	// memoryaicall.DefaultUsageKnown holds the default value on creation for the usage_known field.
+	memoryaicall.DefaultUsageKnown = memoryaicallDescUsageKnown.Default.(bool)
 	// memoryaicallDescPartitionID is the schema descriptor for partition_id field.
-	memoryaicallDescPartitionID := memoryaicallFields[3].Descriptor()
+	memoryaicallDescPartitionID := memoryaicallFields[7].Descriptor()
 	// memoryaicall.DefaultPartitionID holds the default value on creation for the partition_id field.
 	memoryaicall.DefaultPartitionID = memoryaicallDescPartitionID.Default.(string)
 	// memoryaicallDescPartitionIds is the schema descriptor for partition_ids field.
-	memoryaicallDescPartitionIds := memoryaicallFields[4].Descriptor()
+	memoryaicallDescPartitionIds := memoryaicallFields[8].Descriptor()
 	// memoryaicall.DefaultPartitionIds holds the default value on creation for the partition_ids field.
 	memoryaicall.DefaultPartitionIds = memoryaicallDescPartitionIds.Default.([]string)
 	// memoryaicallDescModelVersion is the schema descriptor for model_version field.
-	memoryaicallDescModelVersion := memoryaicallFields[7].Descriptor()
+	memoryaicallDescModelVersion := memoryaicallFields[11].Descriptor()
 	// memoryaicall.DefaultModelVersion holds the default value on creation for the model_version field.
 	memoryaicall.DefaultModelVersion = memoryaicallDescModelVersion.Default.(string)
 	// memoryaicallDescTraceID is the schema descriptor for trace_id field.
-	memoryaicallDescTraceID := memoryaicallFields[8].Descriptor()
+	memoryaicallDescTraceID := memoryaicallFields[12].Descriptor()
 	// memoryaicall.DefaultTraceID holds the default value on creation for the trace_id field.
 	memoryaicall.DefaultTraceID = memoryaicallDescTraceID.Default.(string)
 	// memoryaicallDescJobID is the schema descriptor for job_id field.
-	memoryaicallDescJobID := memoryaicallFields[9].Descriptor()
+	memoryaicallDescJobID := memoryaicallFields[13].Descriptor()
 	// memoryaicall.DefaultJobID holds the default value on creation for the job_id field.
 	memoryaicall.DefaultJobID = memoryaicallDescJobID.Default.(string)
 	// memoryaicallDescAttempt is the schema descriptor for attempt field.
-	memoryaicallDescAttempt := memoryaicallFields[10].Descriptor()
+	memoryaicallDescAttempt := memoryaicallFields[14].Descriptor()
 	// memoryaicall.DefaultAttempt holds the default value on creation for the attempt field.
 	memoryaicall.DefaultAttempt = memoryaicallDescAttempt.Default.(int)
 	// memoryaicallDescProviderRequestID is the schema descriptor for provider_request_id field.
-	memoryaicallDescProviderRequestID := memoryaicallFields[11].Descriptor()
+	memoryaicallDescProviderRequestID := memoryaicallFields[15].Descriptor()
 	// memoryaicall.DefaultProviderRequestID holds the default value on creation for the provider_request_id field.
 	memoryaicall.DefaultProviderRequestID = memoryaicallDescProviderRequestID.Default.(string)
 	// memoryaicallDescBrokerUsageID is the schema descriptor for broker_usage_id field.
-	memoryaicallDescBrokerUsageID := memoryaicallFields[12].Descriptor()
+	memoryaicallDescBrokerUsageID := memoryaicallFields[16].Descriptor()
 	// memoryaicall.DefaultBrokerUsageID holds the default value on creation for the broker_usage_id field.
 	memoryaicall.DefaultBrokerUsageID = memoryaicallDescBrokerUsageID.Default.(string)
 	// memoryaicallDescStatus is the schema descriptor for status field.
-	memoryaicallDescStatus := memoryaicallFields[13].Descriptor()
+	memoryaicallDescStatus := memoryaicallFields[17].Descriptor()
 	// memoryaicall.DefaultStatus holds the default value on creation for the status field.
 	memoryaicall.DefaultStatus = memoryaicallDescStatus.Default.(string)
 	// memoryaicallDescInputTokens is the schema descriptor for input_tokens field.
-	memoryaicallDescInputTokens := memoryaicallFields[14].Descriptor()
+	memoryaicallDescInputTokens := memoryaicallFields[18].Descriptor()
 	// memoryaicall.DefaultInputTokens holds the default value on creation for the input_tokens field.
 	memoryaicall.DefaultInputTokens = memoryaicallDescInputTokens.Default.(int)
 	// memoryaicallDescOutputTokens is the schema descriptor for output_tokens field.
-	memoryaicallDescOutputTokens := memoryaicallFields[15].Descriptor()
+	memoryaicallDescOutputTokens := memoryaicallFields[19].Descriptor()
 	// memoryaicall.DefaultOutputTokens holds the default value on creation for the output_tokens field.
 	memoryaicall.DefaultOutputTokens = memoryaicallDescOutputTokens.Default.(int)
 	// memoryaicallDescReportedCost is the schema descriptor for reported_cost field.
-	memoryaicallDescReportedCost := memoryaicallFields[16].Descriptor()
+	memoryaicallDescReportedCost := memoryaicallFields[20].Descriptor()
 	// memoryaicall.DefaultReportedCost holds the default value on creation for the reported_cost field.
 	memoryaicall.DefaultReportedCost = memoryaicallDescReportedCost.Default.(string)
 	// memoryaicallDescCurrency is the schema descriptor for currency field.
-	memoryaicallDescCurrency := memoryaicallFields[17].Descriptor()
+	memoryaicallDescCurrency := memoryaicallFields[21].Descriptor()
 	// memoryaicall.DefaultCurrency holds the default value on creation for the currency field.
 	memoryaicall.DefaultCurrency = memoryaicallDescCurrency.Default.(string)
 	// memoryaicallDescUsageAuthority is the schema descriptor for usage_authority field.
-	memoryaicallDescUsageAuthority := memoryaicallFields[18].Descriptor()
+	memoryaicallDescUsageAuthority := memoryaicallFields[22].Descriptor()
 	// memoryaicall.DefaultUsageAuthority holds the default value on creation for the usage_authority field.
 	memoryaicall.DefaultUsageAuthority = memoryaicallDescUsageAuthority.Default.(string)
 	// memoryaicallDescFailureCode is the schema descriptor for failure_code field.
-	memoryaicallDescFailureCode := memoryaicallFields[19].Descriptor()
+	memoryaicallDescFailureCode := memoryaicallFields[23].Descriptor()
 	// memoryaicall.DefaultFailureCode holds the default value on creation for the failure_code field.
 	memoryaicall.DefaultFailureCode = memoryaicallDescFailureCode.Default.(string)
 	memorycandidateMixin := schema.MemoryCandidate{}.Mixin()

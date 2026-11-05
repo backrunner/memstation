@@ -32,7 +32,7 @@ type SourceInfo { id: ID!, revision: Long!, speaker_actor_id: ID!, status: Strin
 type MemoryJobInfo { generation_id: ID!, id: ID!, queue: String!, operation_id: ID, user_id: ID!, workspace_id: ID!, partition_id: ID!, conversation_id: ID!, task_type: String!, status: String!, attempt: Int!, failure_code: String, next_retry_at: Time }
 type MemoryControlInfo { actors: [ActorInfo!]!, sources: [SourceInfo!]!, receipts: [IngestionProgress!]!, jobs: [MemoryJobInfo!]!, operations: [LifecycleOperation!]!, limit: Int!, nextCursor: String! }
 type MemoryRecord { kind: String!, visibility: String!, valid_from: Time, valid_to: Time, id: ID!, node_id: ID!, workspace_id: ID!, partition_id: ID, generation_id: ID!, content: String!, subject_actor_ids: [ID!]!, source_refs: [SourceReference!]!, revision: Long!, status: String! }
-type BackgroundCall { id: ID!, workspace_id: ID!, partition_ids: [ID!]!, role: String!, model_alias: String!, model_version: String!, trace_id: String!, job_id: String!, attempt: Int!, provider_request_id: String!, broker_usage_id: String!, status: String!, input_tokens: Int!, output_tokens: Int!, reported_cost: String!, currency: String!, usage_authority: String!, failure_code: String!, created_at: Time!, updated_at: Time! }
+type BackgroundCall { stage:String!, strategy:String!, duration_ms:Long!, usage_known:Boolean!, id: ID!, workspace_id: ID!, partition_ids: [ID!]!, role: String!, model_alias: String!, model_version: String!, trace_id: String!, job_id: String!, attempt: Int!, provider_request_id: String!, broker_usage_id: String!, status: String!, input_tokens: Int!, output_tokens: Int!, reported_cost: String!, currency: String!, usage_authority: String!, failure_code: String!, created_at: Time!, updated_at: Time! }
 extend type Query {
  workspaceDirectory(user: ID = "", after: String = "", query: String = "", limit: Int = 50): WorkspaceDirectory!
  workspaceIntegrations(scope: WorkspaceScope!): [IntegrationInfo!]!
@@ -45,7 +45,8 @@ extend type Query {
  memoryCandidates(scope: WorkspaceScope!, id: ID = "", after: String = ""): [CandidateRecord!]!
  memoryOperation(scope: WorkspaceScope!, id: ID!): LifecycleOperation!
  memoryPublications(scope: WorkspaceScope!, after: String = ""): [PublicationRecord!]!
- memoryBackgroundUsage(scope: WorkspaceScope!, after: String = "", limit: Int = 50): [BackgroundCall!]!
+ memoryUsageReport(scope:WorkspaceScope!, since:Time, until:Time, stage:String="", strategy:String="", status:String="", model:String=""):JSON!
+ memoryBackgroundUsage(scope: WorkspaceScope!, after: String = "", limit: Int = 50, since:Time, until:Time, stage:String="", strategy:String="", status:String="", model:String=""): [BackgroundCall!]!
 }
 extend type Mutation {
  reconcileBackgroundUsage(scope: WorkspaceScope!, id: ID!): BackgroundCall!
@@ -71,7 +72,7 @@ extend type Query {workspaceAgentDetail(scope: WorkspaceScope!, agent: ID!): Wor
 
 type MemoryGenerationInfo {generation_id: ID!, user_id: ID!, workspace_id: ID!, status: String!, scope: String!, conversation_id: ID, is_active: Boolean!, structure_version: Int!, embedding_version: Int!, embedding_model: String!, activate_on_success: Boolean!, source_count: Int!, processed_count: Int!, embedding_count: Int!, failure_count: Int!, last_error: String, metadata: JSON, created_at: Time!, updated_at: Time!, activated_at: Time}
 type MemoryCapabilitiesInfo {contract_version: String!, server_version: String!, status: String!, capabilities: JSON!, limitations: [String!]!, runtime: MemoryRuntimeInfo!}
-type MemoryRuntimeInfo {ai_backend: String!, role_aliases: JSON!, embedding: EmbeddingIdentityInfo!, usage_authority: String!}
+type MemoryRuntimeInfo {processing:JSON!,ai_backend: String!, role_aliases: JSON!, embedding: EmbeddingIdentityInfo!, usage_authority: String!}
 type EmbeddingIdentityInfo {model_version: String!, dimensions: Int!, fingerprint: String!}
 extend type Query {workspaceMemoryGenerations(scope: WorkspaceScope!): [MemoryGenerationInfo!]!, workspaceMemoryCapabilities(scope: WorkspaceScope!): MemoryCapabilitiesInfo!}
 extend type Mutation {rebuildWorkspaceMemory(scope: WorkspaceScope!, embedding_model: String = "", activate_on_success: Boolean = true): MemoryGenerationInfo!, activateWorkspaceGeneration(scope: WorkspaceScope!, id: ID!): MemoryGenerationInfo!, discardWorkspaceGeneration(scope: WorkspaceScope!, id: ID!): MemoryGenerationInfo!}

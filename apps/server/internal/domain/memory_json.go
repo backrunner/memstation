@@ -55,7 +55,7 @@ func PublicMemoryMetadata(metadata map[string]any) map[string]any {
 	}
 	public := make(map[string]any, len(metadata))
 	for key, item := range metadata {
-		if key == "_access" || key == "trusted_source" || strings.HasPrefix(key, "_llm_") {
+		if key == "_access" || key == "trusted_source" || strings.HasPrefix(key, "_llm_") || strings.HasPrefix(key, "_processing_") {
 			continue
 		}
 		public[key] = item

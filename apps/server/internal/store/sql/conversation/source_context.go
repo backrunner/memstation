@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -91,7 +92,7 @@ func (r *InMemoryConversationRepository) ReadSourceWindow(ctx context.Context, i
 		if !nearSourceAnchor(seq, anchors, in.Radius) {
 			continue
 		}
-		t := domain.SourceTurn{UserID: in.UserID, WorkspaceID: w, ConversationID: in.ConversationID, Sequence: seq, Role: m.Role, Text: m.Text, SourceDate: dbutilstore.StringValue(c.Metadata, "source_session_time"), ExternalRef: dbutilstore.StringValue(m.Metadata, "ref"), Speaker: dbutilstore.StringValue(m.Metadata, "speaker")}
+		t := domain.SourceTurn{UserID: in.UserID, WorkspaceID: w, ConversationID: in.ConversationID, Sequence: seq, Anchor: slices.Contains(anchors, seq), Role: m.Role, Text: m.Text, SourceDate: dbutilstore.StringValue(c.Metadata, "source_session_time"), ExternalRef: dbutilstore.StringValue(m.Metadata, "ref"), Speaker: dbutilstore.StringValue(m.Metadata, "speaker")}
 		if m.Source != nil {
 			t.OccurredAt = m.Source.OccurredAt
 			t.Speaker = m.Source.Speaker.ActorID
@@ -115,7 +116,14 @@ func nearSourceAnchor(seq int, anchors []int, radius int) bool {
 }
 
 func boundSourceTurns(turns []domain.SourceTurn, in domain.SourceWindowInput) []domain.SourceTurn {
-	sort.Slice(turns, func(i, j int) bool { return turns[i].Sequence < turns[j].Sequence })
+	// Spend the bounded window on its directly cited turns before adjacent
+	// conversation. Restore chronology only after admission, without truncation.
+	sort.SliceStable(turns, func(i, j int) bool {
+		if turns[i].Anchor != turns[j].Anchor {
+			return turns[i].Anchor
+		}
+		return turns[i].Sequence < turns[j].Sequence
+	})
 	out := []domain.SourceTurn{}
 	bytes := 0
 	for _, t := range turns {
@@ -128,6 +136,7 @@ func boundSourceTurns(turns []domain.SourceTurn, in domain.SourceWindowInput) []
 			break
 		}
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Sequence < out[j].Sequence })
 	return out
 }
 
@@ -167,14 +176,15 @@ func (r *PostgresConversationRepository) ReadSourceWindow(ctx context.Context, i
  AND a.source_revision=s.revision AND NOT s.tombstoned AND s.content_status='active'),
  valid AS (SELECT COUNT(*)=(SELECT COUNT(*) FROM refs) AS ok FROM anchors)
  SELECT w.sequence_num,s.parts::text,COALESCE(s.speaker_actor_id,''),s.occurred_at,s.id,s.revision,
- COALESCE(c.metadata->>'source_session_time',''),CASE WHEN actor.kind='bot' THEN 'assistant' ELSE 'user' END,'{}'::jsonb
+ COALESCE(c.metadata->>'source_session_time',''),CASE WHEN actor.kind='bot' THEN 'assistant' ELSE 'user' END,'{}'::jsonb,
+ EXISTS(SELECT 1 FROM anchors a WHERE a.sequence_num=w.sequence_num) AS is_anchor
  FROM ingestion_window_sources w JOIN conversations c ON c.id=w.conversation_id AND c.user_id=w.user_id AND c.workspace_id=w.workspace_id
  JOIN source_messages s ON s.id=w.source_message_id
  LEFT JOIN actors actor ON actor.user_id=s.user_id AND actor.id=s.speaker_actor_id
  WHERE ` + parent + ` AND (SELECT ok FROM valid) AND s.user_id=$1 AND s.workspace_id=$2 AND s.partition_id=c.partition_id
  AND s.revision=w.source_revision AND NOT s.tombstoned AND s.content_status='active'
  AND octet_length(s.parts::text)<=$6 AND EXISTS(SELECT 1 FROM anchors a WHERE w.sequence_num BETWEEN a.sequence_num-$4 AND a.sequence_num+$4)
- ORDER BY w.sequence_num LIMIT $5`
+ ORDER BY is_anchor DESC,w.sequence_num LIMIT $5`
 	} else {
 		if len(in.Sequences) == 0 || in.ConversationRevision <= 0 {
 			return nil, nil
@@ -182,14 +192,16 @@ func (r *PostgresConversationRepository) ReadSourceWindow(ctx context.Context, i
 		args = append(args, in.ConversationRevision)
 		parent += ` AND c.write_revision=$7`
 		predicates := []string{}
+		anchors := []string{}
 		for _, seq := range in.Sequences {
 			args = append(args, seq)
 			predicates = append(predicates, fmt.Sprintf("m.sequence_num BETWEEN $%d::int-$4 AND $%d::int+$4", len(args), len(args)))
+			anchors = append(anchors, fmt.Sprintf("m.sequence_num=$%d::int", len(args)))
 		}
 		query = `SELECT m.sequence_num,m.text_content,'',NULL::timestamptz,'',0,
- COALESCE(c.metadata->>'source_session_time',''),m.role,m.provider_payload
+ COALESCE(c.metadata->>'source_session_time',''),m.role,m.provider_payload,(` + strings.Join(anchors, " OR ") + `) AS is_anchor
  FROM messages m JOIN conversations c ON c.id=m.conversation_id AND c.user_id=m.user_id AND c.workspace_id=m.workspace_id
- WHERE ` + parent + ` AND c.context_mode<>'events' AND octet_length(m.text_content)<=$6 AND (` + strings.Join(predicates, " OR ") + `) ORDER BY m.sequence_num LIMIT $5`
+ WHERE ` + parent + ` AND c.context_mode<>'events' AND octet_length(m.text_content)<=$6 AND (` + strings.Join(predicates, " OR ") + `) ORDER BY is_anchor DESC,m.sequence_num LIMIT $5`
 	}
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -203,7 +215,7 @@ func (r *PostgresConversationRepository) ReadSourceWindow(ctx context.Context, i
 		var id, role string
 		var revision int64
 		var metadata []byte
-		if err = rows.Scan(&t.Sequence, &t.Text, &t.Speaker, &occurred, &id, &revision, &t.SourceDate, &role, &metadata); err != nil {
+		if err = rows.Scan(&t.Sequence, &t.Text, &t.Speaker, &occurred, &id, &revision, &t.SourceDate, &role, &metadata, &t.Anchor); err != nil {
 			return nil, err
 		}
 		t.Role = domain.MessageRole(role)

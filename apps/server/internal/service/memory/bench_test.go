@@ -125,7 +125,7 @@ func BenchmarkScoreDocument(b *testing.B) {
 	cfg := configForVariant(SearchVariantFull)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		scoreDocument(doc, 0.78, 0.24, 0.12, 0.05, 0.05, 0.0, false, cfg)
+		scoreDocument(doc, 0.78, 0.24, 0, 0.12, 0.05, 0.05, 0.0, false, cfg)
 	}
 }
 
