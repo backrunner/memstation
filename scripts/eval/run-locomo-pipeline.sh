@@ -6,6 +6,18 @@ if [[ ${MEMSTATION_EVAL_RERANK_SCORE_POLICY+x} || ${MEMSTATION_EVAL_RERANK_BLEND
 fi
 
 ROOT_DIR=$(cd "$(dirname "$0")/../.." && pwd)
+# Bring up the whole local stack and its settings unless the caller manages services.
+if [[ "${MEMSTATION_EVAL_STACK:-managed}" != "external" ]]; then
+  bash "$ROOT_DIR/scripts/eval/stack.sh" up
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT_DIR/.artifacts/eval-stack/env"
+  set +a
+  if [[ -z "${MEMSTATION_EVAL_DATABASE_URL:-}" && -n "${MEMSTATION_EVAL_PREFIX:-}" ]]; then
+    MEMSTATION_EVAL_DATABASE_URL=$(bash "$ROOT_DIR/scripts/eval/stack.sh" newdb "memstation_eval_$(printf '%s' "$MEMSTATION_EVAL_PREFIX" | tr -c 'a-z0-9' '_')")
+    export MEMSTATION_EVAL_DATABASE_URL
+  fi
+fi
 : "${LOCOMO_DATASET_PATH:?Set the external dataset path}"
 
 : "${MEMSTATION_EVAL_PREFIX:?Set a unique eval- prefix}"
@@ -23,6 +35,7 @@ go run ./tests/eval/cmd/locomopipeline \
   -questions-per-category "${MEMSTATION_EVAL_QUESTIONS_PER_CATEGORY:-0}" \
   -top-n "${MEMSTATION_EVAL_TOP_N:-20}" \
   -context-bytes "${MEMSTATION_EVAL_CONTEXT_BYTES:-16000}" \
+  -answer-output-tokens "${MEMSTATION_EVAL_ANSWER_OUTPUT_TOKENS:-16384}" \
   -reader-policy "${MEMSTATION_EVAL_READER_POLICY:-baseline}" \
   -semantic-episodes="${MEMSTATION_EVAL_SEMANTIC_EPISODES:-false}" \
   -refine-evidence="${MEMSTATION_EVAL_REFINE_EVIDENCE:-false}" \

@@ -12,6 +12,7 @@ import (
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/provider"
 	memoryservice "memstation/apps/server/internal/service/memory"
+	"memstation/apps/server/internal/service/memoryllm"
 	rerankservice "memstation/apps/server/internal/service/rerank"
 )
 
@@ -30,7 +31,7 @@ type PipelineRerankOptions struct {
 }
 
 func (o PipelineRerankOptions) manifest() map[string]any {
-	return map[string]any{"score_policy": "relevance_v1", "fallback_policy": "hybrid_v1", "model": o.Model, "candidate_selection": o.CandidateSelection, "model_revision": o.ModelRevision, "endpoint_sha256": pipelineHash(o.BaseURL), "timeout_ms": o.Timeout.Milliseconds(), "candidate_multiplier": o.CandidateMultiplier, "min_candidates": o.MinCandidates, "max_candidates": o.MaxCandidates}
+	return map[string]any{"score_policy": "relevance_v1", "fallback_policy": "hybrid_v2", "model": o.Model, "candidate_selection": o.CandidateSelection, "model_revision": o.ModelRevision, "endpoint_sha256": pipelineHash(o.BaseURL), "timeout_ms": o.Timeout.Milliseconds(), "candidate_multiplier": o.CandidateMultiplier, "min_candidates": o.MinCandidates, "max_candidates": o.MaxCandidates}
 }
 
 func configurePipelineReranker(engine *memoryservice.Engine, o PipelineRerankOptions) {
@@ -49,20 +50,32 @@ func pipelineControlMode(mode string) bool {
 	return mode == "question_only" || mode == "full_history" || mode == "gold_evidence"
 }
 
+// pipelineGatewayMode measures default gateway injection rather than the larger
+// benchmark evidence path. It is a report-only track, never a gate candidate.
+const pipelineGatewayMode = "gateway"
+
 func pipelineNeedsIngestion(modes []string) bool {
 	for _, mode := range modes {
-		if mode == "derived" || mode == "combined" {
+		if !pipelineControlMode(mode) {
 			return true
 		}
 	}
 	return false
 }
 
+func pipelineSearchInput(user, query, mode string, topN int) domain.SearchInput {
+	input := domain.SearchInput{UserID: user, Query: query, TopN: topN, IncludeSegments: mode == "raw" || mode == "combined", IncludeConversation: mode == "combined"}
+	if mode == "raw" {
+		input.MemoryTypes = []domain.MemoryType{domain.MemoryTypeSegment}
+	}
+	return input
+}
+
 func normalizePipelineProtocol(o *LOCOMOPipelineOptions) error {
 	if o.ReaderPolicy == "" {
 		o.ReaderPolicy = "baseline"
 	}
-	if o.ReaderPolicy != "baseline" && o.ReaderPolicy != "coverage" && o.ReaderPolicy != "coverage_inference" && o.ReaderPolicy != "interpretation" {
+	if o.ReaderPolicy != "baseline" && o.ReaderPolicy != "coverage" && o.ReaderPolicy != "coverage_inference" && o.ReaderPolicy != "interpretation" && o.ReaderPolicy != "reasoning" && o.ReaderPolicy != "direct" {
 		return fmt.Errorf("invalid reader policy")
 	}
 
@@ -82,7 +95,7 @@ func normalizePipelineProtocol(o *LOCOMOPipelineOptions) error {
 	seen := map[string]bool{}
 	retrieval := false
 	for _, mode := range o.Modes {
-		if seen[mode] || (!pipelineControlMode(mode) && mode != "raw" && mode != "derived" && mode != "combined") {
+		if seen[mode] || (!pipelineControlMode(mode) && mode != "raw" && mode != "derived" && mode != "combined" && mode != pipelineGatewayMode) {
 			return fmt.Errorf("invalid or duplicate evaluation mode")
 		}
 		if o.RefineEvidence && pipelineControlMode(mode) {
@@ -99,6 +112,9 @@ func normalizePipelineProtocol(o *LOCOMOPipelineOptions) error {
 	}
 	var err error
 	if retrieval {
+		if err := o.Processing.Validate(); err != nil {
+			return fmt.Errorf("pipeline processing: %w", err)
+		}
 		if o.EmbeddingRevision == "" {
 			return fmt.Errorf("embedding revision required for retrieval")
 		}
@@ -129,6 +145,12 @@ func normalizePipelineProtocol(o *LOCOMOPipelineOptions) error {
 	o.Judge, err = normalizeLongMemEvalQAJudgeOptions(o.Judge)
 	if err != nil {
 		return err
+	}
+	if o.AnswerOutputTokens < 0 || o.AnswerOutputTokens > o.Answerer.outputTokenLimit() || o.Judge.outputTokenLimit() < 4096 {
+		return fmt.Errorf("initial reader or judge output budget exceeds its configured ceiling")
+	}
+	if pipelineNeedsIngestion(o.Modes) && o.Extraction.outputTokenLimit() < memoryllm.DefaultMinOutputTokens {
+		return fmt.Errorf("extraction output ceiling is below the production initial budget")
 	}
 	r := &o.Rerank
 	r.Model = strings.TrimSpace(r.Model)
@@ -212,7 +234,9 @@ func pipelineControlContext(s pipelineSample, q pipelineQuestion, mode string, b
 			if i >= len(session.Refs) {
 				return "", nil, fmt.Errorf("invalid source reference mapping")
 			}
-			line := fmt.Sprintf("[source %s] %s\n", session.Refs[i], m.Text)
+			// Dataset references remain in the offline mapping only. Even full
+			// history and oracle readers receive request-local opaque labels.
+			line := fmt.Sprintf("[source %d] %s\n", len(refs)+1, m.Text)
 			if out.Len()+len(line) > budget {
 				return "", nil, fmt.Errorf("oracle context exceeds byte limit; refusing truncated baseline")
 			}

@@ -25,7 +25,7 @@ func pipelineFixture(t *testing.T) string {
 		"event_summary": "GOLD_SENTINEL_DO_NOT_INGEST",
 	}, "qa": []any{
 		map[string]any{"question": "A question without evidence?", "answer": "GOLD_SENTINEL_DO_NOT_INGEST", "category": 3},
-		map[string]any{"question": "A supported question?", "answer": "red", "category": 4, "evidence": []string{"D1:1"}},
+		map[string]any{"question": "What color is Alex's bicycle?", "answer": "red", "category": 4, "evidence": []string{"D1:1"}},
 		map[string]any{"question": "Adversarial?", "answer": "unknown", "category": 5},
 	}, "observation": "GOLD_SENTINEL_DO_NOT_INGEST"}
 	raw, _ := json.Marshal([]any{sample})

@@ -17,11 +17,13 @@ import (
 	"memstation/apps/server/internal/service/analysis"
 	memoryservice "memstation/apps/server/internal/service/memory"
 	"memstation/apps/server/internal/service/memoryllm"
+	"memstation/apps/server/internal/service/processing"
 )
 
 // Pipeline options are deliberately separate from the raw-turn retrieval track.
 // The database must be dedicated: the relay consumes its pending outbox.
 type LOCOMOPipelineOptions struct {
+	Processing           processing.Config
 	TaskConcurrency      int
 	AnswerOutputTokens   int
 	extractionAdapter    ports.ProviderAdapter
@@ -71,13 +73,18 @@ type pipelineSample struct {
 	Questions []pipelineQuestion
 }
 type PipelineStage struct {
-	SessionID      string                  `json:"session_id"`
-	ConversationID string                  `json:"conversation_id"`
-	Seconds        float64                 `json:"seconds"`
-	Documents      []domain.MemoryDocument `json:"documents,omitempty"`
-	Error          string                  `json:"error,omitempty"`
+	SourceIndexStatus  string                  `json:"source_index_status"`
+	ProcessingPolicyID string                  `json:"processing_policy_id"`
+	GenerationID       string                  `json:"generation_id"`
+	SemanticStatus     string                  `json:"semantic_status"`
+	SessionID          string                  `json:"session_id"`
+	ConversationID     string                  `json:"conversation_id"`
+	Seconds            float64                 `json:"seconds"`
+	Documents          []domain.MemoryDocument `json:"documents,omitempty"`
+	Error              string                  `json:"error,omitempty"`
 }
 type PipelineAnswer struct {
+	EntityRecall     *domain.EntityRecallDiagnostics     `json:"entity_recall,omitempty"`
 	RawAnswer        string                              `json:"raw_answer,omitempty"`
 	RawJudgment      string                              `json:"raw_judgment,omitempty"`
 	ContextSourceIDs map[string]string                   `json:"context_source_ids,omitempty"`
@@ -117,6 +124,7 @@ type PipelineAnswer struct {
 	Retrieval        any                                 `json:"retrieval,omitempty"`
 }
 type PipelineModeSummary struct {
+	EntityRecallStatuses    map[string]int `json:"entity_recall_statuses"`
 	MeanPlannerInputTokens  float64        `json:"mean_planner_input_tokens"`
 	MeanPlannerOutputTokens float64        `json:"mean_planner_output_tokens"`
 	EvidenceReadyP95Millis  float64        `json:"evidence_ready_p95_millis"`
@@ -332,8 +340,14 @@ func RunLOCOMOPipeline(ctx context.Context, o LOCOMOPipelineOptions) (LOCOMOPipe
 	if err != nil {
 		return report, err
 	}
-	manifest := map[string]any{"version": 3, "qa_output_tokens": o.AnswerOutputTokens, "output_budget_retry": "one explicit truncation retry to the configured output ceiling", "dataset_sha256": pipelineHash(string(raw)), "code_revision": o.CodeRevision, "embedding_revision": o.EmbeddingRevision, "prefix": o.Prefix, "sample_id": o.SampleID, "questions_per_category": o.QuestionsPerCategory, "top_n": o.TopN, "context_byte_budget": o.ContextBytes, "embedding": embedding.runInfo(), "extraction": o.Extraction.runInfo(), "answerer": o.Answerer.runInfo(), "judge": o.Judge.runInfo(), "task_concurrency": max(o.TaskConcurrency, 1), "transport": "production PostgreSQL + outbox relay + Worker handlers; bounded workers with one durable run-wide local task journal; no HTTP/Redis transport measurement", "image_policy": "raw text only; no machine captions or image search query", "sampling": "SHA256(question ID) within category; all source sessions", "source_timezone": "dataset does not specify zone; parsed as UTC for ordering; original date retained", "judge_protocol": "memstation-locomo-qa-v2-reference-agreement; not a vendor leaderboard reproduction"}
+	manifest := map[string]any{"version": 4, "qa_output_tokens": o.AnswerOutputTokens, "output_budget_retry": "one explicit truncation retry to the configured output ceiling", "dataset_sha256": pipelineHash(string(raw)), "code_revision": o.CodeRevision, "embedding_revision": o.EmbeddingRevision, "prefix": o.Prefix, "sample_id": o.SampleID, "questions_per_category": o.QuestionsPerCategory, "top_n": o.TopN, "context_byte_budget": o.ContextBytes, "embedding": embedding.runInfo(), "extraction": o.Extraction.runInfo(), "answerer": o.Answerer.runInfo(), "judge": o.Judge.runInfo(), "task_concurrency": max(o.TaskConcurrency, 1), "transport": "production PostgreSQL + outbox relay + Worker handlers; bounded workers with one durable run-wide local task journal; no HTTP/Redis transport measurement", "image_policy": "raw text only; no machine captions or image search query", "sampling": "SHA256(question ID) within category; all source sessions", "source_timezone": "dataset does not specify zone; parsed as UTC for ordering; original date retained", "judge_protocol": "memstation-locomo-qa-v2-reference-agreement; not a vendor leaderboard reproduction"}
 	manifest["modes"] = o.Modes
+	manifest["judge_initial_output_tokens"] = 4096
+	if pipelineNeedsIngestion(o.Modes) {
+		manifest["processing"] = o.Processing.Public()
+		manifest["processing_endpoint_sha256"] = pipelineHash(o.Processing.Endpoint)
+		manifest["source_index_policy"] = "production_worker_segments_v1; raw selects original segments from the shared corpus; derived excludes segments; combined includes both"
+	}
 	manifest["context_format"] = o.ContextFormat
 	manifest["reader_policy"] = o.ReaderPolicy
 	manifest["reader_format"] = "plain_text_v1"
@@ -344,8 +358,7 @@ func RunLOCOMOPipeline(ctx context.Context, o LOCOMOPipelineOptions) (LOCOMOPipe
 	manifest["refine_evidence"] = o.RefineEvidence
 	if o.RefineEvidence {
 		manifest["planner"] = o.Planner.runInfo()
-		manifest["planner_prompt_sha256"] = pipelineHash(memoryservice.EvidencePlanInstruction)
-		manifest["selector_prompt_sha256"] = pipelineHash(memoryservice.EvidenceSelectionInstruction)
+		manifest["planner_prompt_sha256"] = pipelineHash(memoryservice.EvidenceSearchInstruction)
 		manifest["refinement_policy"] = "additive_coverage_v2; question-only plan, initial and follow-up scored pools before page cutoff, at most three pools of50, interleaved union before bounded selector; source selection prioritizes additions, preserve original fitted evidence, final context shares the same byte budget;180s overall"
 		manifest["selection_byte_budget"] = min(32000, max(1024, o.ContextBytes*2))
 	}
@@ -354,17 +367,19 @@ func RunLOCOMOPipeline(ctx context.Context, o LOCOMOPipelineOptions) (LOCOMOPipe
 		manifest["context_admission"] = "scored_candidate_pool_byte_budget_v1"
 	}
 	manifest["evidence_packet_policy"] = "v1: provenance and whole records; core reservation two thirds, remaining source context, unused budget reclaimed; max 20 anchors"
+	manifest["source_window_policy"] = "direct_citations_before_neighbors_v2; fixed read and byte limits; chronological selected windows"
 	manifest["timeouts_ms"] = map[string]int64{"extraction": o.Extraction.Timeout.Milliseconds(), "answerer": o.Answerer.Timeout.Milliseconds(), "judge": o.Judge.Timeout.Milliseconds()}
 	manifest["generation_revision_policy"] = "configured model IDs and returned model IDs are recorded; remote model weights are not independently attested"
 	manifest["oracle_context_byte_limit"] = o.OracleContextBytes
 	manifest["oracle_neighbor_turns"] = o.OracleNeighborTurns
 	manifest["oracle_policy"] = "diagnostic only; gold references never enter retrieval or ingestion; full contexts fail rather than truncate"
+	manifest["control_source_identity"] = "request_local_labels_v1; dataset references retained only in offline mapping"
 	manifest["answer_prompt_sha256"] = pipelineHash(pipelineReaderInstruction(o.ReaderPolicy))
 	manifest["judge_prompt_sha256"] = pipelineHash(pipelineJudgeInstruction)
 	manifest["rerank"] = o.Rerank.manifest()
 	manifest["checkpoint_policy"] = "each completed or failed attempt is immutable; resume only absent checkpoints; repeats require a new run"
 	if !pipelineNeedsIngestion(o.Modes) {
-		manifest["transport"] = "read-only controls/raw retrieval; no database or ingestion"
+		manifest["transport"] = "read-only diagnostic controls; no database or ingestion"
 	}
 	// Public endpoint metadata omits paths; pin their identity separately so a
 	// different proxy route on the same host cannot silently reuse checkpoints.
@@ -429,7 +444,7 @@ func RunLOCOMOPipeline(ctx context.Context, o LOCOMOPipelineOptions) (LOCOMOPipe
 		for _, q := range s.Questions {
 			for _, mode := range o.Modes {
 				result := PipelineAnswer{SampleID: s.ID, QuestionID: q.ID, Category: q.Category, Mode: mode, Query: q.Query, Expected: q.Answer, EvidenceRefs: q.Evidence}
-				if ingestErr != nil && (mode == "derived" || mode == "combined") {
+				if ingestErr != nil && !pipelineControlMode(mode) {
 					result.Error = "ingestion incomplete: " + ingestErr.Error()
 				} else {
 					result = runtime.answer(ctx, owner, s, q, mode)
@@ -465,6 +480,12 @@ func summarizePipelineAnswers(answers []PipelineAnswer) map[string]PipelineModeS
 	for _, a := range answers {
 		v := out[a.Mode]
 		v.Expected++
+		if v.EntityRecallStatuses == nil {
+			v.EntityRecallStatuses = map[string]int{}
+		}
+		if a.EntityRecall != nil {
+			v.EntityRecallStatuses[a.EntityRecall.Status]++
+		}
 		if v.RerankStatuses == nil {
 			v.RerankStatuses = map[string]int{}
 		}

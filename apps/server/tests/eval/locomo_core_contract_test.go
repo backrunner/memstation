@@ -10,8 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"memstation/apps/server/internal/service/memoryllm"
-
 	"memstation/apps/server/internal/domain"
 	memoryservice "memstation/apps/server/internal/service/memory"
 )
@@ -100,17 +98,14 @@ func answerFrozenEvidence(ctx context.Context, a *PipelineAnswer, reader, judge 
 	start = time.Now()
 	raw, usage, model, err := pipelineCompleteObserved(ctx, judge, pipelineAlternativeJudgeInstruction, map[string]any{"question": a.Query, "reference_answer": a.Expected, "candidate_answer": a.Answer})
 	a.JudgeUsage, a.JudgeModel, a.JudgeMillis = usage, model, float64(time.Since(start).Microseconds())/1000
-	var grade struct {
-		Correct *bool  `json:"correct"`
-		Reason  string `json:"reason"`
-	}
 	if err != nil {
 		a.Error = "judge failed"
 		return
 	}
-	if memoryllm.Decode(raw, &grade) != nil || grade.Correct == nil || grade.Reason == "" {
-		a.Error = "invalid judge schema"
+	correct, reason, decodeErr := decodePipelineJudgment(raw)
+	if decodeErr != nil {
+		a.Error = decodeErr.Error()
 		return
 	}
-	a.Correct, a.Judged, a.JudgeReason, a.Error = *grade.Correct, true, grade.Reason, ""
+	a.Correct, a.Judged, a.JudgeReason, a.Error = correct, true, reason, ""
 }

@@ -3,7 +3,6 @@ package eval
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -16,7 +15,6 @@ import (
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/security"
 	memoryservice "memstation/apps/server/internal/service/memory"
-	"memstation/apps/server/internal/service/memoryllm"
 )
 
 // Manual matched-reader ablation. Retrieval and extraction are frozen; only
@@ -168,20 +166,15 @@ func TestLiveLOCOMOSourceClockReplay(t *testing.T) {
 				start = time.Now()
 				judgeRaw, a.JudgeUsage, a.JudgeModel, e = pipelineCompleteObserved(ctx, judge, pipelineAlternativeJudgeInstruction, map[string]any{"question": a.Query, "reference_answer": a.Expected, "candidate_answer": a.Answer})
 				a.JudgeMillis = float64(time.Since(start).Milliseconds())
-				var verdict struct {
-					Correct *bool  `json:"correct"`
-					Reason  string `json:"reason"`
-				}
+				var correct bool
+				var reason string
 				if e == nil {
-					e = memoryllm.Decode(judgeRaw, &verdict)
-				}
-				if e == nil && (verdict.Correct == nil || verdict.Reason == "") {
-					e = fmt.Errorf("invalid judge schema")
+					correct, reason, e = decodePipelineJudgment(judgeRaw)
 				}
 				if e == nil {
 					a.Judged = true
-					a.Correct = *verdict.Correct
-					a.JudgeReason = verdict.Reason
+					a.Correct = correct
+					a.JudgeReason = reason
 				}
 			}
 			a.Error = ""

@@ -1,0 +1,98 @@
+[
+  {
+    "id": "m01",
+    "group": "activity_and_purpose",
+    "question": "What did Iris and Noel plan to do at the museum?",
+    "reference": "Tour the prototype exhibits and look for ideas for their school science fair.",
+    "candidate": "They planned to tour the prototype exhibits and gather inspiration for the school science fair.",
+    "expected_correct": true
+  },
+  {
+    "id": "m02",
+    "group": "activity_and_purpose",
+    "question": "What did Iris and Noel plan to do at the museum?",
+    "reference": "Tour the prototype exhibits and look for ideas for their school science fair.",
+    "candidate": "Their museum plans were to see the prototypes and find science-fair ideas.",
+    "expected_correct": true
+  },
+  {
+    "id": "m03",
+    "group": "activity_and_purpose",
+    "question": "What did Iris and Noel plan to do at the museum?",
+    "reference": "Tour the prototype exhibits and look for ideas for their school science fair.",
+    "candidate": "They planned to tour the prototype exhibits.",
+    "expected_correct": false
+  },
+  {
+    "id": "m04",
+    "group": "activity_and_purpose",
+    "question": "What did Iris and Noel plan to do at the museum?",
+    "reference": "Tour the prototype exhibits and look for ideas for their school science fair.",
+    "candidate": "Their museum plan was to view prototypes. They would meet at the entrance and have lunch afterward.",
+    "expected_correct": false
+  },
+  {
+    "id": "m05",
+    "group": "provisional_status",
+    "question": "What had Tessa confirmed about the field trip?",
+    "reference": "She proposed a coast visit next month, but no booking or travel had been confirmed.",
+    "candidate": "A coastal trip next month was only a proposal; neither a booking nor travel was confirmed.",
+    "expected_correct": true
+  },
+  {
+    "id": "m06",
+    "group": "provisional_status",
+    "question": "What had Tessa confirmed about the field trip?",
+    "reference": "She proposed a coast visit next month, but no booking or travel had been confirmed.",
+    "candidate": "She suggested visiting the coast the following month. The plan was unconfirmed and no travel or booking was established.",
+    "expected_correct": true
+  },
+  {
+    "id": "m07",
+    "group": "provisional_status",
+    "question": "What had Tessa confirmed about the field trip?",
+    "reference": "She proposed a coast visit next month, but no booking or travel had been confirmed.",
+    "candidate": "She confirmed a booked trip to the coast next month.",
+    "expected_correct": false
+  },
+  {
+    "id": "m08",
+    "group": "provisional_status",
+    "question": "What had Tessa confirmed about the field trip?",
+    "reference": "She proposed a coast visit next month, but no booking or travel had been confirmed.",
+    "candidate": "She had already visited the coast and confirmed that the field trip was completed.",
+    "expected_correct": false
+  },
+  {
+    "id": "m09",
+    "group": "two_benefits",
+    "question": "What did Omar and Celia agree about their rehearsals?",
+    "reference": "They found the rehearsals enjoyable and said the rehearsals improved their confidence.",
+    "candidate": "They enjoyed rehearsing and felt more confident because of it.",
+    "expected_correct": true
+  },
+  {
+    "id": "m10",
+    "group": "two_benefits",
+    "question": "What did Omar and Celia agree about their rehearsals?",
+    "reference": "They found the rehearsals enjoyable and said the rehearsals improved their confidence.",
+    "candidate": "Both agreed that rehearsals were fun and helped build their confidence.",
+    "expected_correct": true
+  },
+  {
+    "id": "m11",
+    "group": "two_benefits",
+    "question": "What did Omar and Celia agree about their rehearsals?",
+    "reference": "They found the rehearsals enjoyable and said the rehearsals improved their confidence.",
+    "candidate": "They agreed that rehearsals improved their confidence.",
+    "expected_correct": false
+  },
+  {
+    "id": "m12",
+    "group": "two_benefits",
+    "question": "What did Omar and Celia agree about their rehearsals?",
+    "reference": "They found the rehearsals enjoyable and said the rehearsals improved their confidence.",
+    "candidate": "They felt more confident after rehearsals and agreed to continue meeting on Tuesdays.",
+    "expected_correct": false
+  }
+]

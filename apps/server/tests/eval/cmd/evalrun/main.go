@@ -148,6 +148,7 @@ func parseVariants(raw string) ([]memoryservice.SearchVariant, error) {
 		}
 		switch variant {
 		case memoryservice.SearchVariantFull,
+			memoryservice.SearchVariantFullNoEntities,
 			memoryservice.SearchVariantFullNoRelations,
 			memoryservice.SearchVariantSemanticOnly,
 			memoryservice.SearchVariantSemanticImportance:

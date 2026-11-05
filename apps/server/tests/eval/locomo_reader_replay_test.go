@@ -1,170 +1,104 @@
 package eval
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
-	"os"
-	"path/filepath"
-	"syscall"
+	"reflect"
 	"testing"
-	"time"
 
-	"memstation/apps/server/internal/service/memoryllm"
+	"memstation/apps/server/internal/domain"
+	memoryservice "memstation/apps/server/internal/service/memory"
 )
 
-type readerReplayInput struct {
-	Path   string `json:"path"`
-	SHA256 string `json:"sha256"`
+func readerComparisonFixture() (packetReplayPlan, preparedPacketReplay) {
+	docs := []domain.MemoryDocument{{ID: "record", NodeID: "node", UserID: "owner", Content: "An independent source."}}
+	ids := map[string]string{"memory-1": "record"}
+	plan := packetReplayPlan{ReaderPolicy: "interpretation", Cases: []packetReplayCase{{Documents: docs, Baseline: PipelineAnswer{Context: "frozen evidence", ContextSourceIDs: ids}}}}
+	prompt := pipelineReaderInstruction("interpretation")
+	prepared := preparedPacketReplay{Preparation: map[string]string{"kind": "frozen_reader_comparison"}, Packets: []memoryservice.EvidencePacket{{Text: "frozen evidence", Memories: append([]domain.MemoryDocument(nil), docs...), SourceIDs: map[string]string{"memory-1": "record"}}}, ReaderComparison: &frozenReaderComparison{BaselineInstruction: "Prior frozen instruction.", BaselineSHA256: pipelineHash("Prior frozen instruction."), CandidateInstruction: prompt, CandidateSHA256: pipelineHash(prompt)}}
+	return plan, prepared
 }
 
-type readerReplayPlan struct {
-	Inputs          []readerReplayInput `json:"inputs"`
-	Policy          string              `json:"policy"`
-	MaxOutputTokens int                 `json:"max_output_tokens"`
+func TestReaderReplayRejectsMixedChangesAndUnfrozenInstructions(t *testing.T) {
+	p, prepared := readerComparisonFixture()
+	prompts, err := packetReplayInstructions(p, prepared)
+	if err != nil || prompts["baseline"] != prepared.ReaderComparison.BaselineInstruction || prompts["candidate"] != pipelineReaderInstruction(p.ReaderPolicy) {
+		t.Fatal("valid reader comparison failed", err)
+	}
+	for name, mutate := range map[string]func(*preparedPacketReplay){
+		"missing provenance":     func(p *preparedPacketReplay) { p.Preparation["kind"] = "same_selected_records" },
+		"missing instructions":   func(p *preparedPacketReplay) { p.ReaderComparison = nil },
+		"changed baseline":       func(p *preparedPacketReplay) { p.ReaderComparison.BaselineInstruction += " changed" },
+		"changed candidate hash": func(p *preparedPacketReplay) { p.ReaderComparison.CandidateSHA256 = "changed" },
+		"candidate differs from code": func(p *preparedPacketReplay) {
+			p.ReaderComparison.CandidateInstruction = "other"
+			p.ReaderComparison.CandidateSHA256 = pipelineHash("other")
+		},
+		"same prompt": func(p *preparedPacketReplay) {
+			p.ReaderComparison.BaselineInstruction = p.ReaderComparison.CandidateInstruction
+			p.ReaderComparison.BaselineSHA256 = p.ReaderComparison.CandidateSHA256
+		},
+		"changed context":           func(p *preparedPacketReplay) { p.Packets[0].Text += " added" },
+		"changed source map":        func(p *preparedPacketReplay) { p.Packets[0].SourceIDs["memory-1"] = "other" },
+		"changed canonical content": func(p *preparedPacketReplay) { p.Packets[0].Memories[0].Content = "other" },
+		"missing packet":            func(p *preparedPacketReplay) { p.Packets = nil },
+	} {
+		t.Run(name, func(t *testing.T) {
+			p, prepared := readerComparisonFixture()
+			mutate(&prepared)
+			if _, err := packetReplayInstructions(p, prepared); err == nil {
+				t.Fatal("invalid comparison accepted before inference")
+			}
+		})
+	}
 }
 
-type readerReplayResult struct {
-	Answer     PipelineAnswer             `json:"answer"`
-	Reading    *memoryllm.EvidenceReading `json:"reading,omitempty"`
-	RawReading string                     `json:"raw_reading,omitempty"`
+func TestReaderPayloadExcludesEvaluationLabelsAndEmptyMemory(t *testing.T) {
+	answer := PipelineAnswer{Query: "What was agreed?", Context: "Authorized evidence", Expected: "private reference", Category: 3, QuestionID: "private-case", SampleID: "private-sample", Correct: true, JudgeReason: "private grade", EvidenceRefs: []string{"private-label"}}
+	if got := packetReaderPayload(answer, false); !reflect.DeepEqual(got, map[string]any{"question": answer.Query, "memories": answer.Context}) {
+		t.Fatal("reader payload leaked offline labels")
+	}
+	if got := packetReaderPayload(answer, true); !reflect.DeepEqual(got, map[string]any{"question": answer.Query, "memories": ""}) {
+		t.Fatal("empty-memory diagnostic retained source or labels")
+	}
 }
 
-type readerReplayGenerator struct {
-	delegate *pipelinePlanGenerator
-	raw      string
+func TestContextReplaysKeepIdenticalCurrentReaderInstructions(t *testing.T) {
+	for _, kind := range []string{"same_selected_records", "frozen_query_provider_retrieval", "frozen_source_support"} {
+		t.Run(kind, func(t *testing.T) {
+			plan := packetReplayPlan{ReaderPolicy: "interpretation"}
+			prepared := preparedPacketReplay{Preparation: map[string]string{"kind": kind}}
+			got, err := packetReplayInstructions(plan, prepared)
+			want := pipelineReaderInstruction(plan.ReaderPolicy)
+			if err != nil || len(got) != 2 || got["baseline"] != want || got["candidate"] != want {
+				t.Fatal("context comparison silently changed reader instructions", err)
+			}
+		})
+	}
 }
 
-func (g *readerReplayGenerator) Generate(ctx context.Context, req memoryllm.Request) (json.RawMessage, error) {
-	raw, err := g.delegate.Generate(ctx, req)
-	g.raw = string(raw)
-	return raw, err
+func TestPipelineFinalAnswerGradesOnlyTheFinalLine(t *testing.T) {
+	got, err := pipelineFinalAnswer("reasoning", "1. FINAL ANSWER: draft\n2. checked\nFINAL ANSWER:  in May 2023 ")
+	if err != nil || got != "in May 2023" {
+		t.Fatal(got, err)
+	}
+	for _, reply := range []string{"worked it out, no marker", "FINAL ANSWER:   "} {
+		if _, err := pipelineFinalAnswer("reasoning", reply); err == nil {
+			t.Fatal("reply without a usable final answer graded", reply)
+		}
+	}
+	if got, err := pipelineFinalAnswer("interpretation", "plain reply"); err != nil || got != "plain reply" {
+		t.Fatal("other readers changed", got, err)
+	}
 }
 
-// This manual ablation holds every context byte fixed. It invokes no retrieval,
-// extraction, source expansion or database operation and never changes grades in
-// the input reports. Every attempted answer, including invalid quotes, persists.
-func TestLiveLOCOMOReaderReplay(t *testing.T) {
-	planPath := os.Getenv("MEMSTATION_EVAL_READER_REPLAY_PLAN")
-	if planPath == "" {
-		t.Skip("manual frozen-context reader ablation")
+func TestReaderEffortComparisonAllowsTheSamePromptOnlyWhenDeclared(t *testing.T) {
+	p, prepared := readerComparisonFixture()
+	prepared.ReaderComparison.BaselineInstruction = prepared.ReaderComparison.CandidateInstruction
+	prepared.ReaderComparison.BaselineSHA256 = prepared.ReaderComparison.CandidateSHA256
+	if _, err := packetReplayInstructions(p, prepared); err == nil {
+		t.Fatal("same prompt accepted without a declared effort change")
 	}
-	out := os.Getenv("MEMSTATION_EVAL_READER_REPLAY_OUT")
-	revision := os.Getenv("MEMSTATION_EVAL_CODE_REVISION")
-	raw, err := os.ReadFile(planPath)
-	if err != nil || out == "" || revision == "" {
-		t.Fatal("missing reader replay provenance", err)
-	}
-	var plan readerReplayPlan
-	if err = memoryllm.Decode(raw, &plan); err != nil || len(plan.Inputs) == 0 || plan.MaxOutputTokens != 4096 || plan.Policy != "grounded" && plan.Policy != "coverage_inference" && plan.Policy != "interpretation" {
-		t.Fatal("invalid reader replay plan", err)
-	}
-	var inputs []PipelineAnswer
-	seen := map[string]bool{}
-	for _, source := range plan.Inputs {
-		data, err := os.ReadFile(source.Path)
-		if err != nil || pipelineHash(string(data)) != source.SHA256 {
-			t.Fatal("frozen context report mismatch", err)
-		}
-		var report LOCOMOPipelineReport
-		if err = json.Unmarshal(data, &report); err != nil {
-			t.Fatal(err)
-		}
-		for _, a := range report.Answers {
-			key := a.QuestionID + "|" + a.Mode
-			if seen[key] || a.Error != "" || a.ContextHash != pipelineHash(a.Context) || a.ContextBytes != len(a.Context) || len(a.Context) > 16000 {
-				t.Fatal("invalid or duplicate frozen context", key)
-			}
-			seen[key] = true
-			inputs = append(inputs, a)
-		}
-	}
-	if err = os.Mkdir(out, 0o700); err != nil {
-		t.Fatal("a new complete run requires a fresh directory", err)
-	}
-	reader, judge := pipelineReplayRoleConfig(t, "ANSWERER"), pipelineReplayRoleConfig(t, "JUDGE")
-	if reader.Model == "" || judge.Model == "" {
-		t.Fatal("reader and judge must be configured")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Minute)
-	defer cancel()
-	results := make([]readerReplayResult, len(inputs))
-	for i, a := range inputs {
-		results[i].Answer = PipelineAnswer{SampleID: a.SampleID, QuestionID: a.QuestionID, Category: a.Category, Mode: a.Mode, Query: a.Query, Expected: a.Expected, EvidenceRefs: a.EvidenceRefs, Context: a.Context, ContextHash: a.ContextHash, ContextBytes: a.ContextBytes, ContextDocuments: a.ContextDocuments, SourceRefs: a.SourceRefs, DiagnosticOnly: a.DiagnosticOnly, Error: "not executed"}
-	}
-	prompt := pipelineReaderInstruction(plan.Policy)
-	if plan.Policy == "grounded" {
-		prompt = memoryllm.EvidenceReaderInstruction
-	}
-	manifest := map[string]any{"code_revision": revision, "plan_sha256": pipelineHash(string(raw)), "inputs": plan.Inputs, "reader_policy": plan.Policy, "reader": reader.runInfo(), "judge": judge.runInfo(), "reader_prompt_sha256": pipelineHash(prompt), "judge_prompt_sha256": pipelineHash(pipelineJudgeInstruction), "max_output_tokens": plan.MaxOutputTokens, "scope": "fixed-context reading only; all cases; developmental cohorts; no retrieval or ingestion claim"}
-	manifest["reader_format"] = "plain_text_v1"
-	if plan.Policy == "grounded" {
-		manifest["reader_format"] = "grounded_json_v1"
-	}
-	save := func() {
-		t.Helper()
-		if err := writePipelineJSON(filepath.Join(out, "results.json"), map[string]any{"manifest": manifest, "results": results}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	save()
-	for i := range results {
-		a := &results[i].Answer
-		if ctx.Err() != nil {
-			t.Fatal(ctx.Err())
-		}
-		a.Error = "attempt interrupted before completion"
-		save()
-		start := time.Now()
-		transportUnavailable := false
-		if plan.Policy == "grounded" {
-			delegate := &pipelinePlanGenerator{config: reader}
-			generator := &readerReplayGenerator{delegate: delegate}
-			reading, readErr := memoryllm.ReadEvidence(ctx, generator, "reader-replay", a.Query, a.Context, plan.MaxOutputTokens)
-			a.AnswerUsage, a.AnswerModel, results[i].RawReading = delegate.usage, delegate.model, generator.raw
-			if readErr != nil {
-				a.Error = readErr.Error()
-				transportUnavailable = errors.Is(readErr, syscall.ECONNREFUSED)
-			} else {
-				a.Answer, a.Error, results[i].Reading = reading.Answer, "", &reading
-			}
-		} else {
-			answer, usage, model, readErr := pipelineReadObserved(ctx, reader, prompt, map[string]any{"question": a.Query, "memories": a.Context}, plan.MaxOutputTokens)
-			a.RawAnswer, results[i].RawReading = answer, answer
-			a.AnswerUsage, a.AnswerModel = usage, model
-			if readErr != nil {
-				a.Error = readErr.Error()
-				transportUnavailable = errors.Is(readErr, syscall.ECONNREFUSED)
-			} else {
-				a.Answer, a.Error = answer, ""
-			}
-		}
-		a.AnswerMillis = float64(time.Since(start).Microseconds()) / 1000
-		if a.Error == "" {
-			start = time.Now()
-			raw, usage, model, gradeErr := pipelineCompleteObserved(ctx, judge, pipelineJudgeInstruction, map[string]any{"question": a.Query, "reference_answer": a.Expected, "candidate_answer": a.Answer})
-			a.RawJudgment = string(raw)
-			a.JudgeUsage, a.JudgeModel, a.JudgeMillis = usage, model, float64(time.Since(start).Microseconds())/1000
-			var grade struct {
-				Correct *bool  `json:"correct"`
-				Reason  string `json:"reason"`
-			}
-			if gradeErr != nil {
-				a.Error = gradeErr.Error()
-				transportUnavailable = errors.Is(gradeErr, syscall.ECONNREFUSED)
-			} else if memoryllm.Decode(raw, &grade) != nil || grade.Correct == nil || grade.Reason == "" {
-				a.Error = "invalid judge schema"
-			} else {
-				a.Correct, a.Judged, a.JudgeReason = *grade.Correct, true, grade.Reason
-			}
-		}
-		save()
-		t.Logf("%d/%d %s %s correct=%t error=%s", i+1, len(results), a.QuestionID, plan.Policy, a.Correct, a.Error)
-		if a.Error != "" {
-			t.Errorf("%s: %s", a.QuestionID, a.Error)
-			if transportUnavailable {
-				t.Fatal("provider connection refused; remaining cohort rows retain not-executed status and stay in the denominator")
-			}
-		}
+	p.CandidateReasoningEffort = "medium"
+	if _, err := packetReplayInstructions(p, prepared); err != nil {
+		t.Fatal(err)
 	}
 }

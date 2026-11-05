@@ -128,6 +128,14 @@ Keep output/cache directories private and ignored by Git. These are diagnosis
 results on observed data, not blind holdout or answer-quality measurements.
 
 
+Complete benchmark stack: `bash scripts/eval/stack.sh up` starts PostgreSQL, Redis, the
+memory extractor and the reranker, and checks the model endpoint. `up --service` also
+starts a migrated serve/worker/scheduler for source replay and load runs. `status`,
+`down` and `newdb <name>` manage it; `down` stops only what the script started. Settings
+come from the environment, then the ignored `.env.memstation-eval`.
+`run-locomo-pipeline.sh` brings the stack up itself and creates a fresh database from
+`MEMSTATION_EVAL_PREFIX`; set `MEMSTATION_EVAL_STACK=external` to manage services yourself.
+
 Manual LOCOMO production ingestion + QA:
 
 ```sh
@@ -139,6 +147,10 @@ export MEMSTATION_EVAL_PREFIX=eval-locomo-RUN
 export MEMSTATION_EVAL_CODE_REVISION=EXACT_SOURCE_REVISION_OR_FINGERPRINT
 export EMBEDDING_REVISION=PINNED_EMBEDDING_DIGEST
 # Supply MODEL, BASE_URL and API_KEY for EMBEDDING, EXTRACTION, ANSWERER, JUDGE.
+# Configure MEMSTATION_MEMORY_PROCESSING_* exactly as server/worker deployment.
+# Pin encoder MODEL/REVISION, supply ENDPOINT/TOKEN; entity recall is mandatory.
+# Explicit role_TEMPERATURE, role_REASONING_EFFORT, role_TIMEOUT (e.g. 10m),
+# and role_MAX_OUTPUT_TOKENS are frozen in the manifest.
 # A pilot still imports the complete source history of the selected sample.
 export MEMSTATION_EVAL_SAMPLE_ID=conv-26
 export MEMSTATION_EVAL_QUESTIONS_PER_CATEGORY=3
@@ -149,14 +161,21 @@ Unset the two pilot variables to evaluate all samples and all category 1–4 QA,
 including questions without evidence labels. Category 5 is excluded explicitly.
 The three tracks share the same answerer, judge, prompts, top-20 cap and 16,000-byte
 context cap by default. This is a UTF-8 byte cap, not an equal token count; actual
-answer/judge token usage is recorded. QA starts at 4,096 output tokens. Explicit
-truncation permits one bounded retry, with twice the initial budget or 8,192,
-whichever is larger, capped at 16,384. Both attempts contribute to recorded usage.
+answer/judge token usage is recorded. The reader starts at 16,384 output tokens by default
+(`MEMSTATION_EVAL_ANSWER_OUTPUT_TOKENS` / `-answer-output-tokens`). Explicit
+truncation permits one bounded retry up to the role-specific configured ceiling
+(default 65,536). The structured judge starts at 4,096 tokens under its own
+ceiling. Both attempts contribute to recorded usage. Worker extraction
+uses the production initial budget and the configured extraction ceiling. Its
+actual provider calls, including retries, and local entity calls are recorded in
+the isolated database AI usage ledger. Unreported tokens remain unreported.
 
-- `raw`: individual original turns, indexed by the existing in-memory production
-  MemoryEngine harness with real embeddings.
+- `raw`: original source segments indexed by the production source Worker in
+  PostgreSQL; retrieval restricts memory types to segments.
 - `derived`: production Summary/Analysis/Embedding Worker output in PostgreSQL,
-  without source segments/conversation expansion.
+  without source segments/conversation expansion in candidate retrieval.
+  Optional evidence-packet source hydration is independent of this candidate
+  filter and must be declared with its neighbor radius.
 - `combined`: the same persistent engine with source segments and conversation
   expansion enabled. Whole records are packed in rank order; oversized records
   are skipped rather than silently truncating negation or attribution.
@@ -173,7 +192,14 @@ are explicitly diagnostic and never enter the memory ingestion/search path:
   Missing or unresolved evidence fails this diagnostic but remains in its QA
   denominator. It is not a production retrieval score or an absolute ceiling.
 
-A controls-only or raw-only run needs no database or extraction model. For example:
+Control readers receive request-local source labels. Dataset source references
+remain only in the offline diagnostic mapping; they are never rendered as reader
+input, including in the full-history and gold-evidence tracks.
+
+All three retrieval tracks share one freshly ingested corpus and the production
+entity index. Raw describes the evidence returned to the reader, not an ingestion
+cost baseline without generative processing. Controls-only runs need no database,
+encoder, or extraction model. For example:
 
 ```sh
 export MEMSTATION_EVAL_MODES=question_only,full_history,gold_evidence
@@ -181,11 +207,11 @@ export MEMSTATION_EVAL_ORACLE_NEIGHBOR_TURNS=1
 bash scripts/eval/run-locomo-pipeline.sh /absolute/private/locomo-controls-RUN
 ```
 
-To use the configured production reranker in **both** raw and persistent engines,
+To use the configured production reranker in all retrieval tracks,
 provide `RERANK_MODEL`, `RERANK_BASE_URL`, `RERANK_REVISION` and, if required by the
 provider, `RERANK_API_KEY`. The model uses the production provider prefix, for
 example `rerank_compatible:<model-id>`. CLI flags expose the candidate multiplier,
-minimum/maximum, blend weight and timeout. An empty model disables reranking;
+minimum/maximum and timeout. An empty model disables reranking;
 there is no implicit dependency on the live server's environment or database.
 The manifest records these settings and an endpoint hash without credentials.
 Each retrieval answer and mode summary records applied/skipped/disabled/degraded
@@ -207,8 +233,11 @@ Replay persists both human speakers as user-origin material, preserving speaker
 and original session date in each turn. It calls real finalization/outbox relay
 and Worker handlers through a persistent synchronous local task queue. It does
 not measure HTTP gateway overhead, Redis delivery, concurrent workers or the
-production SLO. Raw and persistent search latency use different stores and must
-not be presented as a fair speed comparison. Personal-only scope remains intact.
+production SLO. Personal-only scope remains intact. Query entity diagnostics and status counts
+retain timeout, unavailable, empty and completed outcomes; degradation is never
+removed from the denominator. Stage checkpoints pin the processing policy and
+source-index generation and distinguish completed semantics from deliberate
+lightweight/hybrid deferral. Resume validates these against persisted records.
 
 A database-wide advisory lease and an output-directory lease reject concurrent runners. Resume requires the
 same source/model/budget manifest, database and checkpoint directory; use a fresh
@@ -217,14 +246,16 @@ most three attempts per invocation and remains checkpointed on failure. Failed
 or unexecuted questions stay in the expected denominator and the process exits
 nonzero. No model response is replaced by a rule-generated memory.
 
-Protocol v2 freezes every answer attempt, including failures. Intent is persisted
+Protocol v4 freezes processing/encoder settings and uses Worker segments for the
+raw arm. Earlier raw-turn reports are historical references, not matched controls.
+It freezes every answer attempt, including failures. Intent is persisted
 before model work, so a crashed attempt remains interrupted rather than being
 silently retried. Resume executes only missing attempts; a fresh run is required
 to repeat failed questions. Prompt hashes, context hashes, question identity and
 manifest identity protect checkpoint reuse. The provider's existing bounded
 transport/output-truncation recovery remains part of one declared attempt.
 Remote model IDs returned by answerer/judge are recorded; they do not attest to
-immutable remote weights. Older v1 checkpoint directories cannot be mixed into v2.
+immutable remote weights. Older checkpoint directories cannot be mixed into the current protocol.
 
 `pipeline.json` contains stage completion, all expected answers, per-mode accuracy
 and coverage, token usage, retrieval score breakdown and errors. Stage files and
@@ -293,6 +324,14 @@ This is protocol sensitivity, not execution of the other memory engine.
 
 ### Selected-cohort replay with current retrieval
 
+Quality iteration starts with offline diagnosis of existing failures, a frozen
+failure-focused development subset, and a small previously-correct control set.
+Declare call and token limits before running a candidate. Expand the cohort only
+after a useful result; do not default to a full rerun. Historical judgments and
+categories can select the offline diagnostic cohort but must never enter reader
+inputs or product retrieval decisions. Subset recovery is not whole-benchmark
+accuracy. Keep all selected failures in the denominator.
+
 `TestLiveLOCOMOEvidenceReplay` is a manual diagnostic for rerunning a declared
 cohort against the current engine without repeating extraction. Derived/combined
 tracks require an isolated snapshot of the evaluation database; raw-only replay
@@ -329,58 +368,269 @@ The plan manifest explicitly records `refine_evidence` and
 for both arms, and freeze transfer-cohort IDs before reading their outcomes.
 Keep plans, snapshots, answers and reports in ignored private directories.
 
+For evidence presentation changes, `TestPrepareLOCOMOPacketReplay` and
+`TestLiveLOCOMOPacketReplay` reuse the exact already-selected records without a
+database, source reader, embedding or reranker. First reconstruct the baseline
+context byte-for-byte. Prepare the candidate with the production packet builder;
+every record and source mapping must survive, and context bytes cannot increase.
+Both preparation and the live phase compare complete canonical records, including
+scope, type, attribution, revision and source coordinates, and the entire opaque
+source map before inference. A record with an unchanged ID and body but altered
+provenance is rejected. The live phase also rejects empty or enlarged context.
+These checks protect record identity; inspect the rendered text separately to
+verify that it contains every record and preserves its meaning. Measure adjacency
+in the final rendered context: a renderer that regroups by type can undo an
+earlier array permutation. Removing type headings and moving sources together
+must be declared as a combined presentation change.
+The live test alternates which arm runs first for each case, uses the same reader
+and judge prompts, and limits every role to one generation attempt by requiring
+its initial output budget to equal its configured maximum.
+
+The paired runner also accepts hash-frozen packets with preparation kind
+`frozen_source_support`. Such preparation must verify source authorization and
+revision, reproduce the original packet exactly, and preserve every admitted
+record while adding bounded source support. Freeze and retain that validation
+alongside the packets before calling a model. A packet hash alone does not
+establish these properties. This runner accepts declared ceilings up to 32,000
+bytes without increasing them implicitly. An explicitly larger context budget
+tests supplementation with additional context, not same-budget retrieval
+improvement. Correctness and individual protection take priority over token
+savings; a passing development screen still requires the complete replacement
+acceptance procedure before changing the baseline. Default CI makes no model
+calls.
+
+The private plan has `reader_policy` (`interpretation`), `context_bytes`,
+`reader_output_tokens`, `judge_output_tokens` (4096), `max_generation_calls`
+(four per case), `token_stop_limit`, and `cases`. Each case contains `cohort`,
+`group` (`failure` or `control`), the frozen `baseline` PipelineAnswer, and the
+complete admitted `documents` in original admission order. The test rejects
+duplicate cases, inconsistent hashes, empty evidence and invalid budgets.
+
+Set `MEMSTATION_EVAL_PACKET_REPLAY_PLAN` and a fresh
+`MEMSTATION_EVAL_PACKET_REPLAY_OUT` for preparation. For the live phase, also set
+`MEMSTATION_EVAL_PACKET_REPLAY_PREPARED` to the produced `packets.json`, its digest
+in `MEMSTATION_EVAL_PACKET_REPLAY_PREPARED_SHA256`,
+`MEMSTATION_EVAL_CODE_REVISION`, and the usual answerer/judge configuration.
+Use a second fresh output directory for the live run. Before each model call the
+runner checks the call limit and reserves output capacity plus a conservative
+byte-based input allowance against the remaining token budget. Missing or
+inconsistent usage stops the run; all unexecuted rows remain in the denominator.
+This is a paired diagnostic on selected development cases, not a production
+promotion gate or a replacement for later bounded end-to-end validation.
+
+For recall-stage diagnosis, `TestLiveLOCOMORecallSnapshot` records production
+candidate collection and the exact rerank admission without running a reranker,
+reader or judge. It deliberately returns a reranker error to expose the complete
+first-stage score components; this capture is not a quality or fallback result.
+Use a read-only isolated database and a small frozen array of the same case rows
+with `MEMSTATION_EVAL_RECALL_SNAPSHOT_CASES` and a fresh
+`MEMSTATION_EVAL_RECALL_SNAPSHOT_OUT`. Query embeddings and entity extraction run
+once per case and must be included in the experiment budget.
+
+Mandatory entity recall must finish with `complete` or `no_entities`. Failed
+captures remain on disk with their original diagnostics and make the capture
+test fail; they are not healthy empty-entity snapshots. Replay rejects missing
+diagnostics or recorded extraction failures before model inference, writes a
+failed row and continues the frozen cohort. Fresh pipeline QA similarly records
+incomplete entity recall without calling reader/judge. The offline candidate gate
+checks this requirement in both baseline and candidate reports, including older
+artifacts whose answer field alone appears successful. Do not repair old reports
+or omit affected protected cases; a new measurement needs a newly frozen run.
+
+Debug retrieval also records `seed_admission`: the bounded pre-graph union,
+retained nodes, entity-channel overlap and entity-only nodes before/after the
+seed limit. `entity_recall.matched_nodes` measures index matches; it does not
+mean those nodes survived seed admission, reached reranking, or were packed as
+answer evidence. Compare these stages before spending generation calls on an
+apparent recall increase. These diagnostics do not change selection or scores.
+
+`TestPrepareLOCOMORecallReplay` then reuses those exact query-provider outputs,
+while running production SQL, graph retrieval, admission and evidence assembly.
+Set `MEMSTATION_EVAL_RECALL_REPLAY_CASES`,
+`MEMSTATION_EVAL_RECALL_REPLAY_SNAPSHOTS` and a fresh
+`MEMSTATION_EVAL_RECALL_REPLAY_OUT`. Explicitly freeze
+`MEMSTATION_EVAL_RECALL_REPLAY_CONTEXT_BYTES` (1–16,000) and
+`MEMSTATION_EVAL_RECALL_REPLAY_MAX_CANDIDATES` (20–50). Setting
+`MEMSTATION_EVAL_RECALL_REPLAY_CAPTURE_ONLY=true` observes admission without
+inference; otherwise the configured reranker runs once per case and the test
+prepares a packet within the declared byte budget with one neighboring turn. It records the input
+snapshot digest. Frozen-provider timings must not be presented as live latency.
+
+When managing a local reranker, verify its non-generating health endpoint and
+loaded model before starting the frozen inference cohort. A started process is
+not necessarily ready. Each replay saves intent before inference; retrieval,
+reranking or evidence-preparation errors are persisted as failed rows, and the
+remaining frozen cases continue without retrying the failed case. The test still
+fails overall. Preserve the original denominator and do not pass an incomplete
+cohort into paired QA as a complete comparison.
+
+For a zero-model budget/admission ablation, set both
+`MEMSTATION_EVAL_RECALL_REPLAY_RERANK_INPUTS` and
+`MEMSTATION_EVAL_RECALL_REPLAY_RERANK_RESULTS` to completed per-case capture and
+retrieval directories. This replaces the reranker with frozen per-document
+scores and fixes the engine clock to the original snapshot's `captured_at`.
+Every submitted document must match the cached owner, query, model, node ID and
+text exactly; subsets are allowed, but missing/changed documents, partial scores
+and degraded original results stop the replay. No provider retry or score
+fallback is allowed. Input/result digests are recorded. This measures the
+production engine under fixed scores, not a new live reranker or QA result;
+provider batch effects are outside this ablation.
+
+`TestAuditLOCOMORecallCoverage` reads completed artifacts after retrieval and
+packing. Set `MEMSTATION_EVAL_COVERAGE_AUDIT_PLAN` to a private JSON file containing
+`dataset`, `dataset_sha256`, `cases`, `stages` (arm name to cohort name to retrieval
+directory), and a fresh `output` file. It reports annotated source references in
+the reranked and packed records plus verbatim annotated turns in the context.
+Each stage also lists record/node identities, types and content hashes, so a
+comparison can detect a lost or changed summary even when it has no per-turn
+evidence label. These identities are posthoc diagnostics, never retrieval input.
+Provenance coverage is not semantic entailment or answer correctness: a summary
+can preserve an answer without per-turn references, and a derived record may
+cite a turn without retaining all its details. Labels stay in this posthoc
+observer and never change retrieval, packing or reader inputs.
+Execution-error artifacts remain explicit rows in the audit; they have no
+invented packed evidence. A successful non-capture artifact must contain applied
+reranking and a prepared packet.
+
+For admission-only captures, additionally supply `snapshots` (cohort name to
+original capture directory) in the audit plan. The observer verifies the capture
+digest and exact node/text/owner correspondence, then reports the `admitted`
+stage without inventing a packed context or rerank score. Deliberate capture
+errors and successfully applied reranker results remain distinct.
+
+The [memory quality research method](../../../../docs/memory-quality-research.md)
+defines how to absorb external framework ideas, separate cost from judge usage,
+and progress from failure-selected development to a protocol-aligned near-SOTA
+comparison. Public scores are research references until the conditions match.
+
+Freeze and hash both arms' resulting packets before the paired reader/judge
+phase. Set prepared-packet `preparation.kind` to
+`frozen_query_provider_retrieval` and include the retrieval provenance digest;
+presentation-only preparation writes `same_selected_records`. Retrieval packets
+can contain different records, so report candidate coverage separately from
+reader accuracy. Check actual reported token usage as well as rerank count and
+bytes; a byte ceiling alone does not prove equal generation cost. Retain all
+attempts, including candidates rejected before generation, in private artifacts.
+If the candidate also lowers candidate/context budgets, freeze those settings
+before inference and report the combined policy change. Do not label that QA
+comparison as a retrieval-only ablation or silently change deployment defaults.
+
+### Reader-only frozen evidence comparison
+
+Use the bounded packet replay to isolate reader changes from retrieval. Set
+prepared-packet `preparation.kind` to `frozen_reader_comparison` and add
+`reader_comparison` containing `baseline_instruction`, `baseline_sha256`,
+`candidate_instruction` and `candidate_sha256`. Freeze the prior instruction
+from its code snapshot; the candidate instruction must exactly match the current
+reader code. Both instruction hashes are checked before any model request.
+
+Each candidate packet must exactly match the baseline context text, canonical
+records and source-ID mapping. Any evidence change rejects the reader-only run.
+The manifest records both prompt hashes, and arms alternate first position for
+each fixed case. Both receive fresh single-call answers and the same frozen
+judge. Reader payloads contain only `question` and `memories`; sample IDs,
+categories, expected answers, source annotations and earlier grades remain
+outside the reader request. A changed reader protocol is not eligible for the
+retrieval replacement gate and must not overwrite historical benchmark results.
+
+`TestLiveLOCOMOEmptyReaderReplay` consumes the same frozen reader comparison in a
+separate fresh output directory. It clears the memory text and document count
+for both arms, invokes each reader once per question, and never calls the judge.
+Budget this diagnostic separately at two reader calls per case; the shared input
+plan retains its paired-run call ceiling and can specify a smaller token cap.
+Its manifest explicitly identifies empty memory, and rows remain unjudged.
+Inspect unsupported personal assertions separately; do not turn empty-memory
+abstention into a memory-accuracy score. Neither replay starts a database,
+ingestion worker, retrieval provider or reranker.
+
+### Independent judge calibration
+
+`TestLiveJudgeCalibration` uses the existing judge prompt on an independent
+synthetic fixture, without rejudging benchmark answers. Set
+`MEMSTATION_EVAL_JUDGE_CALIBRATION_CASES` to the fixture path,
+`MEMSTATION_EVAL_JUDGE_CALIBRATION_SHA256` to its frozen digest, and
+`MEMSTATION_EVAL_JUDGE_CALIBRATION_OUT` to a fresh directory. Configure `JUDGE_*`
+with a fixed 4,096 output-token ceiling. The test permits at most 12 calls and
+25,000 reported tokens, reserving conservative input/output capacity before each
+attempt. It saves intent before inference, retains every row on failure, and
+does not retry. IDs, groups and expected correctness labels remain offline.
+
+The repository fixture contains six equivalent answers and six negative
+controls for dates, contradictory status and missing list items. Compare its
+expected labels with the saved judgments; a successfully executed test does not
+mean that every judgment agrees. Synthetic calibration is not evidence that a
+particular historical benchmark judgment was wrong. Keep existing scores
+unchanged and report calibration cost separately from runtime reader cost.
+
+The independent synthetic fixture
+`testdata/judge_completeness_calibration.json` adds paired wording controls for
+activity plus purpose, provisional versus completed events, and two distinct
+benefits. It contains six complete and six incorrect/incomplete answers, including
+longer answers whose extra details do not restore a missing requirement. It uses
+no external benchmark text. Select it with the same frozen-file calibration
+command; it requires its own declared model-call budget. Fixture validation alone
+does not establish live judge agreement.
+
+When two benchmark answers omit the same requirement but receive opposite grades,
+record the discrepancy alongside the unchanged original scores. Do not erase the
+scored regression, change the judge mid-run or infer a retrieval loss from the
+grade alone. Verify the actual source text and both rendered answers first.
+
 ### Bounded evidence refinement
 
 `MEMSTATION_EVAL_READER_POLICY=coverage` selects an alternative reader prompt;
 `MEMSTATION_EVAL_REFINE_EVIDENCE=true` independently enables the shared engine's
-LLM question-aspect planner and complementary evidence selector. Defaults remain `baseline` and `false`. Configure
+LLM evidence search. Defaults remain `baseline` and `false`. Configure
 `PLANNER_MODEL`, `PLANNER_BASE_URL`, `PLANNER_API_KEY` to use a separate planner;
 otherwise it uses the answerer configuration. Diagnostic controls cannot be
 combined with refinement. Use separate output directories for each arm.
 
-The planner receives only the question. It returns one to eight requested aspects
-and one or two complementary semantic queries, with no source-based sufficiency
-stop. Each follow-up keeps the original authorization, workspace, private partition,
-generation, memory types and temporal filters. Complete records from the initial
-and follow-up pools are interleaved within a bounded candidate budget. Discovery
-uses the authorized, scored candidate pool before the final result-page cutoff;
-this does not enlarge the search prefetch or cross-encoder budget.
+Each round the model sees the question, the records kept so far and the candidates
+not yet shown, under temporary opaque labels. It returns `core`, the labels that could
+carry needed information, and `next_queries`, at most three follow-ups. It keeps
+searching by default and stops only for a single self-contained fact. The loop runs at
+most three rounds and ends when a follow-up round keeps nothing new. Each follow-up
+keeps the original authorization, workspace, private partition, generation, memory
+types and temporal filters. Malformed decisions or foreign labels fail, and generated
+text never becomes a memory.
 
-A second bounded LLM call chooses complementary evidence using the original
-question, requested aspects and source content. Source labels are temporary and
-opaque; every selected ID must belong to a submitted record and be cited by an
-aspect check. Invented or malformed selections fail, and generated text never
-becomes a memory. Selection prioritizes additions and retains the original
-retrieval records in their original order. The evidence path first determines
-which original records fit, protects those records, and uses remaining space for
-discoveries and optional source context. This preserves source support, not a
-guarantee that a stochastic reader's answer will stay correct. The selector has a
-separate intermediate budget of twice the final context bytes, capped at 32KB;
-the final context retains its declared byte limit.
+Kept records lead the result, then each follow-up's best remaining record so no aspect
+loses its place, then the remaining candidates in retrieval order. The evidence path
+protects kept records when packing, so a discovery competes on what it supports rather
+than for whatever space the first page left. The model's intermediate input is capped
+at twice the final context bytes, at most 32KB per round; the final context keeps its
+declared byte limit. A model that keeps more than fits has the excess reported, not
+silently carried over the budget.
 
 The model-facing evidence formatter assigns temporary memory
 and conversation labels before packing, so byte/token budgets cover delivered
 content rather than long persistence IDs. Canonical source IDs remain in the
 out-of-band packet mapping and retrieval trace.
 
-The scored first-query pool is supplied through a typed `EvidenceSeed`; its
-original page must match that pool before any model call. Up to three scored
-pools of 50 records reach a bounded interleaved union, after which the selector's
-byte budget applies. This avoids dropping first-query bridge facts before
-selection. Evidence-format contexts also admit already-scored candidates by byte
-budget, independently of public result pagination; this does not increase search
-or rerank calls. These source-retention properties do not establish a QA gain.
+Bounded source windows admit directly cited turns before adjacent turns, then
+restore chronology within each selected window. Packet admission likewise keeps
+direct citations ahead of neighbors across candidates, including a turn first
+encountered as a neighbor and later cited directly. Source permissions, revisions,
+query counts and byte limits are unchanged. `packed_anchor_turns` diagnoses
+admitted direct support; it does not prove semantic completeness or a QA gain.
 
-`refinement.selection` records the validated checks;
-`refinement.core` records selected record IDs, and `refinement.context_core`
-reports any subsequent whole-record omissions.
-`refinement.baseline` and `refinement.context_baseline` separately report retained
-original records; selected discoveries that do not fit remain explicitly omitted.
-Planner/selector usage is summed; follow-up rerank and complete evidence-ready
-time are reported separately from
-initial search time. Keep all errors in the denominator. This is an explicitly
-invoked service operation, not a change to the default gateway path. Compare the
-entire declared cohort and success controls before a promotion.
+The scored first-query pool is supplied through a typed `EvidenceSeed`; its original
+page must match that pool before any model call. Evidence-format contexts admit
+already-scored candidates by byte budget, independently of public result pagination.
+
+`refinement.rounds` records each round's queries, shown count, kept records and next
+queries. `refinement.core` lists kept record IDs and `refinement.context_core` reports
+any whole-record omissions. `refinement.baseline` and `refinement.context_baseline`
+report the original records separately. Model usage is summed; follow-up rerank and
+evidence-ready time are reported separately from initial search time. Keep all errors
+in the denominator. This is an explicitly invoked service operation, not a change to
+the default gateway path. Compare the entire declared cohort and success controls
+before a promotion.
+
+Judge replies are read by `decodePipelineJudgment` on every path. The free-text reason
+can contain unescaped quotes, so when strict decoding fails the verdict is read from an
+intact leading `correct` field, for either verdict and without another model call. A
+reply with no intact verdict or no reason remains a failure in the denominator.
 
 Oracle/full-history and question-only modes remain separately labelled diagnostics.
 The former measures an empirical complete-input baseline, not a proven theoretical
@@ -529,3 +779,131 @@ tracked files.
 See [reranking setup and diagnostic methods](../../../../docs/reranking.md). `TestLiveRerankFrozenCandidates` is explicitly opt-in and isolates provider ordering on saved raw-dialogue candidates. It does not replace MemoryEngine ranking ablations or end-to-end LOCOMO evaluation.
 
 For a fixed failure-enriched, real-worker development cohort spanning LOCOMO, LongMemEval and MemoryArena, see [Mixed memory regression](REGRESSION.md). This is a manual diagnostic; it does not become a default CI gate.
+
+### Candidate acceptance before replacement
+
+Use `scripts/eval/check-locomo-candidate.sh` as the required offline acceptance
+step before adopting a memory-quality candidate. This command never invokes a
+provider or opens a database. It is separate from ordinary CI/nightly. The small
+synthetic tests of the checker and evidence-preservation contracts run in normal
+`go test`; they do not execute a benchmark.
+
+Before generating candidate answers, freeze a private JSON plan:
+
+```json
+{
+  "version": 2,
+  "purpose": "screen",
+  "candidate_code_revision": "exact-tested-source-fingerprint",
+  "baselines": [{"path": "/private/baseline/pipeline.json", "sha256": "sha256-of-file"}],
+  "repeat_baselines": [{"path": "/private/repeat/pipeline.json", "sha256": "sha256-of-file"}],
+  "cases": [{"sample_id": "sample", "question_id": "question", "mode": "combined"}],
+  "max_answer_input_token_ratio": 1.05,
+  "max_qa_total_tokens": 500000
+}
+```
+
+`repeat_baselines` are reruns of the baseline's exact code and protocol. They
+measure the noise floor; a plan without them is rejected, and every frozen case
+must appear in them. Draw `cases` as a stratified random sample fixed before
+results exist. Failure-enriched cohorts are for locating mechanisms, not for
+judging a candidate.
+
+`screen` passes when the net gain exceeds the repeat's net drift and losses stay
+within noise. `replacement` additionally requires at least 200 cases, at least 15
+in each category, and an exact two-sided McNemar p below 0.05. In both, baseline-
+correct losses must not significantly exceed the repeat's loss rate, and no category may show a
+significant net loss. Individual flips remain in `verdict.json` as diagnostics.
+
+`cost_reduction` is for candidates that spend less. It needs no gain, but the reader
+must use fewer input tokens and the net loss must stay within the repeat's net drift
+and not be significant, on the same case counts as `replacement`.
+
+The budgets above illustrate the schema; set and record the actual ceilings
+before evaluation. Keep baseline files immutable, hash them, and record the plan
+SHA256 separately before running the candidate. Changing the cohort or a budget
+needs a new plan and attempt, never a revision of the measured attempt. Cases
+identify offline rows only; this plan is never passed into product retrieval or
+model prompts.
+
+Write a private JSON array of candidate report paths, then run from the repo:
+
+```bash
+MEMSTATION_ENFORCE_BENCHMARKS=true bash scripts/eval/check-locomo-candidate.sh \
+  -plan /private/candidate-plan.json \
+  -plan-sha256 "$FROZEN_PLAN_SHA256" \
+  -candidate-reports /private/candidate-reports.json \
+  -out /private/new-acceptance-attempt
+```
+
+The output directory must not exist. Paths inside JSON are absolute. The checker
+returns nonzero on a failed statistical check, missing/duplicate/unjudged/error
+row, incomplete ingestion, changed question/reference/model/protocol, invalid
+context/manifest identity, or exceeded token ceiling. All frozen rows remain in
+`verdict.json`. It compares
+the current v4 pipeline and current frozen-corpus retrieval replay reports,
+including pinned reader/judge/embedding/processing/rerank settings and modality.
+A retrieval replay must reference the exact baseline report and a read-only
+corpus snapshot. Unsupported or incomplete protocols fail; old artifacts are
+not rewritten to manufacture missing provenance. Refinement with additional
+generation requires its own explicit acceptance contract and is rejected here.
+
+Only a successful check writes `acceptance.json`, bound to the plan, exact
+candidate file hashes, code revision and verdict hash. `purpose: regression`
+proves only this protected cohort passed and always has
+`replacement_eligible: false`. `purpose: replacement` additionally requires at
+least one verified gain on the frozen development cohort and no regressions.
+Do not replace the current baseline without a matching replacement receipt;
+changed source, reports or settings require another check. The receipt is an
+evaluation decision, not a deployment command or proof of unseen accuracy.
+Missing execution results cannot be repaired by copying baseline answers.
+
+Token checks cover reported reader/judge usage on the frozen cohort. They do
+not retroactively stop provider spending or measure ingestion, hidden retries,
+latency or currency cost; retain the runner's independent pre-call budget and
+attempt ledger. No quality score alone can authorize higher runtime budgets.
+
+### Protected regression evidence replay
+
+`TestReplayLOCOMORegressionEvidence` is an opt-in, zero-inference check of a
+frozen development cohort. Set `MEMSTATION_EVAL_REGRESSION_EVIDENCE_PLAN` to a
+private JSON plan and `MEMSTATION_EVAL_DATABASE_URL` to the original dedicated
+read-only corpus. The plan has `dataset`, `dataset_sha256`, `sample`, `baseline`,
+`baseline_sha256`, `candidate`, `candidate_sha256`, `cases` (question IDs), and a
+fresh `output` path. Limit each plan to one conversation and at most 128 cases.
+
+Freeze every known regression plus a small previously-correct control cohort
+before evaluating another candidate. The evidence diagnostic rejects missing or
+unjudged rows, execution errors, changed question/reference/model identity and
+any protected correct-to-incorrect transition. Aggregate gains cannot override
+these failures. `MEMSTATION_ENFORCE_BENCHMARKS=true` explicitly makes these
+manual observations blocking; they remain excluded from ordinary CI/nightly.
+This diagnostic does not issue candidate acceptance receipts. Use the required
+candidate acceptance step above for adoption decisions.
+
+The helper also runs current production evidence preparation using the frozen
+baseline reranked candidates and original source store. Its replay context and
+source mapping must exactly match the baseline. It constructs no embedding,
+entity, rerank, reader or judge client. Annotation-based coverage is observed
+only after preparation; labels and historical scores never route retrieval.
+An identical context proves input stability after fixed retrieval, not a new
+correct answer, fresh retrieval equivalence or performance on unseen questions.
+Keep failures in the frozen denominator and retain the original rejected trial.
+
+`TestExportFrozenProcessingSourceWindows` accepts
+`MEMSTATION_EVAL_PROCESSING_SOURCE_PLAN` with `owner`, up to two `conversations`,
+and a fresh private `output` path. It reads stored originals and applies the
+production lightweight window builder without ingestion, QA, or model calls.
+This supports bounded encoder failure diagnosis without re-running generation
+or overwriting an incomplete benchmark.
+
+### Source index readiness
+
+The live LOCOMO pipeline validates original segment vectors after processing and
+before accepting a saved ingestion checkpoint. Every segment must have a ready
+node and a vector with the current generation, model, embedding version, scope,
+and exact content hash. A stored vector or completed task alone is insufficient.
+Missing, stale or pending source embeddings stop answer generation and remain an
+ingestion error in the planned denominator. Historical artifacts are never
+silently repaired or rescored; frozen diagnostic replays must report their corpus
+readiness separately from an ingestion-complete live result.

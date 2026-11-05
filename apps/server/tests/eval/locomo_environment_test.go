@@ -18,5 +18,19 @@ func pipelineReplayRoleConfig(t *testing.T, role string) LongMemEvalQAJudgeOptio
 		}
 		config.Temperature = &value
 	}
+	if raw := os.Getenv(role + "_TIMEOUT"); raw != "" {
+		duration, err := time.ParseDuration(raw)
+		if err != nil || duration <= 0 {
+			t.Fatal("invalid replay timeout for", role)
+		}
+		config.Timeout = duration
+	}
+	if raw := os.Getenv(role + "_MAX_OUTPUT_TOKENS"); raw != "" {
+		limit, err := strconv.Atoi(raw)
+		if err != nil || limit < 1 {
+			t.Fatal("invalid replay output ceiling for", role)
+		}
+		config.MaxOutputTokens = limit
+	}
 	return config
 }

@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
+	"memstation/apps/server/internal/service/processing"
 	eval "memstation/apps/server/tests/eval"
 )
 
@@ -28,6 +30,7 @@ func main() {
 	episodes := flag.Bool("semantic-episodes", os.Getenv("MEMSTATION_EVAL_SEMANTIC_EPISODES") == "true", "Enable experimental source-grounded semantic episodes during worker ingestion")
 	sourceNeighbors := flag.Int("source-neighbor-turns", 0, "Evidence packet source radius, 0 disables, maximum 2; independent of gold diagnostics")
 	budget := flag.Int("context-bytes", 16000, "Fixed UTF-8 context byte budget; actual model token usage is also recorded")
+	answerTokens := flag.Int("answer-output-tokens", 16384, "Initial reader output budget; explicit truncation permits one bounded retry")
 	revision := flag.String("code-revision", "", "Exact tested source revision/fingerprint")
 	embeddingRevision := flag.String("embedding-revision", "", "Embedding model digest")
 	modes := flag.String("modes", "raw,derived,combined", "Comma-separated raw,derived,combined,question_only,full_history,gold_evidence")
@@ -44,7 +47,32 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	cfg := func(role string) eval.LongMemEvalQAJudgeOptions {
-		return eval.LongMemEvalQAJudgeOptions{ReasoningEffort: os.Getenv(role + "_REASONING_EFFORT"), Model: os.Getenv(role + "_MODEL"), BaseURL: os.Getenv(role + "_BASE_URL"), APIKey: os.Getenv(role + "_API_KEY"), Timeout: 3 * time.Minute}
+		value := eval.LongMemEvalQAJudgeOptions{ReasoningEffort: os.Getenv(role + "_REASONING_EFFORT"), Model: os.Getenv(role + "_MODEL"), BaseURL: os.Getenv(role + "_BASE_URL"), APIKey: os.Getenv(role + "_API_KEY"), Timeout: 3 * time.Minute}
+		if raw := os.Getenv(role + "_TEMPERATURE"); raw != "" {
+			temperature, err := strconv.ParseFloat(raw, 64)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "invalid temperature for", role)
+				os.Exit(1)
+			}
+			value.Temperature = &temperature
+		}
+		if raw := os.Getenv(role + "_TIMEOUT"); raw != "" {
+			timeout, err := time.ParseDuration(raw)
+			if err != nil || timeout <= 0 {
+				fmt.Fprintln(os.Stderr, "invalid timeout for", role)
+				os.Exit(1)
+			}
+			value.Timeout = timeout
+		}
+		if raw := os.Getenv(role + "_MAX_OUTPUT_TOKENS"); raw != "" {
+			limit, err := strconv.Atoi(raw)
+			if err != nil || limit < 1 {
+				fmt.Fprintln(os.Stderr, "invalid output token limit for", role)
+				os.Exit(1)
+			}
+			value.MaxOutputTokens = limit
+		}
+		return value
 	}
 	if *rescore != "" {
 		if _, err := eval.RescoreLOCOMOPipelineWithPolicy(ctx, *rescore, *out, *revision, cfg("JUDGE"), *judgePolicy); err != nil {
@@ -57,7 +85,19 @@ func main() {
 		fmt.Fprintln(os.Stderr, "rescore-judge-policy requires rescore-report")
 		os.Exit(1)
 	}
-	_, err := eval.RunLOCOMOPipeline(ctx, eval.LOCOMOPipelineOptions{SemanticEpisodes: *episodes, ReaderPolicy: *readerPolicy, RefineEvidence: *refine, Planner: cfg("PLANNER"), ContextFormat: *contextFormat, SourceNeighborTurns: *sourceNeighbors, Modes: strings.Split(*modes, ","), OracleContextBytes: *oracleBudget, OracleNeighborTurns: *neighbors, Rerank: eval.PipelineRerankOptions{Model: *rerankModel, CandidateSelection: *rerankSelection, ModelRevision: *rerankRevision, BaseURL: os.Getenv("RERANK_BASE_URL"), APIKey: os.Getenv("RERANK_API_KEY"), Timeout: *rerankTimeout, CandidateMultiplier: *rerankMultiplier, MinCandidates: *rerankMin, MaxCandidates: *rerankMax}, DatasetPath: *dataset, OutputDir: *out, Prefix: *prefix, SampleID: *sample, QuestionsPerCategory: *count, TopN: *top, ContextBytes: *budget, CodeRevision: *revision, EmbeddingRevision: *embeddingRevision, DatabaseURL: os.Getenv("MEMSTATION_EVAL_DATABASE_URL"), Embedding: eval.EmbeddingOptions{Mode: eval.EmbeddingModeProvider, Model: os.Getenv("EMBEDDING_MODEL"), BaseURL: os.Getenv("EMBEDDING_BASE_URL"), APIKey: os.Getenv("EMBEDDING_API_KEY")}, Extraction: cfg("EXTRACTION"), Answerer: cfg("ANSWERER"), Judge: cfg("JUDGE")})
+	var processor processing.Config
+	for _, mode := range strings.Split(*modes, ",") {
+		if mode == "raw" || mode == "derived" || mode == "combined" {
+			var err error
+			processor, err = processing.LoadConfig()
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			break
+		}
+	}
+	_, err := eval.RunLOCOMOPipeline(ctx, eval.LOCOMOPipelineOptions{AnswerOutputTokens: *answerTokens, Processing: processor, SemanticEpisodes: *episodes, ReaderPolicy: *readerPolicy, RefineEvidence: *refine, Planner: cfg("PLANNER"), ContextFormat: *contextFormat, SourceNeighborTurns: *sourceNeighbors, Modes: strings.Split(*modes, ","), OracleContextBytes: *oracleBudget, OracleNeighborTurns: *neighbors, Rerank: eval.PipelineRerankOptions{Model: *rerankModel, CandidateSelection: *rerankSelection, ModelRevision: *rerankRevision, BaseURL: os.Getenv("RERANK_BASE_URL"), APIKey: os.Getenv("RERANK_API_KEY"), Timeout: *rerankTimeout, CandidateMultiplier: *rerankMultiplier, MinCandidates: *rerankMin, MaxCandidates: *rerankMax}, DatasetPath: *dataset, OutputDir: *out, Prefix: *prefix, SampleID: *sample, QuestionsPerCategory: *count, TopN: *top, ContextBytes: *budget, CodeRevision: *revision, EmbeddingRevision: *embeddingRevision, DatabaseURL: os.Getenv("MEMSTATION_EVAL_DATABASE_URL"), Embedding: eval.EmbeddingOptions{Mode: eval.EmbeddingModeProvider, Model: os.Getenv("EMBEDDING_MODEL"), BaseURL: os.Getenv("EMBEDDING_BASE_URL"), APIKey: os.Getenv("EMBEDDING_API_KEY")}, Extraction: cfg("EXTRACTION"), Answerer: cfg("ANSWERER"), Judge: cfg("JUDGE")})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	aicallstore "memstation/apps/server/internal/store/sql/aicall"
 	conversationstore "memstation/apps/server/internal/store/sql/conversation"
 	identitystore "memstation/apps/server/internal/store/sql/identity"
 	ingestionstore "memstation/apps/server/internal/store/sql/ingestion"
@@ -28,6 +29,7 @@ import (
 	memoryservice "memstation/apps/server/internal/service/memory"
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
 	"memstation/apps/server/internal/service/memoryllm"
+	"memstation/apps/server/internal/service/processing"
 	settingsservice "memstation/apps/server/internal/service/settings"
 	vectorstore "memstation/apps/server/internal/store/vector"
 	"memstation/apps/server/internal/worker"
@@ -36,22 +38,19 @@ import (
 )
 
 type pipelineRuntime struct {
-	drainMu         sync.Mutex
-	taskQueue       *pipelineQueue
-	taskFailures    map[string]pipelineTaskFailure
-	db              *sql.DB
-	lease           *sql.Conn
-	options         LOCOMOPipelineOptions
-	conversations   *conversationstore.PostgresConversationRepository
-	memories        *memorystore.PostgresMemoryRepository
-	outbox          *conversationstore.PostgresOutboxRepository
-	engine          *memoryservice.Engine
-	services        worker.Services
-	logger          *slog.Logger
-	observed        *observedEmbeddingClient
-	rawSources      *conversationstore.InMemoryConversationRepository
-	rawSourceOwners map[string]bool
-	raw             *harness
+	drainMu       sync.Mutex
+	taskQueue     *pipelineQueue
+	taskFailures  map[string]pipelineTaskFailure
+	db            *sql.DB
+	lease         *sql.Conn
+	options       LOCOMOPipelineOptions
+	conversations *conversationstore.PostgresConversationRepository
+	memories      *memorystore.PostgresMemoryRepository
+	outbox        *conversationstore.PostgresOutboxRepository
+	engine        *memoryservice.Engine
+	services      worker.Services
+	logger        *slog.Logger
+	observed      *observedEmbeddingClient
 }
 
 func pipelineAdapter(cfg LongMemEvalQAJudgeOptions) *openaiprovider.Adapter {
@@ -64,6 +63,9 @@ func newPipelineRuntime(ctx context.Context, o LOCOMOPipelineOptions) (*pipeline
 	}
 	if !pipelineNeedsIngestion(o.Modes) {
 		return &pipelineRuntime{options: o}, nil
+	}
+	if err := o.Processing.Validate(); err != nil {
+		return nil, fmt.Errorf("pipeline processing: %w", err)
 	}
 	db, err := OpenEvaluationDatabase(ctx, o.DatabaseURL)
 	if err != nil {
@@ -106,6 +108,11 @@ func newPipelineRuntime(ctx context.Context, o LOCOMOPipelineOptions) (*pipeline
 	}
 	db.SetMaxOpenConns(8)
 	handle := runtimeconfig.NewStaticDBHandle(db)
+	ledger := aicallstore.NewAICallRepository(handle)
+	processor, err := processing.New(o.Processing, ledger)
+	if err != nil {
+		return nil, err
+	}
 	memories := memorystore.NewPostgresMemoryRepository(db)
 	conversations := conversationstore.NewPostgresConversationRepository(db)
 	outbox := conversationstore.NewPostgresOutboxRepository(db)
@@ -118,6 +125,7 @@ func newPipelineRuntime(ctx context.Context, o LOCOMOPipelineOptions) (*pipeline
 	vectors.SetEmbedder(observed)
 	generations := memorygenservice.NewService(handle, o.Embedding.Model)
 	engine := memoryservice.NewEngine(memories, vectors)
+	engine.SetEntityRecall(processor, time.Duration(o.Processing.EntityRecallTimeoutMS)*time.Millisecond)
 	engine.SetSourceContextReader(conversations)
 	configurePipelineReranker(engine, o.Rerank)
 	engine.SetGenerationService(generations)
@@ -127,13 +135,15 @@ func newPipelineRuntime(ctx context.Context, o LOCOMOPipelineOptions) (*pipeline
 		extractionAdapter = o.extractionAdapter
 	}
 	registry := provider.NewRegistry(domain.ProviderOpenAICompatible, extractionAdapter)
-	llm := memoryllm.NewClientWithOptions(registry, settings, o.Extraction.Timeout, memoryllm.Options{ReasoningEffort: o.Extraction.ReasoningEffort, MaxOutputTokens: o.Extraction.outputTokenLimit()})
+	llm := memoryllm.NewClientWithOptions(registry, settings, o.Extraction.Timeout, memoryllm.Options{Temperature: o.Extraction.Temperature, Strategy: o.Processing.Strategy, ReasoningEffort: o.Extraction.ReasoningEffort, MaxOutputTokens: o.Extraction.outputTokenLimit()})
+	llm.SetLedger(ledger)
 	scorer := memoryservice.NewScorerWithGenerator(llm)
 	service := memoryservice.NewService(engine, memories)
+	service.SetProcessingPolicy(processor)
 	service.SetScorer(scorer)
 	service.SetGenerationService(generations)
 	r := &pipelineRuntime{db: db, lease: lease, options: o, conversations: conversations, memories: memories, outbox: outbox, engine: engine, logger: slog.New(slog.NewTextHandler(io.Discard, nil)), observed: observed}
-	r.services = worker.Services{TaskAuthority: ingestionstore.NewPostgresIngestionRepository(db), Conversations: conversations, Memories: memories, MemoryService: service, Generations: generations, Vectors: vectors, Analysis: analysisservice.NewServiceWithOptions(llm, analysisservice.Options{SemanticEpisodes: o.SemanticEpisodes}), Scorer: scorer, EmbeddingModel: o.Embedding.Model, AllowedKeyMemoryKeys: map[string]struct{}{}}
+	r.services = worker.Services{Processing: processor, TaskAuthority: ingestionstore.NewPostgresIngestionRepository(db), Conversations: conversations, Memories: memories, MemoryService: service, Generations: generations, Vectors: vectors, Analysis: analysisservice.NewServiceWithOptions(llm, analysisservice.Options{SemanticEpisodes: o.SemanticEpisodes}), Scorer: scorer, EmbeddingModel: o.Embedding.Model, AllowedKeyMemoryKeys: map[string]struct{}{}}
 	ok = true
 	return r, nil
 }
@@ -162,10 +172,11 @@ type pipelineTaskAttempt struct {
 	Error     string    `json:"error,omitempty"`
 }
 type pipelineQueue struct {
-	mu          sync.Mutex
-	concurrency int
-	path        string
-	state       pipelineTaskState
+	processingPolicyID string
+	mu                 sync.Mutex
+	concurrency        int
+	path               string
+	state              pipelineTaskState
 }
 
 func taskFingerprint(t domain.TaskMessage) string {
@@ -189,6 +200,16 @@ func (q *pipelineQueue) Publish(ctx context.Context, t domain.TaskMessage) error
 	var payload map[string]any
 	if err = json.Unmarshal(raw, &payload); err != nil {
 		return err
+	}
+	if q.processingPolicyID != "" {
+		prepared, err := worker.BindProcessingPolicy(t, q.processingPolicyID)
+		if err != nil {
+			return err
+		}
+		if policy, ok := prepared.Payload["processing_policy_id"]; ok {
+			payload["processing_policy_id"] = policy
+		}
+		t.UniqueKey = prepared.UniqueKey
 	}
 	payload["workspace_id"] = workspace
 	if version, ok := payload["schema_version"]; ok && version != float64(2) {
@@ -353,7 +374,7 @@ func (r *pipelineRuntime) drainOutbox(ctx context.Context) error {
 	r.drainMu.Lock()
 	defer r.drainMu.Unlock()
 	if r.taskQueue == nil {
-		q := &pipelineQueue{path: filepath.Join(r.options.OutputDir, "worker-tasks.json"), concurrency: r.options.TaskConcurrency, state: pipelineTaskState{Completed: map[string]bool{}}}
+		q := &pipelineQueue{processingPolicyID: r.options.Processing.Identity(), path: filepath.Join(r.options.OutputDir, "worker-tasks.json"), concurrency: r.options.TaskConcurrency, state: pipelineTaskState{Completed: map[string]bool{}}}
 		if raw, err := os.ReadFile(q.path); err == nil {
 			if err = json.Unmarshal(raw, &q.state); err != nil {
 				return err
@@ -426,8 +447,12 @@ func (r *pipelineRuntime) ingest(ctx context.Context, owner string, s pipelineSa
 			}
 			if stage.Error == "" {
 				stored, lookupErr := r.conversations.GetConversation(scoped, owner, stage.ConversationID)
-				if lookupErr != nil || stored.SummaryStatus != domain.ProcessingStatusCompleted || stored.AnalysisStatus != domain.ProcessingStatusCompleted {
+				current := PipelineStage{}
+				if lookupErr != nil || pipelineStageProcessing(&current, stored, r.options.Processing) != nil || current.SourceIndexStatus != stage.SourceIndexStatus || current.ProcessingPolicyID != stage.ProcessingPolicyID || current.GenerationID != stage.GenerationID || current.SemanticStatus != stage.SemanticStatus {
 					return stages, fmt.Errorf("source checkpoint no longer matches database")
+				}
+				if err := r.requireSourceIndex(scoped, owner, stage.ConversationID, current.GenerationID); err != nil {
+					return stages, err
 				}
 				stages = append(stages, stage)
 				continue
@@ -438,7 +463,8 @@ func (r *pipelineRuntime) ingest(ctx context.Context, owner string, s pipelineSa
 		stage.Error = ""
 		start := time.Now()
 		fmt.Printf("Ingesting %s %s (%d human turns)\n", s.ID, session.ID, len(session.Messages))
-		record, lookup := r.conversations.GetConversation(scoped, owner, stage.ConversationID)
+		_, lookup := r.conversations.GetConversation(scoped, owner, stage.ConversationID)
+		var record domain.ConversationRecord
 		if errors.Is(lookup, domain.ErrConversationNotFound) {
 			record = domain.ConversationRecord{AgentID: agentID, UserID: owner, ConversationID: stage.ConversationID, RequestFormat: string(domain.ProtocolOpenAIChat), Provider: domain.ProviderOpenAICompatible, Mode: domain.ModeInject, Messages: session.Messages, CreatedAt: session.At, UpdatedAt: session.At, FinalizeStatus: domain.FinalizeStatusActive, SummaryStatus: domain.ProcessingStatusPending, AnalysisStatus: domain.ProcessingStatusPending, Metadata: map[string]any{"memory_persist_enabled": true, "retain_source_materials": true, "source_session_time": session.Date, "eval_manifest": r.options.manifestHash}}
 			err = r.conversations.PersistExchange(scoped, record)
@@ -457,9 +483,12 @@ func (r *pipelineRuntime) ingest(ctx context.Context, owner string, s pipelineSa
 		}
 		if err == nil {
 			record, err = r.conversations.GetConversation(scoped, owner, stage.ConversationID)
-			if err == nil && (record.SummaryStatus != domain.ProcessingStatusCompleted || record.AnalysisStatus != domain.ProcessingStatusCompleted) {
-				err = fmt.Errorf("memory generation incomplete")
+			if err == nil {
+				err = pipelineStageProcessing(&stage, record, r.options.Processing)
 			}
+		}
+		if err == nil {
+			err = r.requireSourceIndex(scoped, owner, stage.ConversationID, stage.GenerationID)
 		}
 		if err == nil {
 			stage.Documents, err = r.memories.ListDocumentsByConversation(scoped, owner, stage.ConversationID)
@@ -477,4 +506,21 @@ func (r *pipelineRuntime) ingest(ctx context.Context, owner string, s pipelineSa
 		}
 	}
 	return stages, nil
+}
+
+func pipelineStageProcessing(stage *PipelineStage, record domain.ConversationRecord, policy processing.Config) error {
+	stage.SourceIndexStatus, _ = record.Metadata["source_index_status"].(string)
+	stage.ProcessingPolicyID, _ = record.Metadata["processing_policy_id"].(string)
+	stage.GenerationID, _ = record.Metadata["source_index_generation"].(string)
+	stage.SemanticStatus, _ = record.Metadata["semantic_status"].(string)
+	complete := record.SummaryStatus == domain.ProcessingStatusCompleted && record.AnalysisStatus == domain.ProcessingStatusCompleted
+	skipped := record.SummaryStatus == domain.ProcessingStatusSkipped && record.AnalysisStatus == domain.ProcessingStatusSkipped
+	intentional := policy.Strategy == "lightweight" && stage.SemanticStatus == "not_requested" || policy.Strategy == "hybrid" && (stage.SemanticStatus == "deferred" || stage.SemanticStatus == "deferred_budget")
+	if (!complete && (!skipped || !intentional)) || stage.SourceIndexStatus != "stored" || stage.ProcessingPolicyID != policy.Identity() || stage.GenerationID == "" {
+		return fmt.Errorf("memory processing incomplete or policy mismatch")
+	}
+	if complete {
+		stage.SemanticStatus = "completed"
+	}
+	return nil
 }

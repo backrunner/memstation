@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"memstation/apps/server/internal/service/memoryllm"
 )
 
 // RescoreLOCOMOPipeline preserves generated answers and retrieval artifacts.
@@ -103,15 +101,10 @@ func RescoreLOCOMOPipelineWithPolicy(ctx context.Context, source, output, revisi
 		a.JudgeUsage = usage
 		a.JudgeModel = model
 		a.JudgeMillis = float64(time.Since(start).Microseconds()) / 1000
-		var grade struct {
-			Correct *bool  `json:"correct"`
-			Reason  string `json:"reason"`
-		}
+		var correct bool
+		var reason string
 		if callErr == nil {
-			callErr = memoryllm.Decode(raw, &grade)
-		}
-		if callErr == nil && (grade.Correct == nil || strings.TrimSpace(grade.Reason) == "") {
-			callErr = errors.New("invalid judge schema")
+			correct, reason, callErr = decodePipelineJudgment(raw)
 		}
 		if callErr != nil {
 			a.Error = callErr.Error()
@@ -119,8 +112,8 @@ func RescoreLOCOMOPipelineWithPolicy(ctx context.Context, source, output, revisi
 		} else {
 			a.Error = ""
 			a.Judged = true
-			a.Correct = *grade.Correct
-			a.JudgeReason = grade.Reason
+			a.Correct = correct
+			a.JudgeReason = reason
 		}
 		if err = save(); err != nil {
 			return report, err

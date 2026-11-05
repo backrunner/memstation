@@ -6,6 +6,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,10 +20,17 @@ type judgeProbePlan struct {
 	UserTemplate string   `json:"user_template"`
 	SourceURL    string   `json:"source_url"`
 	SourceSHA256 string   `json:"source_sha256"`
+	// Frozen judge settings. Temperature and reasoning stay explicit so a probe
+	// cannot silently use provider defaults that differ from the graded run.
+	Temperature     *float64 `json:"temperature"`
+	ReasoningEffort string   `json:"reasoning_effort"`
+	Concurrency     int      `json:"concurrency"`
 }
 
 type judgeProbeRow struct {
 	Report        string             `json:"report"`
+	Mode          string             `json:"mode"`
+	Category      int                `json:"category"`
 	ParentSHA256  string             `json:"parent_sha256"`
 	QuestionID    string             `json:"question_id"`
 	AnswerSHA256  string             `json:"answer_sha256"`
@@ -165,7 +173,7 @@ func TestLOCOMOFrozenJudgeProtocolProbe(t *testing.T) {
 	if err = json.Unmarshal(raw, &plan); err != nil {
 		t.Fatal(err)
 	}
-	if len(plan.Reports) == 0 || plan.System == "" || plan.SourceURL == "" || len(plan.SourceSHA256) != 64 {
+	if len(plan.Reports) == 0 || plan.System == "" || plan.SourceURL == "" || len(plan.SourceSHA256) != 64 || plan.Temperature == nil || plan.ReasoningEffort == "" || plan.Concurrency < 1 || plan.Concurrency > 16 {
 		t.Fatal("incomplete probe plan")
 	}
 	for _, key := range []string{"{question}", "{golden_answer}", "{generated_answer}"} {
@@ -173,7 +181,7 @@ func TestLOCOMOFrozenJudgeProtocolProbe(t *testing.T) {
 			t.Fatal("invalid template placeholder", key)
 		}
 	}
-	cfg, err := normalizeLongMemEvalQAJudgeOptions(LongMemEvalQAJudgeOptions{Model: os.Getenv("JUDGE_MODEL"), BaseURL: os.Getenv("JUDGE_BASE_URL"), APIKey: os.Getenv("JUDGE_API_KEY")})
+	cfg, err := normalizeLongMemEvalQAJudgeOptions(LongMemEvalQAJudgeOptions{Model: os.Getenv("JUDGE_MODEL"), BaseURL: os.Getenv("JUDGE_BASE_URL"), APIKey: os.Getenv("JUDGE_API_KEY"), Temperature: plan.Temperature, ReasoningEffort: plan.ReasoningEffort, Timeout: 180 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,11 +207,16 @@ func TestLOCOMOFrozenJudgeProtocolProbe(t *testing.T) {
 		ids := map[string]bool{}
 		for _, a := range r.Answers {
 			key := a.QuestionID + ":" + a.Mode
-			if !a.Judged || a.Error != "" || a.Answer == "" || ids[key] {
-				t.Fatal("invalid frozen answer")
+			if ids[key] {
+				t.Fatal("duplicate frozen answer")
 			}
 			ids[key] = true
-			rows = append(rows, judgeProbeRow{Report: src, ParentSHA256: pipelineHash(string(data)), QuestionID: a.QuestionID, AnswerSHA256: pipelineHash(a.Answer), ContextSHA256: pipelineHash(a.Context), Before: a.Correct, Error: "not executed"})
+			row := judgeProbeRow{Report: src, Mode: a.Mode, Category: a.Category, ParentSHA256: pipelineHash(string(data)), QuestionID: a.QuestionID, AnswerSHA256: pipelineHash(a.Answer), ContextSHA256: pipelineHash(a.Context), Before: a.Correct, Error: "not executed"}
+			// A failed parent attempt keeps its denominator slot and is never judged.
+			if !a.Judged || a.Error != "" || a.Answer == "" {
+				row.Error = "parent answer not judged"
+			}
+			rows = append(rows, row)
 			answers = append(answers, a)
 		}
 	}
@@ -223,38 +236,53 @@ func TestLOCOMOFrozenJudgeProtocolProbe(t *testing.T) {
 		EndpointSHA256 string          `json:"endpoint_sha256"`
 		Rows           []judgeProbeRow `json:"rows"`
 	}{pipelineHash(string(raw)), plan.SourceURL, plan.SourceSHA256, cfg.Model, pipelineHash(cfg.BaseURL), rows}
+	var mu sync.Mutex
 	save := func() {
-		t.Helper()
 		if e := writePipelineJSON(out, report); e != nil {
-			t.Fatal(e)
+			t.Error(e)
 		}
 	}
 	save()
+	slots := make(chan struct{}, plan.Concurrency)
+	var wg sync.WaitGroup
 	for i, a := range answers {
-		row := &report.Rows[i]
-		row.Error = "attempt interrupted"
-		save()
-		ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
-		start := time.Now()
-		_, model := memoryllm.ModelReference(cfg.Model)
-		resp, callErr := memoryllm.CompleteWithBudget(ctx, pipelineAdapter(cfg), domain.UnifiedRequest{Model: model, Protocol: domain.ProtocolOpenAIChat, Provider: domain.ProviderOpenAICompatible, Mode: domain.ModeTransparent, JSONOutput: true, MaxOutputTokens: 4096, Messages: []domain.UnifiedMessage{{Role: domain.RoleSystem, Text: plan.System}, {Role: domain.RoleUser, Text: renderJudgeProbe(plan.UserTemplate, a)}}}, cfg.outputTokenLimit())
-		cancel()
-		row.Millis = float64(time.Since(start).Microseconds()) / 1000
-		if resp != nil {
-			row.Usage, row.Model = resp.Usage, resp.Model
-			row.RawOutput = resp.Message.Text
+		if report.Rows[i].Error != "not executed" {
+			continue
 		}
-		correct, valid := parseJudgeProbe(row.RawOutput)
-		if callErr != nil || resp == nil {
-			row.Error = "judge call failed"
-		} else if !valid {
-			row.Error = "invalid judge label"
-		} else {
-			row.Correct, row.Judged, row.Error = correct, true, ""
-		}
-		save()
-		if row.Error != "" {
-			t.Errorf("%s: %s", a.QuestionID, row.Error)
-		}
+		wg.Add(1)
+		slots <- struct{}{}
+		go func(row *judgeProbeRow, a PipelineAnswer) {
+			defer wg.Done()
+			defer func() { <-slots }()
+			ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+			defer cancel()
+			start := time.Now()
+			_, model := memoryllm.ModelReference(cfg.Model)
+			resp, callErr := memoryllm.CompleteWithBudget(ctx, pipelineAdapter(cfg), domain.UnifiedRequest{Temperature: cfg.Temperature, ReasoningEffort: cfg.ReasoningEffort, Model: model, Protocol: domain.ProtocolOpenAIChat, Provider: domain.ProviderOpenAICompatible, Mode: domain.ModeTransparent, JSONOutput: true, MaxOutputTokens: 4096, Messages: []domain.UnifiedMessage{{Role: domain.RoleSystem, Text: plan.System}, {Role: domain.RoleUser, Text: renderJudgeProbe(plan.UserTemplate, a)}}}, cfg.outputTokenLimit())
+			mu.Lock()
+			defer mu.Unlock()
+			row.Millis = float64(time.Since(start).Microseconds()) / 1000
+			if resp != nil {
+				row.Usage, row.Model = resp.Usage, resp.Model
+				row.RawOutput = resp.Message.Text
+			}
+			correct, valid := parseJudgeProbe(row.RawOutput)
+			switch {
+			case callErr != nil || resp == nil:
+				row.Error = "judge call failed"
+			case !valid:
+				row.Error = "invalid judge label"
+			default:
+				row.Correct, row.Judged, row.Error = correct, true, ""
+			}
+			save()
+			if row.Error != "" {
+				t.Errorf("%s: %s", a.QuestionID, row.Error)
+			}
+		}(&report.Rows[i], a)
 	}
+	wg.Wait()
+	mu.Lock()
+	defer mu.Unlock()
+	save()
 }

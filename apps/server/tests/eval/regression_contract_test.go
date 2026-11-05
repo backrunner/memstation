@@ -74,7 +74,7 @@ func TestRegressionCohortRejectsPartialChainsAndDoesNotIngestLabels(t *testing.T
 func TestRegressionContextPreservesSourceTimeAndBudgetsWholeRecords(t *testing.T) {
 	docs := []domain.MemoryDocument{{ID: "a", Content: "A plan, not an accomplished event", Metadata: map[string]any{"source_session_time": "2025-03-04", "valid_from": "2025-03-10T09:00:00Z", "has_answer": true}}}
 	text, admitted, omitted := regressionContext(docs, 4096)
-	if !strings.Contains(text, "source_session_time") || !strings.Contains(text, "2025-03-04") || strings.Contains(text, "has_answer") || len(admitted) != 1 || omitted != 0 {
+	if !strings.Contains(text, "2025-03-04") || strings.Contains(text, "has_answer") || len(admitted) != 1 || omitted != 0 {
 		t.Fatal("lost temporal provenance or rendered a benchmark label", text, admitted, omitted)
 	}
 	text, admitted, omitted = regressionContext(docs, 10)

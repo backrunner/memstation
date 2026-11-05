@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	conversationstore "memstation/apps/server/internal/store/sql/conversation"
 	memorystore "memstation/apps/server/internal/store/sql/memory"
 
 	"memstation/apps/server/internal/domain"
@@ -28,9 +29,22 @@ func TestPipelineOracleBoundariesAndNoGoldLeakage(t *testing.T) {
 	if err != nil || len(refs) != 2 || strings.Contains(text, "changed my plan") || strings.Contains(text, "GOLD_SENTINEL") || !strings.Contains(text, "Speaker: Alex") {
 		t.Fatal(text, refs, err)
 	}
+	for _, ref := range refs {
+		if strings.Contains(text, ref) {
+			t.Fatal("oracle reader received a dataset source identifier")
+		}
+	}
 	full, refs, err := pipelineControlContext(s, q, "full_history", 4096, 0)
 	if err != nil || len(refs) != 3 || !strings.Contains(full, "changed my plan") {
 		t.Fatal(refs, err)
+	}
+	for _, ref := range refs {
+		if strings.Contains(full, ref) {
+			t.Fatal("full-history reader received a dataset source identifier")
+		}
+	}
+	if !strings.Contains(full, "[source 1]") || !strings.Contains(full, "[source 3]") {
+		t.Fatal("missing request-local source mapping")
 	}
 	if _, _, err = pipelineControlContext(s, q, "full_history", 10, 0); err == nil {
 		t.Fatal("silently truncated full history")
@@ -71,6 +85,11 @@ func TestPipelineControlRunFreezesFailuresAndPinsProtocol(t *testing.T) {
 		case pipelineAnswerInstruction:
 			if strings.Contains(body.Messages[1].Content, "GOLD_SENTINEL") {
 				t.Error("gold answer leaked to reader")
+			}
+			for _, identifier := range []string{"D1:1", "D1:2", "D2:1", "synthetic"} {
+				if strings.Contains(body.Messages[1].Content, identifier) {
+					t.Error("dataset identifier leaked to control reader")
+				}
 			}
 		case pipelineJudgeInstruction:
 			// Schema failures must remain in the denominator and never be rerun on resume.
@@ -245,6 +264,9 @@ func TestPipelineRawNeighborsBindCurrentIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	for i := range dataset.Documents {
+		dataset.Documents[i].Type = domain.MemoryTypeSegment
+	}
 	raw, err := newHarnessWithClient(context.Background(), dataset, EmbeddingOptions{}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -268,14 +290,23 @@ func TestPipelineRawNeighborsBindCurrentIdentity(t *testing.T) {
 	}))
 	defer server.Close()
 	cfg := LongMemEvalQAJudgeOptions{Model: "fixture", BaseURL: server.URL, APIKey: "fixture"}
-	runtime := &pipelineRuntime{raw: raw, options: LOCOMOPipelineOptions{OutputDir: t.TempDir(), TopN: 5, ContextBytes: 4096, ContextFormat: "evidence", SourceNeighborTurns: 1, Answerer: cfg, Judge: cfg}}
+	sources := conversationstore.NewInMemoryConversationRepository()
+	user := locomoUserID(samples[0].ID, "")
+	for _, session := range samples[0].Sessions {
+		err := sources.PersistExchange(context.Background(), domain.ConversationRecord{UserID: user, WorkspaceID: domain.PersonalWorkspaceID(user), AgentID: domain.AccessID("eval-agent", user), ConversationID: user + "-" + session.ID, Messages: session.Messages, CreatedAt: session.At, UpdatedAt: session.At})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw.engine.SetSourceContextReader(sources)
+	raw.engine.SetEntityRecall(pipelineFixtureEntities{}, 0)
+	runtime := &pipelineRuntime{engine: raw.engine, options: LOCOMOPipelineOptions{OutputDir: t.TempDir(), TopN: 5, ContextBytes: 4096, ContextFormat: "evidence", SourceNeighborTurns: 1, Answerer: cfg, Judge: cfg}}
 	sample := samples[0]
-	result := runtime.answer(context.Background(), "unused", sample, sample.Questions[0], "raw")
+	result := runtime.answer(context.Background(), user, sample, sample.Questions[0], "raw")
 	if result.Error != "" || !result.Judged {
 		t.Fatal("raw source-neighbor evaluation failed", result.Error)
 	}
-	user := locomoUserID(sample.ID, "")
-	record, err := runtime.rawSources.GetConversation(context.Background(), user, user+"-"+sample.Sessions[0].ID)
+	record, err := sources.GetConversation(context.Background(), user, user+"-"+sample.Sessions[0].ID)
 	if err != nil || record.AgentID == "" || record.WorkspaceID != domain.PersonalWorkspaceID(user) {
 		t.Fatal("source has no explicit current identity", err, record.AgentID, record.WorkspaceID)
 	}

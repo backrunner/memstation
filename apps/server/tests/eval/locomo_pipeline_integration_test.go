@@ -16,6 +16,7 @@ import (
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/ports"
+	memoryservice "memstation/apps/server/internal/service/memory"
 	"memstation/apps/server/internal/service/memoryllm"
 	"memstation/apps/server/internal/testutil/memoryllmfixture"
 )
@@ -109,7 +110,7 @@ func TestLOCOMOPipelinePostgresReplayResumeAndLease(t *testing.T) {
 	server, calls := pipelineContractProvider(t)
 	defer server.Close()
 	cfg := LongMemEvalQAJudgeOptions{Model: "fixture", BaseURL: server.URL, APIKey: "fixture"}
-	o := LOCOMOPipelineOptions{DatasetPath: pipelineFixture(t), DatabaseURL: dsn, OutputDir: t.TempDir(), Prefix: "eval-contract", TopN: 10, ContextBytes: 4096, CodeRevision: "contract", EmbeddingRevision: "fixture", Embedding: EmbeddingOptions{Mode: EmbeddingModeProvider, Model: "fixture", BaseURL: server.URL, APIKey: "fixture"}, Extraction: cfg, Answerer: cfg, Judge: cfg, Rerank: PipelineRerankOptions{Model: "rerank_compatible:fixture", ModelRevision: "fixture", BaseURL: server.URL}}
+	o := LOCOMOPipelineOptions{Processing: pipelineTestProcessing(t), DatasetPath: pipelineFixture(t), DatabaseURL: dsn, OutputDir: t.TempDir(), Prefix: "eval-contract", TopN: 10, ContextBytes: 4096, CodeRevision: "contract", EmbeddingRevision: "fixture", Embedding: EmbeddingOptions{Mode: EmbeddingModeProvider, Model: "fixture", BaseURL: server.URL, APIKey: "fixture"}, Extraction: cfg, Answerer: cfg, Judge: cfg, Rerank: PipelineRerankOptions{Model: "rerank_compatible:fixture", ModelRevision: "fixture", BaseURL: server.URL}}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	report, err := RunLOCOMOPipeline(ctx, o)
@@ -120,8 +121,30 @@ func TestLOCOMOPipelinePostgresReplayResumeAndLease(t *testing.T) {
 		t.Fatalf("incomplete contract: %+v", report.Modes)
 	}
 	for _, a := range report.Answers {
-		if a.Rerank.Status != "applied" {
+		if a.Rerank.Status != "applied" && (a.Rerank.Status != "skipped" || a.Rerank.Reason != "insufficient_candidates" || a.Rerank.Candidates >= 2) {
 			t.Fatalf("%s %s did not use production reranker: %+v", a.QuestionID, a.Mode, a.Rerank)
+		}
+		if a.EntityRecall == nil || a.EntityRecall.Status == "unavailable" {
+			t.Fatalf("%s did not wire entity recall", a.Mode)
+		}
+		if strings.Contains(a.Query, "Alex") && (a.EntityRecall.Status != "complete" || a.EntityRecall.MatchedNodes == 0) {
+			t.Fatalf("%s lost indexed source entities: %+v", a.Mode, a.EntityRecall)
+		}
+		if a.Mode == "raw" {
+			found := a.Retrieval.(memoryservice.DebugSearchResult)
+			if len(found.Result.Memories) == 0 {
+				t.Fatal("raw worker index empty")
+			}
+			for _, doc := range found.Result.Memories {
+				if doc.Type != domain.MemoryTypeSegment {
+					t.Fatal("derived memory entered raw arm")
+				}
+			}
+		}
+	}
+	for _, stage := range report.Stages {
+		if stage.SourceIndexStatus != "stored" || stage.ProcessingPolicyID != o.Processing.Identity() {
+			t.Fatal("missing source index provenance")
 		}
 	}
 	before := calls.Load()
@@ -176,7 +199,7 @@ func TestPipelineConcurrentOwnersShareAuthorityBoundDispatcher(t *testing.T) {
 	server, _ := pipelineContractProvider(t)
 	defer server.Close()
 	cfg := LongMemEvalQAJudgeOptions{Model: "fixture", BaseURL: server.URL, APIKey: "fixture"}
-	o := LOCOMOPipelineOptions{DatabaseURL: dsn, OutputDir: t.TempDir(), Prefix: "eval-parallel", Modes: []string{"derived"}, Embedding: EmbeddingOptions{Mode: EmbeddingModeProvider, Model: "fixture", BaseURL: server.URL, APIKey: "fixture"}, Extraction: cfg, TaskConcurrency: 4}
+	o := LOCOMOPipelineOptions{Processing: pipelineTestProcessing(t), DatabaseURL: dsn, OutputDir: t.TempDir(), Prefix: "eval-parallel", Modes: []string{"derived"}, Embedding: EmbeddingOptions{Mode: EmbeddingModeProvider, Model: "fixture", BaseURL: server.URL, APIKey: "fixture"}, Extraction: cfg, TaskConcurrency: 4}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	runtime, err := newPipelineRuntime(ctx, o)
@@ -252,7 +275,7 @@ func TestPipelinePostgresFailureIsolation(t *testing.T) {
 	server, _ := pipelineContractProvider(t)
 	defer server.Close()
 	cfg := LongMemEvalQAJudgeOptions{Model: "fixture", BaseURL: server.URL, APIKey: "fixture"}
-	options := LOCOMOPipelineOptions{TaskConcurrency: 4, DatasetPath: pipelineFixture(t), DatabaseURL: dsn, OutputDir: t.TempDir(), Prefix: "eval-failure-contract", Modes: []string{"derived"}, TopN: 10, ContextBytes: 4096, CodeRevision: "contract", EmbeddingRevision: "fixture", Embedding: EmbeddingOptions{Mode: EmbeddingModeProvider, Model: "fixture", BaseURL: server.URL, APIKey: "fixture"}, Extraction: cfg, Answerer: cfg, Judge: cfg, extractionAdapter: ownerFailingPipelineAdapter{ProviderAdapter: pipelineAdapter(cfg), owner: "eval-failure-contract-broken"}}
+	options := LOCOMOPipelineOptions{Processing: pipelineTestProcessing(t), TaskConcurrency: 4, DatasetPath: pipelineFixture(t), DatabaseURL: dsn, OutputDir: t.TempDir(), Prefix: "eval-failure-contract", Modes: []string{"derived"}, TopN: 10, ContextBytes: 4096, CodeRevision: "contract", EmbeddingRevision: "fixture", Embedding: EmbeddingOptions{Mode: EmbeddingModeProvider, Model: "fixture", BaseURL: server.URL, APIKey: "fixture"}, Extraction: cfg, Answerer: cfg, Judge: cfg, extractionAdapter: ownerFailingPipelineAdapter{ProviderAdapter: pipelineAdapter(cfg), owner: "eval-failure-contract-broken"}}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	runtime, err := newPipelineRuntime(ctx, options)

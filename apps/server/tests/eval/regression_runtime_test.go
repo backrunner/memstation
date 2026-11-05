@@ -104,6 +104,7 @@ func TestLiveMemoryRegression(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	processor := pipelineReplayProcessing(t)
 	out := os.Getenv("MEMSTATION_EVAL_REGRESSION_OUT")
 	revision := os.Getenv("MEMSTATION_EVAL_CODE_REVISION")
 	dbURL := os.Getenv("MEMSTATION_EVAL_DATABASE_URL")
@@ -148,6 +149,8 @@ func TestLiveMemoryRegression(t *testing.T) {
 	}
 	prefix := "eval-regression-" + pipelineHash(string(raw) + revision)[:12]
 	manifest := map[string]any{"plan": plan, "plan_sha256": pipelineHash(string(raw)), "code_revision": revision, "reader": reader.runInfo(), "reader_thinking_by_dataset": plan.ReaderThinking, "extraction": extraction.runInfo(), "judge": judge.runInfo(), "embedding": embedding.runInfo(), "embedding_revision": cache.revision, "rerank": rerank.manifest(), "worker_concurrency": plan.Concurrency, "worker_output_policy": fmt.Sprintf("min %d, one explicit truncation retry to %d", memoryllm.DefaultMinOutputTokens, plan.MaxTokens), "reader_prompt_sha256": pipelineHash(pipelineInterpretationInstruction), "arena_prompt_sha256": pipelineHash(arenaReaderInstruction), "ingestion": "fresh PostgreSQL + actual finalization/outbox relay/worker handlers; durable local queue, no Redis/HTTP scheduling transport measurement", "scope": "fixed development failures and controls; no full-benchmark/held-out/SOTA claim; same-family judge", "source_policy": "all original source sessions; independent Arena histories per mode; own complete solutions regardless of grade; no gold/type/query-directed ingestion"}
+	manifest["processing"] = processor.Public()
+	manifest["processing_endpoint_sha256"] = pipelineHash(processor.Endpoint)
 	if err = writePipelineJSON(filepath.Join(out, "manifest.json"), manifest); err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +166,7 @@ func TestLiveMemoryRegression(t *testing.T) {
 		}
 	}
 	observed := &regressionObservedAdapter{ProviderAdapter: pipelineAdapter(extraction), path: filepath.Join(out, "extraction-calls.jsonl")}
-	options := LOCOMOPipelineOptions{TaskConcurrency: plan.Concurrency, DatasetPath: plan.Locomo.Path, DatabaseURL: dbURL, OutputDir: filepath.Join(out, "worker"), Prefix: prefix, Modes: []string{"derived", "combined"}, TopN: plan.TopN, ContextBytes: plan.ContextBytes, CodeRevision: revision, EmbeddingRevision: cache.revision, Embedding: embedding, Extraction: extraction, Answerer: reader, Judge: judge, Rerank: rerank, ReaderPolicy: "interpretation", AnswerOutputTokens: plan.ReaderTokens, extractionAdapter: observed, manifestHash: pipelineHash(string(raw) + revision)}
+	options := LOCOMOPipelineOptions{Processing: processor, TaskConcurrency: plan.Concurrency, DatasetPath: plan.Locomo.Path, DatabaseURL: dbURL, OutputDir: filepath.Join(out, "worker"), Prefix: prefix, Modes: []string{"derived", "combined"}, TopN: plan.TopN, ContextBytes: plan.ContextBytes, CodeRevision: revision, EmbeddingRevision: cache.revision, Embedding: embedding, Extraction: extraction, Answerer: reader, Judge: judge, Rerank: rerank, ReaderPolicy: "interpretation", AnswerOutputTokens: plan.ReaderTokens, extractionAdapter: observed, manifestHash: pipelineHash(string(raw) + revision)}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	runtime, err := newPipelineRuntime(ctx, options)
@@ -219,6 +222,7 @@ func regressionRawDataset(g regressionGroup, owner string, locomo Dataset) Datas
 
 func regressionWorkerEngine(r *pipelineRuntime, rerank PipelineRerankOptions) *memoryservice.Engine {
 	engine := memoryservice.NewEngine(r.memories, r.services.Vectors)
+	engine.SetEntityRecall(r.services.Processing, time.Duration(r.options.Processing.EntityRecallTimeoutMS)*time.Millisecond)
 	engine.SetGenerationService(r.services.Generations)
 	engine.SetSourceContextReader(r.conversations)
 	configureExternalReranker(engine, rerank)
@@ -434,13 +438,10 @@ func regressionLocomoRead(ctx context.Context, a *externalAnswer, reader, judge 
 		a.Error = "judge: " + err.Error()
 		return
 	}
-	var result struct {
-		Correct *bool  `json:"correct"`
-		Reason  string `json:"reason"`
-	}
-	if err = memoryllm.Decode(raw, &result); err != nil || result.Correct == nil || strings.TrimSpace(result.Reason) == "" {
-		a.Error = "invalid judge schema"
+	correct, _, decodeErr := decodePipelineJudgment(raw)
+	if decodeErr != nil {
+		a.Error = decodeErr.Error()
 		return
 	}
-	a.Correct, a.Judged = *result.Correct, true
+	a.Correct, a.Judged = correct, true
 }

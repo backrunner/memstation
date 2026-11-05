@@ -3,6 +3,7 @@ package eval
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -38,15 +39,14 @@ func TestPipelineRefinementNoGoldLeakAndImmutableFailures(t *testing.T) {
 				}
 				output := `{"answer":"bicycle"}`
 				switch prompt {
-				case memoryservice.EvidencePlanInstruction:
-					aspect := "events"
+				case memoryservice.EvidenceSearchInstruction:
 					if broken {
-						aspect = ""
+						output = `{"sufficient":true}`
+					} else if strings.Contains(data, "core_so_far\":[]") {
+						output = `{"core":["m1"],"next_queries":["bicycle city"]}`
+					} else {
+						output = `{"core":[],"next_queries":[]}`
 					}
-					raw, _ := json.Marshal(map[string]any{"aspects": []string{aspect}, "queries": []any{map[string]string{"query": "bicycle city", "reason": "other events"}}})
-					output = string(raw)
-				case memoryservice.EvidenceSelectionInstruction:
-					output = `{"selected_ids":["m1"],"checks":[{"aspect":"events","evidence_ids":["m1"],"gap":""}]}`
 				case pipelineCoverageInstruction:
 				case pipelineJudgeInstruction:
 					output = `{"correct":true,"reason":"fixture"}`
@@ -58,11 +58,12 @@ func TestPipelineRefinementNoGoldLeakAndImmutableFailures(t *testing.T) {
 			defer server.Close()
 			repo := memorystore.NewInMemoryMemoryRepository()
 			user := locomoUserID("s", "")
-			if err := repo.StoreDocument(context.Background(), domain.MemoryDocument{ID: "base", UserID: user, Type: domain.MemoryTypeFact, Content: "bicycle city"}); err != nil {
+			if err := repo.StoreDocument(context.Background(), domain.MemoryDocument{ID: "base", UserID: user, Type: domain.MemoryTypeSegment, Content: "bicycle city"}); err != nil {
 				t.Fatal(err)
 			}
 			cfg := LongMemEvalQAJudgeOptions{Model: "fixture", BaseURL: server.URL, APIKey: "fixture"}
-			runtime := pipelineRuntime{options: LOCOMOPipelineOptions{OutputDir: t.TempDir(), ContextBytes: 4096, TopN: 5, ContextFormat: "plain", ReaderPolicy: "coverage", RefineEvidence: true, Planner: cfg, Answerer: cfg, Judge: cfg, manifestHash: "fixture"}, raw: &harness{engine: memoryservice.NewEngine(repo, nil)}}
+			runtime := pipelineRuntime{options: LOCOMOPipelineOptions{OutputDir: t.TempDir(), ContextBytes: 4096, TopN: 5, ContextFormat: "plain", ReaderPolicy: "coverage", RefineEvidence: true, Planner: cfg, Answerer: cfg, Judge: cfg, manifestHash: "fixture"}, engine: memoryservice.NewEngine(repo, nil)}
+			runtime.engine.SetEntityRecall(pipelineFixtureEntities{}, 0)
 			q := pipelineQuestion{ID: "s.1", Query: "bicycle events", Answer: "GOLD_SENTINEL", Evidence: []string{"D999:99"}}
 			a := runtime.answer(context.Background(), user, pipelineSample{ID: "s"}, q, "raw")
 			if broken {
@@ -97,5 +98,34 @@ func TestRefinementSummaryIncludesPlannerAndFollowupCosts(t *testing.T) {
 	got := summarizePipelineAnswers(answers)["raw"]
 	if got.SearchP95Millis != 19 || got.EvidenceReadyP95Millis != 1020 || got.MeanPlannerInputTokens != 100 || got.MeanPlannerOutputTokens != 10 || got.RefinementStatuses["refined"] != 20 || got.FollowupRerankStatuses["applied"] != 20 {
 		t.Fatalf("planner cost hidden: %+v", got)
+	}
+}
+
+func TestPipelineJudgmentSurvivesUnescapedQuotesButNotAMissingVerdict(t *testing.T) {
+	for raw, want := range map[string]bool{
+		`{"correct":true,"reason":"Plain."}`:                                 true,
+		`{"correct":true,"reason":"It matches the reference "Blue." Fine."}`: true,
+		`{"correct":false,"reason":"It omits “red” and “blue.””}`:            false,
+		"{\n \"correct\": false,\n \"reason\": \"Says \"no\" twice\"\n}\n":   false,
+	} {
+		correct, reason, err := decodePipelineJudgment([]byte(raw))
+		if err != nil || correct != want || strings.TrimSpace(reason) == "" {
+			t.Fatal(raw, correct, reason, err)
+		}
+	}
+	for _, raw := range []string{
+		``,
+		`not json`,
+		`{"reason":"malformed verdict"}`,
+		`{"correct":true,"reason":""}`,
+		`{"correct":true,"reason":"  "}`,
+		`{"correct":"true","reason":"quoted "verdict""}`,
+		`{"reason":"it said "correct":true","correct":false`,
+		`{"correct":true,"reason":"truncated before the end`,
+		`Sure: {"correct":true,"reason":"prose "around" it"}`,
+	} {
+		if _, _, err := decodePipelineJudgment([]byte(raw)); !errors.Is(err, errPipelineJudgeSchema) {
+			t.Fatal("accepted", raw, err)
+		}
 	}
 }
