@@ -90,19 +90,22 @@
     const scrollbarPointer = (event: PointerEvent) => {
       if (event.clientX >= document.documentElement.clientWidth - 16 && !navigation.contains(event.target as Node)) resumeScrolling(event);
     };
-    const resize = () => { revealRequested = true; schedule(); };
     let navigationWidth = navigation.clientWidth;
     let navigationHeight = navigation.clientHeight;
-    const observer = new ResizeObserver(() => {
+    let navigationHorizontal = horizontal();
+    const resize = () => {
       // Content and header changes can move sections without changing the TOC viewport.
       // Only reveal again when its available space changes; manual TOC scrolling stays put.
-      if (navigation.clientWidth !== navigationWidth || navigation.clientHeight !== navigationHeight) {
+      // Window resize and ResizeObserver may report the same change in separate frames.
+      if (navigation.clientWidth !== navigationWidth || navigation.clientHeight !== navigationHeight || horizontal() !== navigationHorizontal) {
         navigationWidth = navigation.clientWidth;
         navigationHeight = navigation.clientHeight;
+        navigationHorizontal = horizontal();
         revealRequested = true;
       }
       schedule();
-    });
+    };
+    const observer = new ResizeObserver(resize);
     observer.observe(navigation);
     const container = navigation.parentElement;
     const sheet = container?.querySelector('.settings-sheet');

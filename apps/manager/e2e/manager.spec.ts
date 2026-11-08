@@ -2354,6 +2354,12 @@ test('system section navigation follows visible modules with aligned links and s
   await expect(navigation).toHaveAttribute('data-mask-end', 'false');
   const position = await page.evaluate(() => scrollY);
   await navigation.evaluate(element => element.scrollTo({ top: 0 }));
+  // WebKit can deliver the window resize after ResizeObserver has already
+  // updated the navigation geometry. That duplicate must preserve manual scroll.
+  await page.evaluate(() => new Promise<void>(resolve => {
+    window.dispatchEvent(new Event('resize'));
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
   await expect(navigation).toHaveAttribute('data-mask-start', 'false');
   await expect(navigation).toHaveAttribute('data-mask-end', 'true');
   expect(await page.evaluate(() => scrollY)).toBe(position);
