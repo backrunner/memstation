@@ -206,6 +206,7 @@ func (r *PostgresMemoryRepository) StoreDocumentTx(ctx context.Context, doc doma
 	// Metadata-only writes must not hide an already searchable original. Verify
 	// against the vector's actual content hash, not mutable segment metadata (the
 	// conversation repository may already have replaced that side-table row).
+	// Broker vectors use the generation's pinned profile rather than its model alias.
 	contentHash := fmt.Sprintf("%x", sha256.Sum256([]byte(doc.Content)))
 	_, err = tx.ExecContext(ctx, `
 	        INSERT INTO memory_nodes (id, generation_id, user_id, node_type, entity_id, importance, decay_factor, activity_at, time_tier, embedding_status, created_at, updated_at, workspace_id,partition_id,subject_actor_ids,source_refs,revision,source_conversation_id)
@@ -227,10 +228,17 @@ func (r *PostgresMemoryRepository) StoreDocumentTx(ctx context.Context, doc doma
                   AND EXISTS (SELECT 1 FROM memory_embeddings e
                       JOIN memory_generations g ON g.generation_id=e.generation_id
                        AND g.user_id=e.user_id AND g.workspace_id=e.workspace_id
-                       AND g.embedding_model=e.embedding_model AND g.embedding_version=e.embedding_version
+                       AND g.embedding_version=e.embedding_version
+                      LEFT JOIN embedding_index_profiles p ON p.generation_id=e.generation_id
+                       AND p.user_id=e.user_id AND p.workspace_id=e.workspace_id
+                       AND p.embedding_version=e.embedding_version
                       WHERE e.node_id=memory_nodes.id AND e.user_id=EXCLUDED.user_id
                        AND e.workspace_id=EXCLUDED.workspace_id AND e.generation_id=EXCLUDED.generation_id
-                       AND e.node_type='segment' AND e.content_hash=$19)
+                       AND e.node_type='segment' AND e.content_hash=$19
+                       AND ((p.id IS NULL AND g.embedding_model=e.embedding_model)
+                        OR (p.id IS NOT NULL
+                         AND e.embedding_model='broker:' || p.fingerprint || ':' || p.dimensions::text
+                         AND vector_dims(e.vector)=p.dimensions)))
                  THEN memory_nodes.embedding_status
                  ELSE EXCLUDED.embedding_status END,
 	            updated_at = EXCLUDED.updated_at

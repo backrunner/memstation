@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"os"
+	"strings"
 	"testing"
 
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/runtimeconfig"
+	aicallstore "memstation/apps/server/internal/store/sql/aicall"
 	vectorstore "memstation/apps/server/internal/store/vector"
 
 	"github.com/google/uuid"
@@ -26,7 +28,7 @@ func TestPostgresSegmentRewritePreservesQueryableEmbedding(t *testing.T) {
 	}
 	defer db.Close()
 	ctx := context.Background()
-	for _, variant := range []string{"unchanged", "changed_content", "missing_vector", "pending", "different_generation", "different_model", "different_version", "unverified_hash"} {
+	for _, variant := range []string{"unchanged", "changed_content", "missing_vector", "pending", "different_generation", "different_model", "different_version", "unverified_hash", "broker_unchanged", "broker_changed_profile", "broker_wrong_dimensions", "broker_missing_profile"} {
 		t.Run(variant, func(t *testing.T) {
 			owner := "source-ready-" + uuid.NewString()
 			repo := NewPostgresMemoryRepository(db)
@@ -42,8 +44,17 @@ func TestPostgresSegmentRewritePreservesQueryableEmbedding(t *testing.T) {
 			if _, err := db.ExecContext(ctx, `UPDATE memory_generations SET embedding_model='fixture',embedding_version=1 WHERE user_id=$1 AND generation_id=$2`, owner, doc.GenerationID); err != nil {
 				t.Fatal(err)
 			}
-			vectors := vectorstore.NewPGVectorStore(runtimeconfig.NewStaticDBHandle(db))
-			if err := vectors.Upsert(ctx, domain.VectorUpsertRequest{UserID: owner, GenerationID: doc.GenerationID, NodeID: doc.NodeID, NodeType: string(doc.Type), EmbeddingVersion: 1, EmbeddingModel: "fixture", Content: doc.Content, Vector: []float32{1, 0, 0}}); err != nil {
+			handle := runtimeconfig.NewStaticDBHandle(db)
+			model := "fixture"
+			if strings.HasPrefix(variant, "broker_") {
+				identity := domain.EmbeddingIdentity{ModelVersion: "fixture-version", Dimensions: 3, Fingerprint: "fixture-fingerprint"}
+				if _, err := aicallstore.NewAICallRepository(handle).EmbeddingIdentity(ctx, owner, doc.GenerationID, 1, identity); err != nil {
+					t.Fatal(err)
+				}
+				model = "broker:fixture-fingerprint:3"
+			}
+			vectors := vectorstore.NewPGVectorStore(handle)
+			if err := vectors.Upsert(ctx, domain.VectorUpsertRequest{UserID: owner, GenerationID: doc.GenerationID, NodeID: doc.NodeID, NodeType: string(doc.Type), EmbeddingVersion: 1, EmbeddingModel: model, Content: doc.Content, Vector: []float32{1, 0, 0}}); err != nil {
 				t.Fatal(err)
 			}
 			switch variant {
@@ -61,6 +72,12 @@ func TestPostgresSegmentRewritePreservesQueryableEmbedding(t *testing.T) {
 				_, err = db.ExecContext(ctx, `UPDATE memory_embeddings SET embedding_version=2 WHERE user_id=$1`, owner)
 			case "unverified_hash":
 				_, err = db.ExecContext(ctx, `UPDATE memory_embeddings SET content_hash='' WHERE user_id=$1`, owner)
+			case "broker_changed_profile":
+				_, err = db.ExecContext(ctx, `UPDATE embedding_index_profiles SET fingerprint='changed-fingerprint' WHERE user_id=$1`, owner)
+			case "broker_wrong_dimensions":
+				_, err = db.ExecContext(ctx, `UPDATE embedding_index_profiles SET dimensions=4 WHERE user_id=$1`, owner)
+			case "broker_missing_profile":
+				_, err = db.ExecContext(ctx, `DELETE FROM embedding_index_profiles WHERE user_id=$1`, owner)
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -74,13 +91,13 @@ func TestPostgresSegmentRewritePreservesQueryableEmbedding(t *testing.T) {
 				t.Fatal(err)
 			}
 			expected := "pending"
-			if variant == "unchanged" {
+			if variant == "unchanged" || variant == "broker_unchanged" {
 				expected = "ready"
 			}
 			if status != expected {
 				t.Fatalf("source rewrite status %q, want %q", status, expected)
 			}
-			found, err := vectors.Search(ctx, domain.VectorSearchInput{UserID: owner, GenerationID: doc.GenerationID, Query: "mural", EmbeddingModel: "fixture", EmbeddingVersion: 1, AllowedTypes: []domain.MemoryType{domain.MemoryTypeSegment}, TopK: 5})
+			found, err := vectors.Search(ctx, domain.VectorSearchInput{UserID: owner, GenerationID: doc.GenerationID, Query: "mural", EmbeddingModel: model, EmbeddingVersion: 1, AllowedTypes: []domain.MemoryType{domain.MemoryTypeSegment}, TopK: 5})
 			if err != nil {
 				t.Fatal(err)
 			}

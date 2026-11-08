@@ -52,6 +52,7 @@ import (
 	"memstation/apps/server/internal/service/memoryllm"
 	"memstation/apps/server/internal/store/deletionjournal"
 	vectorstore "memstation/apps/server/internal/store/vector"
+	"memstation/apps/server/internal/testutil/memoryprocessingfixture"
 	grpctransport "memstation/apps/server/internal/transport/grpc"
 	httptransport "memstation/apps/server/internal/transport/http"
 	"memstation/apps/server/internal/worker"
@@ -166,7 +167,13 @@ func testIndependentMemoryPipeline(t *testing.T, episodes bool) {
 	vectors := vectorstore.NewPGVectorStore(handle)
 	vectors.SetEmbedder(broker)
 	gens := memorygen.NewService(handle, "memory.embedding")
+	processor, closeProcessor, err := memoryprocessingfixture.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeProcessor()
 	engine := memoryservice.NewEngine(memories, vectors)
+	engine.SetEntityRecall(processor, time.Duration(processor.Config().EntityRecallTimeoutMS)*time.Millisecond)
 	engine.SetGenerationService(gens)
 	memory := memoryservice.NewService(engine, memories)
 	scorer := memoryservice.NewScorerWithGenerator(llm)
@@ -174,6 +181,7 @@ func testIndependentMemoryPipeline(t *testing.T, episodes bool) {
 	memory.SetGenerationService(gens)
 	memory.SetVectorStore(vectors)
 	memory.SetWatermarks(ingestRepo)
+	memory.SetProcessingPolicy(processor)
 	opt, err := bootstrap.AsynqRedisOpt(redisURL)
 	if err != nil {
 		t.Fatal(err)
@@ -183,7 +191,9 @@ func testIndependentMemoryPipeline(t *testing.T, episodes bool) {
 	inspector := asynq.NewInspector(opt)
 	defer inspector.Close()
 	queue := "contract-" + uuid.NewString()
-	publisher := isolatedQueue{worker.NewPublisher(logger, client), queue}
+	queuePublisher := worker.NewPublisher(logger, client)
+	queuePublisher.SetProcessingPolicy(processor.Config().Identity())
+	publisher := isolatedQueue{queuePublisher, queue}
 	relay := worker.NewRelay(logger, conversationstore.NewPostgresOutboxRepository(db), publisher)
 	relay.SetTaskAuthority(ingestRepo)
 	var failCleanup atomic.Bool
@@ -193,7 +203,7 @@ func testIndependentMemoryPipeline(t *testing.T, episodes bool) {
 		}
 		return lifeRepo.ProcessOperation(c, id)
 	}
-	mux := worker.NewServeMux(logger, worker.Services{Scorer: scorer, DataReady: gate.Check, TaskAuthority: ingestRepo, Jobs: ingestRepo, AcknowledgeReceipt: ingestRepo.AcknowledgeReceipt, ProcessOperation: processOperation, Conversations: conversations, Memories: memories, MemoryService: memory, Generations: gens, Vectors: vectors, Publisher: publisher, Analysis: analysis.NewServiceWithOptions(llm, analysis.Options{SemanticEpisodes: episodes}), AllowedKeyMemoryKeys: map[string]struct{}{}})
+	mux := worker.NewServeMux(logger, worker.Services{Processing: processor, Scorer: scorer, DataReady: gate.Check, TaskAuthority: ingestRepo, Jobs: ingestRepo, AcknowledgeReceipt: ingestRepo.AcknowledgeReceipt, ProcessOperation: processOperation, Conversations: conversations, Memories: memories, MemoryService: memory, Generations: gens, Vectors: vectors, Publisher: publisher, Analysis: analysis.NewServiceWithOptions(llm, analysis.Options{SemanticEpisodes: episodes}), AllowedKeyMemoryKeys: map[string]struct{}{}})
 	server := asynq.NewServer(opt, asynq.Config{Concurrency: 4, Queues: map[string]int{queue: 1}, RetryDelayFunc: worker.MemoryRetryDelay, ShutdownTimeout: time.Second, TaskCheckInterval: 100 * time.Millisecond, ErrorHandler: asynq.ErrorHandlerFunc(func(_ context.Context, task *asynq.Task, err error) { t.Log(task.Type(), err) })})
 	if err = server.Start(mux); err != nil {
 		t.Fatal(err)

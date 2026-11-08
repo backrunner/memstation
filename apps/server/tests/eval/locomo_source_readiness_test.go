@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"memstation/apps/server/internal/bootstrap"
 	"memstation/apps/server/internal/domain"
 	"memstation/apps/server/internal/runtimeconfig"
 	memorygenservice "memstation/apps/server/internal/service/memorygen"
@@ -20,7 +21,9 @@ func TestPostgresSourceReadinessRejectsUnqueryableCorpus(t *testing.T) {
 		t.Skip("MEMSTATION_TEST_DATABASE_URL is not configured")
 	}
 	ctx := context.Background()
-	db, err := OpenEvaluationDatabase(ctx, dsn)
+	// This synthetic contract test uses the configured disposable integration DB;
+	// manual model-backed evaluations retain their stricter database guard.
+	db, err := bootstrap.OpenPostgres(ctx, bootstrap.Config{DatabaseURL: dsn})
 	if err != nil {
 		t.Fatal(err)
 	}
