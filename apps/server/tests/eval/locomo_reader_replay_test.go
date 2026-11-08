@@ -76,6 +76,9 @@ func TestContextReplaysKeepIdenticalCurrentReaderInstructions(t *testing.T) {
 }
 
 func TestPipelineFinalAnswerGradesOnlyTheFinalLine(t *testing.T) {
+	if got, err := pipelineFinalAnswer("inference_reasoning", "work\nFINAL ANSWER: likely Toronto"); err != nil || got != "likely Toronto" {
+		t.Fatal("inference policy final line", got, err)
+	}
 	got, err := pipelineFinalAnswer("reasoning", "1. FINAL ANSWER: draft\n2. checked\nFINAL ANSWER:  in May 2023 ")
 	if err != nil || got != "in May 2023" {
 		t.Fatal(got, err)

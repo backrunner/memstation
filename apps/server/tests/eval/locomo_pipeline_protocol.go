@@ -75,7 +75,7 @@ func normalizePipelineProtocol(o *LOCOMOPipelineOptions) error {
 	if o.ReaderPolicy == "" {
 		o.ReaderPolicy = "baseline"
 	}
-	if o.ReaderPolicy != "baseline" && o.ReaderPolicy != "coverage" && o.ReaderPolicy != "coverage_inference" && o.ReaderPolicy != "interpretation" && o.ReaderPolicy != "reasoning" && o.ReaderPolicy != "direct" {
+	if o.ReaderPolicy != "baseline" && o.ReaderPolicy != "coverage" && o.ReaderPolicy != "coverage_inference" && o.ReaderPolicy != "interpretation" && o.ReaderPolicy != "reasoning" && o.ReaderPolicy != "inference_reasoning" && o.ReaderPolicy != "direct" {
 		return fmt.Errorf("invalid reader policy")
 	}
 

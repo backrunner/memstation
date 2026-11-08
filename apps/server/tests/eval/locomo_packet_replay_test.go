@@ -108,7 +108,7 @@ func loadPacketReplayPlan(t *testing.T) (packetReplayPlan, string, string) {
 }
 
 func validatePacketReplayPlan(plan packetReplayPlan) error {
-	if len(plan.Cases) == 0 || len(plan.Cases) > 64 || (plan.ReaderPolicy != "interpretation" && plan.ReaderPolicy != "reasoning" && plan.ReaderPolicy != "direct") || plan.ContextBytes < 1 || plan.ContextBytes > 32000 || plan.ReaderOutputTokens < 1 || plan.JudgeOutputTokens != 4096 || plan.MaxGenerationCalls != len(plan.Cases)*4 || plan.TokenStopLimit < 1 {
+	if len(plan.Cases) == 0 || len(plan.Cases) > 64 || (plan.ReaderPolicy != "interpretation" && plan.ReaderPolicy != "reasoning" && plan.ReaderPolicy != "inference_reasoning" && plan.ReaderPolicy != "direct") || plan.ContextBytes < 1 || plan.ContextBytes > 32000 || plan.ReaderOutputTokens < 1 || plan.JudgeOutputTokens != 4096 || plan.MaxGenerationCalls != len(plan.Cases)*4 || plan.TokenStopLimit < 1 {
 		return fmt.Errorf("invalid packet replay budgets")
 	}
 	seen := map[string]bool{}
