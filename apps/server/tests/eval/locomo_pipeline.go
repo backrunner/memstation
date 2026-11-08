@@ -23,12 +23,15 @@ import (
 // Pipeline options are deliberately separate from the raw-turn retrieval track.
 // The database must be dedicated: the relay consumes its pending outbox.
 type LOCOMOPipelineOptions struct {
-	Processing           processing.Config
-	TaskConcurrency      int
-	AnswerOutputTokens   int
-	extractionAdapter    ports.ProviderAdapter
-	ReaderPolicy         string
-	SemanticEpisodes     bool
+	Processing         processing.Config
+	TaskConcurrency    int
+	AnswerOutputTokens int
+	extractionAdapter  ports.ProviderAdapter
+	ReaderPolicy       string
+	SemanticEpisodes   bool
+	// ImageCaptions is a separately reported input track: each shared photo adds the
+	// dataset's machine-generated caption to its turn, labelled as such.
+	ImageCaptions        bool
 	RefineEvidence       bool
 	Planner              LongMemEvalQAJudgeOptions
 	ContextFormat        string
@@ -155,6 +158,10 @@ type LOCOMOPipelineReport struct {
 }
 
 func loadPipelineSamples(path, sampleID string, perCategory int) ([]pipelineSample, error) {
+	return loadPipelineSamplesWithCaptions(path, sampleID, perCategory, false)
+}
+
+func loadPipelineSamplesWithCaptions(path, sampleID string, perCategory int, captions bool) ([]pipelineSample, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -204,7 +211,11 @@ func loadPipelineSamples(path, sampleID string, perCategory int) ([]pipelineSamp
 				}
 				refs[id] = true
 				// Both speakers are human sources. Names/time remain source text, not an
-				// authorization identity. Gold QA and machine captions never enter ingest.
+				// authorization identity. Gold QA never enters ingest; a machine caption
+				// enters only on the declared caption track, marked as a description.
+				if caption := firstNonEmptyString(turn, "blip_caption"); captions && caption != "" {
+					text += fmt.Sprintf(" [Shared a photo. Machine-generated image description, not the speaker's words: %s]", caption)
+				}
 				session.Messages = append(session.Messages, domain.UnifiedMessage{Role: domain.RoleUser, Metadata: map[string]any{"ref": id, "speaker": speaker}, Text: fmt.Sprintf("[Conversation date: %s] [Speaker: %s] %s", date, speaker, text)})
 				session.Refs = append(session.Refs, id)
 			}
@@ -328,7 +339,7 @@ func RunLOCOMOPipeline(ctx context.Context, o LOCOMOPipelineOptions) (LOCOMOPipe
 		return report, err
 	}
 	defer func() { _ = lease.Close() }()
-	samples, err := loadPipelineSamples(o.DatasetPath, o.SampleID, o.QuestionsPerCategory)
+	samples, err := loadPipelineSamplesWithCaptions(o.DatasetPath, o.SampleID, o.QuestionsPerCategory, o.ImageCaptions)
 	if err != nil {
 		return report, err
 	}
@@ -352,6 +363,7 @@ func RunLOCOMOPipeline(ctx context.Context, o LOCOMOPipelineOptions) (LOCOMOPipe
 	manifest["reader_policy"] = o.ReaderPolicy
 	manifest["reader_format"] = "plain_text_v1"
 	manifest["semantic_episodes"] = o.SemanticEpisodes
+	manifest["input_modality"] = map[bool]string{false: "text", true: "text_with_machine_image_captions"}[o.ImageCaptions]
 	if o.SemanticEpisodes {
 		manifest["semantic_episode_policy_sha256"] = analysis.SemanticEpisodePolicyHash()
 	}

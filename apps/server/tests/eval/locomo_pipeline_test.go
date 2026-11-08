@@ -266,3 +266,26 @@ func TestPipelineTaskFailureDoesNotBlockAnotherOwnerOrFanout(t *testing.T) {
 		t.Fatal("task failure crossed owners or starved healthy fanout", err, healthyCalls, brokenCalls, q.state)
 	}
 }
+
+func TestPipelineCaptionTrackLabelsMachineDescriptionsAndIsOffByDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "captions.json")
+	raw := `[{"sample_id":"cap","conversation":{"speaker_a":"Ann","speaker_b":"Bo","session_1_date_time":"1:00 pm on 8 May, 2023","session_1":[{"speaker":"Ann","dia_id":"D1:1","text":"Look at this.","img_url":["https://example.invalid/a.jpg"],"blip_caption":"a red bicycle"},{"speaker":"Bo","dia_id":"D1:2","text":"Nice."}]},"qa":[{"question":"q","answer":"a","evidence":["D1:1"],"category":4}]}]`
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	plain, err := loadPipelineSamples(path, "", 0)
+	if err != nil || strings.Contains(plain[0].Sessions[0].Messages[0].Text, "bicycle") {
+		t.Fatal("caption entered the text-only track", err)
+	}
+	captioned, err := loadPipelineSamplesWithCaptions(path, "", 0, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := captioned[0].Sessions[0].Messages[0].Text; !strings.HasSuffix(got, "Look at this. [Shared a photo. Machine-generated image description, not the speaker's words: a red bicycle]") {
+		t.Fatal("caption missing or unlabelled", got)
+	}
+	if strings.Contains(captioned[0].Sessions[0].Messages[1].Text, "photo") || strings.Contains(captioned[0].Sessions[0].Messages[0].Text, "example.invalid") {
+		t.Fatal("caption added to a turn without a photo, or the URL leaked")
+	}
+}
