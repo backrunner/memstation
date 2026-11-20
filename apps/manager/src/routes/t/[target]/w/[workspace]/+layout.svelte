@@ -32,33 +32,38 @@
 <div class="page-stack">
   {#if data.workspaceResult.value}
     <div class="workspace-context">
-    <div class="scope-label"><span>Workspace</span>
-      {#key `${data.routeTarget.id}:${data.workspaceResult.value.id}`}<WorkspacePicker scope={{ target: data.routeTarget, workspace: data.workspaceResult.value }} />{/key}
-      <span class="scope-owner">Owner: {data.workspaceResult.value.user_id}</span>
-    </div>
-    <nav bind:this={tabs} class="workspace-tabs" aria-label="Workspace sections">
-      <a href={memory} aria-current={page.url.pathname.startsWith(memory) ? 'page' : undefined}>Memory documents</a>
-      <a href={keys} aria-current={page.url.pathname.startsWith(keys) ? 'page' : undefined}>Key memories</a>
-      <a href={conversations} aria-current={page.url.pathname.startsWith(conversations) ? 'page' : undefined}>Conversations</a>
-      <a href={settings} aria-current={page.url.pathname === settings ? 'page' : undefined}>Workspace settings</a>
-      <a href={access} aria-current={page.url.pathname.startsWith(access) ? 'page' : undefined}>Agents with access</a>
-      <a href={usage} aria-current={page.url.pathname.startsWith(usage) ? 'page' : undefined}>Usage</a>
- <a href={lifecycle} aria-current={page.url.pathname.startsWith(lifecycle) ? 'page' : undefined}>Memory service</a>
-    </nav>
+      <div class="scope-label">
+        <span class="scope-caption">Workspace</span>
+        {#key `${data.routeTarget.id}:${data.workspaceResult.value.id}`}<WorkspacePicker scope={{ target: data.routeTarget, workspace: data.workspaceResult.value }} />{/key}
+        <span class="scope-owner">Owner <strong>{data.workspaceResult.value.user_id}</strong></span>
+      </div>
+      <nav bind:this={tabs} class="workspace-tabs" aria-label="Workspace sections">
+        <a href={memory} aria-current={page.url.pathname.startsWith(memory) ? 'page' : undefined}>Memory documents</a>
+        <a href={keys} aria-current={page.url.pathname.startsWith(keys) ? 'page' : undefined}>Key memories</a>
+        <a href={conversations} aria-current={page.url.pathname.startsWith(conversations) ? 'page' : undefined}>Conversations</a>
+        <a href={lifecycle} aria-current={page.url.pathname.startsWith(lifecycle) ? 'page' : undefined}>Memory service</a>
+        <a href={access} aria-current={page.url.pathname.startsWith(access) ? 'page' : undefined}>Agents with access</a>
+        <a href={usage} aria-current={page.url.pathname.startsWith(usage) ? 'page' : undefined}>Usage</a>
+        <a href={settings} aria-current={page.url.pathname === settings ? 'page' : undefined}>Workspace settings</a>
+      </nav>
     </div>
   {/if}
   {@render children()}
 </div>
 
 <style>
-  .workspace-context { display: flex; align-items: center; gap: 24px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-xs); min-width: 0; }
-  .workspace-tabs { display: flex; gap: 4px; overflow-x: auto; min-width: 0; padding: 3px; scrollbar-width: thin; }
-  a { display: flex; align-items: center; justify-content: center; min-height: 36px; flex-shrink: 0; padding: 0 11px; border-radius: var(--radius-sm); color: var(--text-muted); font-size: var(--font-size-sm); transition: color 120ms ease, background 120ms ease; }
-  a:hover { background: var(--surface-hover); color: var(--text); }
-  a[aria-current] { color: var(--brand-strong); background: var(--brand-soft); font-weight: 500; }
-  .scope-label { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; min-width: 0; flex: 0 0 230px; color: var(--text-muted); font-size: 11px; }
-  .scope-label :global(.workspace-trigger) { grid-column: 1 / -1; grid-row: 2; width: 100%; max-width: none; }
-  .scope-owner { text-align: right; overflow-wrap: anywhere; }
-  @media (max-width: 1300px) { .workspace-context { align-items: stretch; flex-direction: column; gap: 12px; } .scope-label { flex-basis: auto; grid-template-columns: auto minmax(0, 280px) minmax(0, 1fr); align-items: center; font-size: var(--font-size-xs); } .scope-label :global(.workspace-trigger) { grid-column: 2; grid-row: 1; } .scope-owner { text-align: left; } }
-  @media (max-width: 640px) { .workspace-context { padding: 12px; gap: 10px; } .scope-label { grid-template-columns: minmax(0, 1fr) auto; gap: 6px; } .scope-label :global(.workspace-trigger) { grid-column: 1 / -1; grid-row: 2; } .scope-owner { text-align: right; font-size: 11px; } a { min-height: 44px; padding: 0 12px; } .workspace-tabs { margin-inline: -4px; } }
+  .workspace-context { display: grid; gap: 14px; min-width: 0; margin-bottom: 4px; }
+  .scope-label { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; min-width: 0; }
+  .scope-caption { color: var(--text-muted); font-size: var(--font-size-sm); }
+  .scope-label :global(.workspace-trigger) { width: 260px; max-width: 100%; }
+  .scope-owner { color: var(--text-muted); font-size: var(--font-size-sm); overflow-wrap: anywhere; }
+  .scope-owner strong { color: var(--text-secondary); font-weight: 500; }
+  .workspace-tabs { display: flex; gap: 4px; overflow-x: auto; min-width: 0; border-bottom: 1px solid var(--border); scrollbar-width: none; }
+  .workspace-tabs::-webkit-scrollbar { display: none; }
+  a { position: relative; display: flex; align-items: center; min-height: 40px; flex-shrink: 0; padding: 0 10px; color: var(--text-muted); font-size: var(--font-size-md); font-weight: 500; transition: color 120ms ease; }
+  a:hover { color: var(--text); }
+  a[aria-current] { color: var(--brand-strong); font-weight: 600; }
+  a[aria-current]::after { content: ''; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 1px 1px 0 0; background: var(--brand); }
+  a:focus-visible { outline-offset: -2px; }
+  @media (max-width: 640px) { .scope-label :global(.workspace-trigger) { width: 100%; } .scope-caption { display: none; } a { min-height: 44px; } }
 </style>

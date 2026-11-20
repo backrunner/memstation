@@ -868,6 +868,8 @@
     gap: 8px;
   }
 
+  .provider-route-control :global(.field) { flex: 1 1 auto; min-width: 0; }
+
   .provider-route-tag {
     color: var(--text-muted);
     font-size: var(--font-size-xs);
@@ -1004,6 +1006,7 @@
     }
     :global(.provider-route-trigger),
     .provider-route-readout {
+      min-width: 0;
       max-width: none;
       flex: 1 1 auto;
     }

@@ -262,7 +262,7 @@
         <div class="notice-card is-success">{success}</div>
       {/if}
 
-      <div class="page-columns">
+      <div class="page-columns task-columns">
         <section class="table-card">
           <div class="table-scroll">
             <table class="data-table task-table">
@@ -283,35 +283,33 @@
                     on:click={() => (selectedTask = task)}
                   >
                     <td>
-                      <Button class="table-select-button mono" type="button" aria-pressed={selectedTask?.id === task.id} onclick={() => (selectedTask = task)}>{task.type}</Button>
+                      <Button class="table-select-button mono task-type" type="button" aria-pressed={selectedTask?.id === task.id} onclick={() => (selectedTask = task)}>{task.type}</Button>
                       <div class="subtle-text mono">{task.id}</div>
-                      <a class="btn-link" style="margin-top: 4px;" href={`/operations/tasks/${encodeURIComponent(task.queue)}/${encodeURIComponent(task.id)}`}>
-                        Open detail
-                      </a>
                     </td>
                     <td>
                       <StatusBadge tone={stateTone(task.state)} label={task.state} />
                     </td>
-                    <td class="mono">
-                      {task.queue}
+                    <td class="mono no-wrap">
                       {#if selectedQueue !== task.queue}
-                        <div style="margin-top: 4px;">
-                          <Button
-                            class="btn-link"
-                            type="button"
-                            onclick={(event) => { event.stopPropagation(); (() => { selectedQueue = task.queue; })(); }}
-                          >Filter</Button>
-                        </div>
+                        <Button
+                          class="queue-filter-button"
+                          type="button"
+                          title="Show only this queue"
+                          aria-label={`Show only queue ${task.queue}`}
+                          onclick={(event) => { event.stopPropagation(); selectedQueue = task.queue; }}
+                        >{task.queue}</Button>
+                      {:else}
+                        {task.queue}
                       {/if}
                     </td>
-                    <td class="subtle-text mono">{task.conversation_id ?? 'n/a'}</td>
+                    <td class="subtle-text mono no-wrap">{task.conversation_id ?? 'n/a'}</td>
                     <td class="subtle-text">{task.last_error || 'No error captured'}</td>
                   </tr>
                 {/each}
                 {#if tasks.length === 0}
                   <tr>
                     <td colspan="5">
-                      <div class="empty-state" style="border: none; padding: 12px 0;">No tasks match the current filter.</div>
+                      <span class="text-muted">No tasks match the current filter.</span>
                     </td>
                   </tr>
                 {/if}
@@ -322,14 +320,15 @@
 
         <div class="page-column">
           <section class="card page-stack">
-            <div class="page-header">
-              <div class="page-header-meta">
-                <h2 class="section-title">Selected task</h2>
-              </div>
+            <div class="card-heading">
+              <h2 class="section-title">Selected task</h2>
+              {#if selectedTask}
+                <a class="btn-secondary btn-sm" href={`/operations/tasks/${encodeURIComponent(selectedTask.queue)}/${encodeURIComponent(selectedTask.id)}`}>Open detail</a>
+              {/if}
             </div>
             {#if selectedTask}
               <dl class="meta-grid compact">
-                <div>
+                <div class="meta-span">
                   <dt>Type</dt>
                   <dd class="mono">{selectedTask.type}</dd>
                 </div>
@@ -475,9 +474,28 @@
 
 <style>
   .meta-grid.compact {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 16px;
   }
+
+  .meta-grid .meta-span { grid-column: 1 / -1; }
+
+  .task-columns { grid-template-columns: minmax(0, 1.5fr) minmax(340px, 1fr); }
+  @media (max-width: 1024px) { .task-columns { grid-template-columns: 1fr; } }
+
+  .task-table :global(.task-type) { overflow-wrap: normal; white-space: nowrap; }
+
+  .task-table :global(.queue-filter-button) {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--brand);
+    font: inherit;
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+  }
+
+  .task-table :global(.queue-filter-button:hover) { color: var(--brand-strong); text-decoration-style: solid; }
 
   .meta-grid.compact > div {
     padding: 0;
@@ -488,9 +506,7 @@
   .meta-grid dt {
     color: var(--text-muted);
     font-size: var(--font-size-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0;
+    font-weight: 500;
     margin: 0;
   }
 

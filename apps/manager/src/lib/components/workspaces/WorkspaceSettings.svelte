@@ -91,9 +91,10 @@
 </script>
 
 <section class="page-stack workspace-settings">
-  <PageHeader title="Workspace settings" />
-  <a class="text-link" href={workspaceDirectoryURL(scope.target.id)}>All workspaces</a>
-  <form class="page-stack" on:submit|preventDefault={save}>
+  <PageHeader title="Workspace settings">
+    <svelte:fragment slot="actions"><a class="btn-secondary" href={workspaceDirectoryURL(scope.target.id)}>All workspaces</a></svelte:fragment>
+  </PageHeader>
+  <form class="card page-stack settings-form" on:submit|preventDefault={save}>
     <TextInputField label="Workspace name" bind:value={name} maxlength={120} required disabled={busy || workspace.status !== 'active'} />
     <fieldset disabled={busy || workspace.status !== 'active'}>
       <legend>Workspace permissions</legend>
@@ -112,21 +113,23 @@
     {/if}
     {#if error}<p class="error-state" role="alert">{error}</p>{/if}
     {#if success}<p class="panel-meta" role="status">{success}</p>{/if}
-    <div class="workspace-actions">
+    <div class="workspace-actions form-actions">
+      {#if dirty}<span class="draft-note">Unsaved changes</span><Button class="btn-secondary" disabled={busy} onclick={discard}>Discard draft</Button>{/if}
       <Button class="btn-primary" type="submit" disabled={busy || conflict || !dirty || !name.trim() || workspace.status !== 'active'}>{busy ? 'Saving…' : 'Save workspace'}</Button>
-      {#if dirty}<Button class="btn-secondary" disabled={busy} onclick={discard}>Discard draft</Button>{/if}
     </div>
   </form>
-  <CollapsibleSection title="Workspace details">
+  <CollapsibleSection title="Workspace details" variant="panel">
     <dl><dt>Workspace ID</dt><dd class="mono">{workspace.id}</dd><dt>Policy version</dt><dd>{workspace.policy_version}</dd><dt>Updated</dt><dd>{workspace.updated_at}</dd><dt>Status</dt><dd>{workspace.status}</dd></dl>
   </CollapsibleSection>
 </section>
 
 <style>
-  .workspace-settings { max-width: 820px; }
-  fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
-  legend { font-weight: 600; margin-bottom: 8px; }
+  .workspace-settings { max-width: 880px; }
+  fieldset { display: grid; gap: 8px; border: 0; border-top: 1px solid var(--border-subtle); padding: 16px 0 0; margin: 0; min-width: 0; }
+  legend { float: left; width: 100%; padding: 0; font-size: var(--font-size-lg); font-weight: 600; }
   .workspace-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .notice-card .workspace-actions { margin-block: 8px; }
+  .draft-note { margin-right: auto; color: var(--warning); font-size: var(--font-size-sm); }
   dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 20px; }
   dd { margin: 0; overflow-wrap: anywhere; }
   dt { color: var(--text-muted); }

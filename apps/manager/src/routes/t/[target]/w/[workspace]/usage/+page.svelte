@@ -33,7 +33,7 @@
     const days = new Map<string, number>();
     for (const group of groups) days.set(group.day, (days.get(group.day) ?? 0) + group.input_tokens + group.output_tokens);
     const ordered = [...days].sort(([a], [b]) => a.localeCompare(b));
-    return { tooltip: { trigger: 'axis' }, grid: { left: 64, right: 16, top: 24, bottom: 32 }, xAxis: { type: 'category', data: ordered.map(([day]) => day) }, yAxis: { type: 'value', name: 'Reported tokens' }, series: [{ type: 'bar', barMaxWidth: 44, data: ordered.map(([, tokens]) => tokens), itemStyle: { color: '#2563eb' } }] };
+    return { tooltip: { trigger: 'axis' }, grid: { left: 64, right: 16, top: 28, bottom: 32 }, xAxis: { type: 'category', data: ordered.map(([day]) => day), axisLine: { lineStyle: { color: '#d9ded7' } }, axisTick: { show: false }, axisLabel: { color: '#687069', fontSize: 11 } }, yAxis: { type: 'value', name: 'Reported tokens', nameTextStyle: { color: '#687069', fontSize: 11 }, splitLine: { lineStyle: { color: '#edefed' } }, axisLabel: { color: '#687069', fontSize: 11 } }, series: [{ type: 'bar', barMaxWidth: 32, data: ordered.map(([, tokens]) => tokens), itemStyle: { color: '#276149', borderRadius: [3, 3, 0, 0] } }] };
   });
   let calls = $derived(data.calls.value?.items ?? []);
   let next = $derived(calls.length === 100 ? `?${data.query}&after=${encodeURIComponent(calls.at(-1)!.id)}` : '');

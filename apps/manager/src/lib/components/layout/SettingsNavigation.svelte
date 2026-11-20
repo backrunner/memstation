@@ -10,6 +10,7 @@
   onMount(() => {
     let frame = 0;
     let initialFrame = 0;
+    let anchorTimer = 0;
     let revealRequested = true;
     let requested: { id: string; arrived: boolean } | null = null;
     const horizontal = () => window.matchMedia('(max-width: 900px)').matches;
@@ -73,7 +74,22 @@
     const anchorClick = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
       const link = (event.target instanceof Element ? event.target : null)?.closest('a');
-      if (link) choose(link.hash.slice(1));
+      if (!link) return;
+      const id = link.hash.slice(1);
+      choose(id);
+      const start = scrollY;
+      window.clearTimeout(anchorTimer);
+      // WebKit can update the fragment and focus without starting its scroll
+      // after a header resize. Let native scrolling run first and recover only
+      // when the viewport has not moved.
+      anchorTimer = window.setTimeout(() => {
+        if (requested?.id !== id || location.hash !== link.hash || Math.abs(scrollY - start) > 1) return;
+        const section = document.getElementById(id);
+        if (!section) return;
+        const offset = Number.parseFloat(getComputedStyle(section).scrollMarginTop) || 0;
+        const target = Math.max(0, Math.min(scrollY + section.getBoundingClientRect().top - offset, document.documentElement.scrollHeight - innerHeight));
+        if (Math.abs(scrollY - target) > 1) window.scrollTo({ top: target, behavior: 'instant' });
+      }, 200);
     };
     const hashChange = () => choose(location.hash.slice(1));
     const scrollKeys = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
@@ -131,6 +147,7 @@
     return () => {
       cancelAnimationFrame(frame);
       cancelAnimationFrame(initialFrame);
+      window.clearTimeout(anchorTimer);
       observer.disconnect();
       window.removeEventListener('scroll', schedule);
       window.removeEventListener('resize', resize);

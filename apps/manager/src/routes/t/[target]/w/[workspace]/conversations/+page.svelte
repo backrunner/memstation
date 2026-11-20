@@ -22,15 +22,15 @@
   </form>
   <WorkspaceReadStatus failure={data.records.failure} />
   {#if data.records.value}
-    <p class="helper-text">{records.length} conversations</p>
-    {#if records.length === 0}<p class="notice-card">No conversations match this view.</p>{/if}
-    <div class="list-table">
+    <div class="record-list">
+      <div class="record-list-header"><span>{records.length} conversations</span></div>
       {#each records as item (item.conversation_id)}
         <a class="record-row" href={workspaceConversationURL(base, item.conversation_id)}>
-          <strong>{item.conversation_id}</strong>
-          <MetadataRow items={[`${item.message_count} messages`, `${item.total_tokens} tokens`, item.finalize_status || 'unknown']} />
-          <MetadataRow items={[item.provider, new Date(item.updated_at).toLocaleString()]} />
+          <span class="row-head"><strong class="mono">{item.conversation_id}</strong><span class="row-time">{new Date(item.updated_at).toLocaleString()}</span></span>
+          <MetadataRow items={[item.provider, `${item.message_count} messages`, `${item.total_tokens} tokens`, item.finalize_status || 'unknown']} />
         </a>
+      {:else}
+        <p class="record-list-empty">No conversations match this view.</p>
       {/each}
     </div>
   {/if}
@@ -40,5 +40,6 @@
 <style>
   .filter-bar { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
   .filter-bar :global(.field) { flex: 1; min-width: min(100%, 240px); }
-  .record-row { display: grid; gap: 5px; padding: 16px 0; border-bottom: 1px solid var(--border-subtle); overflow-wrap: anywhere; }
+  .row-head { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 16px; flex-wrap: wrap; min-width: 0; }
+  .row-time { color: var(--text-muted); font-size: var(--font-size-sm); white-space: nowrap; }
 </style>

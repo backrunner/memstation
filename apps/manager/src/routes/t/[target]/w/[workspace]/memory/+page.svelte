@@ -23,8 +23,9 @@
 </script>
 
 <section class="page-stack">
-  <PageHeader title="Memory documents" />
-  <a class="text-link" href={`${base}/memory/search`}>Search memory and fact history</a>
+  <PageHeader title="Memory documents">
+    <svelte:fragment slot="actions"><a class="btn-secondary" href={`${base}/memory/search`}>Search memory and fact history</a></svelte:fragment>
+  </PageHeader>
   <form method="GET" class="filter-bar">
     <TextInputField name="q" label="Filter documents" bind:value={query} placeholder="Content or document ID" maxlength={1024} />
     <SelectField name="kind" label="Document type" items={kinds} bind:value={kind} />
@@ -32,20 +33,25 @@
     <Button class="btn-secondary" type="submit">Apply</Button>
   </form>
   <WorkspaceReadStatus failure={data.records.failure} />
-  {#if data.after}<a class="text-link" href={pageURL()}>First page</a>{/if}
   {#if data.records.value}
-    <p class="helper-text">{records.length} documents</p>
-    {#if data.generation}<p class="helper-text">Viewing generation {data.generation}. <a href={`${base}/memory`}>Return to active memory</a></p>{/if}
-    {#if records.length === 0}<p class="notice-card">No memory documents match this view.</p>{/if}
-    <div class="list-table">
+    {#if data.generation}<p class="notice-card">Viewing generation <span class="mono">{data.generation}</span>. <a class="text-link" href={`${base}/memory`}>Return to active memory</a></p>{/if}
+    <div class="record-list">
+      <div class="record-list-header">
+        <span>{records.length} documents</span>
+        {#if data.after}<a href={pageURL()}>First page</a>{/if}
+      </div>
       {#each records as item (`${item.type}:${item.id}`)}
         <a class="record-row" href={workspaceMemoryURL(base, item.type, item.id, item.generation_id || data.generation)}>
           <span class="preview">{item.content}</span>
           <MetadataRow items={[item.type, item.id]} />
         </a>
+      {:else}
+        <p class="record-list-empty">No memory documents match this view.</p>
       {/each}
+      {#if data.records.value.next_cursor}<div class="record-list-footer"><a class="text-link page-link" href={pageURL(data.records.value.next_cursor)}>Next documents</a></div>{/if}
     </div>
-    {#if data.records.value.next_cursor}<a class="text-link page-link" href={pageURL(data.records.value.next_cursor)}>Next documents</a>{/if}
+  {:else if data.after}
+    <a class="text-link page-link" href={pageURL()}>First page</a>
   {/if}
 </section>
 
@@ -53,6 +59,5 @@
   .page-link { display: inline-flex; align-items: center; min-height: 44px; }
   .filter-bar { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
   .filter-bar :global(.field) { flex: 1; min-width: min(100%, 220px); }
-  .record-row { display: grid; gap: 8px; padding: 16px 0; border-bottom: 1px solid var(--border-subtle); overflow-wrap: anywhere; }
   .preview { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; }
 </style>

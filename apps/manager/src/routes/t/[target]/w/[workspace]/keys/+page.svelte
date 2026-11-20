@@ -16,13 +16,16 @@
 <section class="page-stack">
   <PageHeader title="Key memories" />
   <WorkspaceReadStatus failure={data.records.failure} />
-  <div class="key-toolbar"><form method="GET" class="key-filter"><TextInputField name="q" label="Filter key memories" bind:value={query} maxlength={1024} placeholder="Key, value, category or status" /><Button class="btn-secondary" type="submit">Apply</Button></form><a class="btn btn-primary" href={`${base}/keys/new`}>New key memory</a></div>
+  <div class="key-toolbar filter-bar"><form method="GET" class="key-filter"><TextInputField name="q" label="Filter key memories" bind:value={query} maxlength={1024} placeholder="Key, value, category or status" /><Button class="btn-secondary" type="submit">Apply</Button></form><a class="btn btn-primary" href={`${base}/keys/new`}>New key memory</a></div>
   {#if data.records.value}
-    <p class="helper-text">{records.length} key memories</p>
-    {#if records.length === 0}<p>No key memories match this view.</p>{/if}
-    {#each records as item (item.id)}
-      <a class="record-row" href={`${base}/keys/${encodeURIComponent(item.id)}`}><strong>{item.key}</strong><span class="preview">{item.value}</span><MetadataRow items={[item.category || 'Uncategorized', item.review_status || 'pending']} /></a>
-    {/each}
+    <div class="record-list">
+      <div class="record-list-header"><span>{records.length} key memories</span></div>
+      {#each records as item (item.id)}
+        <a class="record-row" href={`${base}/keys/${encodeURIComponent(item.id)}`}><strong class="mono">{item.key}</strong><span class="preview">{item.value}</span><MetadataRow items={[item.category || 'Uncategorized', item.review_status || 'pending']} /></a>
+      {:else}
+        <p class="record-list-empty">No key memories match this view.</p>
+      {/each}
+    </div>
   {/if}
   <WorkspacePagination path={`${base}/keys`} query={data.query} after={data.after} next={data.records.value?.next_cursor} invalid={data.invalid} label="Key memories" />
 </section>
@@ -30,7 +33,6 @@
   .key-toolbar { display: flex; align-items: end; gap: 12px; }
   .key-filter { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; }
   .key-toolbar > a { flex-shrink: 0; }
-  .record-row { display: grid; gap: 8px; padding: 16px 0; border-bottom: 1px solid var(--border-subtle); overflow-wrap: anywhere; }
   .preview { white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   @media (max-width: 600px) {
     .key-toolbar { display: grid; grid-template-columns: 1fr auto; }

@@ -73,7 +73,7 @@
 </Popover.Root>
 
 <style>
-  :global(.workspace-trigger) { width: min(100%, 280px); min-width: 0; min-height: 44px; gap: 16px; }
+  :global(.workspace-trigger) { width: min(100%, 280px); min-width: 0; min-height: var(--control-height); gap: 16px; }
   .workspace-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
   :global(.workspace-picker) { width: min(360px, calc(100vw - 24px)); max-height: min(520px, var(--bits-popover-content-available-height, calc(100dvh - 24px))); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-lg); z-index: 100; }
   .picker-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 0 12px; gap: 12px; }

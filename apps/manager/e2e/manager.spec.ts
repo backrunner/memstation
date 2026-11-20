@@ -2236,7 +2236,7 @@ test('workspace management modern navigation and activity stay usable across scr
     await expect(sections.getByRole('link', { name: 'Activity', exact: true })).toHaveAttribute('aria-current', 'page');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
     const topbar = await page.locator('.app-topbar').boundingBox();
-    expect(topbar && topbar.x > 0 && topbar.y > 0 && topbar.x + topbar.width < width).toBeTruthy();
+    expect(topbar && topbar.x > 0 && topbar.y >= 0 && topbar.x + topbar.width < width).toBeTruthy();
     await page.screenshot({ path: testInfo.outputPath(`memory-modern-${width}.png`), fullPage: true });
     await page.getByRole('complementary', { name: 'Needs attention', exact: true }).getByRole('link', { name: /Failed tasks/ }).click();
     const heading = await page.getByRole('heading', { name: 'Background tasks', exact: true }).boundingBox();
@@ -2286,7 +2286,7 @@ test('system section navigation stays below sticky controls while scrolling and 
   else { await page.mouse.move(1000, 450); await page.mouse.wheel(0, 400); }
   await expect.poll(() => page.evaluate(() => scrollY)).toBeCloseTo(targetScroll, 0);
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-  await expect.poll(async () => (await stickyGeometry()).toolbarTop).toBeCloseTo(12, 0);
+  await expect.poll(async () => (await stickyGeometry()).toolbarTop).toBeCloseTo(0, 0);
   await expect.poll(async () => { const box = await stickyGeometry(); return box.navigationTop - box.headerBottom; }).toBeGreaterThanOrEqual(8);
   expect((await stickyGeometry()).coveredGap).toBeTruthy();
   geometry.push({ phase: 'scroll', ...await stickyGeometry() });

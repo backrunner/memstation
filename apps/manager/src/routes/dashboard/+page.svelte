@@ -176,11 +176,9 @@
     </div>
 
     <div class="dashboard-charts">
-      <section class="card page-stack">
-        <div class="page-header">
-          <div class="page-header-meta">
-            <h2 class="section-title">Recent conversation tokens</h2>
-          </div>
+      <section class="card is-flush">
+        <div class="card-header">
+          <h2 class="section-title">Recent conversation tokens</h2>
           <div class="segmented-control" role="group" aria-label="Range">
             {#each [7, 30] as item}
               <Button
@@ -193,23 +191,23 @@
             {/each}
           </div>
         </div>
-        <EChart option={tokenTrendOption} height={260} />
+        <div class="card-body">
+          <EChart option={tokenTrendOption} height={260} />
+        </div>
       </section>
-
-      <section class="card page-stack">
-        <div class="page-header">
-          <div class="page-header-meta">
-            <h2 class="section-title">Key memory footprint</h2>
-          </div>
+      <section class="card is-flush">
+        <div class="card-header">
+          <h2 class="section-title">Key memory footprint</h2>
+          <a class="btn-secondary btn-sm" href={workspaceLink($selectedTarget?.id, 'keys')}>Browse key memories</a>
         </div>
         <div class="table-scroll">
           <table class="data-table">
-            <thead><tr><th>User</th><th>Key memories</th></tr></thead>
+            <thead><tr><th>User</th><th class="text-right">Key memories</th></tr></thead>
             <tbody>
               {#each userFootprint as user}
                 <tr>
                   <td><a href={`/users/${encodeURIComponent(user.user_id)}`}>{user.name || user.user_id}</a></td>
-                  <td class="mono">{user.key_memory_count}</td>
+                  <td class="mono text-right">{user.key_memory_count}</td>
                 </tr>
               {:else}
                 <tr><td colspan="2" class="text-muted">No key memories recorded.</td></tr>
@@ -217,16 +215,12 @@
             </tbody>
           </table>
         </div>
-        <a class="link-inline" href={workspaceLink($selectedTarget?.id, 'keys')}>Browse key memories →</a>
       </section>
     </div>
-
     <div class="grid-2">
       <section class="card is-flush">
         <div class="card-header">
-          <div class="page-header-meta">
-            <h2 class="section-title">Worker queues</h2>
-          </div>
+          <h2 class="section-title">Worker queues</h2>
           <a class="btn-secondary btn-sm" href="/operations/queues">Queue details</a>
         </div>
         <div class="table-scroll">
@@ -263,7 +257,7 @@
               {#if queues.length === 0}
                 <tr>
                   <td colspan="5">
-                    <div class="empty-state" style="border: none; padding: 12px 0;">No queue metrics returned.</div>
+                    <span class="text-muted">No queue metrics returned.</span>
                   </td>
                 </tr>
               {/if}
@@ -274,9 +268,7 @@
 
       <section class="card is-flush">
         <div class="card-header">
-          <div class="page-header-meta">
-            <h2 class="section-title">Recent sensitive actions</h2>
-          </div>
+          <h2 class="section-title">Recent sensitive actions</h2>
           <a class="btn-secondary btn-sm" href="/audit">Open audit</a>
         </div>
         {#if auditItems.length === 0}

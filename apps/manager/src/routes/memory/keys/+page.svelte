@@ -2,7 +2,6 @@
 
 <script lang="ts">
   import Button from '#lib/components/ui/Button.svelte';
-  import CollapsibleSection from '#lib/components/ui/CollapsibleSection.svelte';
   import { onMount } from 'svelte';
   import { Dialog } from 'bits-ui';
   import { Plus, X } from '@lucide/svelte';
@@ -17,7 +16,6 @@
     updateAdminKeyMemory
   } from '#lib/api/client.ts';
   import ConfirmActionDialog from '#lib/components/ui/ConfirmActionDialog.svelte';
-  import JsonView from '#lib/components/content/JsonView.svelte';
   import MemoryWorkspaceNav from '#lib/components/layout/MemoryWorkspaceNav.svelte';
   import FilterToolbar from '#lib/components/layout/FilterToolbar.svelte';
   import PageHeader from '#lib/components/layout/PageHeader.svelte';
@@ -394,47 +392,40 @@
       {:else}
         <div class="stack-list data-list">
           {#each visibleKeyMemories as keyMemory}
-            <article class="keymem-card data-list-row">
-              <header class="keymem-head">
-                <div class="keymem-head-main">
-                  <strong>{keyMemory.key}</strong>
-                </div>
-                <div class="inline-group">
+            <article class="keymem-card data-list-row" class:is-editing={editingId === keyMemory.id}>
+              <div class="keymem-main">
+                <header class="keymem-head">
+                  <a class="keymem-key mono" href={memoryDetailHref('keys', keyMemory.id, activeUserId ?? keyMemory.user_id, $selectedTarget?.id)}>{keyMemory.key}</a>
                   {#if keyMemory.category}<span class="helper-text">{keyMemory.category}</span>{/if}
                   {#if keyMemory.review_status !== 'approved'}
                     <StatusBadge tone={keyMemory.review_status === 'rejected' ? 'danger' : 'warning'} label={keyMemory.review_status ?? 'pending'} />
                   {/if}
-                </div>
-              </header>
-
-              {#if editingId !== keyMemory.id}
-                <div class="keymem-value">{keyMemory.value}</div>
-              {/if}
+                </header>
+                {#if editingId !== keyMemory.id}
+                  <div class="keymem-value">{keyMemory.value}</div>
+                {/if}
+              </div>
               <div class="keymem-actions">
-                <a class="btn-ghost btn-sm" href={memoryDetailHref('keys', keyMemory.id, activeUserId ?? keyMemory.user_id, $selectedTarget?.id)}>Open</a>
                 {#if editingId === keyMemory.id}
                   <Button class="btn-ghost btn-sm" type="button" onclick={cancelEdit}>Cancel</Button>
                   <Button class="btn-primary btn-sm" type="button" disabled={saving} onclick={() => saveEdit(keyMemory)}>
                     {saving ? 'Saving…' : 'Save'}
                   </Button>
                 {:else}
+                  <a class="btn-ghost btn-sm" href={memoryDetailHref('keys', keyMemory.id, activeUserId ?? keyMemory.user_id, $selectedTarget?.id)}>Open</a>
                   <Button class="btn-secondary btn-sm" type="button" onclick={() => startEdit(keyMemory)}>Edit</Button>
+                  <Button class="btn-danger is-quiet btn-sm" type="button" disabled={deletingId === keyMemory.id} onclick={() => (deleteCandidate = keyMemory)}>
+                    {deletingId === keyMemory.id ? 'Deleting…' : 'Delete'}
+                  </Button>
                 {/if}
-                <Button class="btn-danger is-quiet btn-sm" type="button" disabled={deletingId === keyMemory.id} onclick={() => (deleteCandidate = keyMemory)}>
-                  {deletingId === keyMemory.id ? 'Deleting…' : 'Delete'}
-                </Button>
               </div>
 
               {#if editingId === keyMemory.id}
-                <div class="form-grid two-up">
+                <div class="form-grid two-up keymem-editor">
                   <TextareaField label="Value" bind:value={draftValue} rows={4} fieldClass="field-span-2" />
                   <TextInputField label="Category" bind:value={draftCategory} />
                   <SelectField label="Review status" items={reviewStatusItems} bind:value={draftReviewStatus} />
                 </div>
-              {:else}
-                <CollapsibleSection title="Record details">
-                  <JsonView value={keyMemory} />
-                </CollapsibleSection>
               {/if}
             </article>
           {/each}
@@ -495,26 +486,36 @@
 
   .keymem-card {
     display: grid;
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 10px 20px;
   }
+
+  .keymem-main { display: grid; gap: 6px; min-width: 0; }
 
   .keymem-head {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
+    align-items: baseline;
+    gap: 6px 12px;
     flex-wrap: wrap;
+    min-width: 0;
   }
 
-  .keymem-head-main {
-    display: grid;
-    gap: 2px;
-  }
+  .keymem-key { color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+  .keymem-key:hover { color: var(--brand); text-decoration: underline; text-underline-offset: 3px; }
 
   .keymem-actions {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: 6px;
     flex-wrap: wrap;
+  }
+
+  .keymem-editor { grid-column: 1 / -1; }
+
+  @media (max-width: 640px) {
+    .keymem-card { grid-template-columns: 1fr; }
+    .keymem-actions { justify-content: flex-start; }
   }
 </style>

@@ -95,7 +95,7 @@
       ]
     },
     {
-      label: 'Test',
+      label: 'Playground',
       items: [
         { href: '/playground/chat', label: 'Chat', icon: Sparkles },
         { href: '/playground/memory', label: 'Recall', icon: Search },
@@ -114,7 +114,7 @@
       ]
     },
     {
-      label: 'Settings',
+      label: 'Configuration',
       items: [
         { href: '/settings/system', label: 'System', icon: Settings },
         { href: '/settings/models', label: 'Models', icon: Boxes },
@@ -134,8 +134,8 @@
     users: 'Users',
     agents: 'Agents',
     workspaces: 'Workspaces',
-    statistics: 'Statistics',
-    tokens: 'Tokens',
+    statistics: 'Operations',
+    tokens: 'Usage',
     settings: 'Settings',
     system: 'System',
     models: 'Models',
@@ -149,7 +149,8 @@
     summaries: 'Summaries',
     impressions: 'Impressions',
     facts: 'Facts',
-    keys: 'Key Memories',
+    keys: 'Key memories',
+    items: 'Agent memory',
     login: 'Connect'
   };
 
@@ -272,11 +273,11 @@
     return segments.map((segment, index) => {
       accumulated += `/${segment}`;
       const isLast = index === segments.length - 1;
-      const label = routeLabels[segment] ?? decodeSegment(segment);
+      const label = segments[0] === 'playground' && segment === 'memory' ? 'Recall' : routeLabels[segment] ?? decodeSegment(segment);
       const sectionDestinations: Record<string, string> = {
         '/operations': '/operations/health',
         '/settings': '/settings/system',
-        '/statistics': '/statistics/tokens',
+        '/statistics': '/operations/health',
         '/playground': '/playground/chat'
       };
       const href = segments[0] === 'operations' && segments[1] === 'tasks' && index === 2
@@ -440,6 +441,11 @@
         {/each}
       </nav>
 
+      <div class="sidebar-footer">
+        <strong title={$selectedTarget?.baseUrl}>{$selectedTarget?.label ?? 'No service selected'}</strong>
+        {#if $selectedTarget && targetVersions[$selectedTarget.id]?.trim()}<span class="sidebar-footer-version">{formatTargetVersion(targetVersions[$selectedTarget.id])}</span>{/if}
+        <span class="sidebar-footer-status" class:is-error={Boolean($targetState.session.error)}>{sessionStatusLabel()}</span>
+      </div>
 {/snippet}
 
 {#if !$targetState.loaded}
@@ -458,6 +464,7 @@
     {/if}
 
     <main class="app-main">
+      <div class="app-topbar-band">
       <header class="app-topbar">
         <div class="mobile-topbar-brand">
           <Dialog.Trigger bind:ref={mobileNavTrigger} class="btn-ghost btn-icon mobile-nav-trigger" aria-label="Open navigation">
@@ -488,14 +495,16 @@
             <SelectField label="Switch target" hideLabel value={$targetState.selectedId} items={targetItems}
               onValueChange={(value) => void switchTarget(value)} title={sessionStatusLabel()}
               triggerClass="target-selector-trigger" contentClass="target-selector-content" itemClass="target-selector-item" align="end">
-              {#snippet selection(item)}<span class="target-selector-label">{item?.endpoint ?? 'Select target'}</span>{/snippet}
+              {#snippet selection(item)}<span class="target-selector-label">{#if item}<span class="target-selector-name">{item.label}</span><span class="target-selector-host">{item.endpoint}</span>{:else}Select target{/if}</span>{/snippet}
               {#snippet option(item)}
+                <span class="target-item-name">{item.label}</span>
                 <span class="target-item-endpoint">{item.endpoint}</span>
                 <span class="target-item-version" class:is-muted={!item.hasServerVersion}>{item.serverVersion}</span>
               {/snippet}
             </SelectField>
           </div>
 
+          <div class="topbar-divider topbar-refresh" aria-hidden="true"></div>
           <Button
             class="btn-ghost btn-icon topbar-refresh"
             type="button"
@@ -528,11 +537,12 @@
           </Button>
         </div>
       </header>
+      </div>
       {#if $targetState.session.checking || $targetState.session.error || !$targetState.session.authenticated}
         <p class="connection-notice" class:is-error={Boolean($targetState.session.error)} role="status">
           {sessionStatusLabel()}
           {#if !$targetState.session.checking && !$targetState.session.authenticated}
-            <Button class="btn-ghost btn-sm" type="button" onclick={() => (targetDialogOpen = true)}>Reconnect</Button>
+            <Button class="btn-secondary btn-sm" type="button" onclick={() => (targetDialogOpen = true)}>Reconnect</Button>
           {/if}
         </p>
       {/if}

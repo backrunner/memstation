@@ -711,7 +711,7 @@
             <div>
               <h2 class="section-title">Recent sessions</h2>
             </div>
-            <a class="btn-ghost" href={workspaceLink($selectedTarget?.id, 'memory', {owner:detail.user.id})}>Open memory workspace</a>
+            <a class="btn-secondary btn-sm" href={workspaceLink($selectedTarget?.id, 'memory', {owner:detail.user.id})}>Open memory workspace</a>
           </div>
           {#if detail.conversations.length === 0}
             <div class="empty-state">No recent sessions are available for this user yet.</div>
@@ -739,7 +739,7 @@
             <div>
               <h2 class="section-title">Key memories</h2>
             </div>
-            <a class="btn-ghost" href={workspaceLink($selectedTarget?.id, 'keys', {owner:detail.user.id})}>Manage key memories</a>
+            <a class="btn-secondary btn-sm" href={workspaceLink($selectedTarget?.id, 'keys', {owner:detail.user.id})}>Manage key memories</a>
           </div>
           {#if detail.key_memories.length === 0}
             <div class="empty-state">This user does not have any key memories yet.</div>
@@ -809,7 +809,18 @@
 />
 
 <style>
-  .user-detail-columns .card { display: grid; align-content: start; gap: 18px; }
+  .user-detail-columns .card { display: grid; align-content: start; gap: 16px; }
+
+  /* Records inside a panel are divider rows, not nested cards. */
+  .user-detail-columns :global(.debug-block) {
+    padding: 14px 0 0;
+    border: 0;
+    border-top: 1px solid var(--border-subtle);
+    border-radius: 0;
+    background: transparent;
+  }
+  .user-detail-columns .toolbar { gap: 14px; }
+  .user-detail-columns :global(.debug-block[style]) { margin-top: 0 !important; }
   .profile-strip > div { min-width: 0; overflow-wrap: anywhere; }
 
   .user-detail-columns {
@@ -823,22 +834,17 @@
   .profile-strip {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
-    padding: 14px 16px;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    background: var(--bg-panel-muted);
+    gap: 12px 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-subtle);
   }
 
   .key-memory-stack {
     gap: 14px;
   }
 
-  .generation-list,
-  .session-list {
-    display: grid;
-    gap: 12px;
-  }
+  .generation-list { display: grid; gap: 14px; }
+  .session-list { display: grid; margin-inline: calc(-1 * var(--panel-padding)); border-top: 1px solid var(--border-subtle); }
 
   .generation-card {
     background: var(--surface);
@@ -849,15 +855,14 @@
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    padding: 14px 16px;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    background: var(--surface);
-    transition: 120ms ease;
+    padding: 12px var(--panel-padding);
+    border-bottom: 1px solid var(--border-subtle);
+    transition: background-color 120ms ease;
   }
 
+  .session-row:last-child { border-bottom: 0; margin-bottom: calc(-1 * var(--panel-padding) + 4px); }
+
   .session-row:hover {
-    border-color: var(--border-strong);
     background: var(--surface-hover);
   }
 
@@ -887,10 +892,6 @@
   }
 
   .key-memory-value {
-    padding: 14px 16px;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    background: var(--bg-panel-muted);
     color: var(--text);
   }
 

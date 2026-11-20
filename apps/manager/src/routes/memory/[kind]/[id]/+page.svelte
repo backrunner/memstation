@@ -426,17 +426,17 @@
       <div class="notice-card">{success}</div>
     {/if}
 
-    <div class="inline-group" style="justify-content: space-between; flex-wrap: wrap;">
-      <div class="inline-group" style="flex-wrap: wrap;">
-        <a class="btn-ghost" href={currentCollectionHref}>Back to collection</a>
-        <a class="btn-ghost" href={workspaceLink($selectedTarget?.id, 'memory', {owner:documentItem?.user_id ?? keyMemoryItem?.user_id})}>Memory workspace</a>
+    <div class="detail-toolbar">
+      <nav class="detail-links" aria-label="Related pages">
+        <a class="detail-link" href={currentCollectionHref}>Back to collection</a>
+        <a class="detail-link" href={workspaceLink($selectedTarget?.id, 'memory', {owner:documentItem?.user_id ?? keyMemoryItem?.user_id})}>Memory workspace</a>
         {#if documentItem?.conversation_id}
-          <a class="btn-ghost" href={workspaceLink($selectedTarget?.id, 'conversations', {owner:documentItem.user_id, record:documentItem.conversation_id})}>Open source conversation</a>
+          <a class="detail-link" href={workspaceLink($selectedTarget?.id, 'conversations', {owner:documentItem.user_id, record:documentItem.conversation_id})}>Open source conversation</a>
         {/if}
         {#if documentItem || keyMemoryItem}
-          <a class="btn-ghost" href={`/users/${encodeURIComponent((documentItem?.user_id ?? keyMemoryItem?.user_id) ?? 'admin')}`}>Open user</a>
+          <a class="detail-link" href={`/users/${encodeURIComponent((documentItem?.user_id ?? keyMemoryItem?.user_id) ?? 'admin')}`}>Open user</a>
         {/if}
-      </div>
+      </nav>
       <div class="inline-group" style="flex-wrap: wrap;">
         {#if routeKind === 'keys'}
           <Button class="btn-danger is-quiet" type="button" disabled={deleting} onclick={() => (deleteConfirmOpen = true)}>{deleting ? 'Deleting...' : 'Delete key memory'}</Button>
@@ -469,7 +469,7 @@
         {#if documentItem}
           {#if documentItem.type === 'entity' && $selectedTarget}<EntityAliasPanel target={$selectedTarget} document={documentItem} />{/if}
           <div class="toolbar">
-            <TextareaField label="Content" bind:value={draftContent} rows={10} />
+            <TextareaField label="Content" bind:value={draftContent} rows={Math.min(14, Math.max(4, Math.ceil(draftContent.length / 90) + draftContent.split('\n').length))} />
           {#if documentItem.type === 'episode'}<SemanticEpisodeDetails metadata={documentItem.metadata} />{/if}
             <CollapsibleSection title="Record details">
               <div class="detail-metadata">
@@ -773,6 +773,11 @@
 />
 
 <style>
+  .detail-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; padding-bottom: 4px; }
+  .detail-links { display: flex; align-items: center; gap: 4px 20px; flex-wrap: wrap; min-width: 0; }
+  .detail-link { display: inline-flex; align-items: center; min-height: 32px; color: var(--brand); font-size: var(--font-size-sm); font-weight: 500; }
+  .detail-link:hover { color: var(--brand-strong); text-decoration: underline; text-underline-offset: 3px; }
+  @media (max-width: 1024px), (pointer: coarse) { .detail-link { min-height: 44px; } }
   .detail-context > .toolbar { gap: 0; }
   .detail-context > .toolbar > .debug-block,
   .detail-context > .debug-block { padding: 16px 0; border: 0; border-bottom: 1px solid var(--border-subtle); border-radius: 0; background: transparent; }
