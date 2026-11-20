@@ -75,7 +75,7 @@ func normalizePipelineProtocol(o *LOCOMOPipelineOptions) error {
 	if o.ReaderPolicy == "" {
 		o.ReaderPolicy = "baseline"
 	}
-	if o.ReaderPolicy != "baseline" && o.ReaderPolicy != "coverage" && o.ReaderPolicy != "coverage_inference" && o.ReaderPolicy != "interpretation" && o.ReaderPolicy != "reasoning" && o.ReaderPolicy != "inference_reasoning" && o.ReaderPolicy != "direct" {
+	if o.ReaderPolicy != "baseline" && o.ReaderPolicy != "coverage" && o.ReaderPolicy != "coverage_inference" && o.ReaderPolicy != "interpretation" && o.ReaderPolicy != "reasoning" && o.ReaderPolicy != "inference_reasoning" && o.ReaderPolicy != "inclusive_reasoning" && o.ReaderPolicy != "direct" {
 		return fmt.Errorf("invalid reader policy")
 	}
 
@@ -299,6 +299,9 @@ func refreshPipelineSummaries(report *LOCOMOPipelineReport) {
 	for key, answers := range categories {
 		report.ByCategory[key] = summarizePipelineAnswers(answers)
 	}
+	report.ByLanguage = summarizePipelineLabels(report.Answers, func(a PipelineAnswer) []string { return nonEmpty(a.Language) })
+	report.ByAxis = summarizePipelineLabels(report.Answers, func(a PipelineAnswer) []string { return nonEmpty(a.Axis) })
+	report.BySkill = summarizePipelineLabels(report.Answers, func(a PipelineAnswer) []string { return a.Skills })
 	report.OracleComparisons = map[string]PipelineOracleComparison{}
 	for _, row := range indexed {
 		for _, referenceMode := range []string{"full_history", "gold_evidence"} {
@@ -333,4 +336,30 @@ func refreshPipelineSummaries(report *LOCOMOPipelineReport) {
 		}
 		report.OracleComparisons[key] = v
 	}
+}
+
+// summarizePipelineLabels groups answers by optional dataset labels; a
+// multi-label answer counts once in each of its groups. Empty means no labels.
+func summarizePipelineLabels(answers []PipelineAnswer, labels func(PipelineAnswer) []string) map[string]map[string]PipelineModeSummary {
+	groups := map[string][]PipelineAnswer{}
+	for _, a := range answers {
+		for _, label := range labels(a) {
+			groups[label] = append(groups[label], a)
+		}
+	}
+	if len(groups) == 0 {
+		return nil
+	}
+	out := make(map[string]map[string]PipelineModeSummary, len(groups))
+	for label, group := range groups {
+		out[label] = summarizePipelineAnswers(group)
+	}
+	return out
+}
+
+func nonEmpty(value string) []string {
+	if value == "" {
+		return nil
+	}
+	return []string{value}
 }

@@ -37,6 +37,28 @@ type packetReplayPlan struct {
 	// CandidateOnly reuses the frozen baseline row as the control instead of paying
 	// for a fresh baseline call on every case.
 	CandidateOnly bool `json:"candidate_only,omitempty"`
+	// CandidateReaderModel swaps only the candidate reader's configured model on
+	// identical evidence and prompt; the judge keeps its frozen settings.
+	CandidateReaderModel string `json:"candidate_reader_model,omitempty"`
+	// SameSettingsRepeat declares a repeat with identical prompt, effort and model,
+	// used only to measure run-to-run noise. It cannot carry any candidate change.
+	SameSettingsRepeat bool `json:"same_settings_repeat,omitempty"`
+}
+
+// packetReplayCandidateChange reports whether the plan declares exactly one kind of
+// candidate difference besides the instruction, or a pure repeat.
+func packetReplayCandidateChange(plan packetReplayPlan) (declared bool, err error) {
+	changes := 0
+	if plan.CandidateReasoningEffort != "" {
+		changes++
+	}
+	if plan.CandidateReaderModel != "" {
+		changes++
+	}
+	if plan.SameSettingsRepeat && changes > 0 {
+		return false, fmt.Errorf("a same-settings repeat cannot change effort or model")
+	}
+	return changes > 0 || plan.SameSettingsRepeat, nil
 }
 
 type preparedPacketReplay struct {
@@ -65,7 +87,12 @@ func packetReplayInstructions(plan packetReplayPlan, prepared preparedPacketRepl
 		return prompts, nil
 	}
 	r := prepared.ReaderComparison
-	if r == nil || strings.TrimSpace(r.BaselineInstruction) == "" || r.BaselineSHA256 != pipelineHash(r.BaselineInstruction) || r.CandidateSHA256 != pipelineHash(r.CandidateInstruction) || r.CandidateInstruction != current || (r.BaselineInstruction == r.CandidateInstruction && plan.CandidateReasoningEffort == "") || len(prepared.Packets) != len(plan.Cases) {
+	declared, err := packetReplayCandidateChange(plan)
+	if err != nil {
+		return nil, err
+	}
+	samePrompt := r != nil && r.BaselineInstruction == r.CandidateInstruction
+	if r == nil || strings.TrimSpace(r.BaselineInstruction) == "" || r.BaselineSHA256 != pipelineHash(r.BaselineInstruction) || r.CandidateSHA256 != pipelineHash(r.CandidateInstruction) || r.CandidateInstruction != current || (samePrompt && !declared) || (plan.SameSettingsRepeat && !samePrompt) || len(prepared.Packets) != len(plan.Cases) {
 		return nil, fmt.Errorf("invalid frozen reader instructions")
 	}
 	for i, packet := range prepared.Packets {
@@ -108,7 +135,7 @@ func loadPacketReplayPlan(t *testing.T) (packetReplayPlan, string, string) {
 }
 
 func validatePacketReplayPlan(plan packetReplayPlan) error {
-	if len(plan.Cases) == 0 || len(plan.Cases) > 64 || (plan.ReaderPolicy != "interpretation" && plan.ReaderPolicy != "reasoning" && plan.ReaderPolicy != "inference_reasoning" && plan.ReaderPolicy != "direct") || plan.ContextBytes < 1 || plan.ContextBytes > 32000 || plan.ReaderOutputTokens < 1 || plan.JudgeOutputTokens != 4096 || plan.MaxGenerationCalls != len(plan.Cases)*4 || plan.TokenStopLimit < 1 {
+	if len(plan.Cases) == 0 || len(plan.Cases) > 64 || (plan.ReaderPolicy != "interpretation" && plan.ReaderPolicy != "reasoning" && plan.ReaderPolicy != "inference_reasoning" && plan.ReaderPolicy != "inclusive_reasoning" && plan.ReaderPolicy != "direct") || plan.ContextBytes < 1 || plan.ContextBytes > 32000 || plan.ReaderOutputTokens < 1 || plan.JudgeOutputTokens != 4096 || plan.MaxGenerationCalls != len(plan.Cases)*4 || plan.TokenStopLimit < 1 {
 		return fmt.Errorf("invalid packet replay budgets")
 	}
 	seen := map[string]bool{}
@@ -343,6 +370,14 @@ func runLiveLOCOMOPacketReplay(t *testing.T, empty bool) {
 	manifest["empty_memory"] = empty
 	manifest["candidate_reasoning_effort"] = plan.CandidateReasoningEffort
 	manifest["candidate_only"] = plan.CandidateOnly
+	manifest["candidate_reader_model"] = plan.CandidateReaderModel
+	manifest["same_settings_repeat"] = plan.SameSettingsRepeat
+	if plan.CandidateReaderModel != "" {
+		candidateReader := reader
+		candidateReader.Model = plan.CandidateReaderModel
+		manifest["candidate_reader"] = candidateReader.runInfo()
+	}
+	manifest["format_retry"] = pipelineFormatRetryPolicy
 	if prepared.ReaderComparison != nil {
 		manifest["scope"] = "reader-only development diagnostic; identical frozen evidence; no retrieval improvement or replacement eligibility"
 	}
@@ -381,10 +416,25 @@ func runLiveLOCOMOPacketReplay(t *testing.T, empty bool) {
 		if results[i].Arm == "candidate" && plan.CandidateReasoningEffort != "" {
 			armReader.ReasoningEffort = plan.CandidateReasoningEffort
 		}
-		a.RawAnswer, a.AnswerUsage, a.AnswerModel, err = pipelineReadObserved(ctx, armReader, prompt, payload, plan.ReaderOutputTokens)
-		a.Answer = a.RawAnswer
-		if err == nil && results[i].Arm == "candidate" {
-			a.Answer, err = pipelineFinalAnswer(plan.ReaderPolicy, a.RawAnswer)
+		if results[i].Arm == "candidate" && plan.CandidateReaderModel != "" {
+			armReader.Model = plan.CandidateReaderModel
+		}
+		// Only the candidate arm extracts a final line; the frozen baseline arm is graded
+		// as replied, so only the candidate can need the format retry.
+		armPolicy := "baseline"
+		if results[i].Arm == "candidate" {
+			armPolicy = plan.ReaderPolicy
+		}
+		allowRetry := func() bool {
+			if !reserve(prompt, payload, plan.ReaderOutputTokens) {
+				return false
+			}
+			calls++
+			return true
+		}
+		a.RawAnswer, a.Answer, a.AnswerUsage, a.AnswerModel, a.AnswerAttempts, err = pipelineReadFinal(ctx, armReader, armPolicy, prompt, payload, plan.ReaderOutputTokens, allowRetry)
+		if armPolicy == "baseline" {
+			a.Answer = a.RawAnswer
 		}
 		a.AnswerMillis = float64(time.Since(start).Microseconds()) / 1000
 		tokens += a.AnswerUsage.TotalTokens
@@ -415,8 +465,15 @@ func runLiveLOCOMOPacketReplay(t *testing.T, empty bool) {
 		calls++
 		save()
 		start = time.Now()
-		raw, usage, model, gradeErr := pipelineCompleteObservedBudget(ctx, judge, pipelineJudgeInstruction, gradePayload, plan.JudgeOutputTokens)
-		a.RawJudgment, a.JudgeUsage, a.JudgeModel = string(raw), usage, model
+		allowJudgeRetry := func() bool {
+			if !reserve(pipelineJudgeInstruction, gradePayload, plan.JudgeOutputTokens) {
+				return false
+			}
+			calls++
+			return true
+		}
+		raw, usage, model, judgeAttempts, correct, reason, gradeErr := pipelineJudgeFinal(ctx, judge, pipelineJudgeInstruction, gradePayload, plan.JudgeOutputTokens, allowJudgeRetry)
+		a.RawJudgment, a.JudgeUsage, a.JudgeModel, a.JudgeAttempts = string(raw), usage, model, judgeAttempts
 		a.JudgeMillis = float64(time.Since(start).Microseconds()) / 1000
 		tokens += usage.TotalTokens
 		if usage.TotalTokens <= 0 || usage.TotalTokens != usage.InputTokens+usage.OutputTokens || tokens > plan.TokenStopLimit {
@@ -426,8 +483,6 @@ func runLiveLOCOMOPacketReplay(t *testing.T, empty bool) {
 		}
 		if gradeErr != nil {
 			a.Error = gradeErr.Error()
-		} else if correct, reason, decodeErr := decodePipelineJudgment(raw); decodeErr != nil {
-			a.Error = decodeErr.Error()
 		} else {
 			a.Correct, a.Judged, a.JudgeReason, a.Error = correct, true, reason, ""
 		}

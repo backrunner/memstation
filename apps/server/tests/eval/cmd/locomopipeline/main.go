@@ -18,7 +18,8 @@ import (
 func main() {
 	judgePolicy := flag.String("rescore-judge-policy", "reference_v2", "Rescore only: reference_v2 or alternatives_v3; never changes generated answers")
 	rescore := flag.String("rescore-report", "", "Rejudge a complete private pipeline report without ingestion or new answers; -out is a new report file")
-	dataset := flag.String("dataset", "", "External LOCOMO dataset")
+	dataset := flag.String("dataset", "", "External LOCOMO dataset or repo-native daily-chat dataset")
+	datasetFormat := flag.String("dataset-format", eval.PipelineDatasetLOCOMO, "Dataset schema: locomo or daily_chat")
 	out := flag.String("out", "", "Private checkpoint/report directory")
 	prefix := flag.String("prefix", "", "Unique eval- run prefix; reuse only to resume identical configuration")
 	sample := flag.String("sample-id", "", "Optional development sample; empty runs all")
@@ -98,7 +99,7 @@ func main() {
 			break
 		}
 	}
-	_, err := eval.RunLOCOMOPipeline(ctx, eval.LOCOMOPipelineOptions{AnswerOutputTokens: *answerTokens, Processing: processor, SemanticEpisodes: *episodes, ImageCaptions: *captions, ReaderPolicy: *readerPolicy, RefineEvidence: *refine, Planner: cfg("PLANNER"), ContextFormat: *contextFormat, SourceNeighborTurns: *sourceNeighbors, Modes: strings.Split(*modes, ","), OracleContextBytes: *oracleBudget, OracleNeighborTurns: *neighbors, Rerank: eval.PipelineRerankOptions{Model: *rerankModel, CandidateSelection: *rerankSelection, ModelRevision: *rerankRevision, BaseURL: os.Getenv("RERANK_BASE_URL"), APIKey: os.Getenv("RERANK_API_KEY"), Timeout: *rerankTimeout, CandidateMultiplier: *rerankMultiplier, MinCandidates: *rerankMin, MaxCandidates: *rerankMax}, DatasetPath: *dataset, OutputDir: *out, Prefix: *prefix, SampleID: *sample, QuestionsPerCategory: *count, TopN: *top, ContextBytes: *budget, CodeRevision: *revision, EmbeddingRevision: *embeddingRevision, DatabaseURL: os.Getenv("MEMSTATION_EVAL_DATABASE_URL"), Embedding: eval.EmbeddingOptions{Mode: eval.EmbeddingModeProvider, Model: os.Getenv("EMBEDDING_MODEL"), BaseURL: os.Getenv("EMBEDDING_BASE_URL"), APIKey: os.Getenv("EMBEDDING_API_KEY")}, Extraction: cfg("EXTRACTION"), Answerer: cfg("ANSWERER"), Judge: cfg("JUDGE")})
+	_, err := eval.RunLOCOMOPipeline(ctx, eval.LOCOMOPipelineOptions{AnswerOutputTokens: *answerTokens, Processing: processor, SemanticEpisodes: *episodes, ImageCaptions: *captions, ReaderPolicy: *readerPolicy, RefineEvidence: *refine, Planner: cfg("PLANNER"), ContextFormat: *contextFormat, SourceNeighborTurns: *sourceNeighbors, Modes: strings.Split(*modes, ","), OracleContextBytes: *oracleBudget, OracleNeighborTurns: *neighbors, Rerank: eval.PipelineRerankOptions{Model: *rerankModel, CandidateSelection: *rerankSelection, ModelRevision: *rerankRevision, BaseURL: os.Getenv("RERANK_BASE_URL"), APIKey: os.Getenv("RERANK_API_KEY"), Timeout: *rerankTimeout, CandidateMultiplier: *rerankMultiplier, MinCandidates: *rerankMin, MaxCandidates: *rerankMax}, DatasetPath: *dataset, DatasetFormat: *datasetFormat, OutputDir: *out, Prefix: *prefix, SampleID: *sample, QuestionsPerCategory: *count, TopN: *top, ContextBytes: *budget, CodeRevision: *revision, EmbeddingRevision: *embeddingRevision, DatabaseURL: os.Getenv("MEMSTATION_EVAL_DATABASE_URL"), Embedding: eval.EmbeddingOptions{Mode: eval.EmbeddingModeProvider, Model: os.Getenv("EMBEDDING_MODEL"), BaseURL: os.Getenv("EMBEDDING_BASE_URL"), APIKey: os.Getenv("EMBEDDING_API_KEY")}, Extraction: cfg("EXTRACTION"), Answerer: cfg("ANSWERER"), Judge: cfg("JUDGE")})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

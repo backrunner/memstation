@@ -8,6 +8,7 @@ Datasets
   It also includes generic agent-memory retrieval cases for `event`, `task`, `procedure`, `artifact`, `entity`, and `agent_action`.
 - `testdata/locomo_fixture.json`: tiny LOCOMO-shaped adapter fixture used only for parser smoke.
 - `testdata/longmemeval_fixture.json`: tiny LongMemEval-shaped adapter fixture used only for parser smoke.
+- `testdata/daily_chat/daily_chat_dev_v1.json`: repo-native multilingual daily-chat suite (development split). See [Daily-chat multilingual suite](#daily-chat-multilingual-suite).
 - Raw LOCOMO data is not committed to this repository.
 - Raw LongMemEval data is not committed to this repository.
 - Raw MemoryArena data is not committed to this repository. The [external memory guide](EXTERNAL-MEMORY.md) describes paired LongMemEval-S and sequential MemoryArena math/physics evaluations, fixed input selection, model budgets, error denominators and protocol limits.
@@ -63,6 +64,18 @@ temporary client keys on completion, and write private reports under `.artifacts
 They do not reset databases or Redis. Keep credentials in environment variables and
 keep external benchmark data and raw reports outside Git. Relative output paths are
 resolved from `apps/server`; prefer an absolute output directory.
+
+Daily-chat multilingual suite
+- Target scene: ordinary personal chat with the assistant and multi-person group chat, where memory must answer by time, person, event and fact. All people and events are fictional and the data is distributable with the repository.
+- Schema `memstation-daily-chat-v1`. Each sample has a language (`zh`, `en`, `ja`, `ko` or `mixed` with explicit `source_languages`), a scene (`assistant_1on1` or `group_chat`), chronological RFC3339 sessions and turns with `user`/`assistant` roles. Each question records `asked_at`, `asked_by` (the owner in 1:1 chats), its own language, one primary axis (`time`, `person`, `event`, `fact`, `abstention`), one or more skills, a reference answer and evidence turn IDs.
+- Skills cover absolute/relative dates, ordering and intervals; attribution, relationships and aliases (including two people sharing a name); participants, locations, outcomes, plan versus completion and cancellations; updates, negation, counts and aggregation; assistant suggestions that the user rejected; cross-lingual questions and code-switching; unanswerable and near-miss questions.
+- The loader rejects the whole file when any item is malformed: questions asked before the final session, evidence citing assistant turns, answerable questions without evidence or abstentions with evidence, a `cross_lingual` label that disagrees with the languages, unknown axes or skills, out-of-order sessions, or a non-owner speaking as the user in a 1:1 chat.
+- Run it through the production pipeline with `MEMSTATION_EVAL_DATASET_FORMAT=daily_chat LOCOMO_DATASET_PATH=$PWD/apps/server/tests/eval/testdata/daily_chat/daily_chat_dev_v1.json bash scripts/eval/run-locomo-pipeline.sh /absolute/fresh/output` plus the usual model, embedding and database settings. Ingestion, retrieval arms, judging, checkpoints and controls are unchanged. Assistant turns are ingested as assistant messages.
+- The reader additionally receives `question_time` (rendered like source dates, with weekday and UTC offset) and `asker`. Language, axis, skill, evidence and reference answers never reach a model. Search still receives only the question text: no question-time anchor is passed to retrieval, so relative-time questions depend on the reader. Reports add `by_language`, `by_axis` and `by_skill`; a multi-label answer counts once in each skill group. Axes map to report categories 1–5 in the order above and per-category sampling stratifies by axis.
+- The development split has 8 samples (zh, en, ja and ko 1:1 chats; a zh family group, an en house-share group crossing the BST/GMT change, and zh/en and ja/en friend groups) and 218 questions: by question language zh 78, en 74, ja 38, ko 28; by axis time 49, person 48, event 48, fact 48, abstention 25. It is visible to developers and is a tuning/diagnostic set. It must not be reported as held-out. Replacement decisions for this scene use a separate sealed held-out split with the same schema in a private ignored directory (at least 200 questions stratified by axis and language), frozen before any results and never inspected while tuning. `MEMSTATION_EVAL_DAILY_CHAT_VALIDATE=/abs/path go test ./tests/eval/ -run ^TestDailyChatValidateSealed$ -v` validates such a file and prints only its hash and label counts.
+- `testdata/daily_chat/daily_chat_dev_v2.json` lengthens every history to 42–44 sessions (29–44KB) with model-written distractor sessions produced and audited by `scripts/eval/extend-daily-chat.py`; it keeps the v1 questions except six recorded reference revisions. Even so, distractors avoid question topics, so the current framework stays near ceiling on it (about 96–99% in 2026-11 runs); it cannot distinguish candidates under the paired significance gate. A harder version needs dense same-topic events, repeated updates and counts generated from a ground-truth event log.
+- v1 limitation: each sample history is only about 3.5–5.4KB, smaller than the packed retrieval context, so every retrieval arm sees nearly the whole history. Version 1 checks ingestion, provenance, dates, question time and reading, but it cannot discriminate retrieval or ranking candidates. Histories must be extended well beyond the context budget, with distractor events about the same people, places and dates, before using this scene for recall comparisons.
+- Judge prompt and reader policies are shared with LOCOMO. Abstention references state what is unrecorded, and near-miss references also name the real fact, so a correct refusal or correction matches.
 
 Embedding modes
 - `deterministic`: local deterministic vectors, only for smoke/regression and offline manual runs. This is not a real embedding-quality benchmark.
@@ -417,6 +430,25 @@ byte-based input allowance against the remaining token budget. Missing or
 inconsistent usage stops the run; all unexecuted rows remain in the denominator.
 This is a paired diagnostic on selected development cases, not a production
 promotion gate or a replacement for later bounded end-to-end validation.
+
+Reader policies with a final answer line (`reasoning`, `inference_reasoning`,
+`inclusive_reasoning`) are graded only on the text after the last
+`FINAL ANSWER:`. `inclusive_reasoning` keeps the inference policy and adds two
+rules: when several recorded events, items or dates could each be what the
+question means and the question does not settle which, the final answer keeps
+each of them briefly; before counting, mentions of the same plan, event or
+object on different dates are merged. It is a reader change on identical
+evidence and is never reported as a recall gain.
+
+All pipeline, evidence-replay and packet-replay runs record `format_retry` in
+their manifest. Under `format_retry_v1`, a reader reply without a usable final
+line or a judge reply without a valid verdict gets exactly one identical-input
+retry, decided from the reply alone before any grade exists; a valid reply or a
+transport error is never retried, both attempts' usage is counted, and a second
+unusable reply stays a failure in the denominator. Rows record
+`answer_attempts` and `judge_attempts`. Reports from before the policy read as
+`format_retry: none`, so the candidate gate treats the change as a protocol
+difference rather than comparing such runs as equals.
 
 For recall-stage diagnosis, `TestLiveLOCOMORecallSnapshot` records production
 candidate collection and the exact rerank admission without running a reranker,

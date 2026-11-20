@@ -106,7 +106,9 @@ func TestPipelineControlRunFreezesFailuresAndPinsProtocol(t *testing.T) {
 	if err == nil || len(report.Answers) != 6 || report.ExpectedSessions != 0 || report.Modes["gold_evidence"].Expected != 2 || report.Modes["gold_evidence"].Errors != 2 {
 		t.Fatal("bad failure denominator", err, report.Modes)
 	}
-	if calls.Load() != 10 {
+	// Five reader calls and five judged rows; each invalid verdict gets exactly one
+	// format retry (pipelineFormatRetryPolicy), still fails and keeps its slot.
+	if calls.Load() != 15 {
 		t.Fatal("missing-evidence oracle called reader or unexpected calls", calls.Load())
 	}
 	for _, a := range report.Answers {

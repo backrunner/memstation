@@ -30,6 +30,7 @@ OUT_DIR=${1:-"$ROOT_DIR/.artifacts/eval/locomo-pipeline"}
 cd "$ROOT_DIR/apps/server"
 go run ./tests/eval/cmd/locomopipeline \
   -dataset "$LOCOMO_DATASET_PATH" -out "$OUT_DIR" \
+  -dataset-format "${MEMSTATION_EVAL_DATASET_FORMAT:-locomo}" \
   -prefix "$MEMSTATION_EVAL_PREFIX" \
   -sample-id "${MEMSTATION_EVAL_SAMPLE_ID:-}" \
   -questions-per-category "${MEMSTATION_EVAL_QUESTIONS_PER_CATEGORY:-0}" \

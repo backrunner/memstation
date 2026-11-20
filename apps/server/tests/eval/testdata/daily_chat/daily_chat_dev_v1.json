@@ -1,0 +1,4959 @@
+{
+  "schema": "memstation-daily-chat-v1",
+  "name": "daily-chat-multilingual-dev-v1",
+  "split": "development",
+  "description": "Synthetic, fictional daily-chat histories for people, time, event and fact memory. All people, places of residence and events are invented for evaluation. This split is visible to developers and must be treated as a tuning set, never as held-out evidence.",
+  "samples": [
+    {
+      "id": "zh-assistant-01",
+      "language": "zh",
+      "scene": "assistant_1on1",
+      "owner_speaker": "林小满",
+      "sessions": [
+        {
+          "id": "session_1",
+          "at": "2026-03-02T21:10:00+08:00",
+          "turns": [
+            {
+              "id": "D1:1",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "今天终于入职新公司了！在杭州滨江，做产品经理。通勤要四十分钟，有点累。"
+            },
+            {
+              "id": "D1:2",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "恭喜入职！第一天辛苦了，通勤四十分钟可以听听播客放松一下。"
+            },
+            {
+              "id": "D1:3",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "对了，我室友周可（我们都叫她可可）下周要去成都出差，托我帮她喂猫，猫叫年糕。"
+            },
+            {
+              "id": "D1:4",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "好的，年糕这几天就拜托你啦。"
+            },
+            {
+              "id": "D1:5",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "还有，我不吃香菜，你记一下，以后推荐菜谱别带香菜。"
+            },
+            {
+              "id": "D1:6",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "记住了，以后推荐菜谱都不放香菜。"
+            }
+          ]
+        },
+        {
+          "id": "session_2",
+          "at": "2026-03-08T22:30:00+08:00",
+          "turns": [
+            {
+              "id": "D2:1",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "昨天和大学同学陈默去西湖边骑车了，骑了二十多公里，腿现在还酸。"
+            },
+            {
+              "id": "D2:2",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "二十多公里很厉害了，记得拉伸一下。"
+            },
+            {
+              "id": "D2:3",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "陈默说他四月要去日本看樱花，问我要不要一起，我还没决定。"
+            },
+            {
+              "id": "D2:4",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "我建议你请几天年假一起去，樱花季很值得。"
+            },
+            {
+              "id": "D2:5",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "再说吧，刚入职估计请不了假。年糕这几天挺乖的，就是半夜会跑酷。"
+            }
+          ]
+        },
+        {
+          "id": "session_3",
+          "at": "2026-03-19T23:05:00+08:00",
+          "turns": [
+            {
+              "id": "D3:1",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "今天被老板表扬了，我负责的会员积分改版上线了。我老板叫何蔚，人挺好的。"
+            },
+            {
+              "id": "D3:2",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "太棒了，第一个项目就上线，开门红！"
+            },
+            {
+              "id": "D3:3",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "这个周末打算回去看我妈，她住在绍兴。她最近血压有点高，医生让她少吃咸的。"
+            },
+            {
+              "id": "D3:4",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "回去陪陪妈妈挺好的，也可以帮她看看平时的饮食。"
+            }
+          ]
+        },
+        {
+          "id": "session_4",
+          "at": "2026-03-23T20:40:00+08:00",
+          "turns": [
+            {
+              "id": "D4:1",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "周末没去成绍兴，我妈说她和我小姨去宁波玩了，改到下个月再回去。"
+            },
+            {
+              "id": "D4:2",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "所以周六我在家把《三体》第二部看完了。"
+            },
+            {
+              "id": "D4:3",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "宅家看书也不错，第二部的结尾很震撼吧。"
+            },
+            {
+              "id": "D4:4",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "陈默的日本行我最后决定不去了，假期不够。另外可可出差回来了，给我带了兔头，我第一次吃，有点辣但是好吃。"
+            }
+          ]
+        },
+        {
+          "id": "session_5",
+          "at": "2026-04-12T21:00:00+08:00",
+          "turns": [
+            {
+              "id": "D5:1",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "今天回绍兴看我妈了，她血压控制得不错，我放心多了。"
+            },
+            {
+              "id": "D5:2",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "跟你说个事，我准备搬家了，下个月从滨江搬到西湖区文三路附近，离公司远一点，但房租每月便宜八百。"
+            },
+            {
+              "id": "D5:3",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "省下的房租挺可观的。可可会一起搬吗？"
+            },
+            {
+              "id": "D5:4",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "不会，可可要回老家长沙工作了，我们不再合租了。"
+            }
+          ]
+        },
+        {
+          "id": "session_6",
+          "at": "2026-05-03T19:20:00+08:00",
+          "turns": [
+            {
+              "id": "D6:1",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "五一假期第一天，我和何蔚还有组里的小唐一起去爬了北高峰。"
+            },
+            {
+              "id": "D6:2",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "小唐全名唐一舟，刚毕业，特别能说，一路都在讲他的游戏。"
+            },
+            {
+              "id": "D6:3",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "和同事一起爬山挺放松的。"
+            },
+            {
+              "id": "D6:4",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "我还开始学游泳了，每周二和周四晚上去，教练姓吴。"
+            }
+          ]
+        },
+        {
+          "id": "session_7",
+          "at": "2026-05-18T22:10:00+08:00",
+          "turns": [
+            {
+              "id": "D7:1",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "搬完家了，上周六搬的，累瘫了。"
+            },
+            {
+              "id": "D7:2",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "年糕我收养了，可可回长沙之后不方便带它。"
+            },
+            {
+              "id": "D7:3",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "年糕有了新家，挺好的。"
+            },
+            {
+              "id": "D7:4",
+              "role": "user",
+              "speaker": "林小满",
+              "text": "游泳改成只周四去了，周二要加班。还有，陈默从日本回来了，给我带了一盒白色恋人。"
+            }
+          ]
+        }
+      ],
+      "questions": [
+        {
+          "id": "q01",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "time",
+          "skills": [
+            "absolute_date"
+          ],
+          "query": "我是哪天入职新公司的？",
+          "answer": "2026年3月2日",
+          "evidence": [
+            "D1:1"
+          ]
+        },
+        {
+          "id": "q02",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "time",
+          "skills": [
+            "relative_time"
+          ],
+          "query": "我和陈默去西湖边骑车是哪一天？",
+          "answer": "2026年3月7日（周六）",
+          "evidence": [
+            "D2:1"
+          ]
+        },
+        {
+          "id": "q03",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "time",
+          "skills": [
+            "relative_time"
+          ],
+          "query": "我是哪天搬的家？",
+          "answer": "2026年5月16日（周六）",
+          "evidence": [
+            "D7:1"
+          ]
+        },
+        {
+          "id": "q04",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "time",
+          "skills": [
+            "ordering",
+            "relative_time"
+          ],
+          "query": "看完《三体》第二部和爬北高峰，哪件事在前？",
+          "answer": "先看完《三体》第二部（3月21日），爬北高峰在5月1日",
+          "evidence": [
+            "D4:2",
+            "D6:1"
+          ]
+        },
+        {
+          "id": "q05",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "time",
+          "skills": [
+            "interval",
+            "relative_time"
+          ],
+          "query": "从我入职到搬家大概隔了多久？",
+          "answer": "约两个半月（3月2日到5月16日，75天）",
+          "evidence": [
+            "D1:1",
+            "D7:1"
+          ]
+        },
+        {
+          "id": "q06",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "time",
+          "skills": [
+            "plan_vs_done",
+            "cancellation"
+          ],
+          "query": "我最终是哪天回绍兴看我妈的？",
+          "answer": "2026年4月12日（原计划3月21–22日那个周末，没去成）",
+          "evidence": [
+            "D3:3",
+            "D4:1",
+            "D5:1"
+          ]
+        },
+        {
+          "id": "q07",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "person",
+          "skills": [
+            "alias",
+            "relationship"
+          ],
+          "query": "可可是谁？",
+          "answer": "周可，我（林小满）以前的室友",
+          "evidence": [
+            "D1:3"
+          ]
+        },
+        {
+          "id": "q08",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "person",
+          "skills": [
+            "update",
+            "attribution"
+          ],
+          "query": "年糕原本是谁的猫？现在谁在养？",
+          "answer": "原本是可可（周可）的猫，现在由我（林小满）收养",
+          "evidence": [
+            "D1:3",
+            "D7:2"
+          ]
+        },
+        {
+          "id": "q09",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "person",
+          "skills": [
+            "relationship"
+          ],
+          "query": "何蔚和我是什么关系？",
+          "answer": "何蔚是我的老板",
+          "evidence": [
+            "D3:1"
+          ]
+        },
+        {
+          "id": "q10",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "person",
+          "skills": [
+            "alias",
+            "profile"
+          ],
+          "query": "唐一舟是谁？",
+          "answer": "组里的同事小唐，刚毕业",
+          "evidence": [
+            "D6:1",
+            "D6:2"
+          ]
+        },
+        {
+          "id": "q11",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "person",
+          "skills": [
+            "attribution",
+            "plan_vs_done"
+          ],
+          "query": "谁去日本看了樱花？",
+          "answer": "陈默去了日本；我没有去",
+          "evidence": [
+            "D2:3",
+            "D4:4",
+            "D7:4"
+          ]
+        },
+        {
+          "id": "q12",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "person",
+          "skills": [
+            "profile"
+          ],
+          "query": "我妈住在哪里？",
+          "answer": "绍兴",
+          "evidence": [
+            "D3:3"
+          ]
+        },
+        {
+          "id": "q13",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "event",
+          "skills": [
+            "participants",
+            "relative_time"
+          ],
+          "query": "五一第一天我和谁一起去爬了北高峰？",
+          "answer": "何蔚和小唐（唐一舟）",
+          "evidence": [
+            "D6:1"
+          ]
+        },
+        {
+          "id": "q14",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "event",
+          "skills": [
+            "attribution"
+          ],
+          "query": "我第一次吃兔头，是谁带给我的？",
+          "answer": "可可（周可）从成都出差回来带的",
+          "evidence": [
+            "D1:3",
+            "D4:4"
+          ]
+        },
+        {
+          "id": "q15",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "event",
+          "skills": [
+            "cancellation"
+          ],
+          "query": "三月那个周末为什么没回成绍兴？",
+          "answer": "我妈和我小姨去宁波玩了",
+          "evidence": [
+            "D4:1"
+          ]
+        },
+        {
+          "id": "q16",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "event",
+          "skills": [
+            "outcome"
+          ],
+          "query": "我被老板表扬是因为什么项目？",
+          "answer": "我负责的会员积分改版上线了",
+          "evidence": [
+            "D3:1"
+          ]
+        },
+        {
+          "id": "q17",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "event",
+          "skills": [
+            "attribution"
+          ],
+          "query": "陈默从日本给我带了什么？",
+          "answer": "一盒白色恋人",
+          "evidence": [
+            "D7:4"
+          ]
+        },
+        {
+          "id": "q18",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "fact",
+          "skills": [
+            "update"
+          ],
+          "query": "我现在每周几去游泳？",
+          "answer": "只有周四（原来是周二和周四）",
+          "evidence": [
+            "D6:4",
+            "D7:4"
+          ]
+        },
+        {
+          "id": "q19",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "fact",
+          "skills": [
+            "update"
+          ],
+          "query": "我现在住在哪一带？",
+          "answer": "杭州西湖区文三路附近（从滨江搬过去的）",
+          "evidence": [
+            "D5:2",
+            "D7:1"
+          ]
+        },
+        {
+          "id": "q20",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "fact",
+          "skills": [
+            "negation",
+            "profile"
+          ],
+          "query": "我有什么忌口？",
+          "answer": "不吃香菜",
+          "evidence": [
+            "D1:5"
+          ]
+        },
+        {
+          "id": "q21",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "fact",
+          "skills": [
+            "assistant_not_evidence",
+            "plan_vs_done"
+          ],
+          "query": "我有没有请年假和陈默一起去日本？",
+          "answer": "没有，假期不够，最后决定不去",
+          "evidence": [
+            "D2:5",
+            "D4:4"
+          ]
+        },
+        {
+          "id": "q22",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "fact",
+          "skills": [
+            "update",
+            "profile"
+          ],
+          "query": "可可现在在哪里工作？",
+          "answer": "回老家长沙工作了",
+          "evidence": [
+            "D5:4",
+            "D7:2"
+          ]
+        },
+        {
+          "id": "q23",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "fact",
+          "skills": [
+            "profile"
+          ],
+          "query": "搬家后房租每月便宜多少？",
+          "answer": "每月便宜八百元",
+          "evidence": [
+            "D5:2"
+          ]
+        },
+        {
+          "id": "q24",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "fact",
+          "skills": [
+            "profile"
+          ],
+          "query": "我的游泳教练姓什么？",
+          "answer": "姓吴",
+          "evidence": [
+            "D6:4"
+          ]
+        },
+        {
+          "id": "q25",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "fact",
+          "skills": [
+            "update",
+            "aggregation"
+          ],
+          "query": "我妈的身体最近怎么样？",
+          "answer": "三月血压有点高，医生让少吃咸的；四月回去时血压控制得不错",
+          "evidence": [
+            "D3:3",
+            "D5:1"
+          ]
+        },
+        {
+          "id": "q26",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "abstention",
+          "skills": [
+            "unanswerable"
+          ],
+          "query": "我在新公司的工号是多少？",
+          "answer": "对话中没有提到工号",
+          "evidence": []
+        },
+        {
+          "id": "q27",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "abstention",
+          "skills": [
+            "near_miss"
+          ],
+          "query": "小唐最喜欢玩什么游戏？",
+          "answer": "没有记录具体是哪款游戏，只提到他一路在讲他的游戏",
+          "evidence": []
+        },
+        {
+          "id": "q28",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "abstention",
+          "skills": [
+            "near_miss"
+          ],
+          "query": "我和陈默是哪所大学的同学？",
+          "answer": "只提到是大学同学，没有提到学校名称",
+          "evidence": []
+        },
+        {
+          "id": "q29",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "abstention",
+          "skills": [
+            "near_miss",
+            "attribution"
+          ],
+          "query": "我妈养了什么宠物？",
+          "answer": "没有记录我妈养宠物；年糕是可可的猫，后来由我收养",
+          "evidence": []
+        },
+        {
+          "id": "q30",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "en",
+          "axis": "person",
+          "skills": [
+            "cross_lingual",
+            "profile"
+          ],
+          "query": "Which city does my mother live in?",
+          "answer": "Shaoxing",
+          "evidence": [
+            "D3:3"
+          ]
+        },
+        {
+          "id": "q31",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "en",
+          "axis": "time",
+          "skills": [
+            "cross_lingual",
+            "relative_time"
+          ],
+          "query": "On what date did I move house?",
+          "answer": "Saturday, May 16, 2026",
+          "evidence": [
+            "D7:1"
+          ]
+        },
+        {
+          "id": "q32",
+          "asked_at": "2026-05-25T20:00:00+08:00",
+          "asked_by": "林小满",
+          "language": "zh",
+          "axis": "event",
+          "skills": [
+            "count",
+            "cancellation"
+          ],
+          "query": "到目前为止，我实际回绍兴看过我妈几次？",
+          "answer": "1次（4月12日）；3月那次没去成",
+          "evidence": [
+            "D3:3",
+            "D4:1",
+            "D5:1"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "en-assistant-01",
+      "language": "en",
+      "scene": "assistant_1on1",
+      "owner_speaker": "Maya",
+      "sessions": [
+        {
+          "id": "session_1",
+          "at": "2026-04-06T20:15:00-04:00",
+          "turns": [
+            {
+              "id": "D1:1",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "Rough Monday, but good news: my sister Lena called — she's pregnant! Due in October. I'm going to be an aunt."
+            },
+            {
+              "id": "D1:2",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "Congratulations, Aunt Maya! That's wonderful news."
+            },
+            {
+              "id": "D1:3",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "Also my manager Priya approved my transfer to the data team. I start there on May 4."
+            },
+            {
+              "id": "D1:4",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "Oh and for the future: I'm allergic to peanuts, so skip any recipe with them."
+            },
+            {
+              "id": "D1:5",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "Noted — no peanuts in anything I suggest."
+            }
+          ]
+        },
+        {
+          "id": "session_2",
+          "at": "2026-04-12T18:40:00-04:00",
+          "turns": [
+            {
+              "id": "D2:1",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "Yesterday I went to Ben's housewarming in Leslieville. Ben was my roommate back at McGill. I finally met his partner Sam — Sam's a nurse, super funny."
+            },
+            {
+              "id": "D2:2",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "Ben's thinking about adopting a greyhound."
+            },
+            {
+              "id": "D2:3",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "Fun! You could offer to dog-sit for him sometimes."
+            },
+            {
+              "id": "D2:4",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "Ha, no way, my building doesn't allow dogs."
+            }
+          ]
+        },
+        {
+          "id": "session_3",
+          "at": "2026-04-24T22:05:00-04:00",
+          "turns": [
+            {
+              "id": "D3:1",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "I signed up for a Wednesday-evening pottery class with my coworker Dev. First class was this Wednesday."
+            },
+            {
+              "id": "D3:2",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "Dev made a lopsided bowl. Mine collapsed completely, lol."
+            },
+            {
+              "id": "D3:3",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "Everyone's first bowl collapses. It gets better!"
+            },
+            {
+              "id": "D3:4",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "Also planning to drive to Montreal May 23–25 to see Lena."
+            }
+          ]
+        },
+        {
+          "id": "session_4",
+          "at": "2026-05-10T21:30:00-04:00",
+          "turns": [
+            {
+              "id": "D4:1",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "First week on the data team done! My new lead is Marcus."
+            },
+            {
+              "id": "D4:2",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "Forgot to tell you — the Friday before I switched teams, Priya took the whole old team out for ramen as a send-off for me."
+            },
+            {
+              "id": "D4:3",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "That's a lovely goodbye."
+            },
+            {
+              "id": "D4:4",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "I quit pottery after three classes though. Wednesdays clash with the data team's sprint review. Dev is still going."
+            }
+          ]
+        },
+        {
+          "id": "session_5",
+          "at": "2026-05-26T19:50:00-04:00",
+          "turns": [
+            {
+              "id": "D5:1",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "Back from Montreal. Lena's bump is showing now! On Saturday we went to Jean-Talon Market, and on Sunday we had bagels at St-Viateur."
+            },
+            {
+              "id": "D5:2",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "Lena found out it's a girl. They're thinking of naming her Rosa."
+            },
+            {
+              "id": "D5:3",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "My brother-in-law Tom drove us everywhere — he just got a new Subaru."
+            }
+          ]
+        },
+        {
+          "id": "session_6",
+          "at": "2026-06-14T17:00:00-04:00",
+          "turns": [
+            {
+              "id": "D6:1",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "Ben adopted the greyhound! Her name is Pepper. He sent me like 40 photos."
+            },
+            {
+              "id": "D6:2",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "I moved my runs from mornings to evenings since the data team starts at 9:30. Training for a 10K on July 12."
+            },
+            {
+              "id": "D6:3",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "Evening runs can be great for recovery. Good luck with the 10K!"
+            },
+            {
+              "id": "D6:4",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "Correction on the baby name: it's Rosalind now, not Rosa. Lena changed her mind."
+            }
+          ]
+        },
+        {
+          "id": "session_7",
+          "at": "2026-06-28T20:20:00-04:00",
+          "turns": [
+            {
+              "id": "D7:1",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "Had dinner with Dev and Marcus last night at a Korean BBQ place to celebrate our first dashboard launch."
+            },
+            {
+              "id": "D7:2",
+              "role": "user",
+              "speaker": "Maya",
+              "text": "Marcus is vegetarian so he mostly ate the side dishes."
+            },
+            {
+              "id": "D7:3",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "Congrats on the launch!"
+            }
+          ]
+        }
+      ],
+      "questions": [
+        {
+          "id": "q01",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "time",
+          "skills": [
+            "absolute_date"
+          ],
+          "query": "When is Lena's baby due?",
+          "answer": "October 2026",
+          "evidence": [
+            "D1:1"
+          ]
+        },
+        {
+          "id": "q02",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "time",
+          "skills": [
+            "relative_time"
+          ],
+          "query": "On what date did I go to Ben's housewarming?",
+          "answer": "Saturday, April 11, 2026",
+          "evidence": [
+            "D2:1"
+          ]
+        },
+        {
+          "id": "q03",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "time",
+          "skills": [
+            "relative_time"
+          ],
+          "query": "When was my first pottery class?",
+          "answer": "Wednesday, April 22, 2026",
+          "evidence": [
+            "D3:1"
+          ]
+        },
+        {
+          "id": "q04",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "time",
+          "skills": [
+            "relative_time"
+          ],
+          "query": "What date was the ramen send-off Priya organized for me?",
+          "answer": "Friday, May 1, 2026",
+          "evidence": [
+            "D1:3",
+            "D4:2"
+          ]
+        },
+        {
+          "id": "q05",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "time",
+          "skills": [
+            "relative_time"
+          ],
+          "query": "Which day did I have bagels at St-Viateur?",
+          "answer": "Sunday, May 24, 2026",
+          "evidence": [
+            "D3:4",
+            "D5:1"
+          ]
+        },
+        {
+          "id": "q06",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "time",
+          "skills": [
+            "interval",
+            "relative_time"
+          ],
+          "query": "How long before my 10K race was the Korean BBQ dinner?",
+          "answer": "About two weeks (June 27 to July 12, 15 days)",
+          "evidence": [
+            "D6:2",
+            "D7:1"
+          ]
+        },
+        {
+          "id": "q07",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "time",
+          "skills": [
+            "ordering"
+          ],
+          "query": "Which came first: Ben's housewarming or my move to the data team?",
+          "answer": "Ben's housewarming (April 11) came before the data team move (May 4)",
+          "evidence": [
+            "D1:3",
+            "D2:1"
+          ]
+        },
+        {
+          "id": "q08",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "person",
+          "skills": [
+            "relationship",
+            "profile"
+          ],
+          "query": "Who is Sam?",
+          "answer": "Ben's partner, a nurse",
+          "evidence": [
+            "D2:1"
+          ]
+        },
+        {
+          "id": "q09",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "person",
+          "skills": [
+            "relationship"
+          ],
+          "query": "Who is Tom?",
+          "answer": "My brother-in-law, Lena's husband",
+          "evidence": [
+            "D5:3"
+          ]
+        },
+        {
+          "id": "q10",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "person",
+          "skills": [
+            "update",
+            "relationship"
+          ],
+          "query": "Who is my current team lead?",
+          "answer": "Marcus (Priya was my previous manager)",
+          "evidence": [
+            "D1:3",
+            "D4:1"
+          ]
+        },
+        {
+          "id": "q11",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "person",
+          "skills": [
+            "relationship"
+          ],
+          "query": "How do I know Ben?",
+          "answer": "He was my roommate at McGill",
+          "evidence": [
+            "D2:1"
+          ]
+        },
+        {
+          "id": "q12",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "person",
+          "skills": [
+            "attribution",
+            "update"
+          ],
+          "query": "Who is still taking the pottery class?",
+          "answer": "Dev",
+          "evidence": [
+            "D4:4"
+          ]
+        },
+        {
+          "id": "q13",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "person",
+          "skills": [
+            "attribution",
+            "profile"
+          ],
+          "query": "Which of my coworkers is vegetarian?",
+          "answer": "Marcus",
+          "evidence": [
+            "D7:2"
+          ]
+        },
+        {
+          "id": "q14",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "event",
+          "skills": [
+            "participants"
+          ],
+          "query": "Who did I celebrate the first dashboard launch with?",
+          "answer": "Dev and Marcus",
+          "evidence": [
+            "D7:1"
+          ]
+        },
+        {
+          "id": "q15",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "event",
+          "skills": [
+            "aggregation",
+            "location"
+          ],
+          "query": "What did I do on my Montreal trip?",
+          "answer": "Visited Lena; went to Jean-Talon Market on Saturday and had bagels at St-Viateur on Sunday; Tom drove them around",
+          "evidence": [
+            "D5:1",
+            "D5:3"
+          ]
+        },
+        {
+          "id": "q16",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "event",
+          "skills": [
+            "outcome",
+            "attribution"
+          ],
+          "query": "What happened to my bowl in the first pottery class?",
+          "answer": "It collapsed completely",
+          "evidence": [
+            "D3:2"
+          ]
+        },
+        {
+          "id": "q17",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "event",
+          "skills": [
+            "cancellation"
+          ],
+          "query": "Why did I quit pottery?",
+          "answer": "Wednesday classes clashed with the data team's sprint review",
+          "evidence": [
+            "D4:4"
+          ]
+        },
+        {
+          "id": "q18",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "event",
+          "skills": [
+            "plan_vs_done"
+          ],
+          "query": "What is the name of Ben's greyhound?",
+          "answer": "Pepper",
+          "evidence": [
+            "D6:1"
+          ]
+        },
+        {
+          "id": "q19",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "fact",
+          "skills": [
+            "update"
+          ],
+          "query": "What are Lena and Tom planning to name the baby?",
+          "answer": "Rosalind (changed from Rosa)",
+          "evidence": [
+            "D5:2",
+            "D6:4"
+          ]
+        },
+        {
+          "id": "q20",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "fact",
+          "skills": [
+            "profile"
+          ],
+          "query": "What food am I allergic to?",
+          "answer": "Peanuts",
+          "evidence": [
+            "D1:4"
+          ]
+        },
+        {
+          "id": "q21",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "fact",
+          "skills": [
+            "update"
+          ],
+          "query": "Do I run in the mornings or evenings now?",
+          "answer": "Evenings (switched from mornings)",
+          "evidence": [
+            "D6:2"
+          ]
+        },
+        {
+          "id": "q22",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "fact",
+          "skills": [
+            "assistant_not_evidence",
+            "negation"
+          ],
+          "query": "Did I agree to dog-sit for Ben?",
+          "answer": "No; my building doesn't allow dogs",
+          "evidence": [
+            "D2:4"
+          ]
+        },
+        {
+          "id": "q23",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "fact",
+          "skills": [
+            "attribution"
+          ],
+          "query": "What car does Tom drive?",
+          "answer": "A new Subaru",
+          "evidence": [
+            "D5:3"
+          ]
+        },
+        {
+          "id": "q24",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "abstention",
+          "skills": [
+            "unanswerable"
+          ],
+          "query": "What is Sam's last name?",
+          "answer": "Not mentioned in the conversations",
+          "evidence": []
+        },
+        {
+          "id": "q25",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "abstention",
+          "skills": [
+            "near_miss",
+            "attribution"
+          ],
+          "query": "What breed of dog did Lena adopt?",
+          "answer": "Not recorded — Lena did not adopt a dog; Ben adopted a greyhound named Pepper",
+          "evidence": []
+        },
+        {
+          "id": "q26",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "abstention",
+          "skills": [
+            "near_miss"
+          ],
+          "query": "What time does my 10K race start?",
+          "answer": "Not mentioned; only the date (July 12) was given",
+          "evidence": []
+        },
+        {
+          "id": "q27",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "zh",
+          "axis": "time",
+          "skills": [
+            "cross_lingual"
+          ],
+          "query": "我姐姐的预产期是什么时候？",
+          "answer": "2026年10月",
+          "evidence": [
+            "D1:1"
+          ]
+        },
+        {
+          "id": "q28",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "ja",
+          "axis": "event",
+          "skills": [
+            "cross_lingual"
+          ],
+          "query": "ベンが迎えた犬の名前は？",
+          "answer": "ペッパー（Pepper）",
+          "evidence": [
+            "D6:1"
+          ]
+        },
+        {
+          "id": "q29",
+          "asked_at": "2026-07-02T19:00:00-04:00",
+          "asked_by": "Maya",
+          "language": "en",
+          "axis": "event",
+          "skills": [
+            "count"
+          ],
+          "query": "How many pottery classes did I attend?",
+          "answer": "Three",
+          "evidence": [
+            "D4:4"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ja-assistant-01",
+      "language": "ja",
+      "scene": "assistant_1on1",
+      "owner_speaker": "美咲",
+      "sessions": [
+        {
+          "id": "session_1",
+          "at": "2026-01-12T21:00:00+09:00",
+          "turns": [
+            {
+              "id": "D1:1",
+              "role": "user",
+              "speaker": "美咲",
+              "text": "今日は弟の健太の成人式だった！スーツ姿、ちょっと感動した。"
+            },
+            {
+              "id": "D1:2",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "おめでとうございます！素敵な一日でしたね。"
+            },
+            {
+              "id": "D1:3",
+              "role": "user",
+              "speaker": "美咲",
+              "text": "あ、私は猫アレルギーだから、猫カフェとかは勧めないでね。"
+            }
+          ]
+        },
+        {
+          "id": "session_2",
+          "at": "2026-01-25T20:30:00+09:00",
+          "turns": [
+            {
+              "id": "D2:1",
+              "role": "user",
+              "speaker": "美咲",
+              "text": "昨日、高校の友達の由紀と京都で抹茶パフェ食べてきた。伏見稲荷も行ったけど人多すぎた。"
+            },
+            {
+              "id": "D2:2",
+              "role": "user",
+              "speaker": "美咲",
+              "text": "由紀、来月から名古屋に転勤らしい。寂しくなるな。"
+            },
+            {
+              "id": "D2:3",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "送別会を開いてみたらどうですか？"
+            },
+            {
+              "id": "D2:4",
+              "role": "user",
+              "speaker": "美咲",
+              "text": "いいね、考えとく。"
+            }
+          ]
+        },
+        {
+          "id": "session_3",
+          "at": "2026-02-08T19:10:00+09:00",
+          "turns": [
+            {
+              "id": "D3:1",
+              "role": "user",
+              "speaker": "美咲",
+              "text": "おとといの金曜に由紀の送別会やったよ。梅田の焼き鳥屋で、6人集まった。"
+            },
+            {
+              "id": "D3:2",
+              "role": "user",
+              "speaker": "美咲",
+              "text": "職場の先輩の田中さん（下の名前は誠）が来月結婚するんだって。"
+            },
+            {
+              "id": "D3:3",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "おめでたい話が続きますね。"
+            }
+          ]
+        },
+        {
+          "id": "session_4",
+          "at": "2026-02-27T22:40:00+09:00",
+          "turns": [
+            {
+              "id": "D4:1",
+              "role": "user",
+              "speaker": "美咲",
+              "text": "来週の土曜にTOEIC受ける予定。目標は800点。"
+            },
+            {
+              "id": "D4:2",
+              "role": "user",
+              "speaker": "美咲",
+              "text": "最近ジム始めた。毎週月曜と水曜の朝に行ってる。"
+            },
+            {
+              "id": "D4:3",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "頑張ってください！"
+            }
+          ]
+        },
+        {
+          "id": "session_5",
+          "at": "2026-03-15T18:00:00+09:00",
+          "turns": [
+            {
+              "id": "D5:1",
+              "role": "user",
+              "speaker": "美咲",
+              "text": "TOEIC、結局インフルエンザで受けられなかった…次は5月。"
+            },
+            {
+              "id": "D5:2",
+              "role": "user",
+              "speaker": "美咲",
+              "text": "田中さんの結婚式、昨日だった。奥さんは看護師のあやさん。"
+            },
+            {
+              "id": "D5:3",
+              "role": "user",
+              "speaker": "美咲",
+              "text": "健太は大学のサークルでバンドを組んだらしい。ドラム担当だって。"
+            }
+          ]
+        },
+        {
+          "id": "session_6",
+          "at": "2026-04-05T21:15:00+09:00",
+          "turns": [
+            {
+              "id": "D6:1",
+              "role": "user",
+              "speaker": "美咲",
+              "text": "引っ越ししました！梅田から堺へ。職場までは電車で30分。"
+            },
+            {
+              "id": "D6:2",
+              "role": "user",
+              "speaker": "美咲",
+              "text": "昨日の夜、由紀が名古屋から遊びに来て新居に泊まってった。"
+            },
+            {
+              "id": "D6:3",
+              "role": "user",
+              "speaker": "美咲",
+              "text": "ジムは月曜だけにした。水曜は残業が多いから。"
+            },
+            {
+              "id": "D6:4",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "新生活のスタートですね。"
+            }
+          ]
+        },
+        {
+          "id": "session_7",
+          "at": "2026-05-24T20:00:00+09:00",
+          "turns": [
+            {
+              "id": "D7:1",
+              "role": "user",
+              "speaker": "美咲",
+              "text": "今日TOEIC受けてきた！手応えはまあまあかな。"
+            },
+            {
+              "id": "D7:2",
+              "role": "user",
+              "speaker": "美咲",
+              "text": "健太は夏休みにバンドで東京のライブハウスに出るんだって。"
+            },
+            {
+              "id": "D7:3",
+              "role": "user",
+              "speaker": "美咲",
+              "text": "田中さん夫婦から新婚旅行のお土産で、ハワイのマカダミアナッツもらった。"
+            }
+          ]
+        }
+      ],
+      "questions": [
+        {
+          "id": "q01",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "time",
+          "skills": [
+            "absolute_date"
+          ],
+          "query": "健太の成人式はいつだった？",
+          "answer": "2026年1月12日",
+          "evidence": [
+            "D1:1"
+          ]
+        },
+        {
+          "id": "q02",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "time",
+          "skills": [
+            "relative_time"
+          ],
+          "query": "由紀と京都に行ったのはいつ？",
+          "answer": "2026年1月24日（土）",
+          "evidence": [
+            "D2:1"
+          ]
+        },
+        {
+          "id": "q03",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "time",
+          "skills": [
+            "relative_time"
+          ],
+          "query": "由紀の送別会は何日にやった？",
+          "answer": "2026年2月6日（金）",
+          "evidence": [
+            "D3:1"
+          ]
+        },
+        {
+          "id": "q04",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "time",
+          "skills": [
+            "plan_vs_done",
+            "cancellation"
+          ],
+          "query": "結局TOEICを受けたのはいつ？",
+          "answer": "2026年5月24日（3月7日の予定はインフルエンザで受けられなかった）",
+          "evidence": [
+            "D4:1",
+            "D5:1",
+            "D7:1"
+          ]
+        },
+        {
+          "id": "q05",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "time",
+          "skills": [
+            "ordering",
+            "relative_time"
+          ],
+          "query": "田中さんの結婚式と私の引っ越し、どっちが先？",
+          "answer": "田中さんの結婚式（3月14日）が先で、引っ越しは4月初め（4月5日までに）",
+          "evidence": [
+            "D5:2",
+            "D6:1"
+          ]
+        },
+        {
+          "id": "q06",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "person",
+          "skills": [
+            "relationship"
+          ],
+          "query": "健太は私とどういう関係？",
+          "answer": "弟",
+          "evidence": [
+            "D1:1"
+          ]
+        },
+        {
+          "id": "q07",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "person",
+          "skills": [
+            "update",
+            "profile"
+          ],
+          "query": "由紀は今どこに住んでいる？",
+          "answer": "名古屋（転勤した）",
+          "evidence": [
+            "D2:2",
+            "D6:2"
+          ]
+        },
+        {
+          "id": "q08",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "person",
+          "skills": [
+            "relationship",
+            "profile"
+          ],
+          "query": "田中さんの奥さんはどんな人？",
+          "answer": "あやさんという看護師",
+          "evidence": [
+            "D5:2"
+          ]
+        },
+        {
+          "id": "q09",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "person",
+          "skills": [
+            "alias"
+          ],
+          "query": "田中さんの下の名前は？",
+          "answer": "誠",
+          "evidence": [
+            "D3:2"
+          ]
+        },
+        {
+          "id": "q10",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "person",
+          "skills": [
+            "attribution"
+          ],
+          "query": "バンドでドラムを担当しているのは誰？",
+          "answer": "弟の健太",
+          "evidence": [
+            "D5:3"
+          ]
+        },
+        {
+          "id": "q11",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "event",
+          "skills": [
+            "location",
+            "participants"
+          ],
+          "query": "由紀の送別会はどこで、何人集まった？",
+          "answer": "梅田の焼き鳥屋で、6人",
+          "evidence": [
+            "D3:1"
+          ]
+        },
+        {
+          "id": "q12",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "event",
+          "skills": [
+            "aggregation"
+          ],
+          "query": "京都では何をした？",
+          "answer": "由紀と抹茶パフェを食べて、伏見稲荷に行った（人が多すぎた）",
+          "evidence": [
+            "D2:1"
+          ]
+        },
+        {
+          "id": "q13",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "event",
+          "skills": [
+            "attribution"
+          ],
+          "query": "ハワイのお土産は誰から何をもらった？",
+          "answer": "田中さん夫婦から、マカダミアナッツ",
+          "evidence": [
+            "D7:3"
+          ]
+        },
+        {
+          "id": "q14",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "event",
+          "skills": [
+            "relative_time"
+          ],
+          "query": "由紀が新居に泊まったのはいつ？",
+          "answer": "2026年4月4日の夜",
+          "evidence": [
+            "D6:2"
+          ]
+        },
+        {
+          "id": "q15",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "fact",
+          "skills": [
+            "update"
+          ],
+          "query": "私は今どこに住んでる？",
+          "answer": "堺（梅田から引っ越した）",
+          "evidence": [
+            "D6:1"
+          ]
+        },
+        {
+          "id": "q16",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "fact",
+          "skills": [
+            "update"
+          ],
+          "query": "今は何曜日にジムに行ってる？",
+          "answer": "月曜だけ（以前は月曜と水曜）",
+          "evidence": [
+            "D4:2",
+            "D6:3"
+          ]
+        },
+        {
+          "id": "q17",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "fact",
+          "skills": [
+            "profile"
+          ],
+          "query": "私には何のアレルギーがある？",
+          "answer": "猫アレルギー",
+          "evidence": [
+            "D1:3"
+          ]
+        },
+        {
+          "id": "q18",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "fact",
+          "skills": [
+            "profile"
+          ],
+          "query": "TOEICの目標点数は？",
+          "answer": "800点",
+          "evidence": [
+            "D4:1"
+          ]
+        },
+        {
+          "id": "q19",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "fact",
+          "skills": [
+            "update",
+            "profile"
+          ],
+          "query": "今の家から職場まではどのくらいかかる？",
+          "answer": "電車で30分",
+          "evidence": [
+            "D6:1"
+          ]
+        },
+        {
+          "id": "q20",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "abstention",
+          "skills": [
+            "near_miss"
+          ],
+          "query": "TOEICの結果は何点だった？",
+          "answer": "結果はまだ記録されていない（手応えはまあまあと言っていた）",
+          "evidence": []
+        },
+        {
+          "id": "q21",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "abstention",
+          "skills": [
+            "unanswerable"
+          ],
+          "query": "由紀の名古屋の勤務先はどこ？",
+          "answer": "記録されていない",
+          "evidence": []
+        },
+        {
+          "id": "q22",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "abstention",
+          "skills": [
+            "near_miss"
+          ],
+          "query": "健太のバンドの名前は？",
+          "answer": "記録されていない",
+          "evidence": []
+        },
+        {
+          "id": "q23",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "en",
+          "axis": "fact",
+          "skills": [
+            "cross_lingual",
+            "update"
+          ],
+          "query": "Where did I move to in April?",
+          "answer": "Sakai (from Umeda)",
+          "evidence": [
+            "D6:1"
+          ]
+        },
+        {
+          "id": "q24",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "zh",
+          "axis": "person",
+          "skills": [
+            "cross_lingual",
+            "profile"
+          ],
+          "query": "田中先生的妻子是做什么工作的？",
+          "answer": "护士",
+          "evidence": [
+            "D5:2"
+          ]
+        },
+        {
+          "id": "q25",
+          "asked_at": "2026-06-10T20:00:00+09:00",
+          "asked_by": "美咲",
+          "language": "ja",
+          "axis": "event",
+          "skills": [
+            "count",
+            "aggregation"
+          ],
+          "query": "記録の中で、由紀とは何回会った？",
+          "answer": "3回（1月24日の京都、2月6日の送別会、4月4日の新居での宿泊）",
+          "evidence": [
+            "D2:1",
+            "D3:1",
+            "D6:2"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mixed-group-01",
+      "language": "mixed",
+      "scene": "group_chat",
+      "owner_speaker": "",
+      "source_languages": [
+        "zh",
+        "en"
+      ],
+      "sessions": [
+        {
+          "id": "session_1",
+          "at": "2026-06-06T10:05:00+08:00",
+          "turns": [
+            {
+              "id": "D1:1",
+              "role": "user",
+              "speaker": "Kevin",
+              "text": "明早9点杨浦体育馆 court 3，我已经 book 了，AA 每人 40。"
+            },
+            {
+              "id": "D1:2",
+              "role": "user",
+              "speaker": "Jojo",
+              "text": "OK 我来！btw 我膝盖上周扭了，只能打半场。"
+            },
+            {
+              "id": "D1:3",
+              "role": "user",
+              "speaker": "阿哲",
+              "text": "我明早有事，pass。"
+            },
+            {
+              "id": "D1:4",
+              "role": "user",
+              "speaker": "Mia",
+              "text": "Count me in，我带新球。"
+            }
+          ]
+        },
+        {
+          "id": "session_2",
+          "at": "2026-06-07T13:20:00+08:00",
+          "turns": [
+            {
+              "id": "D2:1",
+              "role": "user",
+              "speaker": "Mia",
+              "text": "今天打得好爽，Kevin 那个杀球 insane。"
+            },
+            {
+              "id": "D2:2",
+              "role": "user",
+              "speaker": "Kevin",
+              "text": "下周我 out，要去深圳出差，6/8 到 6/12。"
+            },
+            {
+              "id": "D2:3",
+              "role": "user",
+              "speaker": "Jojo",
+              "text": "我膝盖还行，下次应该可以打全场了。"
+            },
+            {
+              "id": "D2:4",
+              "role": "user",
+              "speaker": "Mia",
+              "text": "对了，我下个月要搬去新加坡了，公司 transfer，7月20号走。"
+            }
+          ]
+        },
+        {
+          "id": "session_3",
+          "at": "2026-06-14T20:40:00+08:00",
+          "turns": [
+            {
+              "id": "D3:1",
+              "role": "user",
+              "speaker": "Jojo",
+              "text": "今天 Kevin 不在，我们三个打的，阿哲也来了。"
+            },
+            {
+              "id": "D3:2",
+              "role": "user",
+              "speaker": "阿哲",
+              "text": "我买了新拍子 Yonex Astrox 88D，手感一般。"
+            },
+            {
+              "id": "D3:3",
+              "role": "user",
+              "speaker": "Jojo",
+              "text": "我们组的 Kevin Liu 也想来打，可以拉他进群吗？"
+            },
+            {
+              "id": "D3:4",
+              "role": "user",
+              "speaker": "Mia",
+              "text": "Sure!"
+            }
+          ]
+        },
+        {
+          "id": "session_4",
+          "at": "2026-06-21T21:00:00+08:00",
+          "turns": [
+            {
+              "id": "D4:1",
+              "role": "user",
+              "speaker": "Kevin Liu",
+              "text": "Hi all，我是 Jojo 的同事 Kevin Liu，大家叫我 KL 就好。"
+            },
+            {
+              "id": "D4:2",
+              "role": "user",
+              "speaker": "Kevin",
+              "text": "哈哈，终于有两个 Kevin 了。我从深圳回来了。"
+            },
+            {
+              "id": "D4:3",
+              "role": "user",
+              "speaker": "阿哲",
+              "text": "下周六的场地我来订，换到徐汇那家，人少。"
+            }
+          ]
+        },
+        {
+          "id": "session_5",
+          "at": "2026-06-28T18:30:00+08:00",
+          "turns": [
+            {
+              "id": "D5:1",
+              "role": "user",
+              "speaker": "阿哲",
+              "text": "抱歉，昨天徐汇那家临时维修，场地取消了，钱已经退回来了。"
+            },
+            {
+              "id": "D5:2",
+              "role": "user",
+              "speaker": "Mia",
+              "text": "那我走之前得再打一次啊，7/11 周六？"
+            },
+            {
+              "id": "D5:3",
+              "role": "user",
+              "speaker": "Kevin",
+              "text": "7/11 OK，我订杨浦。"
+            }
+          ]
+        },
+        {
+          "id": "session_6",
+          "at": "2026-07-12T22:10:00+08:00",
+          "turns": [
+            {
+              "id": "D6:1",
+              "role": "user",
+              "speaker": "Kevin",
+              "text": "昨天给 Mia 的送行局，打完去吃了云南菜，Mia 请客。"
+            },
+            {
+              "id": "D6:2",
+              "role": "user",
+              "speaker": "Kevin Liu",
+              "text": "第一次来就被 Kevin 打爆了 lol"
+            },
+            {
+              "id": "D6:3",
+              "role": "user",
+              "speaker": "Jojo",
+              "text": "以后群费我来管吧。场地涨价了，每次 AA 改成每人 45。"
+            },
+            {
+              "id": "D6:4",
+              "role": "user",
+              "speaker": "Mia",
+              "text": "Thanks all！到新加坡给你们寄 kaya 酱。"
+            }
+          ]
+        },
+        {
+          "id": "session_7",
+          "at": "2026-07-26T20:00:00+08:00",
+          "turns": [
+            {
+              "id": "D7:1",
+              "role": "user",
+              "speaker": "Mia",
+              "text": "已到新加坡，一切都好，住在 Tiong Bahru。"
+            },
+            {
+              "id": "D7:2",
+              "role": "user",
+              "speaker": "阿哲",
+              "text": "我下个月开始改成周六下午打，早上要陪娃上课。"
+            }
+          ]
+        }
+      ],
+      "questions": [
+        {
+          "id": "q01",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "zh",
+          "axis": "time",
+          "skills": [
+            "absolute_date"
+          ],
+          "query": "Kevin 去深圳出差是哪几天？",
+          "answer": "6月8日到6月12日",
+          "evidence": [
+            "D2:2"
+          ]
+        },
+        {
+          "id": "q02",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "zh",
+          "axis": "time",
+          "skills": [
+            "absolute_date"
+          ],
+          "query": "Mia 原定哪天出发去新加坡？",
+          "answer": "7月20日",
+          "evidence": [
+            "D2:4"
+          ]
+        },
+        {
+          "id": "q03",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "zh",
+          "axis": "time",
+          "skills": [
+            "relative_time",
+            "cancellation"
+          ],
+          "query": "徐汇那家场地取消是哪一天？",
+          "answer": "2026年6月27日（周六）",
+          "evidence": [
+            "D4:3",
+            "D5:1"
+          ]
+        },
+        {
+          "id": "q04",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "en",
+          "axis": "time",
+          "skills": [
+            "relative_time",
+            "code_switch"
+          ],
+          "query": "When was Mia's farewell badminton game?",
+          "answer": "Saturday, July 11, 2026",
+          "evidence": [
+            "D5:2",
+            "D6:1"
+          ]
+        },
+        {
+          "id": "q05",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "zh",
+          "axis": "time",
+          "skills": [
+            "relative_time"
+          ],
+          "query": "Jojo 膝盖扭伤后只打半场的那次是哪天几点？在哪里？",
+          "answer": "2026年6月7日（周日）上午9点，杨浦体育馆 court 3",
+          "evidence": [
+            "D1:1",
+            "D1:2"
+          ]
+        },
+        {
+          "id": "q06",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "zh",
+          "axis": "person",
+          "skills": [
+            "alias",
+            "relationship"
+          ],
+          "query": "KL 是谁？",
+          "answer": "Kevin Liu，Jojo 的同事",
+          "evidence": [
+            "D3:3",
+            "D4:1"
+          ]
+        },
+        {
+          "id": "q07",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "zh",
+          "axis": "person",
+          "skills": [
+            "attribution",
+            "alias"
+          ],
+          "query": "被 Mia 夸杀球 insane 的是哪个 Kevin？",
+          "answer": "群里原来的 Kevin，不是 Kevin Liu（KL）",
+          "evidence": [
+            "D2:1"
+          ]
+        },
+        {
+          "id": "q08",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "zh",
+          "axis": "person",
+          "skills": [
+            "attribution"
+          ],
+          "query": "送行局之后谁请的客？",
+          "answer": "Mia",
+          "evidence": [
+            "D6:1"
+          ]
+        },
+        {
+          "id": "q09",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "en",
+          "axis": "person",
+          "skills": [
+            "attribution",
+            "update",
+            "code_switch"
+          ],
+          "query": "Who manages the group fund now?",
+          "answer": "Jojo",
+          "evidence": [
+            "D6:3"
+          ]
+        },
+        {
+          "id": "q10",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "zh",
+          "axis": "person",
+          "skills": [
+            "attribution"
+          ],
+          "query": "谁的膝盖受过伤？",
+          "answer": "Jojo",
+          "evidence": [
+            "D1:2"
+          ]
+        },
+        {
+          "id": "q11",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "en",
+          "axis": "person",
+          "skills": [
+            "attribution",
+            "code_switch"
+          ],
+          "query": "Who moved to Singapore, and why?",
+          "answer": "Mia, because of a company transfer",
+          "evidence": [
+            "D2:4",
+            "D7:1"
+          ]
+        },
+        {
+          "id": "q12",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "zh",
+          "axis": "event",
+          "skills": [
+            "participants",
+            "relative_time"
+          ],
+          "query": "6月14日那次打球有谁？",
+          "answer": "Jojo、Mia 和阿哲（Kevin 不在）",
+          "evidence": [
+            "D3:1"
+          ]
+        },
+        {
+          "id": "q13",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "en",
+          "axis": "event",
+          "skills": [
+            "attribution",
+            "code_switch"
+          ],
+          "query": "What racket did 阿哲 buy, and what did he think of it?",
+          "answer": "A Yonex Astrox 88D; he found the feel only so-so",
+          "evidence": [
+            "D3:2"
+          ]
+        },
+        {
+          "id": "q14",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "zh",
+          "axis": "event",
+          "skills": [
+            "outcome"
+          ],
+          "query": "送行局打完球之后去吃了什么？",
+          "answer": "云南菜",
+          "evidence": [
+            "D6:1"
+          ]
+        },
+        {
+          "id": "q15",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "zh",
+          "axis": "event",
+          "skills": [
+            "location",
+            "attribution"
+          ],
+          "query": "7月11日的场地在哪里？谁订的？",
+          "answer": "杨浦，Kevin 订的",
+          "evidence": [
+            "D5:3"
+          ]
+        },
+        {
+          "id": "q16",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "zh",
+          "axis": "fact",
+          "skills": [
+            "update"
+          ],
+          "query": "现在打一次球每人 AA 多少钱？",
+          "answer": "每人45（以前是40）",
+          "evidence": [
+            "D1:1",
+            "D6:3"
+          ]
+        },
+        {
+          "id": "q17",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "en",
+          "axis": "fact",
+          "skills": [
+            "update",
+            "location"
+          ],
+          "query": "Where in Singapore does Mia live?",
+          "answer": "Tiong Bahru",
+          "evidence": [
+            "D7:1"
+          ]
+        },
+        {
+          "id": "q18",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "zh",
+          "axis": "fact",
+          "skills": [
+            "update"
+          ],
+          "query": "阿哲下个月开始改成什么时间打球？为什么？",
+          "answer": "周六下午；因为早上要陪孩子上课",
+          "evidence": [
+            "D7:2"
+          ]
+        },
+        {
+          "id": "q19",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "zh",
+          "axis": "fact",
+          "skills": [
+            "profile"
+          ],
+          "query": "第一次在杨浦订的是几号场？",
+          "answer": "court 3（3号场）",
+          "evidence": [
+            "D1:1"
+          ]
+        },
+        {
+          "id": "q20",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "zh",
+          "axis": "abstention",
+          "skills": [
+            "near_miss"
+          ],
+          "query": "KL 用的是什么球拍？",
+          "answer": "没有提到；买 Yonex Astrox 88D 的是阿哲",
+          "evidence": []
+        },
+        {
+          "id": "q21",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "zh",
+          "axis": "abstention",
+          "skills": [
+            "unanswerable"
+          ],
+          "query": "Mia 在新加坡的公司叫什么？",
+          "answer": "没有提到",
+          "evidence": []
+        },
+        {
+          "id": "q22",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "en",
+          "axis": "abstention",
+          "skills": [
+            "near_miss",
+            "attribution"
+          ],
+          "query": "When did Kevin go to Singapore?",
+          "answer": "Not recorded — Kevin went to Shenzhen on a business trip; it was Mia who moved to Singapore",
+          "evidence": []
+        },
+        {
+          "id": "q23",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "ja",
+          "axis": "event",
+          "skills": [
+            "cross_lingual"
+          ],
+          "query": "ミアはシンガポールからみんなに何を送ると言った？",
+          "answer": "カヤジャム（kaya 酱）",
+          "evidence": [
+            "D6:4"
+          ]
+        },
+        {
+          "id": "q24",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "zh",
+          "axis": "event",
+          "skills": [
+            "count",
+            "cancellation"
+          ],
+          "query": "记录里这个群实际打了几次球？",
+          "answer": "3次（6月7日、6月14日、7月11日）；6月27日那次因场地维修取消",
+          "evidence": [
+            "D1:1",
+            "D2:1",
+            "D3:1",
+            "D5:1",
+            "D6:1"
+          ]
+        },
+        {
+          "id": "q25",
+          "asked_at": "2026-07-30T21:00:00+08:00",
+          "language": "zh",
+          "axis": "event",
+          "skills": [
+            "attribution",
+            "relative_time"
+          ],
+          "query": "Kevin 缺席的是哪一次打球？",
+          "answer": "6月14日那次",
+          "evidence": [
+            "D2:2",
+            "D3:1"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ko-assistant-01",
+      "language": "ko",
+      "scene": "assistant_1on1",
+      "owner_speaker": "서연",
+      "sessions": [
+        {
+          "id": "session_1",
+          "at": "2026-02-02T21:30:00+09:00",
+          "turns": [
+            {
+              "id": "D1:1",
+              "role": "user",
+              "speaker": "서연",
+              "text": "오늘부터 새 회사 출근했어! 판교에 있는 게임 회사고 UX 디자이너로 들어갔어."
+            },
+            {
+              "id": "D1:2",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "축하해요! 첫날은 어땠어요?"
+            },
+            {
+              "id": "D1:3",
+              "role": "user",
+              "speaker": "서연",
+              "text": "팀장님 이름은 박준호인데 엄청 친절하셨어. 아 그리고 나 우유 못 마셔, 유당불내증 있어. 레시피 추천할 때 참고해 줘."
+            },
+            {
+              "id": "D1:4",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "알겠어요, 앞으로 유제품 없는 레시피로 추천할게요."
+            }
+          ]
+        },
+        {
+          "id": "session_2",
+          "at": "2026-02-15T20:00:00+09:00",
+          "turns": [
+            {
+              "id": "D2:1",
+              "role": "user",
+              "speaker": "서연",
+              "text": "어제 동생 서준이랑 망원동에서 떡볶이 먹었어. 서준이 다음 달에 군대 간대."
+            },
+            {
+              "id": "D2:2",
+              "role": "user",
+              "speaker": "서연",
+              "text": "입대일은 3월 9일이래."
+            },
+            {
+              "id": "D2:3",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "입대 전에 가족끼리 여행 다녀오는 건 어때요?"
+            },
+            {
+              "id": "D2:4",
+              "role": "user",
+              "speaker": "서연",
+              "text": "다들 바빠서 그건 어려울 것 같아."
+            }
+          ]
+        },
+        {
+          "id": "session_3",
+          "at": "2026-03-01T22:10:00+09:00",
+          "turns": [
+            {
+              "id": "D3:1",
+              "role": "user",
+              "speaker": "서연",
+              "text": "오늘 대학 친구 하은이 결혼식 다녀왔어. 신랑은 하은이 회사 동료래."
+            },
+            {
+              "id": "D3:2",
+              "role": "user",
+              "speaker": "서연",
+              "text": "나 요즘 필라테스 시작했어. 화요일이랑 목요일 저녁 8시에 가."
+            },
+            {
+              "id": "D3:3",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "결혼식도 다녀오고 운동도 시작하고, 바쁜 한 주였네요."
+            }
+          ]
+        },
+        {
+          "id": "session_4",
+          "at": "2026-03-10T23:00:00+09:00",
+          "turns": [
+            {
+              "id": "D4:1",
+              "role": "user",
+              "speaker": "서연",
+              "text": "어제 서준이 입대했어. 엄마가 엄청 우셨어."
+            },
+            {
+              "id": "D4:2",
+              "role": "user",
+              "speaker": "서연",
+              "text": "그리고 회사에서 다음 달에 부산 출장 가게 됐어. 4월 16일부터 17일까지."
+            }
+          ]
+        },
+        {
+          "id": "session_5",
+          "at": "2026-04-19T19:40:00+09:00",
+          "turns": [
+            {
+              "id": "D5:1",
+              "role": "user",
+              "speaker": "서연",
+              "text": "부산 출장이 결국 하루 늦춰져서 17일부터 18일까지 다녀왔어. 해운대에서 돼지국밥 먹었어."
+            },
+            {
+              "id": "D5:2",
+              "role": "user",
+              "speaker": "서연",
+              "text": "출장은 팀장님이랑 같은 팀 민지랑 셋이 갔어."
+            },
+            {
+              "id": "D5:3",
+              "role": "user",
+              "speaker": "서연",
+              "text": "참고로 그 민지는 이민지야. 회사에 민지가 두 명이거든. 김민지는 QA 팀이야."
+            },
+            {
+              "id": "D5:4",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "헷갈리지 않게 기억해 둘게요."
+            }
+          ]
+        },
+        {
+          "id": "session_6",
+          "at": "2026-05-10T21:00:00+09:00",
+          "turns": [
+            {
+              "id": "D6:1",
+              "role": "user",
+              "speaker": "서연",
+              "text": "필라테스는 목요일만 가기로 했어. 화요일엔 야근이 많아서."
+            },
+            {
+              "id": "D6:2",
+              "role": "user",
+              "speaker": "서연",
+              "text": "그리고 고양이 입양했어! 이름은 호두. 3개월 된 치즈냥이야."
+            },
+            {
+              "id": "D6:3",
+              "role": "assistant",
+              "speaker": "Assistant",
+              "text": "호두 너무 귀엽겠어요!"
+            },
+            {
+              "id": "D6:4",
+              "role": "user",
+              "speaker": "서연",
+              "text": "서준이 첫 휴가 나와서 그저께 호두 보러 왔었어."
+            }
+          ]
+        },
+        {
+          "id": "session_7",
+          "at": "2026-05-30T18:20:00+09:00",
+          "turns": [
+            {
+              "id": "D7:1",
+              "role": "user",
+              "speaker": "서연",
+              "text": "이사 결정했어. 다음 달에 회사 근처 판교로 이사 가. 지금 사는 망원동은 출퇴근이 너무 멀어."
+            },
+            {
+              "id": "D7:2",
+              "role": "user",
+              "speaker": "서연",
+              "text": "이민지가 이사할 때 도와주겠대."
+            },
+            {
+              "id": "D7:3",
+              "role": "user",
+              "speaker": "서연",
+              "text": "박준호 팀장님은 다음 달에 다른 팀으로 옮기신대. 새 팀장은 아직 몰라."
+            }
+          ]
+        }
+      ],
+      "questions": [
+        {
+          "id": "q01",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "time",
+          "skills": [
+            "absolute_date"
+          ],
+          "query": "내가 새 회사에 처음 출근한 날은 언제야?",
+          "answer": "2026년 2월 2일",
+          "evidence": [
+            "D1:1"
+          ]
+        },
+        {
+          "id": "q02",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "time",
+          "skills": [
+            "relative_time"
+          ],
+          "query": "서준이랑 망원동에서 떡볶이 먹은 날은 언제야?",
+          "answer": "2026년 2월 14일(토)",
+          "evidence": [
+            "D2:1"
+          ]
+        },
+        {
+          "id": "q03",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "time",
+          "skills": [
+            "plan_vs_done",
+            "update"
+          ],
+          "query": "부산 출장은 실제로 언제 다녀왔어?",
+          "answer": "4월 17일부터 18일까지 (원래 16~17일 예정이었는데 하루 늦춰짐)",
+          "evidence": [
+            "D4:2",
+            "D5:1"
+          ]
+        },
+        {
+          "id": "q04",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "time",
+          "skills": [
+            "relative_time"
+          ],
+          "query": "서준이가 호두 보러 온 날은 언제야?",
+          "answer": "2026년 5월 8일(금)",
+          "evidence": [
+            "D6:4"
+          ]
+        },
+        {
+          "id": "q05",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "time",
+          "skills": [
+            "ordering"
+          ],
+          "query": "하은이 결혼식이랑 서준이 입대 중에 뭐가 먼저였어?",
+          "answer": "하은이 결혼식(3월 1일)이 먼저고, 서준이 입대는 3월 9일",
+          "evidence": [
+            "D3:1",
+            "D4:1"
+          ]
+        },
+        {
+          "id": "q06",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "person",
+          "skills": [
+            "relationship"
+          ],
+          "query": "서준이는 나랑 어떤 관계야?",
+          "answer": "동생",
+          "evidence": [
+            "D2:1"
+          ]
+        },
+        {
+          "id": "q07",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "person",
+          "skills": [
+            "alias",
+            "attribution"
+          ],
+          "query": "부산 출장에 같이 간 민지는 누구야?",
+          "answer": "같은 팀 이민지 (QA 팀 김민지가 아님)",
+          "evidence": [
+            "D5:2",
+            "D5:3"
+          ]
+        },
+        {
+          "id": "q08",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "person",
+          "skills": [
+            "relationship",
+            "update"
+          ],
+          "query": "박준호는 누구야?",
+          "answer": "내 팀장님 (다음 달 다른 팀으로 옮길 예정)",
+          "evidence": [
+            "D1:3",
+            "D7:3"
+          ]
+        },
+        {
+          "id": "q09",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "person",
+          "skills": [
+            "relationship"
+          ],
+          "query": "하은이 남편은 어떤 사람이야?",
+          "answer": "하은이 회사 동료",
+          "evidence": [
+            "D3:1"
+          ]
+        },
+        {
+          "id": "q10",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "person",
+          "skills": [
+            "attribution"
+          ],
+          "query": "이사할 때 도와주겠다고 한 사람은 누구야?",
+          "answer": "이민지",
+          "evidence": [
+            "D7:2"
+          ]
+        },
+        {
+          "id": "q11",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "event",
+          "skills": [
+            "participants",
+            "alias"
+          ],
+          "query": "부산 출장은 누구랑 같이 갔어?",
+          "answer": "박준호 팀장님과 이민지",
+          "evidence": [
+            "D1:3",
+            "D5:2",
+            "D5:3"
+          ]
+        },
+        {
+          "id": "q12",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "event",
+          "skills": [
+            "location"
+          ],
+          "query": "부산 출장 때 뭐 먹었어?",
+          "answer": "해운대에서 돼지국밥",
+          "evidence": [
+            "D5:1"
+          ]
+        },
+        {
+          "id": "q13",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "event",
+          "skills": [
+            "outcome"
+          ],
+          "query": "서준이 입대하던 날 엄마는 어떠셨어?",
+          "answer": "엄청 우셨어",
+          "evidence": [
+            "D4:1"
+          ]
+        },
+        {
+          "id": "q14",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "fact",
+          "skills": [
+            "assistant_not_evidence",
+            "plan_vs_done"
+          ],
+          "query": "서준이 입대 전에 가족 여행 갔어?",
+          "answer": "아니, 기록상 가지 않았어. 어시스턴트가 제안했지만 다들 바빠서 어렵다고 했어",
+          "evidence": [
+            "D2:4"
+          ]
+        },
+        {
+          "id": "q15",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "fact",
+          "skills": [
+            "update"
+          ],
+          "query": "지금 필라테스는 무슨 요일에 가?",
+          "answer": "목요일만 (원래 화요일과 목요일)",
+          "evidence": [
+            "D3:2",
+            "D6:1"
+          ]
+        },
+        {
+          "id": "q16",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "fact",
+          "skills": [
+            "negation",
+            "profile"
+          ],
+          "query": "나 못 먹는 거 있어?",
+          "answer": "우유 (유당불내증)",
+          "evidence": [
+            "D1:3"
+          ]
+        },
+        {
+          "id": "q17",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "fact",
+          "skills": [
+            "profile"
+          ],
+          "query": "내 직업이 뭐야?",
+          "answer": "판교에 있는 게임 회사의 UX 디자이너",
+          "evidence": [
+            "D1:1"
+          ]
+        },
+        {
+          "id": "q18",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "fact",
+          "skills": [
+            "profile"
+          ],
+          "query": "호두는 어떤 고양이야?",
+          "answer": "3개월 된 치즈냥이, 내가 입양한 고양이",
+          "evidence": [
+            "D6:2"
+          ]
+        },
+        {
+          "id": "q19",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "fact",
+          "skills": [
+            "update",
+            "plan_vs_done"
+          ],
+          "query": "나 지금 어디 살아?",
+          "answer": "기록상 아직 망원동 (6월에 판교로 이사할 예정)",
+          "evidence": [
+            "D7:1"
+          ]
+        },
+        {
+          "id": "q20",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "fact",
+          "skills": [
+            "absolute_date"
+          ],
+          "query": "서준이 입대일은 언제였어?",
+          "answer": "2026년 3월 9일",
+          "evidence": [
+            "D2:2",
+            "D4:1"
+          ]
+        },
+        {
+          "id": "q21",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "abstention",
+          "skills": [
+            "unanswerable"
+          ],
+          "query": "하은이 결혼식은 어디서 했어?",
+          "answer": "기록에 없어",
+          "evidence": []
+        },
+        {
+          "id": "q22",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "abstention",
+          "skills": [
+            "near_miss"
+          ],
+          "query": "새 팀장은 누구야?",
+          "answer": "아직 기록이 없어. 박준호 팀장님이 다른 팀으로 옮긴다는 것만 기록되어 있어",
+          "evidence": []
+        },
+        {
+          "id": "q23",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "abstention",
+          "skills": [
+            "unanswerable"
+          ],
+          "query": "호두가 다니는 동물병원은 어디야?",
+          "answer": "기록에 없어",
+          "evidence": []
+        },
+        {
+          "id": "q24",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "en",
+          "axis": "fact",
+          "skills": [
+            "cross_lingual",
+            "profile"
+          ],
+          "query": "What is my cat's name?",
+          "answer": "Hodu (호두)",
+          "evidence": [
+            "D6:2"
+          ]
+        },
+        {
+          "id": "q25",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "zh",
+          "axis": "time",
+          "skills": [
+            "cross_lingual",
+            "absolute_date"
+          ],
+          "query": "서준是哪天入伍的？",
+          "answer": "2026年3月9日",
+          "evidence": [
+            "D2:2",
+            "D4:1"
+          ]
+        },
+        {
+          "id": "q26",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "person",
+          "skills": [
+            "count",
+            "alias"
+          ],
+          "query": "회사에 민지라는 사람이 몇 명이야?",
+          "answer": "두 명 (같은 팀 이민지, QA 팀 김민지)",
+          "evidence": [
+            "D5:3"
+          ]
+        },
+        {
+          "id": "q27",
+          "asked_at": "2026-06-05T21:00:00+09:00",
+          "asked_by": "서연",
+          "language": "ko",
+          "axis": "event",
+          "skills": [
+            "attribution",
+            "negation"
+          ],
+          "query": "부산 출장에 김민지도 같이 갔어?",
+          "answer": "아니, 같이 간 건 이민지야. 김민지는 QA 팀이야",
+          "evidence": [
+            "D5:2",
+            "D5:3"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "zh-group-01",
+      "language": "zh",
+      "scene": "group_chat",
+      "owner_speaker": "",
+      "sessions": [
+        {
+          "id": "session_1",
+          "at": "2026-04-05T20:15:00+08:00",
+          "turns": [
+            {
+              "id": "D1:1",
+              "role": "user",
+              "speaker": "刘芳",
+              "text": "今天清明，我和你爸回老家给爷爷扫墓了，路上堵了三个小时。"
+            },
+            {
+              "id": "D1:2",
+              "role": "user",
+              "speaker": "陈晨",
+              "text": "辛苦了妈！我这周项目上线走不开，五一一定回来。"
+            },
+            {
+              "id": "D1:3",
+              "role": "user",
+              "speaker": "陈曦",
+              "text": "我也五一回，已经抢到武汉到长沙的高铁票了。"
+            },
+            {
+              "id": "D1:4",
+              "role": "user",
+              "speaker": "刘静",
+              "text": "姐，你们回来的时候记得带点老家的腊肉给我。"
+            }
+          ]
+        },
+        {
+          "id": "session_2",
+          "at": "2026-04-12T20:30:00+08:00",
+          "turns": [
+            {
+              "id": "D2:1",
+              "role": "user",
+              "speaker": "陈建国",
+              "text": "体检结果出来了，医生说我血糖有点高，以后要少吃甜的。"
+            },
+            {
+              "id": "D2:2",
+              "role": "user",
+              "speaker": "刘芳",
+              "text": "听到没，蛋糕不许再偷吃了。"
+            },
+            {
+              "id": "D2:3",
+              "role": "user",
+              "speaker": "陈曦",
+              "text": "爸你要多运动，我给你手机下了个计步 app。"
+            },
+            {
+              "id": "D2:4",
+              "role": "user",
+              "speaker": "陈建国",
+              "text": "好，从明天开始每天晚饭后走一万步。"
+            }
+          ]
+        },
+        {
+          "id": "session_3",
+          "at": "2026-04-26T21:00:00+08:00",
+          "turns": [
+            {
+              "id": "D3:1",
+              "role": "user",
+              "speaker": "陈晨",
+              "text": "跟大家说个好消息，我升职了，下个月开始做产品组长。"
+            },
+            {
+              "id": "D3:2",
+              "role": "user",
+              "speaker": "刘静",
+              "text": "晨晨太厉害了！等你五一回来二姨请你吃饭。"
+            },
+            {
+              "id": "D3:3",
+              "role": "user",
+              "speaker": "陈曦",
+              "text": "我们辩论队昨天拿了校赛冠军🏆"
+            },
+            {
+              "id": "D3:4",
+              "role": "user",
+              "speaker": "陈建国",
+              "text": "都很棒！这个月我已经有二十天走够一万步了。"
+            }
+          ]
+        },
+        {
+          "id": "session_4",
+          "at": "2026-05-05T22:40:00+08:00",
+          "turns": [
+            {
+              "id": "D4:1",
+              "role": "user",
+              "speaker": "刘芳",
+              "text": "五一一家人终于聚齐了，前天晚上还去橘子洲看了烟花。"
+            },
+            {
+              "id": "D4:2",
+              "role": "user",
+              "speaker": "陈曦",
+              "text": "二姨请吃的那顿湘菜太好吃了，就是坡子街那家。"
+            },
+            {
+              "id": "D4:3",
+              "role": "user",
+              "speaker": "陈晨",
+              "text": "我明天回深圳，票是早上八点的。"
+            },
+            {
+              "id": "D4:4",
+              "role": "user",
+              "speaker": "刘静",
+              "text": "腊肉收到了，谢谢姐！"
+            }
+          ]
+        },
+        {
+          "id": "session_5",
+          "at": "2026-05-20T19:50:00+08:00",
+          "turns": [
+            {
+              "id": "D5:1",
+              "role": "user",
+              "speaker": "陈曦",
+              "text": "跟大家报告一下，我暑假要去上海实习，在一家券商，7月6号入职。"
+            },
+            {
+              "id": "D5:2",
+              "role": "user",
+              "speaker": "刘芳",
+              "text": "那你住哪里？"
+            },
+            {
+              "id": "D5:3",
+              "role": "user",
+              "speaker": "陈曦",
+              "text": "先住我同学周扬家，他家在浦东。"
+            },
+            {
+              "id": "D5:4",
+              "role": "user",
+              "speaker": "陈建国",
+              "text": "我去复查了，血糖降下来了，医生说保持就好。"
+            }
+          ]
+        },
+        {
+          "id": "session_6",
+          "at": "2026-06-14T18:30:00+08:00",
+          "turns": [
+            {
+              "id": "D6:1",
+              "role": "user",
+              "speaker": "陈晨",
+              "text": "端午我回不去了，公司要我去成都出差。"
+            },
+            {
+              "id": "D6:2",
+              "role": "user",
+              "speaker": "刘芳",
+              "text": "那我们端午去你二姨家包粽子。"
+            },
+            {
+              "id": "D6:3",
+              "role": "user",
+              "speaker": "刘静",
+              "text": "好啊，我把咸蛋黄肉粽的料都准备好了。"
+            }
+          ]
+        },
+        {
+          "id": "session_7",
+          "at": "2026-06-21T21:15:00+08:00",
+          "turns": [
+            {
+              "id": "D7:1",
+              "role": "user",
+              "speaker": "刘芳",
+              "text": "端午在二姨家包了六十个粽子，冻了一半。"
+            },
+            {
+              "id": "D7:2",
+              "role": "user",
+              "speaker": "陈晨",
+              "text": "成都出差取消了，客户改成线上开会，结果我在深圳加了三天班。"
+            },
+            {
+              "id": "D7:3",
+              "role": "user",
+              "speaker": "陈曦",
+              "text": "实习改成7月13号入职了。住的地方也换了，公司提供宿舍，不去周扬家住了。"
+            },
+            {
+              "id": "D7:4",
+              "role": "user",
+              "speaker": "陈建国",
+              "text": "我把每天一万步改成八千步了，膝盖有点受不了。"
+            }
+          ]
+        }
+      ],
+      "questions": [
+        {
+          "id": "q01",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "time",
+          "skills": [
+            "absolute_date"
+          ],
+          "query": "刘芳和陈建国是哪天回老家扫墓的？",
+          "answer": "2026年4月5日（清明）",
+          "evidence": [
+            "D1:1"
+          ]
+        },
+        {
+          "id": "q02",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "time",
+          "skills": [
+            "relative_time"
+          ],
+          "query": "陈曦的辩论队是哪天拿的校赛冠军？",
+          "answer": "2026年4月25日（周六）",
+          "evidence": [
+            "D3:3"
+          ]
+        },
+        {
+          "id": "q03",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "time",
+          "skills": [
+            "relative_time"
+          ],
+          "query": "一家人去橘子洲看烟花是哪天？",
+          "answer": "2026年5月3日晚上",
+          "evidence": [
+            "D4:1"
+          ]
+        },
+        {
+          "id": "q04",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "time",
+          "skills": [
+            "update"
+          ],
+          "query": "陈曦的实习现在定在哪天入职？",
+          "answer": "7月13日（原定7月6日）",
+          "evidence": [
+            "D5:1",
+            "D7:3"
+          ]
+        },
+        {
+          "id": "q05",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "time",
+          "skills": [
+            "relative_time"
+          ],
+          "query": "五一之后陈晨是哪天回深圳的？",
+          "answer": "2026年5月6日（早上八点的票）",
+          "evidence": [
+            "D4:3"
+          ]
+        },
+        {
+          "id": "q06",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "person",
+          "skills": [
+            "relationship"
+          ],
+          "query": "刘静和刘芳是什么关系？",
+          "answer": "姐妹，刘芳是姐姐；刘静是陈晨和陈曦的二姨",
+          "evidence": [
+            "D1:4",
+            "D3:2"
+          ]
+        },
+        {
+          "id": "q07",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "person",
+          "skills": [
+            "relationship"
+          ],
+          "query": "周扬是谁？",
+          "answer": "陈曦的同学，家在浦东",
+          "evidence": [
+            "D5:3"
+          ]
+        },
+        {
+          "id": "q08",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "person",
+          "skills": [
+            "attribution"
+          ],
+          "query": "谁升职了？升成了什么？",
+          "answer": "陈晨，从五月开始做产品组长",
+          "evidence": [
+            "D3:1"
+          ]
+        },
+        {
+          "id": "q09",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "person",
+          "skills": [
+            "attribution"
+          ],
+          "query": "谁给陈建国下载了计步 app？",
+          "answer": "陈曦",
+          "evidence": [
+            "D2:3"
+          ]
+        },
+        {
+          "id": "q10",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "person",
+          "skills": [
+            "attribution"
+          ],
+          "query": "端午前是谁准备了咸蛋黄肉粽的料？",
+          "answer": "刘静（二姨）",
+          "evidence": [
+            "D6:3"
+          ]
+        },
+        {
+          "id": "q11",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "event",
+          "skills": [
+            "location",
+            "outcome"
+          ],
+          "query": "端午在谁家包的粽子？包了多少？",
+          "answer": "在二姨刘静家，包了六十个，冻了一半",
+          "evidence": [
+            "D6:2",
+            "D7:1"
+          ]
+        },
+        {
+          "id": "q12",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "event",
+          "skills": [
+            "location",
+            "alias"
+          ],
+          "query": "二姨请吃饭的湘菜馆在哪条街？",
+          "answer": "坡子街",
+          "evidence": [
+            "D3:2",
+            "D4:2"
+          ]
+        },
+        {
+          "id": "q13",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "event",
+          "skills": [
+            "cancellation"
+          ],
+          "query": "陈晨的成都出差最后怎么样了？",
+          "answer": "取消了，客户改成线上会议，她在深圳加了三天班",
+          "evidence": [
+            "D6:1",
+            "D7:2"
+          ]
+        },
+        {
+          "id": "q14",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "fact",
+          "skills": [
+            "update",
+            "aggregation"
+          ],
+          "query": "陈建国体检发现了什么问题？后来怎么样了？",
+          "answer": "血糖有点高；五月复查时已经降下来了",
+          "evidence": [
+            "D2:1",
+            "D5:4"
+          ]
+        },
+        {
+          "id": "q15",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "fact",
+          "skills": [
+            "update"
+          ],
+          "query": "陈建国现在每天走多少步？",
+          "answer": "八千步（原来一万步，因为膝盖受不了）",
+          "evidence": [
+            "D2:4",
+            "D7:4"
+          ]
+        },
+        {
+          "id": "q16",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "fact",
+          "skills": [
+            "update",
+            "plan_vs_done"
+          ],
+          "query": "陈曦实习期间住在哪里？",
+          "answer": "公司宿舍（原计划住同学周扬家）",
+          "evidence": [
+            "D5:3",
+            "D7:3"
+          ]
+        },
+        {
+          "id": "q17",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "fact",
+          "skills": [
+            "profile"
+          ],
+          "query": "陈曦在哪个城市上学？",
+          "answer": "武汉",
+          "evidence": [
+            "D1:3"
+          ]
+        },
+        {
+          "id": "q18",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "fact",
+          "skills": [
+            "profile"
+          ],
+          "query": "陈曦去实习的是什么公司？",
+          "answer": "上海的一家券商",
+          "evidence": [
+            "D5:1"
+          ]
+        },
+        {
+          "id": "q19",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "fact",
+          "skills": [
+            "profile",
+            "location"
+          ],
+          "query": "陈建国和刘芳住在哪个城市？",
+          "answer": "长沙",
+          "evidence": [
+            "D1:3",
+            "D4:1"
+          ]
+        },
+        {
+          "id": "q20",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "abstention",
+          "skills": [
+            "unanswerable"
+          ],
+          "query": "陈晨在深圳哪家公司工作？",
+          "answer": "没有提到",
+          "evidence": []
+        },
+        {
+          "id": "q21",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "abstention",
+          "skills": [
+            "near_miss",
+            "attribution"
+          ],
+          "query": "陈晨的实习哪天入职？",
+          "answer": "没有记录陈晨实习；去上海实习的是陈曦，7月13日入职",
+          "evidence": []
+        },
+        {
+          "id": "q22",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "abstention",
+          "skills": [
+            "near_miss",
+            "attribution"
+          ],
+          "query": "刘静的体检结果怎么样？",
+          "answer": "没有提到；体检血糖偏高的是陈建国",
+          "evidence": []
+        },
+        {
+          "id": "q23",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "en",
+          "axis": "event",
+          "skills": [
+            "cross_lingual",
+            "count"
+          ],
+          "query": "How many zongzi did the family make at the Dragon Boat Festival?",
+          "answer": "Sixty, and half of them were frozen",
+          "evidence": [
+            "D7:1"
+          ]
+        },
+        {
+          "id": "q24",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "ko",
+          "axis": "event",
+          "skills": [
+            "cross_lingual",
+            "cancellation"
+          ],
+          "query": "陈晨은 단오 때 어디에 있었어?",
+          "answer": "선전(深圳)에서 사흘 동안 야근했어 (청두 출장은 취소됨)",
+          "evidence": [
+            "D6:1",
+            "D7:2"
+          ]
+        },
+        {
+          "id": "q25",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "event",
+          "skills": [
+            "count",
+            "participants"
+          ],
+          "query": "五一期间回长沙的孩子有几个？",
+          "answer": "两个：陈晨和陈曦",
+          "evidence": [
+            "D1:2",
+            "D1:3",
+            "D4:1"
+          ]
+        },
+        {
+          "id": "q26",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "time",
+          "skills": [
+            "interval",
+            "relative_time"
+          ],
+          "query": "陈建国从开始每天走一万步到改成八千步，大约过了多久？",
+          "answer": "两个多月（4月13日开始，6月21日说已改成八千步）",
+          "evidence": [
+            "D2:4",
+            "D7:4"
+          ]
+        },
+        {
+          "id": "q27",
+          "asked_at": "2026-06-28T20:00:00+08:00",
+          "language": "zh",
+          "axis": "fact",
+          "skills": [
+            "negation",
+            "cancellation"
+          ],
+          "query": "陈晨端午回长沙了吗？",
+          "answer": "没有回",
+          "evidence": [
+            "D6:1",
+            "D7:2"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mixed-group-02",
+      "language": "mixed",
+      "source_languages": [
+        "ja",
+        "en"
+      ],
+      "scene": "group_chat",
+      "owner_speaker": "",
+      "sessions": [
+        {
+          "id": "session_1",
+          "at": "2026-09-05T11:00:00+09:00",
+          "turns": [
+            {
+              "id": "D1:1",
+              "role": "user",
+              "speaker": "Ryo",
+              "text": "明日の日曜、高円寺のボードゲームカフェ「ダイスタワー」に14時集合でどう？"
+            },
+            {
+              "id": "D1:2",
+              "role": "user",
+              "speaker": "Emma",
+              "text": "I'm in! I'll bring my copy of Wingspan."
+            },
+            {
+              "id": "D1:3",
+              "role": "user",
+              "speaker": "健",
+              "text": "行けるけど、17時には帰らなきゃ。"
+            },
+            {
+              "id": "D1:4",
+              "role": "user",
+              "speaker": "Sofia",
+              "text": "Sorry, I have a dentist appointment tomorrow. Next time!"
+            }
+          ]
+        },
+        {
+          "id": "session_2",
+          "at": "2026-09-06T21:40:00+09:00",
+          "turns": [
+            {
+              "id": "D2:1",
+              "role": "user",
+              "speaker": "Emma",
+              "text": "That was so fun! Ken won Wingspan by 2 points 😤"
+            },
+            {
+              "id": "D2:2",
+              "role": "user",
+              "speaker": "Ryo",
+              "text": "健くん強すぎ。次はカタンでリベンジしよう。"
+            },
+            {
+              "id": "D2:3",
+              "role": "user",
+              "speaker": "健",
+              "text": "ありがとう！来月から大阪に転勤になるから、10月からはオンライン参加になるかも。"
+            }
+          ]
+        },
+        {
+          "id": "session_3",
+          "at": "2026-09-20T20:10:00+09:00",
+          "turns": [
+            {
+              "id": "D3:1",
+              "role": "user",
+              "speaker": "Sofia",
+              "text": "Dentist update: I need a root canal on Oct 2, ugh."
+            },
+            {
+              "id": "D3:2",
+              "role": "user",
+              "speaker": "Ryo",
+              "text": "お大事に…。26日の土曜は僕の誕生日なので、うちでパーティーやります！"
+            },
+            {
+              "id": "D3:3",
+              "role": "user",
+              "speaker": "Emma",
+              "text": "Yay! What should we bring?"
+            },
+            {
+              "id": "D3:4",
+              "role": "user",
+              "speaker": "Ryo",
+              "text": "飲み物だけでOK。僕はお酒が飲めないので、ノンアルでお願いします。"
+            }
+          ]
+        },
+        {
+          "id": "session_4",
+          "at": "2026-09-27T12:30:00+09:00",
+          "turns": [
+            {
+              "id": "D4:1",
+              "role": "user",
+              "speaker": "Emma",
+              "text": "Happy belated birthday again Ryo! The cake Sofia made was amazing."
+            },
+            {
+              "id": "D4:2",
+              "role": "user",
+              "speaker": "Sofia",
+              "text": "Thanks! It was a matcha chiffon 🍵"
+            },
+            {
+              "id": "D4:3",
+              "role": "user",
+              "speaker": "健",
+              "text": "昨日は楽しかった。僕からのプレゼントのミープル型マグ、気に入ってくれてよかった。"
+            }
+          ]
+        },
+        {
+          "id": "session_5",
+          "at": "2026-10-11T22:00:00+09:00",
+          "turns": [
+            {
+              "id": "D5:1",
+              "role": "user",
+              "speaker": "健",
+              "text": "大阪に引っ越しました。新しい部署は営業企画です。"
+            },
+            {
+              "id": "D5:2",
+              "role": "user",
+              "speaker": "Sofia",
+              "text": "Root canal got moved to Oct 9 — it's done now, all good."
+            },
+            {
+              "id": "D5:3",
+              "role": "user",
+              "speaker": "Emma",
+              "text": "I'm going back to Melbourne for Christmas, flying out Dec 19."
+            }
+          ]
+        },
+        {
+          "id": "session_6",
+          "at": "2026-10-25T21:30:00+09:00",
+          "turns": [
+            {
+              "id": "D6:1",
+              "role": "user",
+              "speaker": "Ryo",
+              "text": "今日は健くんもオンラインで参加してくれて、4人でコードネームやりました。"
+            },
+            {
+              "id": "D6:2",
+              "role": "user",
+              "speaker": "Emma",
+              "text": "Sofia and I were on the same team and still lost to you two lol."
+            },
+            {
+              "id": "D6:3",
+              "role": "user",
+              "speaker": "Sofia",
+              "text": "By the way, I started proper Japanese classes — every Wednesday night."
+            }
+          ]
+        },
+        {
+          "id": "session_7",
+          "at": "2026-11-08T20:00:00+09:00",
+          "turns": [
+            {
+              "id": "D7:1",
+              "role": "user",
+              "speaker": "Emma",
+              "text": "Change of plans — my Christmas flight is now Dec 21 because of work."
+            },
+            {
+              "id": "D7:2",
+              "role": "user",
+              "speaker": "Sofia",
+              "text": "日本語の授業、水曜から金曜の夜に変わりました！"
+            },
+            {
+              "id": "D7:3",
+              "role": "user",
+              "speaker": "Ryo",
+              "text": "12月のボードゲーム会は13日の日曜にしよう。健くんもその週末は東京に戻ってくるって。"
+            }
+          ]
+        }
+      ],
+      "questions": [
+        {
+          "id": "q01",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "ja",
+          "axis": "time",
+          "skills": [
+            "relative_time"
+          ],
+          "query": "ダイスタワーで集まったのは何月何日の何時？",
+          "answer": "2026年9月6日（日）の14時",
+          "evidence": [
+            "D1:1",
+            "D2:1"
+          ]
+        },
+        {
+          "id": "q02",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "en",
+          "axis": "time",
+          "skills": [
+            "update",
+            "code_switch"
+          ],
+          "query": "When did Sofia actually have her root canal?",
+          "answer": "Friday, October 9, 2026 (moved from October 2)",
+          "evidence": [
+            "D3:1",
+            "D5:2"
+          ]
+        },
+        {
+          "id": "q03",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "ja",
+          "axis": "time",
+          "skills": [
+            "absolute_date",
+            "code_switch"
+          ],
+          "query": "Ryoの誕生日パーティーはいつだった？",
+          "answer": "2026年9月26日（土）",
+          "evidence": [
+            "D3:2",
+            "D4:3"
+          ]
+        },
+        {
+          "id": "q04",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "en",
+          "axis": "time",
+          "skills": [
+            "update"
+          ],
+          "query": "When is Emma flying to Melbourne for Christmas now?",
+          "answer": "December 21 (changed from December 19)",
+          "evidence": [
+            "D5:3",
+            "D7:1"
+          ]
+        },
+        {
+          "id": "q05",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "ja",
+          "axis": "time",
+          "skills": [
+            "absolute_date"
+          ],
+          "query": "次のボードゲーム会はいつ？",
+          "answer": "12月13日（日）",
+          "evidence": [
+            "D7:3"
+          ]
+        },
+        {
+          "id": "q06",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "en",
+          "axis": "person",
+          "skills": [
+            "alias",
+            "code_switch"
+          ],
+          "query": "Who is Ken?",
+          "answer": "健, the group member who won Wingspan and transferred to Osaka",
+          "evidence": [
+            "D2:1",
+            "D2:3"
+          ]
+        },
+        {
+          "id": "q07",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "ja",
+          "axis": "person",
+          "skills": [
+            "attribution",
+            "code_switch"
+          ],
+          "query": "誕生日ケーキを作ったのは誰？",
+          "answer": "Sofia（抹茶シフォン）",
+          "evidence": [
+            "D4:1",
+            "D4:2"
+          ]
+        },
+        {
+          "id": "q08",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "en",
+          "axis": "person",
+          "skills": [
+            "attribution",
+            "code_switch"
+          ],
+          "query": "Who gave Ryo the meeple-shaped mug?",
+          "answer": "健 (Ken)",
+          "evidence": [
+            "D4:3"
+          ]
+        },
+        {
+          "id": "q09",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "ja",
+          "axis": "person",
+          "skills": [
+            "profile",
+            "update"
+          ],
+          "query": "健の新しい部署はどこ？",
+          "answer": "大阪の営業企画",
+          "evidence": [
+            "D5:1"
+          ]
+        },
+        {
+          "id": "q10",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "en",
+          "axis": "person",
+          "skills": [
+            "attribution",
+            "profile",
+            "code_switch"
+          ],
+          "query": "Who in the group can't drink alcohol?",
+          "answer": "Ryo",
+          "evidence": [
+            "D3:4"
+          ]
+        },
+        {
+          "id": "q11",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "ja",
+          "axis": "event",
+          "skills": [
+            "outcome",
+            "code_switch"
+          ],
+          "query": "ウイングスパンで勝ったのは誰？何点差だった？",
+          "answer": "健が2点差で勝った",
+          "evidence": [
+            "D2:1"
+          ]
+        },
+        {
+          "id": "q12",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "en",
+          "axis": "event",
+          "skills": [
+            "participants",
+            "code_switch"
+          ],
+          "query": "Who played Codenames on October 25, and which pair lost?",
+          "answer": "Ryo, Ken (online), Emma and Sofia; Emma and Sofia lost",
+          "evidence": [
+            "D6:1",
+            "D6:2"
+          ]
+        },
+        {
+          "id": "q13",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "ja",
+          "axis": "event",
+          "skills": [
+            "outcome"
+          ],
+          "query": "Ryoの誕生日パーティーには何を持ってくるよう頼まれた？",
+          "answer": "飲み物だけ、ノンアルコールで",
+          "evidence": [
+            "D3:4"
+          ]
+        },
+        {
+          "id": "q14",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "en",
+          "axis": "event",
+          "skills": [
+            "cancellation"
+          ],
+          "query": "Why couldn't Sofia come to the first meetup at Dice Tower?",
+          "answer": "She had a dentist appointment",
+          "evidence": [
+            "D1:4"
+          ]
+        },
+        {
+          "id": "q15",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "ja",
+          "axis": "fact",
+          "skills": [
+            "update",
+            "code_switch"
+          ],
+          "query": "Sofiaの日本語の授業は今は何曜日？",
+          "answer": "金曜の夜（以前は水曜の夜）",
+          "evidence": [
+            "D6:3",
+            "D7:2"
+          ]
+        },
+        {
+          "id": "q16",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "ja",
+          "axis": "fact",
+          "skills": [
+            "update"
+          ],
+          "query": "健は今どこに住んでいる？",
+          "answer": "大阪",
+          "evidence": [
+            "D2:3",
+            "D5:1"
+          ]
+        },
+        {
+          "id": "q17",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "en",
+          "axis": "fact",
+          "skills": [
+            "location"
+          ],
+          "query": "Where is Emma going for Christmas?",
+          "answer": "Melbourne",
+          "evidence": [
+            "D5:3"
+          ]
+        },
+        {
+          "id": "q18",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "en",
+          "axis": "event",
+          "skills": [
+            "attribution"
+          ],
+          "query": "Which game did Emma bring to the first meetup?",
+          "answer": "Wingspan",
+          "evidence": [
+            "D1:2"
+          ]
+        },
+        {
+          "id": "q19",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "ja",
+          "axis": "fact",
+          "skills": [
+            "profile"
+          ],
+          "query": "最初の集まりで、健は何時までに帰らないといけなかった？",
+          "answer": "17時",
+          "evidence": [
+            "D1:3"
+          ]
+        },
+        {
+          "id": "q20",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "en",
+          "axis": "abstention",
+          "skills": [
+            "unanswerable"
+          ],
+          "query": "What is Emma's job?",
+          "answer": "Not mentioned",
+          "evidence": []
+        },
+        {
+          "id": "q21",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "ja",
+          "axis": "abstention",
+          "skills": [
+            "near_miss",
+            "attribution"
+          ],
+          "query": "Ryoはいつ大阪に転勤した？",
+          "answer": "記録にない。大阪に転勤したのは健",
+          "evidence": []
+        },
+        {
+          "id": "q22",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "en",
+          "axis": "abstention",
+          "skills": [
+            "near_miss",
+            "plan_vs_done"
+          ],
+          "query": "Who won the Catan rematch?",
+          "answer": "Not recorded; a Catan rematch was only suggested by Ryo",
+          "evidence": []
+        },
+        {
+          "id": "q23",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "zh",
+          "axis": "fact",
+          "skills": [
+            "cross_lingual",
+            "update"
+          ],
+          "query": "健的新部门在哪个城市？",
+          "answer": "大阪",
+          "evidence": [
+            "D5:1"
+          ]
+        },
+        {
+          "id": "q24",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "ko",
+          "axis": "event",
+          "skills": [
+            "cross_lingual"
+          ],
+          "query": "소피아가 만든 케이크는 무슨 케이크였어?",
+          "answer": "말차 시폰 케이크",
+          "evidence": [
+            "D4:2"
+          ]
+        },
+        {
+          "id": "q25",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "en",
+          "axis": "event",
+          "skills": [
+            "count",
+            "participants",
+            "code_switch"
+          ],
+          "query": "How many of the recorded meetups did Ken attend in person, and how many online?",
+          "answer": "Two in person (September 6 and the September 26 birthday party) and one online (October 25)",
+          "evidence": [
+            "D2:1",
+            "D4:3",
+            "D6:1"
+          ]
+        },
+        {
+          "id": "q26",
+          "asked_at": "2026-11-12T21:00:00+09:00",
+          "language": "ja",
+          "axis": "time",
+          "skills": [
+            "interval",
+            "code_switch"
+          ],
+          "query": "Sofiaの根管治療は最初の予定から何日延びた？",
+          "answer": "7日（10月2日から10月9日へ）",
+          "evidence": [
+            "D3:1",
+            "D5:2"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "en-group-01",
+      "language": "en",
+      "scene": "group_chat",
+      "owner_speaker": "",
+      "sessions": [
+        {
+          "id": "session_1",
+          "at": "2026-09-13T19:00:00+01:00",
+          "turns": [
+            {
+              "id": "D1:1",
+              "role": "user",
+              "speaker": "Olivia",
+              "text": "House meeting reminder: bins go out on Tuesday nights now, the council changed the schedule."
+            },
+            {
+              "id": "D1:2",
+              "role": "user",
+              "speaker": "Raj",
+              "text": "Noted. Also the boiler's making that noise again, I've emailed Mr Hughes."
+            },
+            {
+              "id": "D1:3",
+              "role": "user",
+              "speaker": "Chloe",
+              "text": "Can we do a house dinner this Friday? I'll cook my mum's jollof rice."
+            },
+            {
+              "id": "D1:4",
+              "role": "user",
+              "speaker": "Dan",
+              "text": "Friday works. I'm vegan now btw, so if there's chicken I'll skip it."
+            }
+          ]
+        },
+        {
+          "id": "session_2",
+          "at": "2026-09-19T11:20:00+01:00",
+          "turns": [
+            {
+              "id": "D2:1",
+              "role": "user",
+              "speaker": "Chloe",
+              "text": "Last night was lovely! I made a separate veggie jollof for Dan."
+            },
+            {
+              "id": "D2:2",
+              "role": "user",
+              "speaker": "Raj",
+              "text": "Mr Hughes says the plumber is coming Thursday the 24th between 9 and 12."
+            },
+            {
+              "id": "D2:3",
+              "role": "user",
+              "speaker": "Olivia",
+              "text": "I can be home for that, I work from home on Thursdays."
+            }
+          ]
+        },
+        {
+          "id": "session_3",
+          "at": "2026-09-27T20:45:00+01:00",
+          "turns": [
+            {
+              "id": "D3:1",
+              "role": "user",
+              "speaker": "Raj",
+              "text": "The plumber didn't show up on Thursday. Rescheduled to Wednesday the 30th."
+            },
+            {
+              "id": "D3:2",
+              "role": "user",
+              "speaker": "Dan",
+              "text": "Big news — I got the job at the Science Museum! Starting 12 October as an exhibitions assistant."
+            },
+            {
+              "id": "D3:3",
+              "role": "user",
+              "speaker": "Chloe",
+              "text": "Congrats Dan!! 🎉"
+            }
+          ]
+        },
+        {
+          "id": "session_4",
+          "at": "2026-10-04T18:10:00+01:00",
+          "turns": [
+            {
+              "id": "D4:1",
+              "role": "user",
+              "speaker": "Olivia",
+              "text": "Boiler finally fixed on Wednesday. The plumber said the pressure valve was faulty."
+            },
+            {
+              "id": "D4:2",
+              "role": "user",
+              "speaker": "Raj",
+              "text": "My colleague Olivia — not you, Liv, the one from work — is visiting London. Could she crash on the sofa on Saturday the 10th?"
+            },
+            {
+              "id": "D4:3",
+              "role": "user",
+              "speaker": "Chloe",
+              "text": "Fine by me."
+            },
+            {
+              "id": "D4:4",
+              "role": "user",
+              "speaker": "Olivia",
+              "text": "Sure, as long as she's ok with Chloe's cat Biscuit sleeping on the sofa too."
+            }
+          ]
+        },
+        {
+          "id": "session_5",
+          "at": "2026-10-18T21:00:00+01:00",
+          "turns": [
+            {
+              "id": "D5:1",
+              "role": "user",
+              "speaker": "Dan",
+              "text": "First week at the museum done. My manager is Grace, she's lovely."
+            },
+            {
+              "id": "D5:2",
+              "role": "user",
+              "speaker": "Raj",
+              "text": "Work-Olivia says thanks for having her — she left you all a box of Portuguese custard tarts."
+            },
+            {
+              "id": "D5:3",
+              "role": "user",
+              "speaker": "Chloe",
+              "text": "Biscuit has a vet appointment this Tuesday for her vaccines."
+            }
+          ]
+        },
+        {
+          "id": "session_6",
+          "at": "2026-11-01T20:30:00+00:00",
+          "turns": [
+            {
+              "id": "D6:1",
+              "role": "user",
+              "speaker": "Olivia",
+              "text": "Bins are back to Wednesday nights from this week, the council reversed it."
+            },
+            {
+              "id": "D6:2",
+              "role": "user",
+              "speaker": "Chloe",
+              "text": "Biscuit's vaccines went fine, but the vet says she needs to lose some weight."
+            },
+            {
+              "id": "D6:3",
+              "role": "user",
+              "speaker": "Raj",
+              "text": "I'm moving out at the end of November — got a place in Leeds near my new office."
+            },
+            {
+              "id": "D6:4",
+              "role": "user",
+              "speaker": "Dan",
+              "text": "Gutted! Leaving drinks at the Crown before you go?"
+            }
+          ]
+        },
+        {
+          "id": "session_7",
+          "at": "2026-11-15T19:30:00+00:00",
+          "turns": [
+            {
+              "id": "D7:1",
+              "role": "user",
+              "speaker": "Raj",
+              "text": "Leaving drinks are Friday the 27th at the Crown, 7pm."
+            },
+            {
+              "id": "D7:2",
+              "role": "user",
+              "speaker": "Olivia",
+              "text": "Mr Hughes says he's already found someone for Raj's room — a nurse called Hannah, moving in on 1 December."
+            },
+            {
+              "id": "D7:3",
+              "role": "user",
+              "speaker": "Dan",
+              "text": "I've gone back to eating fish, so I'm pescatarian now, not vegan."
+            },
+            {
+              "id": "D7:4",
+              "role": "user",
+              "speaker": "Chloe",
+              "text": "Biscuit has lost 300g already 🐱"
+            }
+          ]
+        }
+      ],
+      "questions": [
+        {
+          "id": "q01",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "time",
+          "skills": [
+            "relative_time"
+          ],
+          "query": "What date was the house dinner where Chloe cooked jollof rice?",
+          "answer": "Friday, 18 September 2026",
+          "evidence": [
+            "D1:3",
+            "D2:1"
+          ]
+        },
+        {
+          "id": "q02",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "time",
+          "skills": [
+            "cancellation",
+            "relative_time"
+          ],
+          "query": "When was the boiler actually fixed?",
+          "answer": "Wednesday, 30 September 2026 (the plumber missed the 24 September visit)",
+          "evidence": [
+            "D2:2",
+            "D3:1",
+            "D4:1"
+          ]
+        },
+        {
+          "id": "q03",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "time",
+          "skills": [
+            "absolute_date"
+          ],
+          "query": "When did Dan start at the Science Museum?",
+          "answer": "12 October 2026",
+          "evidence": [
+            "D3:2",
+            "D5:1"
+          ]
+        },
+        {
+          "id": "q04",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "time",
+          "skills": [
+            "absolute_date",
+            "location"
+          ],
+          "query": "When and where are Raj's leaving drinks?",
+          "answer": "Friday 27 November 2026 at 7pm, at the Crown",
+          "evidence": [
+            "D7:1"
+          ]
+        },
+        {
+          "id": "q05",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "time",
+          "skills": [
+            "absolute_date"
+          ],
+          "query": "When does Hannah move in?",
+          "answer": "1 December 2026",
+          "evidence": [
+            "D7:2"
+          ]
+        },
+        {
+          "id": "q06",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "person",
+          "skills": [
+            "alias",
+            "attribution"
+          ],
+          "query": "Who slept on the sofa on Saturday 10 October?",
+          "answer": "Raj's work colleague Olivia, not housemate Olivia",
+          "evidence": [
+            "D4:2",
+            "D5:2"
+          ]
+        },
+        {
+          "id": "q07",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "person",
+          "skills": [
+            "relationship"
+          ],
+          "query": "Who is Mr Hughes?",
+          "answer": "The landlord, who arranges repairs and found the new tenant",
+          "evidence": [
+            "D1:2",
+            "D7:2"
+          ]
+        },
+        {
+          "id": "q08",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "person",
+          "skills": [
+            "relationship"
+          ],
+          "query": "Who is Grace?",
+          "answer": "Dan's manager at the Science Museum",
+          "evidence": [
+            "D5:1"
+          ]
+        },
+        {
+          "id": "q09",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "person",
+          "skills": [
+            "attribution"
+          ],
+          "query": "Whose cat is Biscuit?",
+          "answer": "Chloe's",
+          "evidence": [
+            "D4:4"
+          ]
+        },
+        {
+          "id": "q10",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "person",
+          "skills": [
+            "attribution",
+            "plan_vs_done"
+          ],
+          "query": "Who is moving out, and where to?",
+          "answer": "Raj, to Leeds near his new office, at the end of November",
+          "evidence": [
+            "D6:3"
+          ]
+        },
+        {
+          "id": "q11",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "person",
+          "skills": [
+            "profile"
+          ],
+          "query": "Who is Hannah?",
+          "answer": "A nurse who is taking Raj's room",
+          "evidence": [
+            "D7:2"
+          ]
+        },
+        {
+          "id": "q12",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "event",
+          "skills": [
+            "outcome"
+          ],
+          "query": "What was wrong with the boiler?",
+          "answer": "A faulty pressure valve",
+          "evidence": [
+            "D4:1"
+          ]
+        },
+        {
+          "id": "q13",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "event",
+          "skills": [
+            "alias",
+            "attribution"
+          ],
+          "query": "What did Raj's colleague leave for the housemates after her stay?",
+          "answer": "A box of Portuguese custard tarts",
+          "evidence": [
+            "D5:2"
+          ]
+        },
+        {
+          "id": "q14",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "event",
+          "skills": [
+            "attribution"
+          ],
+          "query": "Who offered to be home for the plumber's first visit, and why could she?",
+          "answer": "Olivia, because she works from home on Thursdays",
+          "evidence": [
+            "D2:3"
+          ]
+        },
+        {
+          "id": "q15",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "event",
+          "skills": [
+            "outcome"
+          ],
+          "query": "What did Chloe make for Dan at the house dinner, and why?",
+          "answer": "A separate veggie jollof, because Dan was vegan",
+          "evidence": [
+            "D1:4",
+            "D2:1"
+          ]
+        },
+        {
+          "id": "q16",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "fact",
+          "skills": [
+            "update"
+          ],
+          "query": "Which night do the bins go out now?",
+          "answer": "Wednesday nights (it was briefly Tuesday nights)",
+          "evidence": [
+            "D1:1",
+            "D6:1"
+          ]
+        },
+        {
+          "id": "q17",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "fact",
+          "skills": [
+            "update"
+          ],
+          "query": "What is Dan's diet now?",
+          "answer": "Pescatarian (he was vegan before and now eats fish)",
+          "evidence": [
+            "D1:4",
+            "D7:3"
+          ]
+        },
+        {
+          "id": "q18",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "fact",
+          "skills": [
+            "profile"
+          ],
+          "query": "What is Dan's job?",
+          "answer": "Exhibitions assistant at the Science Museum",
+          "evidence": [
+            "D3:2"
+          ]
+        },
+        {
+          "id": "q19",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "fact",
+          "skills": [
+            "update",
+            "aggregation"
+          ],
+          "query": "How is Biscuit's weight going?",
+          "answer": "The vet said she needed to lose weight, and she has already lost 300g",
+          "evidence": [
+            "D6:2",
+            "D7:4"
+          ]
+        },
+        {
+          "id": "q20",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "fact",
+          "skills": [
+            "profile"
+          ],
+          "query": "Which day does Olivia work from home?",
+          "answer": "Thursdays",
+          "evidence": [
+            "D2:3"
+          ]
+        },
+        {
+          "id": "q21",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "abstention",
+          "skills": [
+            "unanswerable"
+          ],
+          "query": "How much rent does Raj pay?",
+          "answer": "Not mentioned",
+          "evidence": []
+        },
+        {
+          "id": "q22",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "abstention",
+          "skills": [
+            "near_miss",
+            "attribution"
+          ],
+          "query": "When is Olivia moving to Leeds?",
+          "answer": "Not recorded — Olivia isn't moving; Raj is the one moving to Leeds",
+          "evidence": []
+        },
+        {
+          "id": "q23",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "abstention",
+          "skills": [
+            "unanswerable"
+          ],
+          "query": "What breed is Biscuit?",
+          "answer": "Not mentioned",
+          "evidence": []
+        },
+        {
+          "id": "q24",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "zh",
+          "axis": "person",
+          "skills": [
+            "cross_lingual",
+            "profile"
+          ],
+          "query": "房东找到的新租客是做什么工作的？",
+          "answer": "护士（Hannah）",
+          "evidence": [
+            "D7:2"
+          ]
+        },
+        {
+          "id": "q25",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "ja",
+          "axis": "time",
+          "skills": [
+            "cross_lingual",
+            "relative_time"
+          ],
+          "query": "ビスケットのワクチン接種の予約は何日だった？",
+          "answer": "2026年10月20日（火）",
+          "evidence": [
+            "D5:3"
+          ]
+        },
+        {
+          "id": "q26",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "ko",
+          "axis": "event",
+          "skills": [
+            "cross_lingual",
+            "location"
+          ],
+          "query": "Raj의 송별회는 어디서 해?",
+          "answer": "the Crown (펍)",
+          "evidence": [
+            "D7:1"
+          ]
+        },
+        {
+          "id": "q27",
+          "asked_at": "2026-11-19T20:00:00+00:00",
+          "language": "en",
+          "axis": "event",
+          "skills": [
+            "count",
+            "cancellation"
+          ],
+          "query": "How many plumber visits were scheduled for the boiler?",
+          "answer": "Two: Thursday 24 September (no-show) and Wednesday 30 September (fixed)",
+          "evidence": [
+            "D2:2",
+            "D3:1",
+            "D4:1"
+          ]
+        }
+      ]
+    }
+  ]
+}

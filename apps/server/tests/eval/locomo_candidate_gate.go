@@ -191,6 +191,12 @@ func candidateProtocol(m map[string]any) (map[string]any, error) {
 		}
 		out[key] = v
 	}
+	// Retrying unusable replies changes how failures enter the denominator, so it is
+	// protocol. Reports from before the policy had no retry.
+	out["format_retry"] = "none"
+	if v, ok := m["format_retry"].(string); ok && v != "" {
+		out["format_retry"] = v
+	}
 	prompt, ok := m[readerKey].(string)
 	if !ok || !candidateSHA256(prompt) {
 		return nil, fmt.Errorf("missing reader prompt identity")

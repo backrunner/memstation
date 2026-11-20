@@ -105,3 +105,39 @@ func TestReaderEffortComparisonAllowsTheSamePromptOnlyWhenDeclared(t *testing.T)
 		t.Fatal(err)
 	}
 }
+
+func TestReaderModelSwapAndSameSettingsRepeatAreExplicit(t *testing.T) {
+	samePrompt := func() (packetReplayPlan, preparedPacketReplay) {
+		p, prepared := readerComparisonFixture()
+		prepared.ReaderComparison.BaselineInstruction = prepared.ReaderComparison.CandidateInstruction
+		prepared.ReaderComparison.BaselineSHA256 = prepared.ReaderComparison.CandidateSHA256
+		return p, prepared
+	}
+	p, prepared := samePrompt()
+	p.CandidateReaderModel = "other-reader"
+	if _, err := packetReplayInstructions(p, prepared); err != nil {
+		t.Fatal("declared model swap rejected", err)
+	}
+	p, prepared = samePrompt()
+	p.SameSettingsRepeat = true
+	if _, err := packetReplayInstructions(p, prepared); err != nil {
+		t.Fatal("declared repeat rejected", err)
+	}
+	for name, change := range map[string]func(*packetReplayPlan){
+		"repeat with model":  func(p *packetReplayPlan) { p.SameSettingsRepeat, p.CandidateReaderModel = true, "other-reader" },
+		"repeat with effort": func(p *packetReplayPlan) { p.SameSettingsRepeat, p.CandidateReasoningEffort = true, "high" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			p, prepared := samePrompt()
+			change(&p)
+			if _, err := packetReplayInstructions(p, prepared); err == nil {
+				t.Fatal("a repeat that changes the reader was accepted")
+			}
+		})
+	}
+	p, prepared = readerComparisonFixture()
+	p.SameSettingsRepeat = true
+	if _, err := packetReplayInstructions(p, prepared); err == nil {
+		t.Fatal("a repeat with a different prompt was accepted")
+	}
+}

@@ -66,7 +66,9 @@ func TestLiveLOCOMOEvidenceReplay(t *testing.T) {
 	if err = os.Mkdir(out, 0o700); err != nil {
 		t.Fatal("repeats require a fresh output", err)
 	}
-	samples, err := loadPipelineSamples(plan.DatasetPath, plan.SampleID, 0)
+	// The parent manifest names the dataset schema; LOCOMO manifests omit it.
+	format, _ := plan.Manifest["dataset_format"].(string)
+	samples, err := loadPipelineSamplesForFormat(format, plan.DatasetPath, plan.SampleID, 0, false)
 	if err != nil || len(samples) != 1 {
 		t.Fatal("exactly one sample required", err)
 	}
@@ -102,7 +104,7 @@ func TestLiveLOCOMOEvidenceReplay(t *testing.T) {
 	if err = json.Unmarshal(rerankData, &pinned); err != nil {
 		t.Fatal(err)
 	}
-	options := LOCOMOPipelineOptions{DatasetPath: plan.DatasetPath, SampleID: sample.ID, OutputDir: out, TopN: intField("top_n"), ContextBytes: intField("context_byte_budget"), ReaderPolicy: stringField("reader_policy"), ContextFormat: stringField("context_format"), SourceNeighborTurns: intField("source_neighbor_turns"), Modes: []string{"raw", "derived", "combined"}, EmbeddingRevision: stringField("embedding_revision"), Embedding: EmbeddingOptions{Mode: EmbeddingModeProvider, Model: os.Getenv("EMBEDDING_MODEL"), BaseURL: os.Getenv("EMBEDDING_BASE_URL"), APIKey: os.Getenv("EMBEDDING_API_KEY")}, Answerer: cfg("ANSWERER"), Judge: cfg("JUDGE"), Rerank: PipelineRerankOptions{Model: pinned.Model, ModelRevision: pinned.Revision, BaseURL: os.Getenv("RERANK_BASE_URL"), APIKey: os.Getenv("RERANK_API_KEY"), CandidateSelection: pinned.Selection, CandidateMultiplier: pinned.Multiplier, MinCandidates: pinned.Min, MaxCandidates: pinned.Max}}
+	options := LOCOMOPipelineOptions{DatasetPath: plan.DatasetPath, DatasetFormat: format, SampleID: sample.ID, OutputDir: out, TopN: intField("top_n"), ContextBytes: intField("context_byte_budget"), ReaderPolicy: stringField("reader_policy"), ContextFormat: stringField("context_format"), SourceNeighborTurns: intField("source_neighbor_turns"), Modes: []string{"raw", "derived", "combined"}, EmbeddingRevision: stringField("embedding_revision"), Embedding: EmbeddingOptions{Mode: EmbeddingModeProvider, Model: os.Getenv("EMBEDDING_MODEL"), BaseURL: os.Getenv("EMBEDDING_BASE_URL"), APIKey: os.Getenv("EMBEDDING_API_KEY")}, Answerer: cfg("ANSWERER"), Judge: cfg("JUDGE"), Rerank: PipelineRerankOptions{Model: pinned.Model, ModelRevision: pinned.Revision, BaseURL: os.Getenv("RERANK_BASE_URL"), APIKey: os.Getenv("RERANK_API_KEY"), CandidateSelection: pinned.Selection, CandidateMultiplier: pinned.Multiplier, MinCandidates: pinned.Min, MaxCandidates: pinned.Max}}
 	options.RefineEvidence, _ = plan.Manifest["refine_evidence"].(bool)
 	options.AnswerOutputTokens = intField("qa_output_tokens")
 	options.Planner = cfg("PLANNER")
@@ -180,6 +182,7 @@ func TestLiveLOCOMOEvidenceReplay(t *testing.T) {
 	manifest["processing"] = options.Processing.Public()
 	manifest["qa_output_tokens"] = options.AnswerOutputTokens
 	manifest["judge_initial_output_tokens"] = 4096
+	manifest["format_retry"] = pipelineFormatRetryPolicy
 	manifest["processing_endpoint_sha256"] = pipelineHash(options.Processing.Endpoint)
 	manifest["source_index_policy"] = "production_worker_segments_v1"
 	manifest["source_window_policy"] = "direct_citations_before_neighbors_v2; fixed read and byte limits; chronological selected windows"

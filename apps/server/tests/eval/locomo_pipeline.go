@@ -41,6 +41,7 @@ type LOCOMOPipelineOptions struct {
 	OracleNeighborTurns  int
 	Rerank               PipelineRerankOptions
 	DatasetPath          string
+	DatasetFormat        string
 	DatabaseURL          string
 	OutputDir            string
 	Prefix               string
@@ -69,6 +70,13 @@ type pipelineQuestion struct {
 	Answer   string   `json:"answer"`
 	Category int      `json:"category"`
 	Evidence []string `json:"evidence"`
+	// Daily-chat only. AskedAt/AskedBy are question context the reader receives;
+	// language, axis and skills are report labels and never reach a model.
+	AskedAt  string   `json:"asked_at,omitempty"`
+	AskedBy  string   `json:"asked_by,omitempty"`
+	Language string   `json:"language,omitempty"`
+	Axis     string   `json:"axis,omitempty"`
+	Skills   []string `json:"skills,omitempty"`
 }
 type pipelineSample struct {
 	ID        string
@@ -124,7 +132,14 @@ type PipelineAnswer struct {
 	JudgeMillis      float64                             `json:"judge_millis"`
 	AnswerUsage      domain.UsageRecord                  `json:"answer_usage"`
 	JudgeUsage       domain.UsageRecord                  `json:"judge_usage"`
-	Retrieval        any                                 `json:"retrieval,omitempty"`
+	// Attempts under pipelineFormatRetryPolicy; zero for runs before that policy.
+	AnswerAttempts int `json:"answer_attempts,omitempty"`
+	JudgeAttempts  int `json:"judge_attempts,omitempty"`
+	Retrieval      any `json:"retrieval,omitempty"`
+	// Daily-chat report labels copied from the dataset after answering.
+	Language string   `json:"language,omitempty"`
+	Axis     string   `json:"axis,omitempty"`
+	Skills   []string `json:"skills,omitempty"`
 }
 type PipelineModeSummary struct {
 	EntityRecallStatuses    map[string]int `json:"entity_recall_statuses"`
@@ -147,6 +162,9 @@ type PipelineModeSummary struct {
 type LOCOMOPipelineReport struct {
 	BySample          map[string]map[string]PipelineModeSummary `json:"by_sample"`
 	ByCategory        map[int]map[string]PipelineModeSummary    `json:"by_category"`
+	ByLanguage        map[string]map[string]PipelineModeSummary `json:"by_language,omitempty"`
+	ByAxis            map[string]map[string]PipelineModeSummary `json:"by_axis,omitempty"`
+	BySkill           map[string]map[string]PipelineModeSummary `json:"by_skill,omitempty"`
 	OracleComparisons map[string]PipelineOracleComparison       `json:"oracle_comparisons"`
 	GeneratedAt       time.Time                                 `json:"generated_at"`
 	Manifest          map[string]any                            `json:"manifest"`
@@ -339,7 +357,7 @@ func RunLOCOMOPipeline(ctx context.Context, o LOCOMOPipelineOptions) (LOCOMOPipe
 		return report, err
 	}
 	defer func() { _ = lease.Close() }()
-	samples, err := loadPipelineSamplesWithCaptions(o.DatasetPath, o.SampleID, o.QuestionsPerCategory, o.ImageCaptions)
+	samples, err := loadPipelineSamplesForFormat(o.DatasetFormat, o.DatasetPath, o.SampleID, o.QuestionsPerCategory, o.ImageCaptions)
 	if err != nil {
 		return report, err
 	}
@@ -353,7 +371,16 @@ func RunLOCOMOPipeline(ctx context.Context, o LOCOMOPipelineOptions) (LOCOMOPipe
 	}
 	manifest := map[string]any{"version": 4, "qa_output_tokens": o.AnswerOutputTokens, "output_budget_retry": "one explicit truncation retry to the configured output ceiling", "dataset_sha256": pipelineHash(string(raw)), "code_revision": o.CodeRevision, "embedding_revision": o.EmbeddingRevision, "prefix": o.Prefix, "sample_id": o.SampleID, "questions_per_category": o.QuestionsPerCategory, "top_n": o.TopN, "context_byte_budget": o.ContextBytes, "embedding": embedding.runInfo(), "extraction": o.Extraction.runInfo(), "answerer": o.Answerer.runInfo(), "judge": o.Judge.runInfo(), "task_concurrency": max(o.TaskConcurrency, 1), "transport": "production PostgreSQL + outbox relay + Worker handlers; bounded workers with one durable run-wide local task journal; no HTTP/Redis transport measurement", "image_policy": "raw text only; no machine captions or image search query", "sampling": "SHA256(question ID) within category; all source sessions", "source_timezone": "dataset does not specify zone; parsed as UTC for ordering; original date retained", "judge_protocol": "memstation-locomo-qa-v2-reference-agreement; not a vendor leaderboard reproduction"}
 	manifest["modes"] = o.Modes
+	if o.DatasetFormat == PipelineDatasetDailyChat {
+		// Added only for this format so existing LOCOMO manifests stay byte-identical.
+		manifest["dataset_format"] = PipelineDatasetDailyChat
+		manifest["source_timezone"] = "RFC3339 offsets from the dataset; sources and questions rendered with weekday and offset"
+		manifest["sampling"] = "SHA256(question ID) within primary axis; all source sessions"
+		manifest["question_context"] = "question text, question_time rendered like source dates, and asker name; language/axis/skill labels never reach a model"
+		manifest["retrieval_time_anchor"] = "none: search receives the question text only; relative times are resolved by the reader"
+	}
 	manifest["judge_initial_output_tokens"] = 4096
+	manifest["format_retry"] = pipelineFormatRetryPolicy
 	if pipelineNeedsIngestion(o.Modes) {
 		manifest["processing"] = o.Processing.Public()
 		manifest["processing_endpoint_sha256"] = pipelineHash(o.Processing.Endpoint)
