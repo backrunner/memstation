@@ -51,7 +51,7 @@ func main() {
 	flag.DurationVar(&embeddingTimeout, "embedding-timeout", 60*time.Second, "Timeout for embedding requests in provider mode.")
 	flag.BoolVar(&locomoSkipCategoryFive, "locomo-skip-category-five", true, "Skip LOCOMO category-5 questions for retrieval/ranking runs.")
 	flag.BoolVar(&locomoIncludeCaptions, "locomo-include-captions", false, "Include marked machine-generated image captions in a separate LOCOMO input track.")
-	flag.StringVar(&longMemEvalGranularityValue, "longmemeval-granularity", string(eval.LongMemEvalGranularitySession), "LongMemEval retrieval granularity: session or turn.")
+	flag.StringVar(&longMemEvalGranularityValue, "longmemeval-granularity", string(eval.LongMemEvalGranularitySession), "LongMemEval retrieval granularity: session, turn, or round.")
 	flag.Parse()
 
 	formatValue := eval.DatasetFormat(strings.TrimSpace(format))

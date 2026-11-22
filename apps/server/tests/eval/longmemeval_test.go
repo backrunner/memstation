@@ -96,7 +96,7 @@ func TestLongMemEvalAdapterAllowsRepeatedSessionIDs(t *testing.T) {
 		AnswerSessionIDs: []any{"sharegpt-syblhtk-0"},
 	}}
 
-	for _, granularity := range []LongMemEvalGranularity{LongMemEvalGranularitySession, LongMemEvalGranularityTurn} {
+	for _, granularity := range []LongMemEvalGranularity{LongMemEvalGranularitySession, LongMemEvalGranularityTurn, LongMemEvalGranularityRound} {
 		dataset, err := buildLongMemEvalDataset(samples, LongMemEvalOptions{Granularity: granularity})
 		if err != nil {
 			t.Fatalf("build dataset with %s granularity: %v", granularity, err)
@@ -110,6 +110,51 @@ func TestLongMemEvalAdapterAllowsRepeatedSessionIDs(t *testing.T) {
 				t.Fatalf("duplicate document id for %s granularity: %s", granularity, doc.ID)
 			}
 			seen[doc.ID] = struct{}{}
+		}
+	}
+}
+
+func TestLongMemEvalRoundsKeepUserTurnWithItsAnswer(t *testing.T) {
+	t.Parallel()
+
+	sample := longMemEvalSample{
+		QuestionID:         "q-rounds",
+		QuestionType:       "multi-session",
+		Question:           "How many plants did I buy?",
+		QuestionDate:       "2025-03-10",
+		HaystackSessionIDs: []any{"s1", "s2"},
+		HaystackDates:      []any{"2025-03-01", "2025-03-02"},
+		HaystackSessions: [][]longMemEvalTurn{
+			{
+				{Role: "assistant", Content: "Welcome back."},
+				{Role: "user", Content: "I bought a fern today.", HasAnswer: true},
+				{Role: "assistant", Content: "Ferns like shade."},
+				{Role: "user", Content: "Any watering tips?"},
+				{Role: "assistant", Content: "Keep the soil moist."},
+			},
+			{
+				{Role: "user", Content: "Unrelated question."},
+				{Role: "assistant", Content: "   "},
+			},
+		},
+		AnswerSessionIDs: []any{"s1"},
+	}
+	documents, positives := buildLongMemEvalRoundDocuments(sample, "owner")
+	if len(documents) != 4 {
+		t.Fatalf("expected an opening round, two user rounds and one round in the second session, got %d", len(documents))
+	}
+	if documents[1].Content != "user: I bought a fern today.\nassistant: Ferns like shade." {
+		t.Fatalf("round must keep the user turn with its answer, got %q", documents[1].Content)
+	}
+	if documents[3].Content != "user: Unrelated question." || documents[3].Metadata["session_index"] != 2 {
+		t.Fatal("empty turns must be skipped and rounds must keep their session", documents[3].Content)
+	}
+	if len(positives) != 1 || positives[0] != documents[1].ID {
+		t.Fatal("only the round holding the evidence turn is positive", positives)
+	}
+	for _, doc := range documents {
+		if strings.Contains(doc.Content, "has_answer") || !doc.CreatedAt.Equal(longMemEvalSessionTime(sample, doc.Metadata["session_index"].(int)-1, doc.CreatedAt)) {
+			t.Fatal("round content must not carry labels and must keep its session time")
 		}
 	}
 }

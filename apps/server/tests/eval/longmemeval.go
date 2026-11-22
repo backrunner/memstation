@@ -17,6 +17,8 @@ type LongMemEvalGranularity string
 const (
 	LongMemEvalGranularitySession LongMemEvalGranularity = "session"
 	LongMemEvalGranularityTurn    LongMemEvalGranularity = "turn"
+	// A round is one user turn and the non-user turns that answer it.
+	LongMemEvalGranularityRound LongMemEvalGranularity = "round"
 )
 
 type LongMemEvalOptions struct {
@@ -78,7 +80,7 @@ func normalizeLongMemEvalOptions(options LongMemEvalOptions) (LongMemEvalOptions
 		options.Granularity = LongMemEvalGranularitySession
 	}
 	switch options.Granularity {
-	case LongMemEvalGranularitySession, LongMemEvalGranularityTurn:
+	case LongMemEvalGranularitySession, LongMemEvalGranularityTurn, LongMemEvalGranularityRound:
 		return options, nil
 	default:
 		return LongMemEvalOptions{}, fmt.Errorf("unsupported LongMemEval granularity %q", options.Granularity)
@@ -151,6 +153,9 @@ func buildLongMemEvalDocuments(sample longMemEvalSample, userID string, options 
 		return documents, positives, nil
 	case LongMemEvalGranularityTurn:
 		documents, positives := buildLongMemEvalTurnDocuments(sample, userID)
+		return documents, positives, nil
+	case LongMemEvalGranularityRound:
+		documents, positives := buildLongMemEvalRoundDocuments(sample, userID)
 		return documents, positives, nil
 	default:
 		return nil, nil, fmt.Errorf("unsupported LongMemEval granularity %q", options.Granularity)
@@ -260,6 +265,68 @@ func buildLongMemEvalTurnDocuments(sample longMemEvalSample, userID string) ([]D
 	return documents, uniqueStrings(positives)
 }
 
+// buildLongMemEvalRoundDocuments indexes each user turn together with the
+// assistant turns that follow it, keeping the session time. Turns before the
+// first user turn form their own round. has_answer marks positives for offline
+// diagnostics only and never enters document content.
+func buildLongMemEvalRoundDocuments(sample longMemEvalSample, userID string) ([]DatasetDocument, []string) {
+	questionTime := longMemEvalTimeOrDefault(sample.QuestionDate, time.Date(2026, 4, 9, 0, 0, 0, 0, time.UTC))
+	answerSessions := longMemEvalStringSet(sample.AnswerSessionIDs)
+	questionID := sanitizeExternalID(sample.QuestionID)
+	documents := make([]DatasetDocument, 0)
+	positives := make([]string, 0)
+	fallbackPositives := make([]string, 0)
+	for sessionIdx, session := range sample.HaystackSessions {
+		sessionID := longMemEvalSessionID(sample, sessionIdx)
+		sessionTime := longMemEvalSessionTime(sample, sessionIdx, questionTime)
+		sessionSuffix := fmt.Sprintf("%s-%03d", sanitizeExternalID(sessionID), sessionIdx+1)
+		var rounds [][]longMemEvalTurn
+		for _, turn := range session {
+			if strings.TrimSpace(turn.Content) == "" {
+				continue
+			}
+			if len(rounds) == 0 || strings.EqualFold(strings.TrimSpace(turn.Role), "user") {
+				rounds = append(rounds, nil)
+			}
+			rounds[len(rounds)-1] = append(rounds[len(rounds)-1], turn)
+		}
+		for roundIdx, round := range rounds {
+			docID := fmt.Sprintf("longmemeval-doc-%s-round-%s-%03d", questionID, sessionSuffix, roundIdx+1)
+			documents = append(documents, DatasetDocument{
+				ID:          docID,
+				NodeID:      fmt.Sprintf("longmemeval-node-%s-round-%s-%03d", questionID, sessionSuffix, roundIdx+1),
+				UserID:      userID,
+				Type:        domain.MemoryTypeSegment,
+				Content:     renderLongMemEvalSession(round),
+				Importance:  1,
+				DecayFactor: 1,
+				Metadata: map[string]any{
+					"question_id":   sample.QuestionID,
+					"session_id":    sessionID,
+					"session_index": sessionIdx + 1,
+					"round_index":   roundIdx + 1,
+					"granularity":   string(LongMemEvalGranularityRound),
+				},
+				CreatedAt: sessionTime,
+				UpdatedAt: sessionTime,
+			})
+			for _, turn := range round {
+				if turn.HasAnswer {
+					positives = append(positives, docID)
+					break
+				}
+			}
+			if _, ok := answerSessions[sessionID]; ok {
+				fallbackPositives = append(fallbackPositives, docID)
+			}
+		}
+	}
+	if len(positives) == 0 {
+		positives = fallbackPositives
+	}
+	return documents, uniqueStrings(positives)
+}
+
 func shouldSkipLongMemEvalSample(sample longMemEvalSample) bool {
 	questionID := strings.TrimSpace(sample.QuestionID)
 	if questionID == "" {
@@ -272,7 +339,7 @@ func shouldSkipLongMemEvalSample(sample longMemEvalSample) bool {
 }
 
 func longMemEvalDefaultTopN(granularity LongMemEvalGranularity) int {
-	if granularity == LongMemEvalGranularityTurn {
+	if granularity == LongMemEvalGranularityTurn || granularity == LongMemEvalGranularityRound {
 		return 20
 	}
 	return 10

@@ -34,7 +34,7 @@ Commands
   Override the dataset source with `LOCOMO_DATASET_PATH` or `LOCOMO_DATASET_URL`.
 - External LongMemEval run: `./scripts/eval/run-memory-longmemeval.sh`
   By default this expects `provider` embedding mode and uses `longmemeval_s_cleaned.json` at `session` granularity.
-  Override the dataset source with `LONGMEMEVAL_DATASET_PATH` or `LONGMEMEVAL_DATASET_URL`, and granularity with `LONGMEMEVAL_GRANULARITY=session|turn`.
+  Override the dataset source with `LONGMEMEVAL_DATASET_PATH` or `LONGMEMEVAL_DATASET_URL`, and granularity with `LONGMEMEVAL_GRANULARITY=session|turn|round`. A round groups a user turn with the following replies before the next user turn.
 - LongMemEval QA auto-eval: `./scripts/eval/run-memory-longmemeval-qa.sh path/to/hypotheses.jsonl`
   This expects `LONGMEMEVAL_QA_JUDGE_MODEL`, `LONGMEMEVAL_QA_JUDGE_BASE_URL`, and `LONGMEMEVAL_QA_JUDGE_API_KEY`.
 - LongMemEval-S + MemoryArena formal tracks: prepare an immutable plan with `python3 scripts/eval/prepare-memory-external.py`, then run `bash scripts/eval/run-memory-external.sh /absolute/fresh/output` with the private provider environment described in [EXTERNAL-MEMORY.md](EXTERNAL-MEMORY.md). This invokes real retrieval and reading with paired no-memory controls; it does not re-run summary/fact ingestion workers or cover the shopping/search/travel environments.
