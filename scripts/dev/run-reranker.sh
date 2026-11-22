@@ -8,7 +8,7 @@ exec "${LLAMA_SERVER_BIN:-llama-server}" \
   --alias "$MEMSTATION_RERANK_ALIAS" \
   --reranking --host "${MEMSTATION_RERANK_HOST:-127.0.0.1}" \
   --port "${MEMSTATION_RERANK_PORT:-18082}" \
-  --ctx-size "${MEMSTATION_RERANK_CONTEXT:-8192}" \
-  --batch-size "${MEMSTATION_RERANK_CONTEXT:-8192}" \
-  --ubatch-size "${MEMSTATION_RERANK_CONTEXT:-8192}" \
+  --ctx-size "${MEMSTATION_RERANK_CONTEXT:-32768}" \
+  --batch-size "${MEMSTATION_RERANK_CONTEXT:-32768}" \
+  --ubatch-size "${MEMSTATION_RERANK_CONTEXT:-32768}" \
   --parallel 1 --log-verbosity 1 "$@"

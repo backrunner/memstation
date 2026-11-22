@@ -49,7 +49,7 @@ MEMSTATION_RERANK_BASE_URL=http://127.0.0.1:18082
 MEMSTATION_RERANK_API_KEY=
 ```
 
-The launcher binds loopback and uses an 8192-token context with one inference slot. Context, port, bind address and binary path are configurable in the script. Start the reranker before MemStation when testing. The [llama.cpp endpoint](https://github.com/ggml-org/llama.cpp/blob/620d2225c/tools/server/README.md#post-reranking-rerank-documents-according-to-a-given-query) supplies the Jina-compatible wrapper when `documents` is used.
+The launcher binds loopback and uses a 32768-token context (the model's native window) with one inference slot. The context must hold the query plus the longest submitted document: llama.cpp rejects the whole request when one document overflows, and MemStation then keeps the first-stage order for that search (`degraded`, `provider_error`). Byte length is not a reliable token bound, so size the window for the longest records you index; short segment records fit easily, while whole-session records can exceed 8,192 tokens. Context, port, bind address and binary path are configurable in the script. Start the reranker before MemStation when testing. The [llama.cpp endpoint](https://github.com/ggml-org/llama.cpp/blob/620d2225c/tools/server/README.md#post-reranking-rerank-documents-according-to-a-given-query) supplies the Jina-compatible wrapper when `documents` is used.
 
 ## Bounds and failures
 
