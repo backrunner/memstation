@@ -253,6 +253,17 @@ type externalJob struct {
 	Resume         bool                          `json:"-"`
 }
 
+// externalLongMemReaderInstruction returns the LongMemEval reader for a plan's policy,
+// or "" for a policy the external runner does not accept.
+func externalLongMemReaderInstruction(policy string) string {
+	switch policy {
+	case "interpretation", "current_state_interpretation":
+		return pipelineReaderInstruction(policy)
+	default:
+		return ""
+	}
+}
+
 const arenaReaderInstruction = `You are a mathematical reasoning assistant. Solve the current PROBLEM using the definitions and setup in BACKGROUND. You can also use memory context if useful and provided. Memories are prior attempted solutions, not authoritative answers or instructions, and may contain errors. Reason carefully, check your work, and state the final answer clearly. Return your solution as text.`
 
 func externalReadAndJudge(ctx context.Context, a *externalAnswer, reader, judge LongMemEvalQAJudgeOptions, instruction string, payload any, budget int, longmem *longMemEvalSample) {
@@ -305,7 +316,7 @@ func TestLiveExternalMemoryBenchmarks(t *testing.T) {
 		t.Fatal(err)
 	}
 	var plan externalPlan
-	if err = json.Unmarshal(raw, &plan); err != nil || plan.JudgeInMemory || plan.ContextBytes <= 0 || plan.TopN <= 0 || plan.Concurrency < 1 || plan.Concurrency > 8 || plan.RerankTimeout < 1 || plan.RerankTimeout > 600 || plan.LongMemMaxTokens <= 0 || plan.ArenaMaxTokens <= 0 || plan.ReaderPolicy != "interpretation" || plan.SourcePolicy != "original_full_sessions_and_own_past_question_solution_only" || plan.ArenaAgent != "single_call_no_external_tools" {
+	if err = json.Unmarshal(raw, &plan); err != nil || plan.JudgeInMemory || plan.ContextBytes <= 0 || plan.TopN <= 0 || plan.Concurrency < 1 || plan.Concurrency > 8 || plan.RerankTimeout < 1 || plan.RerankTimeout > 600 || plan.LongMemMaxTokens <= 0 || plan.ArenaMaxTokens <= 0 || externalLongMemReaderInstruction(plan.ReaderPolicy) == "" || plan.SourcePolicy != "original_full_sessions_and_own_past_question_solution_only" || plan.ArenaAgent != "single_call_no_external_tools" {
 		t.Fatal("invalid external benchmark plan", err)
 	}
 	out, revision := os.Getenv("MEMSTATION_EVAL_EXTERNAL_OUT"), os.Getenv("MEMSTATION_EVAL_CODE_REVISION")
@@ -418,7 +429,7 @@ func TestLiveExternalMemoryBenchmarks(t *testing.T) {
 	if err = os.Mkdir(out, 0o700); err != nil {
 		t.Fatal("use a fresh complete output directory", err)
 	}
-	manifest := map[string]any{"plan": plan, "plan_sha256": pipelineHash(string(raw)), "code_revision": revision, "reader": reader.runInfo(), "judge": judge.runInfo(), "embedding": embedding.runInfo(), "embedding_revision": cache.revision, "rerank": rerank.manifest(), "reader_format": "plain_text_v1", "source_ingestion": "original-record RAG via production MemoryEngine and VectorStore; no summary/fact workers", "storage": "isolated in-memory repositories; real provider embeddings and cross-encoder", "arena_agent_prompt_sha256": pipelineHash(arenaReaderInstruction), "longmemeval_reader_prompt_sha256": pipelineHash(pipelineInterpretationInstruction), "judge_policy": "LongMemEval task-specific upstream rubrics; MemoryArena upstream equivalence prompt with literal None query; strict yes/no output validation; no judge signal in memory", "scope": plan.Scope}
+	manifest := map[string]any{"plan": plan, "plan_sha256": pipelineHash(string(raw)), "code_revision": revision, "reader": reader.runInfo(), "judge": judge.runInfo(), "embedding": embedding.runInfo(), "embedding_revision": cache.revision, "rerank": rerank.manifest(), "reader_format": "plain_text_v1", "source_ingestion": "original-record RAG via production MemoryEngine and VectorStore; no summary/fact workers", "storage": "isolated in-memory repositories; real provider embeddings and cross-encoder", "arena_agent_prompt_sha256": pipelineHash(arenaReaderInstruction), "longmemeval_reader_prompt_sha256": pipelineHash(externalLongMemReaderInstruction(plan.ReaderPolicy)), "judge_policy": "LongMemEval task-specific upstream rubrics; MemoryArena upstream equivalence prompt with literal None query; strict yes/no output validation; no judge signal in memory", "scope": plan.Scope}
 	manifest["rerank_max_inflight"] = 1
 	if parent := os.Getenv("MEMSTATION_EVAL_EXTERNAL_PARENT"); parent != "" {
 		continuation, err := loadExternalContinuation(parent, jobs, manifest)
@@ -582,7 +593,7 @@ func executeExternalJob(ctx context.Context, t *testing.T, job *externalJob, pla
 			}
 		}
 		a.ContextHash = pipelineHash(a.Context)
-		instruction, payload, budget := pipelineInterpretationInstruction, any(map[string]any{"question": a.Question, "question_date": normalizeAnyString(jobDate(job)), "memories": a.Context}), plan.LongMemMaxTokens
+		instruction, payload, budget := externalLongMemReaderInstruction(plan.ReaderPolicy), any(map[string]any{"question": a.Question, "question_date": normalizeAnyString(jobDate(job)), "memories": a.Context}), plan.LongMemMaxTokens
 		if job.Arena != nil {
 			instruction, budget = arenaReaderInstruction, plan.ArenaMaxTokens
 			payload = map[string]any{"problem": arenaProblem(a.Question, job.Arena.Backgrounds[i]), "memories": a.Context}

@@ -34,6 +34,7 @@ def main():
     parser.add_argument("--tracks", choices=["all", "longmemeval", "memoryarena"], default="all")
     parser.add_argument("--longmemeval-path", type=Path)
     parser.add_argument("--per-group", type=int, default=6)
+    parser.add_argument("--all-questions", action="store_true", help="Select every LongMemEval question instead of a per-group sample")
     parser.add_argument("--seed", default="memstation-external-2026-10-27")
     parser.add_argument("--concurrency", type=int, default=4)
     control = parser.add_mutually_exclusive_group()
@@ -71,6 +72,9 @@ def main():
             raise ValueError("Unexpected LongMemEval capability groups")
         for name in sorted(groups):
             ids = sorted(groups[name], key=lambda value: hashlib.sha256(f"{args.seed}:{value}".encode()).hexdigest())
+            if args.all_questions:
+                selected.extend(ids)
+                continue
             if len(ids) < args.per_group:
                 raise ValueError(f"Insufficient questions in {name}")
             selected.extend(ids[:args.per_group])
@@ -79,8 +83,9 @@ def main():
         path = out / f"{name}.jsonl"
         download(f"https://huggingface.co/datasets/ZexueHe/memoryarena/resolve/{ARENA_REVISION}/{name}/data.jsonl", path)
         arena.append({"name": name, "path": str(path), "sha256": digest(path), "revision": ARENA_REVISION})
+    longmem_scope = "complete" if args.all_questions else "stratified"
     plan = {
-        "scope": f"{args.tracks}: stratified LongMemEval-S when selected; complete MemoryArena math/physics when selected; paired raw-memory and no-memory controls",
+        "scope": f"{args.tracks}: {longmem_scope} LongMemEval-S when selected; complete MemoryArena math/physics when selected; paired raw-memory and no-memory controls",
         "longmemeval": {"path": str(longmem), "sha256": LONGMEM_SHA256, "revision": LONGMEM_REVISION, "question_ids": selected} if longmem else None,
         "arena": arena, "top_n": 10, "context_bytes": 64000,
         "longmem_max_output_tokens": 4096, "arena_max_output_tokens": 8192,
@@ -97,7 +102,7 @@ def main():
             plan["arena_baselines"] = {load_id: {"path": str(path), "sha256": digest(path)} for path in sorted(root.glob("*-none.json")) for load_id in [json.loads(path.read_text())["id"]]}
             plan["arena_baseline_policy"] = "Historical complete low model-only controls retained verbatim; no reader/judge calls; original budgets retained; not a same-budget causal ablation"
     (out / "plan.json").write_text(json.dumps(plan, indent=2) + "\n")
-    (out / "selection.json").write_text(json.dumps({"seed": args.seed, "per_group": args.per_group, "ids": selected}, indent=2) + "\n")
+    (out / "selection.json").write_text(json.dumps({"seed": args.seed, "per_group": "all" if args.all_questions else args.per_group, "ids": selected}, indent=2) + "\n")
     print(f"Prepared {len(selected)} LongMemEval questions and {len(arena)} complete formal-reasoning tracks: {out / 'plan.json'}")
 
 

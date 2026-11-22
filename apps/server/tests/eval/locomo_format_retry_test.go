@@ -126,3 +126,19 @@ func TestCandidateGateTreatsFormatRetryAsProtocol(t *testing.T) {
 		t.Fatal("a retry policy change must be visible to the gate", err)
 	}
 }
+
+func TestExternalLongMemReaderPolicies(t *testing.T) {
+	base, current := externalLongMemReaderInstruction("interpretation"), externalLongMemReaderInstruction("current_state_interpretation")
+	if base != pipelineInterpretationInstruction || current == "" || current == base || !strings.HasPrefix(current, base) {
+		t.Fatal("current-state reader must extend the interpretation reader")
+	}
+	for _, policy := range []string{"", "inference_reasoning", "baseline", "unknown"} {
+		if externalLongMemReaderInstruction(policy) != "" {
+			t.Fatal("external runner accepted an unsupported reader policy", policy)
+		}
+	}
+	o := LOCOMOPipelineOptions{ReaderPolicy: "current_state_interpretation"}
+	if err := normalizePipelineProtocol(&o); err != nil && strings.Contains(err.Error(), "reader policy") {
+		t.Fatal(err)
+	}
+}
